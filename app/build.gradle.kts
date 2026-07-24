@@ -53,7 +53,7 @@ android {
 }
 
 dependencies {
-    implementation("androidx.core:core:1.19.0")
+    implementation("androidx.core:core:1.17.0")
     implementation("androidx.media3:media3-exoplayer:1.10.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.10.1")
     implementation("androidx.media3:media3-exoplayer-dash:1.10.1")
