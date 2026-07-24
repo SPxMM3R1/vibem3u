@@ -58,7 +58,7 @@ final class AppUpdater {
         checkStarted = true;
         executor.submit(() -> {
             try {
-                UpdateInfo update = repository.findAvailableUpdate(BuildConfig.VERSION_NAME);
+                UpdateInfo update = repository.findAvailableUpdate(currentVersionName());
                 if (update != null) {
                     mainHandler.post(() -> {
                         availableUpdate = update;
@@ -347,6 +347,17 @@ final class AppUpdater {
         return !destroyed && !activity.isFinishing()
                 && (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1
                 || !activity.isDestroyed());
+    }
+
+    private String currentVersionName() {
+        try {
+            String versionName = activity.getPackageManager()
+                    .getPackageInfo(activity.getPackageName(), 0)
+                    .versionName;
+            return versionName == null ? "0.0.0" : versionName;
+        } catch (PackageManager.NameNotFoundException ignored) {
+            return "0.0.0";
+        }
     }
 
     private boolean canPresentDialog() {

@@ -215,7 +215,7 @@ final class UpdateRepository {
         HttpURLConnection connection = (HttpURLConnection) uri.toURL().openConnection();
         connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
         connection.setReadTimeout(READ_TIMEOUT_MS);
-        connection.setRequestProperty("User-Agent", "VibeM3U/" + BuildConfig.VERSION_NAME);
+        connection.setRequestProperty("User-Agent", "VibeM3U-Android-TV");
         return connection;
     }
 
