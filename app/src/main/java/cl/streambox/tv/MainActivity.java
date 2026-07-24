@@ -51,6 +51,7 @@ public final class MainActivity extends Activity {
     private static final int SETTINGS_REQUEST = 1001;
     private static final long OVERLAY_TIMEOUT_MS = 4_500;
     private static final long PLAYER_RETRY_DELAY_MS = 2_500;
+    private static final long UPDATE_CHECK_DELAY_MS = 4_000;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
@@ -77,6 +78,7 @@ public final class MainActivity extends Activity {
     private TextView streamStatus;
 
     private ExoPlayer player;
+    private AppUpdater appUpdater;
     private ChannelLogoCache channelLogoCache;
     private EpgData epgData = EpgData.empty();
     private int channelIndex;
@@ -116,6 +118,8 @@ public final class MainActivity extends Activity {
         registerBackCallback();
         enterImmersiveMode();
         createPlayer();
+        appUpdater = new AppUpdater(this, networkExecutor, mainHandler);
+        mainHandler.postDelayed(appUpdater::checkForUpdates, UPDATE_CHECK_DELAY_MS);
         updateClock.run();
     }
 
@@ -467,6 +471,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (appUpdater != null && appUpdater.onActivityResult(requestCode)) return;
         if (requestCode == SETTINGS_REQUEST) {
             settingsOpen = false;
             String url = getPlaylistUrl();
@@ -566,6 +571,7 @@ public final class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         enterImmersiveMode();
+        if (appUpdater != null) appUpdater.onHostResume();
         if (refreshAfterSettings) {
             refreshAfterSettings = false;
             refreshPlaylist(getPlaylistUrl());
@@ -575,6 +581,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
+        if (appUpdater != null) appUpdater.onHostPause();
         if (player != null) player.pause();
         super.onPause();
     }
@@ -583,6 +590,7 @@ public final class MainActivity extends Activity {
     protected void onDestroy() {
         playlistGeneration++;
         mainHandler.removeCallbacksAndMessages(null);
+        if (appUpdater != null) appUpdater.destroy();
         networkExecutor.shutdownNow();
         if (player != null) {
             player.release();

@@ -31,6 +31,16 @@ jobs:
       - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Comprobar versión de la etiqueta
+        shell: bash
+        run: |
+          version_name="$(
+            sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' \
+              app/build.gradle.kts
+          )"
+          echo "Versión del proyecto: $version_name"
+          test "v$version_name" = "$GITHUB_REF_NAME"
+
       - name: Comprobar el secreto de firma
         if: ${{ env.ANDROID_DEBUG_KEYSTORE_BASE64 == '' }}
         shell: bash

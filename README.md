@@ -6,13 +6,28 @@ Reproductor M3U para Android TV inspirado en la experiencia de un set-top box:
 abre directamente la señal, descarga la lista nuevamente en cada inicio y muestra
 una barra compacta al cambiar de canal.
 
-La versión 0.2.1 añade navegación configurable, caché persistente de logos,
-confirmación de salida y programación actual desde la EPG XMLTV declarada por la M3U.
+La versión 0.3.0 añade actualización desde GitHub: la app avisa cuando existe una
+versión nueva, descarga el APK, valida su firma y abre el instalador de Android TV.
 
 ## Descargar
 
-- [Descargar VibeM3U v0.2.1](https://github.com/SPxMM3R1/vibem3u/releases/download/v0.2.1/VibeM3U-v0.2.1.apk)
+- [Descargar la versión más reciente](https://github.com/SPxMM3R1/vibem3u/releases/latest)
 - [Ver todas las versiones](https://github.com/SPxMM3R1/vibem3u/releases)
+
+## Actualizaciones en Android TV
+
+Al abrir VibeM3U, la app consulta la última Release pública de GitHub. Si encuentra
+una versión superior:
+
+1. Muestra un aviso con **Actualizar** seleccionado.
+2. Descarga el APK en el almacenamiento privado de la app.
+3. Comprueba el nombre del paquete, el número de versión y el certificado.
+4. Solicita, si hace falta, permiso para instalar desde VibeM3U.
+5. Abre el instalador de Android para que el usuario confirme la actualización.
+
+Android no permite a una app normal completar silenciosamente el último paso. La
+versión 0.3.0 debe instalarse una vez mediante Downloader; las versiones posteriores
+ya podrán anunciarse y descargarse desde la propia app.
 
 ## Controles
 

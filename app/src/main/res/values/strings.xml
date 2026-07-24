@@ -19,4 +19,13 @@
     <string name="invert_channel_keys">Invertir botones arriba y abajo</string>
     <string name="invert_channel_keys_description">Activado: ↑ avanza al canal siguiente y ↓ vuelve al anterior.</string>
     <string name="remote_help">Durante la reproducción: ↑/↓ cambia de canal · OK muestra información · mantener OK abre esta configuración.</string>
+    <string name="update_title">Actualización disponible</string>
+    <string name="update_available">VibeM3U %1$s está lista para instalar.</string>
+    <string name="update_later">Más tarde</string>
+    <string name="update_now">Actualizar</string>
+    <string name="update_downloading">Descargando… %1$d%%</string>
+    <string name="update_download_error">No se pudo actualizar: %1$s</string>
+    <string name="update_permission_required">Activa “Permitir desde esta fuente” y vuelve para continuar.</string>
+    <string name="update_permission_unavailable">Abre los ajustes del sistema y permite que VibeM3U instale aplicaciones.</string>
+    <string name="retry">Reintentar</string>
 </resources>
