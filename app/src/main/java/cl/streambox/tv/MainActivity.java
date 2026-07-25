@@ -548,10 +548,15 @@ public final class MainActivity extends Activity {
                     group.getTrackFormat(trackIndex)
             ));
         }
-        Collections.sort(result, Comparator
-                .comparingInt((VideoTrackOption option) -> option.bitrate)
-                .thenComparingInt(option -> option.height)
-                .reversed());
+        Collections.sort(result, new Comparator<VideoTrackOption>() {
+            @Override
+            public int compare(VideoTrackOption left, VideoTrackOption right) {
+                int bitrateOrder = Integer.compare(right.bitrate, left.bitrate);
+                return bitrateOrder != 0
+                        ? bitrateOrder
+                        : Integer.compare(right.height, left.height);
+            }
+        });
         return result;
     }
 
