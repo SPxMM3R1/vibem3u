@@ -28,4 +28,8 @@
     <string name="update_permission_required">Activa “Permitir desde esta fuente” y vuelve para continuar.</string>
     <string name="update_permission_unavailable">Abre los ajustes del sistema y permite que VibeM3U instale aplicaciones.</string>
     <string name="retry">Reintentar</string>
+    <string name="stream_quality_title">Calidad del stream</string>
+    <string name="stream_quality_description">%1$s · Automático adapta la calidad a la conexión.</string>
+    <string name="stream_quality_unavailable">%1$s · Este stream sólo informa una calidad.</string>
+    <string name="stream_quality_automatic">Automático</string>
 </resources>
