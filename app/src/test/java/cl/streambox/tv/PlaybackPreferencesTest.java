@@ -5,8 +5,8 @@ import static org.junit.Assert.assertEquals;
 import org.junit.Test;
 
 import java.net.URI;
-import java.util.List;
-import java.util.Map;
+import java.util.Arrays;
+import java.util.Collections;
 
 public final class PlaybackPreferencesTest {
     @Test
@@ -15,7 +15,7 @@ public final class PlaybackPreferencesTest {
         Channel saved = channel("Canal B", "b", "https://example.com/b.m3u8");
 
         assertEquals(0, PlaybackPreferences.findChannelIndex(
-                List.of(saved, first),
+                Arrays.asList(saved, first),
                 PlaybackPreferences.channelIdentity(saved),
                 1
         ));
@@ -26,7 +26,7 @@ public final class PlaybackPreferencesTest {
         Channel only = channel("Canal A", "a", "https://example.com/a.m3u8");
 
         assertEquals(0, PlaybackPreferences.findChannelIndex(
-                List.of(only),
+                Collections.singletonList(only),
                 "tvg:missing",
                 20
         ));
@@ -38,7 +38,7 @@ public final class PlaybackPreferencesTest {
                 URI.create(stream),
                 null,
                 "TV",
-                Map.of("tvg-id", tvgId)
+                Collections.singletonMap("tvg-id", tvgId)
         );
     }
 }

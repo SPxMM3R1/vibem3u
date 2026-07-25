@@ -46,6 +46,7 @@ import androidx.media3.ui.PlayerView;
 import java.net.URI;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
@@ -547,7 +548,7 @@ public final class MainActivity extends Activity {
                     group.getTrackFormat(trackIndex)
             ));
         }
-        result.sort(Comparator
+        Collections.sort(result, Comparator
                 .comparingInt((VideoTrackOption option) -> option.bitrate)
                 .thenComparingInt(option -> option.height)
                 .reversed());
