@@ -25,14 +25,11 @@ import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.CompoundButton;
-import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
-import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
-import android.view.ViewGroup;
 import android.window.OnBackInvokedDispatcher;
 
 import androidx.media3.common.C;
@@ -73,10 +70,7 @@ public final class MainActivity extends Activity {
     private final List<Channel> channels = new ArrayList<>();
 
     private PlayerView playerView;
-    private FrameLayout playerHost;
-    private FrameLayout guideLiveHost;
     private View channelOverlay;
-    private View guideOverlay;
     private View loadingPanel;
     private ProgressBar loadingProgress;
     private TextView loadingText;
@@ -92,15 +86,6 @@ public final class MainActivity extends Activity {
     private TextView codecInfo;
     private TextView statusDot;
     private TextView streamStatus;
-    private TextView guideDate;
-    private TextView guideClock;
-    private TextView guideSelectedChannel;
-    private TextView guideLiveChannel;
-    private TextView guideLiveContent;
-    private LinearLayout guideChannelList;
-    private LinearLayout guideProgrammeList;
-    private ScrollView guideChannelScroll;
-    private ScrollView guideProgrammeScroll;
 
     private ExoPlayer player;
     private AppUpdater appUpdater;
@@ -118,10 +103,7 @@ public final class MainActivity extends Activity {
     private String qualityPreferenceAppliedFor;
     private String subtitlePreferenceAppliedFor;
     private int playlistGeneration;
-    private boolean guideOpen;
     private boolean playerUsesVolumeNormalization;
-    private int guideChannelIndex;
-    private int guideProgrammeIndex;
 
     private final Runnable hideOverlay = () -> {
         channelOverlay.setVisibility(View.GONE);
@@ -132,14 +114,12 @@ public final class MainActivity extends Activity {
             String currentTime = new SimpleDateFormat("HH:mm", Locale.getDefault())
                     .format(new Date());
             clock.setText(currentTime);
-            guideClock.setText(currentTime);
             mainHandler.postDelayed(this, 30_000);
         }
     };
     private final Runnable updateProgramme = new Runnable() {
         @Override public void run() {
             updateProgrammeInfo();
-            if (guideOpen) updateGuide();
             if (!exiting && !isFinishing()) {
                 mainHandler.postDelayed(this, 30_000);
             }
@@ -162,11 +142,8 @@ public final class MainActivity extends Activity {
     }
 
     private void bindViews() {
-        playerHost = findViewById(R.id.player_host);
         playerView = findViewById(R.id.player_view);
-        guideLiveHost = findViewById(R.id.guide_live_host);
         channelOverlay = findViewById(R.id.channel_overlay);
-        guideOverlay = findViewById(R.id.guide_overlay);
         loadingPanel = findViewById(R.id.loading_panel);
         loadingProgress = findViewById(R.id.loading_progress);
         loadingText = findViewById(R.id.loading_text);
@@ -182,15 +159,6 @@ public final class MainActivity extends Activity {
         codecInfo = findViewById(R.id.codec_info);
         statusDot = findViewById(R.id.status_dot);
         streamStatus = findViewById(R.id.stream_status);
-        guideDate = findViewById(R.id.guide_date);
-        guideClock = findViewById(R.id.guide_clock);
-        guideSelectedChannel = findViewById(R.id.guide_selected_channel);
-        guideLiveChannel = findViewById(R.id.guide_live_channel);
-        guideLiveContent = findViewById(R.id.guide_live_content);
-        guideChannelList = findViewById(R.id.guide_channel_list);
-        guideProgrammeList = findViewById(R.id.guide_programme_list);
-        guideChannelScroll = findViewById(R.id.guide_channel_scroll);
-        guideProgrammeScroll = findViewById(R.id.guide_programme_scroll);
     }
 
     private void createPlayer() {
@@ -503,6 +471,9 @@ public final class MainActivity extends Activity {
         LinearLayout container = dialog.findViewById(
                 R.id.stream_quality_options
         );
+        Switch subtitlesSwitch = createSubtitleSwitch(channel);
+        container.addView(subtitlesSwitch);
+
         Button automaticButton = createQualityButton(
                 (preference == null ? "\u2713 " : "")
                         + getString(R.string.stream_quality_automatic)
@@ -527,8 +498,6 @@ public final class MainActivity extends Activity {
             if (selected) focusTarget = button;
         }
 
-        Switch subtitlesSwitch = createSubtitleSwitch(channel);
-        container.addView(subtitlesSwitch);
         if (focusTarget == null) focusTarget = automaticButton;
         Button initialFocus = focusTarget;
 
@@ -698,205 +667,6 @@ public final class MainActivity extends Activity {
         return closest;
     }
 
-    private void openGuide() {
-        if (guideOpen || channels.isEmpty() || loadFailed) return;
-        guideOpen = true;
-        guideChannelIndex = channelIndex;
-        guideProgrammeIndex = 0;
-        mainHandler.removeCallbacks(hideOverlay);
-        hideOverlay.run();
-        guideOverlay.setVisibility(View.VISIBLE);
-        movePlayerToGuide();
-        updateGuide();
-    }
-
-    private void closeGuide() {
-        if (!guideOpen) return;
-        guideOpen = false;
-        movePlayerToFullscreen();
-        guideOverlay.setVisibility(View.GONE);
-        enterImmersiveMode();
-    }
-
-    private void movePlayerToGuide() {
-        if (playerView.getParent() == guideLiveHost) return;
-        ViewGroup parent = (ViewGroup) playerView.getParent();
-        if (parent != null) parent.removeView(playerView);
-        guideLiveHost.addView(playerView, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-        ));
-    }
-
-    private void movePlayerToFullscreen() {
-        if (playerView.getParent() == playerHost) return;
-        ViewGroup parent = (ViewGroup) playerView.getParent();
-        if (parent != null) parent.removeView(playerView);
-        playerHost.addView(playerView, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-        ));
-    }
-
-    private void updateGuide() {
-        if (!guideOpen || channels.isEmpty()) return;
-        guideChannelIndex = Math.max(0, Math.min(guideChannelIndex, channels.size() - 1));
-        Channel selectedChannel = channels.get(guideChannelIndex);
-        List<EpgProgramme> programmes = epgData.getProgrammes(selectedChannel.getTvgId());
-        if (programmes.isEmpty()) {
-            guideProgrammeIndex = 0;
-        } else {
-            guideProgrammeIndex = Math.max(0, Math.min(guideProgrammeIndex, programmes.size() - 1));
-        }
-
-        guideDate.setText(new SimpleDateFormat("EEEE, d MMMM", Locale.getDefault())
-                .format(new Date()));
-        guideSelectedChannel.setText(String.format(
-                Locale.ROOT,
-                "%03d  %s",
-                guideChannelIndex + 1,
-                selectedChannel.getName()
-        ));
-        Channel currentChannel = channels.get(channelIndex);
-        guideLiveChannel.setText(String.format(
-                Locale.ROOT,
-                "%03d  %s",
-                channelIndex + 1,
-                currentChannel.getName()
-        ));
-        EpgProgramme liveProgramme = epgData.findCurrent(
-                currentChannel.getTvgId(),
-                System.currentTimeMillis()
-        );
-        guideLiveContent.setText(liveProgramme == null
-                ? (currentChannel.getGroup().isBlank()
-                ? getString(R.string.live_content)
-                : currentChannel.getGroup())
-                : liveProgramme.getTitle());
-
-        guideChannelList.removeAllViews();
-        for (int index = 0; index < channels.size(); index++) {
-            Channel channel = channels.get(index);
-            TextView row = new TextView(this);
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    dp(42)
-            );
-            params.bottomMargin = dp(5);
-            row.setLayoutParams(params);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(dp(10), 0, dp(8), 0);
-            row.setSingleLine(true);
-            row.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            row.setText(String.format(Locale.ROOT, "%03d  %s", index + 1, channel.getName()));
-            row.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-            row.setTextColor(getColor(index == guideChannelIndex
-                    ? R.color.black
-                    : R.color.white));
-            row.setBackgroundColor(getColor(index == guideChannelIndex
-                    ? R.color.cyan
-                    : R.color.panel));
-            guideChannelList.addView(row);
-        }
-
-        guideProgrammeList.removeAllViews();
-        if (programmes.isEmpty()) {
-            TextView empty = createGuideMessage(getString(R.string.guide_no_programming));
-            guideProgrammeList.addView(empty);
-        } else {
-            int start = Math.max(0, Math.min(
-                    guideProgrammeIndex - 2,
-                    Math.max(0, programmes.size() - 10)
-            ));
-            int end = Math.min(programmes.size(), start + 10);
-            SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
-            for (int index = start; index < end; index++) {
-                EpgProgramme programme = programmes.get(index);
-                LinearLayout row = new LinearLayout(this);
-                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        dp(52)
-                );
-                params.bottomMargin = dp(6);
-                row.setLayoutParams(params);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(dp(12), 0, dp(12), 0);
-                row.setOrientation(LinearLayout.HORIZONTAL);
-                row.setBackgroundColor(getColor(index == guideProgrammeIndex
-                        ? R.color.cyan
-                        : R.color.panel));
-
-                TextView time = new TextView(this);
-                time.setLayoutParams(new LinearLayout.LayoutParams(dp(86), dp(40)));
-                time.setGravity(Gravity.CENTER_VERTICAL);
-                time.setText(timeFormat.format(new Date(programme.getStartMillis())));
-                time.setTextColor(getColor(index == guideProgrammeIndex
-                        ? R.color.black
-                        : R.color.cyan));
-                time.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-                row.addView(time);
-
-                TextView title = new TextView(this);
-                title.setLayoutParams(new LinearLayout.LayoutParams(
-                        0,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        1f
-                ));
-                title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                title.setMaxLines(1);
-                title.setText(programme.getTitle());
-                title.setTextColor(getColor(index == guideProgrammeIndex
-                        ? R.color.black
-                        : R.color.white));
-                title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-                row.addView(title);
-                guideProgrammeList.addView(row);
-            }
-        }
-        guideChannelScroll.post(() -> guideChannelScroll.smoothScrollTo(
-                0,
-                Math.max(0, guideChannelIndex * dp(47) - dp(115))
-        ));
-        guideProgrammeScroll.post(() -> guideProgrammeScroll.fullScroll(View.FOCUS_DOWN));
-    }
-
-    private TextView createGuideMessage(String message) {
-        TextView text = new TextView(this);
-        text.setLayoutParams(new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        ));
-        text.setPadding(dp(12), dp(14), dp(12), dp(14));
-        text.setText(message);
-        text.setTextColor(getColor(R.color.muted));
-        text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        return text;
-    }
-
-    private void moveGuideChannel(int delta) {
-        if (!guideOpen || channels.isEmpty()) return;
-        guideChannelIndex = (guideChannelIndex + delta + channels.size()) % channels.size();
-        guideProgrammeIndex = epgData.findProgrammeIndex(
-                channels.get(guideChannelIndex).getTvgId(),
-                System.currentTimeMillis()
-        );
-        if (guideProgrammeIndex < 0) guideProgrammeIndex = 0;
-        updateGuide();
-    }
-
-    private void moveGuideProgramme(int delta) {
-        if (!guideOpen || channels.isEmpty()) return;
-        List<EpgProgramme> programmes = epgData.getProgrammes(
-                channels.get(guideChannelIndex).getTvgId()
-        );
-        if (programmes.isEmpty()) return;
-        guideProgrammeIndex = Math.max(0, Math.min(
-                programmes.size() - 1,
-                guideProgrammeIndex + delta
-        ));
-        updateGuide();
-    }
-
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
@@ -933,37 +703,10 @@ public final class MainActivity extends Activity {
                 return true;
             }
             if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) && event.getRepeatCount() >= 1) {
-                if (guideOpen) closeGuide();
                 openSettings();
                 return true;
             }
             if (event.getRepeatCount() == 0) {
-                if (guideOpen) {
-                    if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                        moveGuideChannel(-1);
-                        return true;
-                    }
-                    if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                        moveGuideChannel(1);
-                        return true;
-                    }
-                    if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                        moveGuideProgramme(-1);
-                        return true;
-                    }
-                    if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                        moveGuideProgramme(1);
-                        return true;
-                    }
-                    if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER
-                            || keyCode == KeyEvent.KEYCODE_ENTER) {
-                        int selectedChannel = guideChannelIndex;
-                        closeGuide();
-                        playChannel(selectedChannel);
-                        return true;
-                    }
-                    return true;
-                }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
                     playChannel(channelIndex + (isChannelNavigationInverted() ? 1 : -1));
                     return true;
@@ -979,9 +722,6 @@ public final class MainActivity extends Activity {
                 if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_INFO) {
                     if (loadFailed) {
                         refreshPlaylist(getPlaylistUrl());
-                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER
-                            || keyCode == KeyEvent.KEYCODE_ENTER) {
-                        openGuide();
                     } else {
                         showOverlay(false);
                     }
@@ -1001,10 +741,6 @@ public final class MainActivity extends Activity {
     }
 
     private void handleBackAction() {
-        if (guideOpen) {
-            closeGuide();
-            return;
-        }
         if (channelOverlay.getVisibility() == View.VISIBLE
                 || clock.getVisibility() == View.VISIBLE) {
             overlayAwaitingPlayback = false;
@@ -1065,7 +801,6 @@ public final class MainActivity extends Activity {
 
     private void openSettings() {
         if (settingsOpen) return;
-        if (guideOpen) closeGuide();
         settingsOpen = true;
         startActivityForResult(new Intent(this, SettingsActivity.class), SETTINGS_REQUEST);
     }
