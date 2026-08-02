@@ -12,7 +12,7 @@ public final class EpgRepository {
     private static final int CONNECT_TIMEOUT_MS = 12_000;
     private static final int READ_TIMEOUT_MS = 25_000;
     private static final int MAX_EPG_BYTES = 32 * 1024 * 1024;
-    private static final String USER_AGENT = "VibeM3U/0.2.1 (Android TV)";
+    private static final String USER_AGENT = "VibeM3U/0.4.2 (Android TV)";
 
     public EpgData download(URI epgUri) throws IOException {
         if (epgUri == null || epgUri.getScheme() == null) return EpgData.empty();
