@@ -51,10 +51,12 @@ public final class VolumeNormalizationAudioProcessorTest {
         processor.configure(format);
         processor.flush();
 
-        ByteBuffer input = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder());
-        input.putFloat(0.04f).flip();
+        ByteBuffer input = ByteBuffer.allocateDirect(4 * 48_000).order(ByteOrder.nativeOrder());
+        for (int index = 0; index < 48_000; index++) input.putFloat(0.04f);
+        input.flip();
         processor.queueInput(input);
-        float processed = processor.getOutput().order(ByteOrder.nativeOrder()).getFloat();
+        ByteBuffer processedOutput = processor.getOutput().order(ByteOrder.nativeOrder());
+        float processed = processedOutput.getFloat(processedOutput.limit() - 4);
 
         processor.flush();
         ByteBuffer afterReset = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder());
