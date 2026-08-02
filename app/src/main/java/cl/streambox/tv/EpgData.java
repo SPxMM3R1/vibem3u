@@ -48,23 +48,5 @@ public final class EpgData {
         return null;
     }
 
-    public List<EpgProgramme> getProgrammes(String channelId) {
-        if (channelId == null || channelId.isBlank()) return Collections.emptyList();
-        List<EpgProgramme> programmes = programmesByChannel.get(channelId);
-        return programmes == null ? Collections.emptyList() : programmes;
-    }
-
-    public int findProgrammeIndex(String channelId, long nowMillis) {
-        List<EpgProgramme> programmes = getProgrammes(channelId);
-        for (int index = 0; index < programmes.size(); index++) {
-            EpgProgramme programme = programmes.get(index);
-            if (programme.getStartMillis() <= nowMillis && nowMillis < programme.getStopMillis()) {
-                return index;
-            }
-            if (programme.getStartMillis() > nowMillis) break;
-        }
-        return programmes.isEmpty() ? -1 : 0;
-    }
-
     public int getProgrammeCount() { return programmeCount; }
 }
