@@ -18,10 +18,12 @@ public final class SettingsActivity extends Activity {
     public static final String PREFS = "streambox_settings";
     public static final String KEY_PLAYLIST_URL = "playlist_url";
     public static final String KEY_INVERT_CHANNEL_KEYS = "invert_channel_keys";
+    public static final String KEY_NORMALIZE_VOLUME = "normalize_volume";
 
     private EditText urlInput;
     private TextView errorText;
     private Switch invertChannelKeys;
+    private Switch normalizeVolume;
     private boolean hasExistingUrl;
 
     @Override
@@ -44,12 +46,14 @@ public final class SettingsActivity extends Activity {
         urlInput = findViewById(R.id.playlist_url);
         errorText = findViewById(R.id.url_error);
         invertChannelKeys = findViewById(R.id.invert_channel_keys);
+        normalizeVolume = findViewById(R.id.normalize_volume);
         Button cancelButton = findViewById(R.id.cancel_button);
         Button saveButton = findViewById(R.id.save_button);
 
         urlInput.setText(existingUrl);
         urlInput.setSelection(urlInput.length());
         invertChannelKeys.setChecked(prefs.getBoolean(KEY_INVERT_CHANNEL_KEYS, false));
+        normalizeVolume.setChecked(prefs.getBoolean(KEY_NORMALIZE_VOLUME, false));
         cancelButton.setVisibility(hasExistingUrl ? View.VISIBLE : View.GONE);
         cancelButton.setOnClickListener(v -> finish());
         saveButton.setOnClickListener(v -> save());
@@ -81,6 +85,7 @@ public final class SettingsActivity extends Activity {
                 .edit()
                 .putString(KEY_PLAYLIST_URL, value)
                 .putBoolean(KEY_INVERT_CHANNEL_KEYS, invertChannelKeys.isChecked())
+                .putBoolean(KEY_NORMALIZE_VOLUME, normalizeVolume.isChecked())
                 .apply();
         setResult(RESULT_OK, new Intent().putExtra(KEY_PLAYLIST_URL, value));
         finish();

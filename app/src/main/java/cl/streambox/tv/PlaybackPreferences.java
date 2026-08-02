@@ -13,6 +13,7 @@ final class PlaybackPreferences {
     private static final String KEY_LAST_CHANNEL = "last_channel";
     private static final String KEY_LAST_INDEX = "last_index";
     private static final String QUALITY_PREFIX = "quality_";
+    private static final String SUBTITLES_PREFIX = "subtitles_";
 
     static final class QualityPreference {
         final int bitrate;
@@ -73,6 +74,14 @@ final class PlaybackPreferences {
         preferences.edit().remove(qualityKey(channel)).apply();
     }
 
+    boolean getSubtitles(Channel channel) {
+        return preferences.getBoolean(subtitlesKey(channel), true);
+    }
+
+    void rememberSubtitles(Channel channel, boolean enabled) {
+        preferences.edit().putBoolean(subtitlesKey(channel), enabled).apply();
+    }
+
     static int findChannelIndex(List<Channel> channels, String savedIdentity, int fallbackIndex) {
         if (channels.isEmpty()) return 0;
         if (savedIdentity != null && !savedIdentity.isBlank()) {
@@ -92,6 +101,10 @@ final class PlaybackPreferences {
 
     private static String qualityKey(Channel channel) {
         return QUALITY_PREFIX + sha256(channelIdentity(channel));
+    }
+
+    private static String subtitlesKey(Channel channel) {
+        return SUBTITLES_PREFIX + sha256(channelIdentity(channel));
     }
 
     private static String sha256(String value) {

@@ -34,10 +34,15 @@ ya podrán anunciarse y descargarse desde la propia app.
 ## Controles
 
 - `↑` / `↓`: canal anterior o siguiente; el sentido puede invertirse en Configuración.
-- `→`: elegir `Automático` o fijar una resolución/bitrate para el canal actual.
-- `OK`: mostrar la información del canal.
+- `→`: elegir `Automático`, fijar una resolución/bitrate y activar o desactivar subtítulos del canal.
+- `OK`: abrir la guía general con canales, programación y el video en vivo.
+- `←` / `→` dentro de la guía: recorrer la programación.
 - Mantener `OK`, botón `Menú` o botón `Configuración`: editar la URL M3U.
 - `Atrás`: ocultar la información si está visible; si ya está oculta, confirmar salida.
+
+En Configuración se puede activar la normalización general de volumen. Esta opción
+procesa el audio PCM para reducir diferencias entre canales y puede desactivar el
+passthrough de audio digital mientras está activa.
 
 ## Compilación automática
 
