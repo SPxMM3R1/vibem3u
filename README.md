@@ -6,7 +6,7 @@ Reproductor M3U para Android TV inspirado en la experiencia de un set-top box:
 abre directamente la señal, descarga la lista nuevamente en cada inicio y muestra
 una barra compacta al cambiar de canal.
 
-La versión 0.4.1 recuerda el último canal, permite fijar una variante de video por
+La versión 0.4.2 recuerda el último canal, permite fijar una variante de video por
 canal, presenta el reloj dentro de un panel con el mismo estilo de la información
 del canal y usa `Atrás` para ocultar primero la información visible. También conserva
 la actualización desde GitHub introducida en 0.3.0.
@@ -34,10 +34,15 @@ ya podrán anunciarse y descargarse desde la propia app.
 ## Controles
 
 - `↑` / `↓`: canal anterior o siguiente; el sentido puede invertirse en Configuración.
-- `→`: elegir `Automático` o fijar una resolución/bitrate para el canal actual.
-- `OK`: mostrar la información del canal.
+- `→`: elegir `Automático`, fijar una resolución/bitrate y activar o desactivar subtítulos del canal.
+- `OK`: abrir la guía general con canales, programación y el video en vivo.
+- `←` / `→` dentro de la guía: recorrer la programación.
 - Mantener `OK`, botón `Menú` o botón `Configuración`: editar la URL M3U.
 - `Atrás`: ocultar la información si está visible; si ya está oculta, confirmar salida.
+
+En Configuración se puede activar la normalización general de volumen. Esta opción
+procesa el audio PCM para reducir diferencias entre canales y puede desactivar el
+passthrough de audio digital mientras está activa.
 
 ## Compilación automática
 

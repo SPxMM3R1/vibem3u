@@ -81,6 +81,36 @@
             android:textColor="@color/muted"
             android:textSize="13sp" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="@string/audio_settings_title"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <Switch
+            android:id="@+id/normalize_volume"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/focus_button"
+            android:focusable="true"
+            android:paddingHorizontal="14dp"
+            android:text="@string/normalize_volume"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            android:thumbTint="@color/cyan" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/normalize_volume_description"
+            android:textColor="@color/muted"
+            android:textSize="13sp" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
