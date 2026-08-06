@@ -41,6 +41,8 @@ import androidx.media3.common.Player;
 import androidx.media3.common.TrackSelectionOverride;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.VideoSize;
+import androidx.media3.common.text.Cue;
+import androidx.media3.common.text.CueGroup;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
@@ -100,8 +102,12 @@ public final class MainActivity extends Activity {
     private boolean exiting;
     private Dialog exitDialog;
     private Dialog qualityDialog;
+    private LinearLayout qualityDialogOptions;
+    private Switch qualityDialogSubtitleSwitch;
+    private String qualityDialogChannelIdentity;
     private String qualityPreferenceAppliedFor;
     private String subtitlePreferenceAppliedFor;
+    private String subtitleTextObservedFor;
     private int playlistGeneration;
     private boolean playerUsesVolumeNormalization;
 
@@ -182,6 +188,10 @@ public final class MainActivity extends Activity {
                 updateDiagnostics();
                 applySavedQualityPreference(tracks);
                 applySavedSubtitlePreference(tracks);
+            }
+
+            @Override public void onCues(CueGroup cueGroup) {
+                handleSubtitleCues(cueGroup);
             }
 
             @Override public void onPlayerError(PlaybackException error) {
@@ -266,6 +276,7 @@ public final class MainActivity extends Activity {
         String channelIdentity = PlaybackPreferences.channelIdentity(channel);
         qualityPreferenceAppliedFor = null;
         subtitlePreferenceAppliedFor = null;
+        subtitleTextObservedFor = null;
 
         player.setTrackSelectionParameters(player.getTrackSelectionParameters()
                 .buildUpon()
@@ -418,14 +429,52 @@ public final class MainActivity extends Activity {
         if (mediaItem == null || !channelIdentity.equals(mediaItem.mediaId)
                 || channelIdentity.equals(subtitlePreferenceAppliedFor)) return;
 
+        // A manifest can advertise a text group without ever delivering a real
+        // subtitle cue. Keep text enabled while probing the stream so a saved
+        // "off" preference cannot prevent onCues() from proving availability.
+        boolean textObserved = channelIdentity.equals(subtitleTextObservedFor);
         subtitlePreferenceAppliedFor = channelIdentity;
         player.setTrackSelectionParameters(player.getTrackSelectionParameters()
                 .buildUpon()
                 .setTrackTypeDisabled(
                         C.TRACK_TYPE_TEXT,
-                        !playbackPreferences.getSubtitles(channel)
+                        textObserved && !playbackPreferences.getSubtitles(channel)
                 )
                 .build());
+    }
+
+    private void handleSubtitleCues(CueGroup cueGroup) {
+        if (!hasNonBlankTextCue(cueGroup)
+                || player == null
+                || channels.isEmpty()
+                || channelIndex < 0
+                || channelIndex >= channels.size()) return;
+
+        MediaItem mediaItem = player.getCurrentMediaItem();
+        if (mediaItem == null) return;
+
+        String channelIdentity = PlaybackPreferences.channelIdentity(
+                channels.get(channelIndex)
+        );
+        if (!channelIdentity.equals(mediaItem.mediaId)) return;
+
+        subtitleTextObservedFor = channelIdentity;
+        subtitlePreferenceAppliedFor = null;
+        applySavedSubtitlePreference(player.getCurrentTracks());
+        maybeAddSubtitleOptionToQualityDialog();
+    }
+
+    private static boolean hasNonBlankTextCue(CueGroup cueGroup) {
+        for (Cue cue : cueGroup.cues) {
+            if (cue.text != null && !cue.text.toString().isBlank()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasObservedSubtitleText(Channel channel) {
+        return PlaybackPreferences.channelIdentity(channel).equals(subtitleTextObservedFor);
     }
 
     private static boolean hasSupportedTextTrack(Tracks tracks) {
@@ -471,12 +520,15 @@ public final class MainActivity extends Activity {
         LinearLayout container = dialog.findViewById(
                 R.id.stream_quality_options
         );
+        qualityDialogOptions = container;
+        qualityDialogSubtitleSwitch = null;
+        qualityDialogChannelIdentity = PlaybackPreferences.channelIdentity(channel);
         View focusTarget = null;
         Button automaticButton = null;
-        if (hasSupportedTextTrack(player.getCurrentTracks())) {
-            Switch subtitlesSwitch = createSubtitleSwitch(channel);
-            container.addView(subtitlesSwitch);
-            focusTarget = subtitlesSwitch;
+        if (hasObservedSubtitleText(channel)) {
+            qualityDialogSubtitleSwitch = createSubtitleSwitch(channel);
+            container.addView(qualityDialogSubtitleSwitch);
+            focusTarget = qualityDialogSubtitleSwitch;
         }
 
         if (options.size() != 1) {
@@ -511,7 +563,12 @@ public final class MainActivity extends Activity {
             dialog.setOnShowListener(ignored -> initialFocus.requestFocus());
         }
         dialog.setOnDismissListener(ignored -> {
-            if (qualityDialog == dialog) qualityDialog = null;
+            if (qualityDialog == dialog) {
+                qualityDialog = null;
+                qualityDialogOptions = null;
+                qualityDialogSubtitleSwitch = null;
+                qualityDialogChannelIdentity = null;
+            }
             if (!isFinishing() && !isDestroyed()) enterImmersiveMode();
         });
 
@@ -526,6 +583,25 @@ public final class MainActivity extends Activity {
             window.setAttributes(attributes);
         }
         dialog.show();
+    }
+
+    private void maybeAddSubtitleOptionToQualityDialog() {
+        if (qualityDialog == null
+                || !qualityDialog.isShowing()
+                || qualityDialogOptions == null
+                || qualityDialogSubtitleSwitch != null
+                || player == null
+                || channels.isEmpty()
+                || channelIndex < 0
+                || channelIndex >= channels.size()) return;
+
+        Channel channel = channels.get(channelIndex);
+        String channelIdentity = PlaybackPreferences.channelIdentity(channel);
+        if (!channelIdentity.equals(qualityDialogChannelIdentity)
+                || !channelIdentity.equals(subtitleTextObservedFor)) return;
+
+        qualityDialogSubtitleSwitch = createSubtitleSwitch(channel);
+        qualityDialogOptions.addView(qualityDialogSubtitleSwitch, 0);
     }
 
     private Switch createSubtitleSwitch(Channel channel) {
