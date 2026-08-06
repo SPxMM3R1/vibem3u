@@ -471,20 +471,27 @@ public final class MainActivity extends Activity {
         LinearLayout container = dialog.findViewById(
                 R.id.stream_quality_options
         );
-        Switch subtitlesSwitch = createSubtitleSwitch(channel);
-        container.addView(subtitlesSwitch);
+        View focusTarget = null;
+        Button automaticButton = null;
+        if (hasSupportedTextTrack(player.getCurrentTracks())) {
+            Switch subtitlesSwitch = createSubtitleSwitch(channel);
+            container.addView(subtitlesSwitch);
+            focusTarget = subtitlesSwitch;
+        }
 
-        Button automaticButton = createQualityButton(
-                (preference == null ? "\u2713 " : "")
-                        + getString(R.string.stream_quality_automatic)
-        );
-        automaticButton.setOnClickListener(view -> {
-            useAutomaticQuality(channel);
-            dialog.dismiss();
-        });
-        container.addView(automaticButton);
+        if (options.size() != 1) {
+            automaticButton = createQualityButton(
+                    (preference == null ? "\u2713 " : "")
+                            + getString(R.string.stream_quality_automatic)
+            );
+            automaticButton.setOnClickListener(view -> {
+                useAutomaticQuality(channel);
+                dialog.dismiss();
+            });
+            container.addView(automaticButton);
+            if (preference == null) focusTarget = automaticButton;
+        }
 
-        Button focusTarget = preference == null ? automaticButton : null;
         for (VideoTrackOption option : options) {
             boolean selected = option == selectedOption;
             Button button = createQualityButton(
@@ -495,13 +502,14 @@ public final class MainActivity extends Activity {
                 dialog.dismiss();
             });
             container.addView(button);
-            if (selected) focusTarget = button;
+            if (selected || options.size() == 1) focusTarget = button;
         }
 
         if (focusTarget == null) focusTarget = automaticButton;
-        Button initialFocus = focusTarget;
-
-        dialog.setOnShowListener(ignored -> initialFocus.requestFocus());
+        if (focusTarget != null) {
+            View initialFocus = focusTarget;
+            dialog.setOnShowListener(ignored -> initialFocus.requestFocus());
+        }
         dialog.setOnDismissListener(ignored -> {
             if (qualityDialog == dialog) qualityDialog = null;
             if (!isFinishing() && !isDestroyed()) enterImmersiveMode();
@@ -521,7 +529,6 @@ public final class MainActivity extends Activity {
     }
 
     private Switch createSubtitleSwitch(Channel channel) {
-        boolean available = hasSupportedTextTrack(player.getCurrentTracks());
         Switch subtitlesSwitch = new Switch(this);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -534,26 +541,21 @@ public final class MainActivity extends Activity {
         subtitlesSwitch.setTextColor(getColor(R.color.white));
         subtitlesSwitch.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
         subtitlesSwitch.setAllCaps(false);
-        subtitlesSwitch.setEnabled(available);
         subtitlesSwitch.setChecked(playbackPreferences.getSubtitles(channel));
-        updateSubtitleSwitchLabel(subtitlesSwitch, available);
+        updateSubtitleSwitchLabel(subtitlesSwitch);
         subtitlesSwitch.setOnCheckedChangeListener((button, checked) -> {
             playbackPreferences.rememberSubtitles(channel, checked);
-            updateSubtitleSwitchLabel(button, available);
+            updateSubtitleSwitchLabel(button);
             subtitlePreferenceAppliedFor = null;
             applySavedSubtitlePreference(player.getCurrentTracks());
         });
         return subtitlesSwitch;
     }
 
-    private void updateSubtitleSwitchLabel(CompoundButton button, boolean available) {
-        if (!available) {
-            button.setText(R.string.subtitles_unavailable);
-        } else {
-            button.setText(button.isChecked()
-                    ? R.string.subtitles_enabled
-                    : R.string.subtitles_disabled);
-        }
+    private void updateSubtitleSwitchLabel(CompoundButton button) {
+        button.setText(button.isChecked()
+                ? R.string.subtitles_enabled
+                : R.string.subtitles_disabled);
     }
 
     private Button createQualityButton(String text) {

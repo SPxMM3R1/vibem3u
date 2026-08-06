@@ -6,7 +6,7 @@ Reproductor M3U para Android TV inspirado en la experiencia de un set-top box:
 abre directamente la señal, descarga la lista nuevamente en cada inicio y muestra
 una barra compacta al cambiar de canal.
 
-La versión 0.4.3 recuerda el último canal, permite fijar una variante de video por
+La versión 0.4.4 recuerda el último canal, permite fijar una variante de video por
 canal, presenta el reloj dentro de un panel con el mismo estilo de la información
 del canal y usa `Atrás` para ocultar primero la información visible. También conserva
 la actualización desde GitHub introducida en 0.3.0.
