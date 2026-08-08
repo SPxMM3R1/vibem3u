@@ -47,6 +47,12 @@ public final class ChannelLogoCache {
     }
 
     public synchronized Bitmap load(URI logoUri) throws IOException {
+        Bitmap cached = loadCached(logoUri);
+        return cached != null ? cached : refresh(logoUri);
+    }
+
+    public synchronized Bitmap loadCached(URI logoUri) {
+        if (logoUri == null || logoUri.getScheme() == null) return null;
         String url = logoUri.toString();
         Bitmap memoryBitmap = memoryCache.get(url);
         if (memoryBitmap != null && !memoryBitmap.isRecycled()) {
@@ -65,15 +71,27 @@ public final class ChannelLogoCache {
             //noinspection ResultOfMethodCallIgnored
             diskFile.delete();
         }
+        return null;
+    }
 
+    public synchronized Bitmap refresh(URI logoUri) throws IOException {
+        if (logoUri == null || logoUri.getScheme() == null) {
+            throw new IOException("La URL del logo no es válida.");
+        }
+        String url = logoUri.toString();
+        File diskFile = new File(diskDirectory, cacheKey(url) + ".img");
         byte[] bytes = download(url);
         Bitmap downloadedBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
         if (downloadedBitmap == null) {
             throw new IOException("El logo no tiene un formato de imagen compatible.");
         }
 
-        writeToDisk(diskFile, bytes);
-        trimDiskCache();
+        try {
+            writeToDisk(diskFile, bytes);
+            trimDiskCache();
+        } catch (IOException ignored) {
+            // La imagen nueva todavía puede mostrarse durante esta sesión.
+        }
         memoryCache.put(url, downloadedBitmap);
         return downloadedBitmap;
     }
@@ -82,9 +100,11 @@ public final class ChannelLogoCache {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
         connection.setReadTimeout(READ_TIMEOUT_MS);
-        connection.setUseCaches(true);
+        connection.setUseCaches(false);
         connection.setInstanceFollowRedirects(true);
         connection.setRequestProperty("Accept", "image/*,*/*;q=0.8");
+        connection.setRequestProperty("Cache-Control", "no-cache, no-store");
+        connection.setRequestProperty("Pragma", "no-cache");
         connection.setRequestProperty("User-Agent", USER_AGENT);
         try {
             int responseCode = connection.getResponseCode();
@@ -115,16 +135,35 @@ public final class ChannelLogoCache {
 
     private static void writeToDisk(File target, byte[] bytes) throws IOException {
         File temporary = new File(target.getParentFile(), target.getName() + ".tmp");
+        File backup = new File(target.getParentFile(), target.getName() + ".bak");
+        boolean movedPrevious = false;
         try (FileOutputStream output = new FileOutputStream(temporary)) {
             output.write(bytes);
         }
-        if (target.exists() && !target.delete()) {
-            // El archivo válido anterior seguirá funcionando si no puede reemplazarse.
-            //noinspection ResultOfMethodCallIgnored
-            temporary.delete();
-            return;
-        }
-        if (!temporary.renameTo(target)) {
+        try {
+            if (backup.exists() && !backup.delete()) {
+                throw new IOException("No se pudo preparar la caché del logo.");
+            }
+            if (target.exists()) {
+                if (!target.renameTo(backup)) {
+                    throw new IOException("No se pudo conservar la caché del logo anterior.");
+                }
+                movedPrevious = true;
+            }
+            if (!temporary.renameTo(target)) {
+                throw new IOException("No se pudo guardar la caché del logo nueva.");
+            }
+            if (movedPrevious) {
+                //noinspection ResultOfMethodCallIgnored
+                backup.delete();
+            }
+        } catch (IOException error) {
+            if (movedPrevious && !target.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                backup.renameTo(target);
+            }
+            throw error;
+        } finally {
             //noinspection ResultOfMethodCallIgnored
             temporary.delete();
         }
