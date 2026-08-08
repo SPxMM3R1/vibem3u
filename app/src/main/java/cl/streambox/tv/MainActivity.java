@@ -163,7 +163,6 @@ public final class MainActivity extends Activity {
         clock = findViewById(R.id.clock);
         channelLogo = findViewById(R.id.channel_logo);
         channelLogoFallback = findViewById(R.id.channel_logo_fallback);
-        channelLogo.setFilterBitmap(true);
         channelNumber = findViewById(R.id.channel_number);
         channelName = findViewById(R.id.channel_name);
         contentTitle = findViewById(R.id.content_title);
@@ -442,7 +441,11 @@ public final class MainActivity extends Activity {
                 mainHandler.post(() -> {
                     if (expectedIndex != channelIndex || isFinishing()) return;
                     channelLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                    channelLogo.setImageBitmap(bitmap);
+                    android.graphics.drawable.BitmapDrawable drawable =
+                            new android.graphics.drawable.BitmapDrawable(getResources(), bitmap);
+                    drawable.setFilterBitmap(true);
+                    drawable.setDither(true);
+                    channelLogo.setImageDrawable(drawable);
                     channelLogo.setVisibility(View.VISIBLE);
                     channelLogoFallback.setVisibility(View.GONE);
                 });
