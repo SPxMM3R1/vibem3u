@@ -45,7 +45,9 @@ import androidx.media3.common.VideoSize;
 import androidx.media3.common.text.Cue;
 import androidx.media3.common.text.CueGroup;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.PlayerView;
 
 import java.net.URI;
@@ -65,11 +67,14 @@ public final class MainActivity extends Activity {
     private static final long OVERLAY_TIMEOUT_MS = 4_500;
     private static final long PLAYER_RETRY_DELAY_MS = 2_500;
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
+    private static final String PLAYER_USER_AGENT =
+            "VibeM3U/" + BuildConfig.VERSION_NAME + " (Android TV)";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
     private final PlaylistRepository repository = new PlaylistRepository();
     private final EpgRepository epgRepository = new EpgRepository();
+    private final PlaybackRecoveryPolicy playbackRecoveryPolicy = new PlaybackRecoveryPolicy();
     private final List<Channel> channels = new ArrayList<>();
 
     private PlayerView playerView;
@@ -111,6 +116,8 @@ public final class MainActivity extends Activity {
     private String subtitleTextObservedFor;
     private int playlistGeneration;
     private boolean playerUsesVolumeNormalization;
+    private long playbackGeneration;
+    private Runnable scheduledPlaybackRetry;
 
     private final Runnable hideOverlay = () -> {
         channelOverlay.setVisibility(View.GONE);
@@ -170,10 +177,17 @@ public final class MainActivity extends Activity {
 
     private void createPlayer() {
         playerUsesVolumeNormalization = isVolumeNormalizationEnabled();
+        DefaultHttpDataSource.Factory httpDataSourceFactory =
+                new DefaultHttpDataSource.Factory()
+                        .setUserAgent(PLAYER_USER_AGENT)
+                        .setAllowCrossProtocolRedirects(true)
+                        .setConnectTimeoutMs(12_000)
+                        .setReadTimeoutMs(20_000);
         player = new ExoPlayer.Builder(
                 this,
                 new VibeRenderersFactory(this, playerUsesVolumeNormalization)
         )
+                .setMediaSourceFactory(new DefaultMediaSourceFactory(httpDataSourceFactory))
                 .setAudioAttributes(
                         new AudioAttributes.Builder()
                                 .setUsage(C.USAGE_MEDIA)
@@ -208,18 +222,20 @@ public final class MainActivity extends Activity {
                 codecInfo.setText(shortMessage(error));
                 overlayAwaitingPlayback = true;
                 showOverlay(true);
-                mainHandler.postDelayed(() -> {
-                    if (player != null && player.getPlayerError() != null) {
-                        player.prepare();
-                        player.play();
-                    }
-                }, PLAYER_RETRY_DELAY_MS);
+                cancelScheduledPlaybackRetry();
+                MediaItem current = player == null ? null : player.getCurrentMediaItem();
+                if (current != null && playbackRecoveryPolicy.tryConsumeRetry(error.errorCode)) {
+                    schedulePlaybackRetry(current.mediaId, playbackGeneration);
+                }
             }
         });
     }
 
     private void refreshPlaylist(String url) {
         int generation = ++playlistGeneration;
+        playbackGeneration++;
+        cancelScheduledPlaybackRetry();
+        playbackRecoveryPolicy.reset();
         loadFailed = false;
         loadingPanel.setVisibility(View.VISIBLE);
         loadingProgress.setVisibility(View.VISIBLE);
@@ -282,7 +298,9 @@ public final class MainActivity extends Activity {
         if (channels.isEmpty()) return;
         channelIndex = (requestedIndex % channels.size() + channels.size()) % channels.size();
         Channel channel = channels.get(channelIndex);
-        String channelIdentity = PlaybackPreferences.channelIdentity(channel);
+        playbackGeneration++;
+        cancelScheduledPlaybackRetry();
+        playbackRecoveryPolicy.reset();
         qualityPreferenceAppliedFor = null;
         subtitlePreferenceAppliedFor = null;
         subtitleTextObservedFor = null;
@@ -291,12 +309,8 @@ public final class MainActivity extends Activity {
                 .buildUpon()
                 .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
                 .build());
-        player.setMediaItem(new MediaItem.Builder()
-                .setUri(Uri.parse(channel.getStreamUri().toString()))
-                .setMediaId(channelIdentity)
-                .build());
-        player.prepare();
-        player.play();
+        player.setMediaItem(mediaItemFor(channel));
+        prepareAndPlay();
         playbackPreferences.rememberChannel(channel, channelIndex);
 
         channelNumber.setText(String.format(Locale.ROOT, "%03d", channelIndex + 1));
@@ -307,6 +321,66 @@ public final class MainActivity extends Activity {
         setStatus("CARGANDO", R.color.amber);
         loadChannelLogo(channel);
         showOverlayForChannelStart();
+    }
+
+    private void prepareAndPlay() {
+        if (player == null) return;
+        player.prepare();
+        player.play();
+    }
+
+    private void schedulePlaybackRetry(String expectedMediaId, long expectedGeneration) {
+        cancelScheduledPlaybackRetry();
+        scheduledPlaybackRetry = () -> {
+            scheduledPlaybackRetry = null;
+            retryCurrentPlayback(expectedMediaId, expectedGeneration);
+        };
+        mainHandler.postDelayed(scheduledPlaybackRetry, PLAYER_RETRY_DELAY_MS);
+    }
+
+    private void cancelScheduledPlaybackRetry() {
+        if (scheduledPlaybackRetry == null) return;
+        mainHandler.removeCallbacks(scheduledPlaybackRetry);
+        scheduledPlaybackRetry = null;
+    }
+
+    private void retryCurrentPlayback(String expectedMediaId, long expectedGeneration) {
+        if (player == null || expectedGeneration != playbackGeneration) return;
+        MediaItem current = player.getCurrentMediaItem();
+        if (current == null || !expectedMediaId.equals(current.mediaId)) return;
+
+        player.stop();
+        player.setMediaItem(current);
+        prepareAndPlay();
+    }
+
+    private void startPlaybackFromInput() {
+        if (player == null || player.getCurrentMediaItem() == null) return;
+        if (player.getPlayerError() != null || player.getPlaybackState() == Player.STATE_IDLE) {
+            playbackRecoveryPolicy.reset();
+            retryCurrentPlayback(
+                    player.getCurrentMediaItem().mediaId,
+                    playbackGeneration
+            );
+            return;
+        }
+        player.play();
+    }
+
+    private static MediaItem mediaItemFor(Channel channel) {
+        Uri uri = Uri.parse(channel.getStreamUri().toString());
+        MediaItem.Builder builder = new MediaItem.Builder()
+                .setUri(uri)
+                .setMediaId(PlaybackPreferences.channelIdentity(channel));
+        if (isHlsUri(uri)) {
+            builder.setMimeType(MimeTypes.APPLICATION_M3U8);
+        }
+        return builder.build();
+    }
+
+    private static boolean isHlsUri(Uri uri) {
+        String path = uri.getPath();
+        return path != null && path.toLowerCase(Locale.ROOT).contains(".m3u8");
     }
 
     private void updateProgrammeInfo() {
@@ -825,10 +899,16 @@ public final class MainActivity extends Activity {
                     if (loadFailed) {
                         refreshPlaylist(getPlaylistUrl());
                     } else {
+                        startPlaybackFromInput();
                         showOverlay(false);
                     }
                     return true;
                 }
+            }
+            if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY
+                    || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
+                startPlaybackFromInput();
+                return true;
             }
         }
         return super.dispatchKeyEvent(event);
@@ -1027,12 +1107,13 @@ public final class MainActivity extends Activity {
             refreshAfterSettings = false;
             refreshPlaylist(getPlaylistUrl());
         }
-        if (player != null) player.play();
+        startPlaybackFromInput();
     }
 
     @Override
     protected void onPause() {
         if (appUpdater != null) appUpdater.onHostPause();
+        cancelScheduledPlaybackRetry();
         if (player != null) player.pause();
         super.onPause();
     }
