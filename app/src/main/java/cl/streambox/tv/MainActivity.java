@@ -32,6 +32,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.window.OnBackInvokedDispatcher;
 
+import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
 import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
@@ -172,7 +173,15 @@ public final class MainActivity extends Activity {
         player = new ExoPlayer.Builder(
                 this,
                 new VibeRenderersFactory(this, playerUsesVolumeNormalization)
-        ).build();
+        )
+                .setAudioAttributes(
+                        new AudioAttributes.Builder()
+                                .setUsage(C.USAGE_MEDIA)
+                                .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                                .build(),
+                        true
+                )
+                .build();
         playerView.setPlayer(player);
         player.addListener(new Player.Listener() {
             @Override public void onPlaybackStateChanged(int playbackState) {
