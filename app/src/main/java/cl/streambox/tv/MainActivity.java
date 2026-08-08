@@ -67,7 +67,7 @@ public final class MainActivity extends Activity {
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
-    private PlaylistRepository repository;
+    private final PlaylistRepository repository = new PlaylistRepository();
     private EpgRepository epgRepository;
     private final List<Channel> channels = new ArrayList<>();
 
@@ -138,7 +138,6 @@ public final class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         channelLogoCache = new ChannelLogoCache(this);
-        repository = new PlaylistRepository(this);
         epgRepository = new EpgRepository(this);
         playbackPreferences = new PlaybackPreferences(this);
         bindViews();
@@ -220,28 +219,25 @@ public final class MainActivity extends Activity {
         loadingText.setText(R.string.loading_playlist);
         hideOverlay.run();
 
+        if (!isNetworkAvailable()) {
+            showPlaylistError("No hay conexión a Internet.");
+            return;
+        }
+
         networkExecutor.submit(() -> {
             try {
-                Playlist cachedPlaylist = repository.loadCached(url);
-                if (cachedPlaylist != null) {
-                    mainHandler.post(() -> applyPlaylistIfCurrent(generation, cachedPlaylist));
-                    postCachedEpg(generation, cachedPlaylist);
-                }
-
-                if (!isNetworkAvailable()) {
-                    mainHandler.post(() -> {
-                        if (generation != playlistGeneration || isFinishing()) return;
-                        if (channels.isEmpty()) {
-                            showPlaylistError("No hay conexión a Internet.");
-                        } else {
-                            loadingPanel.setVisibility(View.GONE);
-                        }
-                    });
-                    return;
-                }
-
                 Playlist downloaded = repository.download(url);
-                mainHandler.post(() -> applyPlaylistIfCurrent(generation, downloaded));
+                mainHandler.post(() -> {
+                    if (generation != playlistGeneration || isFinishing()) return;
+                    channels.clear();
+                    channels.addAll(downloaded.getChannels());
+                    channelIndex = playbackPreferences.findInitialChannelIndex(channels);
+                    loadingPanel.setVisibility(View.GONE);
+                    playChannel(channelIndex);
+                    if (downloaded.getEpgUri() == null) {
+                        applyEpgDataIfCurrent(generation, EpgData.empty());
+                    }
+                });
 
                 URI epgUri = downloaded.getEpgUri();
                 if (epgUri != null) {
@@ -259,35 +255,10 @@ public final class MainActivity extends Activity {
             } catch (Exception error) {
                 mainHandler.post(() -> {
                     if (generation != playlistGeneration || isFinishing()) return;
-                    if (channels.isEmpty()) {
-                        showPlaylistError(shortMessage(error));
-                    } else {
-                        loadingPanel.setVisibility(View.GONE);
-                    }
+                    showPlaylistError(shortMessage(error));
                 });
             }
         });
-    }
-
-    private void applyPlaylistIfCurrent(int generation, Playlist playlist) {
-        if (generation != playlistGeneration || isFinishing() || isDestroyed()) return;
-        channels.clear();
-        channels.addAll(playlist.getChannels());
-        channelIndex = playbackPreferences.findInitialChannelIndex(channels);
-        loadingPanel.setVisibility(View.GONE);
-        playChannel(channelIndex);
-        if (playlist.getEpgUri() == null) {
-            applyEpgDataIfCurrent(generation, EpgData.empty());
-        }
-    }
-
-    private void postCachedEpg(int generation, Playlist playlist) {
-        URI epgUri = playlist.getEpgUri();
-        if (epgUri == null) return;
-        EpgData cachedEpg = epgRepository.loadCached(epgUri);
-        if (cachedEpg != null) {
-            mainHandler.post(() -> applyEpgDataIfCurrent(generation, cachedEpg));
-        }
     }
 
     private void applyEpgDataIfCurrent(int generation, EpgData data) {
