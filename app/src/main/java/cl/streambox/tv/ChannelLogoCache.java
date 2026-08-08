@@ -12,6 +12,7 @@ import android.util.LruCache;
 
 import com.caverock.androidsvg.PreserveAspectRatio;
 import com.caverock.androidsvg.SVG;
+import com.caverock.androidsvg.SVGParseException;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -171,7 +172,8 @@ public final class ChannelLogoCache {
         }
     }
 
-    private static void configureSvgForViewport(SVG svg, int targetWidthPx, int targetHeightPx) {
+    private static void configureSvgForViewport(SVG svg, int targetWidthPx, int targetHeightPx)
+            throws SVGParseException {
         RectF viewBox = svg.getDocumentViewBox();
         if (!isValidRect(viewBox)) {
             float documentWidth = svg.getDocumentWidth();
