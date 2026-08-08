@@ -67,8 +67,8 @@ public final class MainActivity extends Activity {
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
-    private PlaylistRepository repository;
-    private EpgRepository epgRepository;
+    private final PlaylistRepository repository = new PlaylistRepository();
+    private final EpgRepository epgRepository = new EpgRepository();
     private final List<Channel> channels = new ArrayList<>();
 
     private PlayerView playerView;
@@ -94,7 +94,6 @@ public final class MainActivity extends Activity {
     private PlaybackPreferences playbackPreferences;
     private ChannelLogoCache channelLogoCache;
     private EpgData epgData = EpgData.empty();
-    private String displayedLogoUrl;
     private int channelIndex;
     private boolean loadFailed;
     private boolean settingsOpen;
@@ -138,8 +137,6 @@ public final class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         channelLogoCache = new ChannelLogoCache(this);
-        repository = new PlaylistRepository(this);
-        epgRepository = new EpgRepository(this);
         playbackPreferences = new PlaybackPreferences(this);
         bindViews();
         registerBackCallback();
@@ -218,40 +215,36 @@ public final class MainActivity extends Activity {
         loadingPanel.setVisibility(View.VISIBLE);
         loadingProgress.setVisibility(View.VISIBLE);
         loadingText.setText(R.string.loading_playlist);
+        epgData = EpgData.empty();
+        mainHandler.removeCallbacks(updateProgramme);
         hideOverlay.run();
+
+        if (!isNetworkAvailable()) {
+            showPlaylistError("No hay conexión a Internet.");
+            return;
+        }
 
         networkExecutor.submit(() -> {
             try {
-                Playlist cachedPlaylist = repository.loadCached(url);
-                if (cachedPlaylist != null) {
-                    mainHandler.post(() -> applyPlaylistIfCurrent(generation, cachedPlaylist));
-                    postCachedEpg(generation, cachedPlaylist);
-                }
-
-                if (!isNetworkAvailable()) {
-                    mainHandler.post(() -> {
-                        if (generation != playlistGeneration || isFinishing()) return;
-                        if (channels.isEmpty()) {
-                            showPlaylistError("No hay conexión a Internet.");
-                        } else {
-                            loadingPanel.setVisibility(View.GONE);
-                        }
-                    });
-                    return;
-                }
-
                 Playlist downloaded = repository.download(url);
-                mainHandler.post(() -> applyPlaylistIfCurrent(generation, downloaded));
+                mainHandler.post(() -> {
+                    if (generation != playlistGeneration || isFinishing()) return;
+                    channels.clear();
+                    channels.addAll(downloaded.getChannels());
+                    channelIndex = playbackPreferences.findInitialChannelIndex(channels);
+                    loadingPanel.setVisibility(View.GONE);
+                    playChannel(channelIndex);
+                });
 
-                URI epgUri = downloaded.getEpgUri();
-                if (epgUri != null) {
-                    EpgData cachedEpg = epgRepository.loadCached(epgUri);
-                    if (cachedEpg != null) {
-                        mainHandler.post(() -> applyEpgDataIfCurrent(generation, cachedEpg));
-                    }
+                if (downloaded.getEpgUri() != null) {
                     try {
-                        EpgData downloadedEpg = epgRepository.download(epgUri);
-                        mainHandler.post(() -> applyEpgDataIfCurrent(generation, downloadedEpg));
+                        EpgData downloadedEpg = epgRepository.download(downloaded.getEpgUri());
+                        mainHandler.post(() -> {
+                            if (generation != playlistGeneration || isFinishing()) return;
+                            epgData = downloadedEpg;
+                            mainHandler.removeCallbacks(updateProgramme);
+                            updateProgramme.run();
+                        });
                     } catch (Exception ignored) {
                         // La reproducción continúa usando el grupo del canal como respaldo.
                     }
@@ -259,42 +252,10 @@ public final class MainActivity extends Activity {
             } catch (Exception error) {
                 mainHandler.post(() -> {
                     if (generation != playlistGeneration || isFinishing()) return;
-                    if (channels.isEmpty()) {
-                        showPlaylistError(shortMessage(error));
-                    } else {
-                        loadingPanel.setVisibility(View.GONE);
-                    }
+                    showPlaylistError(shortMessage(error));
                 });
             }
         });
-    }
-
-    private void applyPlaylistIfCurrent(int generation, Playlist playlist) {
-        if (generation != playlistGeneration || isFinishing() || isDestroyed()) return;
-        channels.clear();
-        channels.addAll(playlist.getChannels());
-        channelIndex = playbackPreferences.findInitialChannelIndex(channels);
-        loadingPanel.setVisibility(View.GONE);
-        playChannel(channelIndex);
-        if (playlist.getEpgUri() == null) {
-            applyEpgDataIfCurrent(generation, EpgData.empty());
-        }
-    }
-
-    private void postCachedEpg(int generation, Playlist playlist) {
-        URI epgUri = playlist.getEpgUri();
-        if (epgUri == null) return;
-        EpgData cachedEpg = epgRepository.loadCached(epgUri);
-        if (cachedEpg != null) {
-            mainHandler.post(() -> applyEpgDataIfCurrent(generation, cachedEpg));
-        }
-    }
-
-    private void applyEpgDataIfCurrent(int generation, EpgData data) {
-        if (generation != playlistGeneration || isFinishing() || isDestroyed()) return;
-        epgData = data;
-        mainHandler.removeCallbacks(updateProgramme);
-        updateProgramme.run();
     }
 
     private void showPlaylistError(String detail) {
@@ -373,57 +334,28 @@ public final class MainActivity extends Activity {
     private void loadChannelLogo(Channel channel) {
         URI logoUri = channel.getLogoUri();
         String fallback = initials(channel.getName());
-        String requestedLogoUrl = logoUri == null ? null : logoUri.toString();
-        boolean keepDisplayedLogo = requestedLogoUrl != null
-                && requestedLogoUrl.equals(displayedLogoUrl);
-        if (!keepDisplayedLogo) {
-            displayedLogoUrl = null;
-            channelLogo.setImageDrawable(null);
-            channelLogo.setVisibility(View.GONE);
-            channelLogoFallback.setText(fallback);
-            channelLogoFallback.setVisibility(View.VISIBLE);
-        }
+        channelLogo.setImageDrawable(null);
+        channelLogo.setVisibility(View.GONE);
+        channelLogoFallback.setText(fallback);
+        channelLogoFallback.setVisibility(View.VISIBLE);
         if (logoUri == null || !("http".equalsIgnoreCase(logoUri.getScheme()) || "https".equalsIgnoreCase(logoUri.getScheme()))) {
             return;
         }
 
         int expectedIndex = channelIndex;
-        String expectedLogoUrl = logoUri.toString();
         networkExecutor.submit(() -> {
-            android.graphics.Bitmap cachedBitmap = channelLogoCache.loadCached(logoUri);
-            if (cachedBitmap != null) {
-                postChannelLogo(cachedBitmap, expectedIndex, expectedLogoUrl);
-            }
             try {
-                android.graphics.Bitmap freshBitmap = channelLogoCache.refresh(logoUri);
-                postChannelLogo(freshBitmap, expectedIndex, expectedLogoUrl);
+                android.graphics.Bitmap bitmap = channelLogoCache.load(logoUri);
+                mainHandler.post(() -> {
+                    if (expectedIndex != channelIndex || isFinishing()) return;
+                    channelLogo.setImageBitmap(bitmap);
+                    channelLogo.setVisibility(View.VISIBLE);
+                    channelLogoFallback.setVisibility(View.GONE);
+                });
             } catch (Exception ignored) {
-                // La imagen cacheada permanece visible como respaldo.
+                // El monograma del canal permanece visible como respaldo.
             }
         });
-    }
-
-    private void postChannelLogo(android.graphics.Bitmap bitmap,
-                                 int expectedIndex,
-                                 String expectedLogoUrl) {
-        mainHandler.post(() -> {
-            if (!isCurrentLogoRequest(expectedIndex, expectedLogoUrl)) return;
-            displayedLogoUrl = expectedLogoUrl;
-            channelLogo.setImageBitmap(bitmap);
-            channelLogo.setVisibility(View.VISIBLE);
-            channelLogoFallback.setVisibility(View.GONE);
-        });
-    }
-
-    private boolean isCurrentLogoRequest(int expectedIndex, String expectedLogoUrl) {
-        if (expectedIndex != channelIndex
-                || channels.isEmpty()
-                || channelIndex < 0
-                || channelIndex >= channels.size()
-                || isFinishing()
-                || isDestroyed()) return false;
-        URI currentLogoUri = channels.get(channelIndex).getLogoUri();
-        return currentLogoUri != null && expectedLogoUrl.equals(currentLogoUri.toString());
     }
 
     private void updateStreamStatus(int state) {
