@@ -3,10 +3,16 @@ package cl.streambox.tv;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.RectF;
 import android.util.LruCache;
 
+import com.caverock.androidsvg.SVG;
+
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,6 +24,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Locale;
 
 public final class ChannelLogoCache {
     private static final int CONNECT_TIMEOUT_MS = 6_000;
@@ -25,6 +32,8 @@ public final class ChannelLogoCache {
     private static final int MAX_LOGO_BYTES = 2 * 1024 * 1024;
     private static final int MAX_DISK_FILES = 96;
     private static final long MAX_DISK_BYTES = 24L * 1024L * 1024L;
+    private static final int DECODE_OVERSAMPLE = 4;
+    private static final int DEFAULT_SVG_SIZE_PX = 512;
     private static final String USER_AGENT = "VibeM3U/0.2 (Android TV)";
 
     private final LruCache<String, Bitmap> memoryCache;
@@ -47,35 +56,159 @@ public final class ChannelLogoCache {
     }
 
     public synchronized Bitmap load(URI logoUri) throws IOException {
+        return load(logoUri, 0, 0);
+    }
+
+    public synchronized Bitmap load(URI logoUri, int targetWidthPx, int targetHeightPx) throws IOException {
         String url = logoUri.toString();
-        Bitmap memoryBitmap = memoryCache.get(url);
+        String memoryKey = displayCacheKey(url, targetWidthPx, targetHeightPx);
+        Bitmap memoryBitmap = memoryCache.get(memoryKey);
         if (memoryBitmap != null && !memoryBitmap.isRecycled()) {
             return memoryBitmap;
         }
 
         File diskFile = new File(diskDirectory, cacheKey(url) + ".img");
-        Bitmap diskBitmap = BitmapFactory.decodeFile(diskFile.getAbsolutePath());
-        if (diskBitmap != null) {
-            //noinspection ResultOfMethodCallIgnored
-            diskFile.setLastModified(System.currentTimeMillis());
-            memoryCache.put(url, diskBitmap);
-            return diskBitmap;
-        }
         if (diskFile.exists()) {
+            try {
+                Bitmap diskBitmap = decodeLogo(
+                        readLimited(new FileInputStream(diskFile)),
+                        url,
+                        targetWidthPx,
+                        targetHeightPx
+                );
+                if (diskBitmap != null) {
+                    //noinspection ResultOfMethodCallIgnored
+                    diskFile.setLastModified(System.currentTimeMillis());
+                    memoryCache.put(memoryKey, diskBitmap);
+                    return diskBitmap;
+                }
+            } catch (IOException ignored) {
+                // Se vuelve a descargar cuando el caché anterior no se puede decodificar.
+            }
             //noinspection ResultOfMethodCallIgnored
             diskFile.delete();
         }
 
         byte[] bytes = download(url);
-        Bitmap downloadedBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+        Bitmap downloadedBitmap = decodeLogo(bytes, url, targetWidthPx, targetHeightPx);
         if (downloadedBitmap == null) {
             throw new IOException("El logo no tiene un formato de imagen compatible.");
         }
 
         writeToDisk(diskFile, bytes);
         trimDiskCache();
-        memoryCache.put(url, downloadedBitmap);
+        memoryCache.put(memoryKey, downloadedBitmap);
         return downloadedBitmap;
+    }
+
+    private static Bitmap decodeLogo(byte[] bytes, String url, int targetWidthPx, int targetHeightPx)
+            throws IOException {
+        if (looksLikeSvg(bytes, url)) {
+            return decodeSvg(bytes, targetWidthPx, targetHeightPx);
+        }
+        return decodeBitmap(bytes, targetWidthPx, targetHeightPx);
+    }
+
+    private static Bitmap decodeBitmap(byte[] bytes, int targetWidthPx, int targetHeightPx) {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.length, bounds);
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            return null;
+        }
+
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+        options.inDither = true;
+        options.inScaled = false;
+        options.inSampleSize = calculateSampleSize(
+                bounds.outWidth,
+                bounds.outHeight,
+                targetWidthPx,
+                targetHeightPx
+        );
+        Bitmap decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+        return decoded == null ? null : scaleToFit(decoded, targetWidthPx, targetHeightPx);
+    }
+
+    private static Bitmap decodeSvg(byte[] bytes, int targetWidthPx, int targetHeightPx) throws IOException {
+        try (ByteArrayInputStream input = new ByteArrayInputStream(bytes)) {
+            SVG svg = SVG.getFromInputStream(input);
+            int width = targetWidthPx > 0 ? targetWidthPx : documentSize(svg, true);
+            int height = targetHeightPx > 0 ? targetHeightPx : documentSize(svg, false);
+            Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+            svg.renderToCanvas(canvas, new RectF(0f, 0f, width, height));
+            return bitmap;
+        } catch (Exception error) {
+            throw new IOException("No se pudo renderizar el logo SVG.", error);
+        }
+    }
+
+    private static int documentSize(SVG svg, boolean width) {
+        float value = width ? svg.getDocumentWidth() : svg.getDocumentHeight();
+        if (value <= 0f || Float.isNaN(value) || Float.isInfinite(value)) {
+            return DEFAULT_SVG_SIZE_PX;
+        }
+        return Math.max(1, Math.round(value));
+    }
+
+    private static Bitmap scaleToFit(Bitmap source, int targetWidthPx, int targetHeightPx) {
+        if (targetWidthPx <= 0 || targetHeightPx <= 0) {
+            return source;
+        }
+
+        float scale = Math.min(
+                1f,
+                Math.min(
+                        targetWidthPx / (float) source.getWidth(),
+                        targetHeightPx / (float) source.getHeight()
+                )
+        );
+        int width = Math.max(1, Math.round(source.getWidth() * scale));
+        int height = Math.max(1, Math.round(source.getHeight() * scale));
+        if (width == source.getWidth() && height == source.getHeight()) {
+            return source;
+        }
+
+        Bitmap scaled = Bitmap.createScaledBitmap(source, width, height, true);
+        if (scaled != source) {
+            source.recycle();
+        }
+        return scaled;
+    }
+
+    private static int calculateSampleSize(
+            int sourceWidth,
+            int sourceHeight,
+            int targetWidthPx,
+            int targetHeightPx
+    ) {
+        if (targetWidthPx <= 0 || targetHeightPx <= 0) {
+            return 1;
+        }
+
+        int desiredWidth = Math.max(1, targetWidthPx * DECODE_OVERSAMPLE);
+        int desiredHeight = Math.max(1, targetHeightPx * DECODE_OVERSAMPLE);
+        int sampleSize = 1;
+        while (sourceWidth / (sampleSize * 2) >= desiredWidth
+                && sourceHeight / (sampleSize * 2) >= desiredHeight) {
+            sampleSize *= 2;
+        }
+        return sampleSize;
+    }
+
+    private static boolean looksLikeSvg(byte[] bytes, String url) {
+        String lowerUrl = url.toLowerCase(Locale.ROOT);
+        if (lowerUrl.endsWith(".svg") || lowerUrl.contains(".svg?")) {
+            return true;
+        }
+        int length = Math.min(bytes.length, 4096);
+        String prefix = new String(bytes, 0, length, StandardCharsets.UTF_8)
+                .replace("\uFEFF", "")
+                .trim()
+                .toLowerCase(Locale.ROOT);
+        return prefix.contains("<svg");
     }
 
     private static byte[] download(String url) throws IOException {
@@ -111,6 +244,10 @@ public final class ChannelLogoCache {
             }
             return output.toByteArray();
         }
+    }
+
+    private static String displayCacheKey(String url, int targetWidthPx, int targetHeightPx) {
+        return url + "#" + targetWidthPx + "x" + targetHeightPx;
     }
 
     private static void writeToDisk(File target, byte[] bytes) throws IOException {
