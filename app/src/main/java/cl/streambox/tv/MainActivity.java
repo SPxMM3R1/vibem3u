@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.Dialog;
 import android.graphics.Color;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -368,10 +367,8 @@ public final class MainActivity extends Activity {
                 );
                 mainHandler.post(() -> {
                     if (expectedIndex != channelIndex || isFinishing()) return;
-                    BitmapDrawable drawable = new BitmapDrawable(getResources(), bitmap);
-                    drawable.setFilterBitmap(true);
-                    drawable.setDither(true);
-                    channelLogo.setImageDrawable(drawable);
+                    channelLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                    channelLogo.setImageBitmap(bitmap);
                     channelLogo.setVisibility(View.VISIBLE);
                     channelLogoFallback.setVisibility(View.GONE);
                 });

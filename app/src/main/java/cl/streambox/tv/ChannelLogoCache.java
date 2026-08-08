@@ -4,9 +4,13 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.PaintFlagsDrawFilter;
+import android.graphics.PorterDuff;
 import android.graphics.RectF;
 import android.util.LruCache;
 
+import com.caverock.androidsvg.PreserveAspectRatio;
 import com.caverock.androidsvg.SVG;
 
 import java.io.ByteArrayInputStream;
@@ -33,6 +37,8 @@ public final class ChannelLogoCache {
     private static final int MAX_DISK_FILES = 96;
     private static final long MAX_DISK_BYTES = 24L * 1024L * 1024L;
     private static final int DECODE_OVERSAMPLE = 4;
+    private static final int MAX_RENDER_EDGE_PX = 4096;
+    private static final int ALPHA_TRIM_THRESHOLD = 2;
     private static final int DEFAULT_SVG_SIZE_PX = 512;
     private static final String USER_AGENT = "VibeM3U/0.2 (Android TV)";
 
@@ -120,6 +126,7 @@ public final class ChannelLogoCache {
         BitmapFactory.Options options = new BitmapFactory.Options();
         options.inPreferredConfig = Bitmap.Config.ARGB_8888;
         options.inDither = true;
+        options.inPreferQualityOverSpeed = true;
         options.inScaled = false;
         options.inSampleSize = calculateSampleSize(
                 bounds.outWidth,
@@ -128,21 +135,70 @@ public final class ChannelLogoCache {
                 targetHeightPx
         );
         Bitmap decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
-        return decoded == null ? null : scaleToFit(decoded, targetWidthPx, targetHeightPx);
+        return decoded == null ? null : fitRasterToTarget(decoded, targetWidthPx, targetHeightPx);
     }
 
     private static Bitmap decodeSvg(byte[] bytes, int targetWidthPx, int targetHeightPx) throws IOException {
         try (ByteArrayInputStream input = new ByteArrayInputStream(bytes)) {
             SVG svg = SVG.getFromInputStream(input);
-            int width = targetWidthPx > 0 ? targetWidthPx : documentSize(svg, true);
-            int height = targetHeightPx > 0 ? targetHeightPx : documentSize(svg, false);
-            Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(bitmap);
-            svg.renderToCanvas(canvas, new RectF(0f, 0f, width, height));
-            return bitmap;
+            int outputWidth = targetWidthPx > 0 ? targetWidthPx : documentSize(svg, true);
+            int outputHeight = targetHeightPx > 0 ? targetHeightPx : documentSize(svg, false);
+            configureSvgForViewport(svg, outputWidth, outputHeight);
+
+            int renderWidth = targetWidthPx > 0
+                    ? oversampledSize(targetWidthPx)
+                    : outputWidth;
+            int renderHeight = targetHeightPx > 0
+                    ? oversampledSize(targetHeightPx)
+                    : outputHeight;
+            Bitmap rendered = Bitmap.createBitmap(
+                    renderWidth,
+                    renderHeight,
+                    Bitmap.Config.ARGB_8888
+            );
+            Canvas canvas = new Canvas(rendered);
+            canvas.drawColor(0, PorterDuff.Mode.CLEAR);
+            canvas.setDrawFilter(new PaintFlagsDrawFilter(
+                    0,
+                    Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG
+            ));
+            svg.renderToCanvas(canvas, new RectF(0f, 0f, renderWidth, renderHeight));
+            return targetWidthPx > 0
+                    ? downsample(rendered, targetWidthPx, targetHeightPx)
+                    : rendered;
         } catch (Exception error) {
             throw new IOException("No se pudo renderizar el logo SVG.", error);
         }
+    }
+
+    private static void configureSvgForViewport(SVG svg, int targetWidthPx, int targetHeightPx) {
+        RectF viewBox = svg.getDocumentViewBox();
+        if (!isValidRect(viewBox)) {
+            float documentWidth = svg.getDocumentWidth();
+            float documentHeight = svg.getDocumentHeight();
+            float aspectRatio = svg.getDocumentAspectRatio();
+            if (!isFinitePositive(aspectRatio)) {
+                aspectRatio = targetWidthPx > 0 && targetHeightPx > 0
+                        ? targetWidthPx / (float) targetHeightPx
+                        : 1f;
+            }
+            if (!isFinitePositive(documentWidth)) {
+                documentWidth = isFinitePositive(documentHeight)
+                        ? documentHeight * aspectRatio
+                        : DEFAULT_SVG_SIZE_PX * aspectRatio;
+            }
+            if (!isFinitePositive(documentHeight)) {
+                documentHeight = documentWidth / aspectRatio;
+            }
+            svg.setDocumentViewBox(0f, 0f, documentWidth, documentHeight);
+        }
+
+        // AndroidSVG only scales a document reliably when its viewBox is present
+        // and its root width/height are allowed to follow the render viewport.
+        // This also fixes Illustrator/Inkscape SVGs that carry huge pixel sizes.
+        svg.setDocumentWidth("100%");
+        svg.setDocumentHeight("100%");
+        svg.setDocumentPreserveAspectRatio(PreserveAspectRatio.LETTERBOX);
     }
 
     private static int documentSize(SVG svg, boolean width) {
@@ -153,29 +209,130 @@ public final class ChannelLogoCache {
         return Math.max(1, Math.round(value));
     }
 
-    private static Bitmap scaleToFit(Bitmap source, int targetWidthPx, int targetHeightPx) {
+    private static Bitmap fitRasterToTarget(Bitmap source, int targetWidthPx, int targetHeightPx) {
         if (targetWidthPx <= 0 || targetHeightPx <= 0) {
             return source;
         }
 
+        Bitmap content = trimTransparentEdges(source);
         float scale = Math.min(
                 1f,
                 Math.min(
-                        targetWidthPx / (float) source.getWidth(),
-                        targetHeightPx / (float) source.getHeight()
+                        targetWidthPx / (float) content.getWidth(),
+                        targetHeightPx / (float) content.getHeight()
                 )
         );
-        int width = Math.max(1, Math.round(source.getWidth() * scale));
-        int height = Math.max(1, Math.round(source.getHeight() * scale));
-        if (width == source.getWidth() && height == source.getHeight()) {
-            return source;
-        }
+        int width = Math.max(1, Math.round(content.getWidth() * scale));
+        int height = Math.max(1, Math.round(content.getHeight() * scale));
+        Bitmap scaled = downsample(content, width, height);
 
-        Bitmap scaled = Bitmap.createScaledBitmap(source, width, height, true);
-        if (scaled != source) {
+        Bitmap output = Bitmap.createBitmap(
+                targetWidthPx,
+                targetHeightPx,
+                Bitmap.Config.ARGB_8888
+        );
+        Canvas canvas = new Canvas(output);
+        Paint paint = bitmapPaint();
+        int left = (targetWidthPx - scaled.getWidth()) / 2;
+        int top = (targetHeightPx - scaled.getHeight()) / 2;
+        canvas.drawBitmap(scaled, left, top, paint);
+
+        if (scaled != content && !scaled.isRecycled()) {
+            scaled.recycle();
+        }
+        if (content != source && !content.isRecycled()) {
+            content.recycle();
+        }
+        if (!source.isRecycled()) {
             source.recycle();
         }
-        return scaled;
+        return output;
+    }
+
+    private static Bitmap trimTransparentEdges(Bitmap source) {
+        int sourceWidth = source.getWidth();
+        int sourceHeight = source.getHeight();
+        int left = sourceWidth;
+        int top = sourceHeight;
+        int right = -1;
+        int bottom = -1;
+        int[] row = new int[sourceWidth];
+
+        for (int y = 0; y < sourceHeight; y++) {
+            source.getPixels(row, 0, sourceWidth, 0, y, sourceWidth, 1);
+            for (int x = 0; x < sourceWidth; x++) {
+                if (((row[x] >>> 24) & 0xff) <= ALPHA_TRIM_THRESHOLD) {
+                    continue;
+                }
+                if (x < left) left = x;
+                if (x > right) right = x;
+                if (y < top) top = y;
+                if (y > bottom) bottom = y;
+            }
+        }
+
+        if (right < left || bottom < top
+                || (left == 0 && top == 0 && right == sourceWidth - 1 && bottom == sourceHeight - 1)) {
+            return source;
+        }
+        return Bitmap.createBitmap(
+                source,
+                left,
+                top,
+                right - left + 1,
+                bottom - top + 1
+        );
+    }
+
+    private static Bitmap downsample(Bitmap source, int targetWidthPx, int targetHeightPx) {
+        Bitmap current = source;
+        while (current.getWidth() > targetWidthPx * 2
+                || current.getHeight() > targetHeightPx * 2) {
+            int nextWidth = Math.max(targetWidthPx, current.getWidth() / 2);
+            int nextHeight = Math.max(targetHeightPx, current.getHeight() / 2);
+            Bitmap next = Bitmap.createScaledBitmap(current, nextWidth, nextHeight, true);
+            if (current != source && !current.isRecycled()) {
+                current.recycle();
+            }
+            current = next;
+        }
+        if (current.getWidth() != targetWidthPx || current.getHeight() != targetHeightPx) {
+            Bitmap next = Bitmap.createScaledBitmap(
+                    current,
+                    targetWidthPx,
+                    targetHeightPx,
+                    true
+            );
+            if (current != source && !current.isRecycled()) {
+                current.recycle();
+            }
+            current = next;
+        }
+        return current;
+    }
+
+    private static Paint bitmapPaint() {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+        paint.setFilterBitmap(true);
+        paint.setDither(true);
+        return paint;
+    }
+
+    private static int oversampledSize(int size) {
+        long value = (long) size * DECODE_OVERSAMPLE;
+        return (int) Math.max(1, Math.min(MAX_RENDER_EDGE_PX, value));
+    }
+
+    private static boolean isValidRect(RectF value) {
+        return value != null
+                && isFinitePositive(value.width())
+                && isFinitePositive(value.height())
+                && Float.isFinite(value.left)
+                && Float.isFinite(value.top);
+    }
+
+    private static boolean isFinitePositive(float value) {
+        return value > 0f && Float.isFinite(value);
     }
 
     private static int calculateSampleSize(

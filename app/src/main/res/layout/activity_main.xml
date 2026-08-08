@@ -89,7 +89,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:contentDescription="Logo del canal"
-                android:scaleType="fitCenter" />
+                android:scaleType="centerInside" />
 
             <TextView
                 android:id="@+id/channel_logo_fallback"
