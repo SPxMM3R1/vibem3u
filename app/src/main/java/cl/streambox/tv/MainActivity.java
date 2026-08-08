@@ -441,11 +441,7 @@ public final class MainActivity extends Activity {
                 mainHandler.post(() -> {
                     if (expectedIndex != channelIndex || isFinishing()) return;
                     channelLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                    android.graphics.drawable.BitmapDrawable drawable =
-                            new android.graphics.drawable.BitmapDrawable(getResources(), bitmap);
-                    drawable.setFilterBitmap(true);
-                    drawable.setDither(true);
-                    channelLogo.setImageDrawable(drawable);
+                    channelLogo.setImageBitmap(bitmap);
                     channelLogo.setVisibility(View.VISIBLE);
                     channelLogoFallback.setVisibility(View.GONE);
                 });
