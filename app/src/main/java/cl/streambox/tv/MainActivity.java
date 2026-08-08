@@ -67,8 +67,7 @@ public final class MainActivity extends Activity {
     private static final long OVERLAY_TIMEOUT_MS = 4_500;
     private static final long PLAYER_RETRY_DELAY_MS = 2_500;
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
-    private static final String PLAYER_USER_AGENT =
-            "VibeM3U/" + BuildConfig.VERSION_NAME + " (Android TV)";
+    private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.12 (Android TV)";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
