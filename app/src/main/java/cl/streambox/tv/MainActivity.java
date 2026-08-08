@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.Dialog;
 import android.graphics.Color;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -352,12 +353,25 @@ public final class MainActivity extends Activity {
         }
 
         int expectedIndex = channelIndex;
+        int targetWidthPx = channelLogo.getWidth() > 0
+                ? channelLogo.getWidth()
+                : dpToPx(78);
+        int targetHeightPx = channelLogo.getHeight() > 0
+                ? channelLogo.getHeight()
+                : dpToPx(54);
         networkExecutor.submit(() -> {
             try {
-                android.graphics.Bitmap bitmap = channelLogoCache.load(logoUri);
+                android.graphics.Bitmap bitmap = channelLogoCache.load(
+                        logoUri,
+                        targetWidthPx,
+                        targetHeightPx
+                );
                 mainHandler.post(() -> {
                     if (expectedIndex != channelIndex || isFinishing()) return;
-                    channelLogo.setImageBitmap(bitmap);
+                    BitmapDrawable drawable = new BitmapDrawable(getResources(), bitmap);
+                    drawable.setFilterBitmap(true);
+                    drawable.setDither(true);
+                    channelLogo.setImageDrawable(drawable);
                     channelLogo.setVisibility(View.VISIBLE);
                     channelLogoFallback.setVisibility(View.GONE);
                 });
@@ -365,6 +379,10 @@ public final class MainActivity extends Activity {
                 // El monograma del canal permanece visible como respaldo.
             }
         });
+    }
+
+    private int dpToPx(int dp) {
+        return Math.max(1, Math.round(dp * getResources().getDisplayMetrics().density));
     }
 
     private void updateStreamStatus(int state) {
