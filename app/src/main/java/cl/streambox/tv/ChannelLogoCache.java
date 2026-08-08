@@ -37,7 +37,10 @@ public final class ChannelLogoCache {
     private static final int MAX_LOGO_BYTES = 2 * 1024 * 1024;
     private static final int MAX_DISK_FILES = 96;
     private static final long MAX_DISK_BYTES = 24L * 1024L * 1024L;
-    private static final int DECODE_OVERSAMPLE = 4;
+    // Keep image assets above their final display size so Android can perform
+    // the last reduction with filtered sampling. This is a per-element
+    // 4K-equivalent render target, not a 3840x2160 bitmap for the whole UI.
+    private static final int HIGH_RESOLUTION_SCALE = 4;
     private static final int MAX_RENDER_EDGE_PX = 4096;
     private static final int ALPHA_TRIM_THRESHOLD = 2;
     private static final int DEFAULT_SVG_SIZE_PX = 512;
@@ -69,6 +72,8 @@ public final class ChannelLogoCache {
     public synchronized Bitmap load(URI logoUri, int targetWidthPx, int targetHeightPx) throws IOException {
         String url = logoUri.toString();
         String memoryKey = displayCacheKey(url, targetWidthPx, targetHeightPx);
+        int renderWidthPx = highResolutionSize(targetWidthPx);
+        int renderHeightPx = highResolutionSize(targetHeightPx);
         Bitmap memoryBitmap = memoryCache.get(memoryKey);
         if (memoryBitmap != null && !memoryBitmap.isRecycled()) {
             return memoryBitmap;
@@ -80,8 +85,8 @@ public final class ChannelLogoCache {
                 Bitmap diskBitmap = decodeLogo(
                         readLimited(new FileInputStream(diskFile)),
                         url,
-                        targetWidthPx,
-                        targetHeightPx
+                        renderWidthPx,
+                        renderHeightPx
                 );
                 if (diskBitmap != null) {
                     //noinspection ResultOfMethodCallIgnored
@@ -97,7 +102,7 @@ public final class ChannelLogoCache {
         }
 
         byte[] bytes = download(url);
-        Bitmap downloadedBitmap = decodeLogo(bytes, url, targetWidthPx, targetHeightPx);
+        Bitmap downloadedBitmap = decodeLogo(bytes, url, renderWidthPx, renderHeightPx);
         if (downloadedBitmap == null) {
             throw new IOException("El logo no tiene un formato de imagen compatible.");
         }
@@ -146,12 +151,11 @@ public final class ChannelLogoCache {
             int outputHeight = targetHeightPx > 0 ? targetHeightPx : documentSize(svg, false);
             configureSvgForViewport(svg, outputWidth, outputHeight);
 
-            int renderWidth = targetWidthPx > 0
-                    ? oversampledSize(targetWidthPx)
-                    : outputWidth;
-            int renderHeight = targetHeightPx > 0
-                    ? oversampledSize(targetHeightPx)
-                    : outputHeight;
+            // targetWidthPx/targetHeightPx already contain the high-resolution
+            // per-element target calculated by load(). Keep that bitmap large
+            // until ImageView performs the final filtered reduction.
+            int renderWidth = targetWidthPx > 0 ? targetWidthPx : outputWidth;
+            int renderHeight = targetHeightPx > 0 ? targetHeightPx : outputHeight;
             Bitmap rendered = Bitmap.createBitmap(
                     renderWidth,
                     renderHeight,
@@ -164,9 +168,7 @@ public final class ChannelLogoCache {
                     Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG
             ));
             svg.renderToCanvas(canvas, new RectF(0f, 0f, renderWidth, renderHeight));
-            return targetWidthPx > 0
-                    ? downsample(rendered, targetWidthPx, targetHeightPx)
-                    : rendered;
+            return rendered;
         } catch (Exception error) {
             throw new IOException("No se pudo renderizar el logo SVG.", error);
         }
@@ -320,8 +322,11 @@ public final class ChannelLogoCache {
         return paint;
     }
 
-    private static int oversampledSize(int size) {
-        long value = (long) size * DECODE_OVERSAMPLE;
+    private static int highResolutionSize(int size) {
+        if (size <= 0) {
+            return size;
+        }
+        long value = (long) size * HIGH_RESOLUTION_SCALE;
         return (int) Math.max(1, Math.min(MAX_RENDER_EDGE_PX, value));
     }
 
@@ -347,8 +352,8 @@ public final class ChannelLogoCache {
             return 1;
         }
 
-        int desiredWidth = Math.max(1, targetWidthPx * DECODE_OVERSAMPLE);
-        int desiredHeight = Math.max(1, targetHeightPx * DECODE_OVERSAMPLE);
+        int desiredWidth = Math.max(1, targetWidthPx);
+        int desiredHeight = Math.max(1, targetHeightPx);
         int sampleSize = 1;
         while (sourceWidth / (sampleSize * 2) >= desiredWidth
                 && sourceHeight / (sampleSize * 2) >= desiredHeight) {

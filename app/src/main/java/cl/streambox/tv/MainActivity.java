@@ -163,6 +163,7 @@ public final class MainActivity extends Activity {
         clock = findViewById(R.id.clock);
         channelLogo = findViewById(R.id.channel_logo);
         channelLogoFallback = findViewById(R.id.channel_logo_fallback);
+        channelLogo.setFilterBitmap(true);
         channelNumber = findViewById(R.id.channel_number);
         channelName = findViewById(R.id.channel_name);
         contentTitle = findViewById(R.id.content_title);
