@@ -95,8 +95,8 @@ public final class TokenHttpClient {
     }
 
     private static String readUtf8(InputStream input) throws IOException {
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        byte[] buffer = new byte[8 * 1024];
+        ByteArrayOutputStream output = new ByteArrayOutputStream(64 * 1024);
+        byte[] buffer = new byte[16 * 1024];
         int total = 0;
         int count;
         while ((count = input.read(buffer)) != -1) {

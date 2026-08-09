@@ -21,7 +21,7 @@ public final class ProviderStreamParsersTest {
         ProviderStreamParsers.MeganoticiasConfig config =
                 ProviderStreamParsers.parseMeganoticiasConfig(
                         "<script>var VideoSenalEnVivo = { id: 'dummy-mega', "
-                                + "foo: 'ignored', serverKey: 'dummy-server-key' };</script>"
+                                + "foo: 'ignored }', serverKey: 'dummy-server-key' };</script>"
                 );
 
         assertEquals("dummy-mega", config.getStreamId());
