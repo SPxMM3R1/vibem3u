@@ -25,6 +25,7 @@ import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.CompoundButton;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -82,6 +83,10 @@ public final class MainActivity extends Activity {
     private final List<Channel> channels = new ArrayList<>();
 
     private PlayerView playerView;
+    private FrameLayout root;
+    private GuideOverlayView guideOverlay;
+    private TextView guideClock;
+    private FrameLayout.LayoutParams playerFullScreenLayoutParams;
     private View channelOverlay;
     private View loadingPanel;
     private ProgressBar loadingProgress;
@@ -109,6 +114,8 @@ public final class MainActivity extends Activity {
     private boolean settingsOpen;
     private boolean refreshAfterSettings;
     private boolean overlayAwaitingPlayback;
+    private boolean guideActive;
+    private boolean suppressCenterRepeats;
     private boolean exiting;
     private Dialog exitDialog;
     private Dialog qualityDialog;
@@ -130,6 +137,7 @@ public final class MainActivity extends Activity {
     private boolean fallbackAttempted;
 
     private final Runnable hideOverlay = () -> {
+        if (guideActive) return;
         channelOverlay.setVisibility(View.GONE);
         clock.setVisibility(View.GONE);
     };
@@ -138,12 +146,14 @@ public final class MainActivity extends Activity {
             String currentTime = new SimpleDateFormat("HH:mm", Locale.getDefault())
                     .format(new Date());
             clock.setText(currentTime);
+            guideClock.setText(currentTime);
             mainHandler.postDelayed(this, 30_000);
         }
     };
     private final Runnable updateProgramme = new Runnable() {
         @Override public void run() {
             updateProgrammeInfo();
+            if (guideActive) guideOverlay.invalidate();
             if (!exiting && !isFinishing()) {
                 mainHandler.postDelayed(this, 30_000);
             }
@@ -166,7 +176,13 @@ public final class MainActivity extends Activity {
     }
 
     private void bindViews() {
+        root = findViewById(R.id.root);
         playerView = findViewById(R.id.player_view);
+        playerFullScreenLayoutParams = new FrameLayout.LayoutParams(
+                (FrameLayout.LayoutParams) playerView.getLayoutParams()
+        );
+        guideOverlay = findViewById(R.id.guide_overlay);
+        guideClock = findViewById(R.id.guide_clock);
         channelOverlay = findViewById(R.id.channel_overlay);
         loadingPanel = findViewById(R.id.loading_panel);
         loadingProgress = findViewById(R.id.loading_progress);
@@ -247,6 +263,7 @@ public final class MainActivity extends Activity {
 
     private void refreshPlaylist(String url) {
         int generation = ++playlistGeneration;
+        closeGuide();
         playbackGeneration++;
         cancelScheduledPlaybackRetry();
         cancelPlaybackResolution();
@@ -284,6 +301,7 @@ public final class MainActivity extends Activity {
                         mainHandler.post(() -> {
                             if (generation != playlistGeneration || isFinishing()) return;
                             epgData = downloadedEpg;
+                            if (guideActive) guideOverlay.setEpgData(downloadedEpg);
                             mainHandler.removeCallbacks(updateProgramme);
                             updateProgramme.run();
                         });
@@ -1034,9 +1052,70 @@ public final class MainActivity extends Activity {
         statusDot.setTextColor(getColor(colorResource));
     }
 
+    private void openGuide() {
+        if (guideActive || channels.isEmpty()) return;
+
+        guideActive = true;
+        mainHandler.removeCallbacks(hideOverlay);
+        channelOverlay.setVisibility(View.GONE);
+        clock.setVisibility(View.GONE);
+        guideOverlay.setData(channels, epgData, channelIndex, System.currentTimeMillis());
+        guideOverlay.setVisibility(View.VISIBLE);
+        guideClock.setText(clock.getText());
+        guideClock.setVisibility(View.VISIBLE);
+        root.post(this::resizePlayerForGuide);
+    }
+
+    private void closeGuide() {
+        if (!guideActive) return;
+
+        guideActive = false;
+        guideOverlay.setVisibility(View.GONE);
+        guideClock.setVisibility(View.GONE);
+        if (playerFullScreenLayoutParams != null) {
+            playerView.setLayoutParams(new FrameLayout.LayoutParams(playerFullScreenLayoutParams));
+        }
+    }
+
+    private void resizePlayerForGuide() {
+        if (!guideActive || root.getWidth() <= 0 || root.getHeight() <= 0) return;
+
+        int pipWidth = Math.round(root.getWidth() * 0.36f);
+        int pipHeight = Math.round(pipWidth * 9f / 16f);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                pipWidth,
+                pipHeight,
+                Gravity.TOP | Gravity.START
+        );
+        params.leftMargin = dp(32);
+        params.topMargin = dp(32);
+        playerView.setLayoutParams(params);
+        playerView.bringToFront();
+        guideClock.bringToFront();
+    }
+
+    private void selectGuideChannel() {
+        if (!guideActive) return;
+
+        suppressCenterRepeats = true;
+        int selectedIndex = guideOverlay.getSelectedChannelIndex();
+        closeGuide();
+        if (selectedIndex < 0 || selectedIndex >= channels.size()) return;
+
+        if (selectedIndex == channelIndex) {
+            startPlaybackFromInput();
+            showOverlay(false);
+        } else {
+            playChannel(selectedIndex);
+        }
+    }
+
     private void showOverlay(boolean keepVisible) {
+        if (guideActive) return;
         channelOverlay.setVisibility(View.VISIBLE);
         clock.setVisibility(View.VISIBLE);
+        channelOverlay.bringToFront();
+        clock.bringToFront();
         mainHandler.removeCallbacks(hideOverlay);
         if (!keepVisible) {
             mainHandler.postDelayed(hideOverlay, OVERLAY_TIMEOUT_MS);
@@ -1050,18 +1129,60 @@ public final class MainActivity extends Activity {
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)
+                && suppressCenterRepeats) {
+            if (event.getAction() == KeyEvent.ACTION_UP) suppressCenterRepeats = false;
+            return true;
+        }
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
-            int keyCode = event.getKeyCode();
             if (keyCode == KeyEvent.KEYCODE_BACK && event.getRepeatCount() == 0) {
-                handleBackAction();
+                if (guideActive) {
+                    closeGuide();
+                    showOverlay(false);
+                } else {
+                    handleBackAction();
+                }
                 return true;
             }
             if (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_SETTINGS) {
+                closeGuide();
                 openSettings();
                 return true;
             }
-            if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) && event.getRepeatCount() >= 1) {
-                openSettings();
+
+            if (guideActive) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                    guideOverlay.moveVertical(-1);
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    guideOverlay.moveVertical(1);
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    guideOverlay.moveHorizontal(-1);
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    guideOverlay.moveHorizontal(1);
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                        || keyCode == KeyEvent.KEYCODE_ENTER
+                        || keyCode == KeyEvent.KEYCODE_INFO) {
+                    if (event.getRepeatCount() == 0
+                            && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                            || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                        selectGuideChannel();
+                    }
+                    return true;
+                }
+            }
+
+            if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)
+                    && event.getRepeatCount() >= 1) {
+                openGuide();
                 return true;
             }
             if (event.getRepeatCount() == 0) {
@@ -1071,6 +1192,10 @@ public final class MainActivity extends Activity {
                 }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN) {
                     playChannel(channelIndex + (isChannelNavigationInverted() ? -1 : 1));
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    openSettings();
                     return true;
                 }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
@@ -1105,6 +1230,11 @@ public final class MainActivity extends Activity {
     }
 
     private void handleBackAction() {
+        if (guideActive) {
+            closeGuide();
+            showOverlay(false);
+            return;
+        }
         if (channelOverlay.getVisibility() == View.VISIBLE
                 || clock.getVisibility() == View.VISIBLE) {
             overlayAwaitingPlayback = false;
