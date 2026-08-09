@@ -177,11 +177,10 @@
             android:orientation="vertical"
             android:paddingHorizontal="16dp">
 
-            <TextView
+            <cl.streambox.tv.ContinuousMarqueeTextView
                 android:id="@+id/content_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:ellipsize="end"
                 android:maxLines="1"
                 android:text="@string/live_content"
                 android:textColor="@color/white"
