@@ -266,4 +266,26 @@
         </LinearLayout>
     </LinearLayout>
 
+    <cl.streambox.tv.GuideOverlayView
+        android:id="@+id/guide_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/guide_clock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="24dp"
+        android:layout_marginEnd="36dp"
+        android:background="@drawable/channel_overlay_background"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="9dp"
+        android:textColor="@color/white"
+        android:textSize="20sp"
+        android:visibility="gone" />
+
 </FrameLayout>
