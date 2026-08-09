@@ -1,8 +1,5 @@
 package cl.streambox.tv;
 
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.io.IOException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -16,6 +13,9 @@ final class ProviderStreamParsers {
     );
     private static final Pattern ACCESS_TOKEN_PATTERN = Pattern.compile(
             "\\baccess_token\\s*:\\s*['\"]([^'\"]+)['\"]"
+    );
+    private static final Pattern JSON_ACCESS_TOKEN_PATTERN = Pattern.compile(
+            "\\\"access_token\\\"\\s*:\\s*\\\"([^\\\"]+)\\\""
     );
     private static final Pattern MEGANOTICIAS_CONFIG_PATTERN = Pattern.compile(
             "var\\s+VideoSenalEnVivo\\s*=\\s*\\{\\s*"
@@ -62,12 +62,14 @@ final class ProviderStreamParsers {
     }
 
     static String parseMeganoticiasAccessToken(String json) throws IOException {
-        try {
-            String token = new JSONObject(json).optString("access_token", "");
-            return validateToken(token, "Meganoticias");
-        } catch (JSONException | NullPointerException error) {
+        if (json == null || json.isBlank()) {
             throw new IOException("Meganoticias devolvió una respuesta inválida.");
         }
+        Matcher matcher = JSON_ACCESS_TOKEN_PATTERN.matcher(json);
+        if (!matcher.find()) {
+            throw new IOException("Meganoticias devolvió una respuesta inválida.");
+        }
+        return validateToken(matcher.group(1), "Meganoticias");
     }
 
     private static String validateToken(String token, String provider) throws IOException {
