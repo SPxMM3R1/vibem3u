@@ -46,8 +46,10 @@ import androidx.media3.common.text.Cue;
 import androidx.media3.common.text.CueGroup;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.ui.PlayerView;
 
 import java.net.URI;
@@ -58,8 +60,10 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 @UnstableApi
 public final class MainActivity extends Activity {
@@ -67,13 +71,14 @@ public final class MainActivity extends Activity {
     private static final long OVERLAY_TIMEOUT_MS = 4_500;
     private static final long PLAYER_RETRY_DELAY_MS = 2_500;
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
-    private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.12 (Android TV)";
+    private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.15 (Android TV)";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
     private final PlaylistRepository repository = new PlaylistRepository();
     private final EpgRepository epgRepository = new EpgRepository();
     private final PlaybackRecoveryPolicy playbackRecoveryPolicy = new PlaybackRecoveryPolicy();
+    private final StreamResolverRegistry streamResolverRegistry = new StreamResolverRegistry();
     private final List<Channel> channels = new ArrayList<>();
 
     private PlayerView playerView;
@@ -117,6 +122,12 @@ public final class MainActivity extends Activity {
     private boolean playerUsesVolumeNormalization;
     private long playbackGeneration;
     private Runnable scheduledPlaybackRetry;
+    private Future<?> playbackResolutionTask;
+    private long playbackResolutionRequestId;
+    private Channel playbackChannel;
+    private ResolvedPlaybackSource currentPlaybackSource;
+    private boolean tokenRefreshAttempted;
+    private boolean fallbackAttempted;
 
     private final Runnable hideOverlay = () -> {
         channelOverlay.setVisibility(View.GONE);
@@ -222,6 +233,10 @@ public final class MainActivity extends Activity {
                 overlayAwaitingPlayback = true;
                 showOverlay(true);
                 cancelScheduledPlaybackRetry();
+                if (isProviderAuthorizationError(error)) {
+                    handleProviderAuthorizationFailure();
+                    return;
+                }
                 MediaItem current = player == null ? null : player.getCurrentMediaItem();
                 if (current != null && playbackRecoveryPolicy.tryConsumeRetry(error.errorCode)) {
                     schedulePlaybackRetry(current.mediaId, playbackGeneration);
@@ -234,7 +249,10 @@ public final class MainActivity extends Activity {
         int generation = ++playlistGeneration;
         playbackGeneration++;
         cancelScheduledPlaybackRetry();
+        cancelPlaybackResolution();
         playbackRecoveryPolicy.reset();
+        playbackChannel = null;
+        currentPlaybackSource = null;
         loadFailed = false;
         loadingPanel.setVisibility(View.VISIBLE);
         loadingProgress.setVisibility(View.VISIBLE);
@@ -299,7 +317,12 @@ public final class MainActivity extends Activity {
         Channel channel = channels.get(channelIndex);
         playbackGeneration++;
         cancelScheduledPlaybackRetry();
+        cancelPlaybackResolution();
         playbackRecoveryPolicy.reset();
+        playbackChannel = channel;
+        currentPlaybackSource = null;
+        tokenRefreshAttempted = false;
+        fallbackAttempted = false;
         qualityPreferenceAppliedFor = null;
         subtitlePreferenceAppliedFor = null;
         subtitleTextObservedFor = null;
@@ -308,8 +331,11 @@ public final class MainActivity extends Activity {
                 .buildUpon()
                 .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
                 .build());
-        player.setMediaItem(mediaItemFor(channel));
-        prepareAndPlay();
+        if (player != null) {
+            player.stop();
+            player.clearMediaItems();
+        }
+        resolveAndPlay(channel, playbackGeneration);
         playbackPreferences.rememberChannel(channel, channelIndex);
 
         channelNumber.setText(String.format(Locale.ROOT, "%03d", channelIndex + 1));
@@ -343,19 +369,176 @@ public final class MainActivity extends Activity {
         scheduledPlaybackRetry = null;
     }
 
+    private void cancelPlaybackResolution() {
+        if (playbackResolutionTask != null) {
+            playbackResolutionTask.cancel(true);
+            playbackResolutionTask = null;
+        }
+    }
+
+    private void resolveAndPlay(Channel channel, long expectedGeneration) {
+        if (player == null || !isCurrentPlayback(channel, expectedGeneration)) return;
+        StreamResolver resolver = streamResolverRegistry.find(channel);
+        if (resolver == null) {
+            startResolvedPlayback(
+                    channel,
+                    ResolvedPlaybackSource.direct(channel, PLAYER_USER_AGENT),
+                    expectedGeneration
+            );
+            return;
+        }
+
+        cancelPlaybackResolution();
+        long requestId = ++playbackResolutionRequestId;
+        playbackResolutionTask = networkExecutor.submit(() -> {
+            try {
+                ResolvedPlaybackSource source = resolver.resolve(channel);
+                mainHandler.post(() -> {
+                    if (!isCurrentPlayback(channel, expectedGeneration)
+                            || requestId != playbackResolutionRequestId) return;
+                    playbackResolutionTask = null;
+                    startResolvedPlayback(channel, source, expectedGeneration);
+                });
+            } catch (Exception error) {
+                if (Thread.currentThread().isInterrupted()) return;
+                mainHandler.post(() -> {
+                    if (!isCurrentPlayback(channel, expectedGeneration)
+                            || requestId != playbackResolutionRequestId) return;
+                    playbackResolutionTask = null;
+                    handleResolutionFailure(channel, resolver, expectedGeneration);
+                });
+            }
+        });
+    }
+
+    private void handleResolutionFailure(
+            Channel channel,
+            StreamResolver resolver,
+            long expectedGeneration
+    ) {
+        if (fallbackAttempted) {
+            showPlaybackFailure();
+            return;
+        }
+        tokenRefreshAttempted = true;
+        fallbackAttempted = true;
+        codecInfo.setText("Probando respaldo del canal");
+        startResolvedPlayback(
+                channel,
+                ResolvedPlaybackSource.fallback(channel, resolver.getId(), PLAYER_USER_AGENT),
+                expectedGeneration
+        );
+    }
+
+    private void startResolvedPlayback(
+            Channel channel,
+            ResolvedPlaybackSource source,
+            long expectedGeneration
+    ) {
+        if (player == null || !isCurrentPlayback(channel, expectedGeneration)) return;
+        currentPlaybackSource = source;
+        player.setMediaSource(mediaSourceFor(channel, source));
+        prepareAndPlay();
+    }
+
+    private MediaSource mediaSourceFor(Channel channel, ResolvedPlaybackSource source) {
+        String userAgent = source.getUserAgent().isBlank()
+                ? PLAYER_USER_AGENT
+                : source.getUserAgent();
+        DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory()
+                .setUserAgent(userAgent)
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(12_000)
+                .setReadTimeoutMs(20_000);
+        Map<String, String> headers = source.getRequestHeaders();
+        if (!headers.isEmpty()) {
+            dataSourceFactory.setDefaultRequestProperties(headers);
+        }
+        return new DefaultMediaSourceFactory(dataSourceFactory)
+                .createMediaSource(mediaItemFor(channel, source.getPlaybackUri()));
+    }
+
+    private boolean isCurrentPlayback(Channel channel, long expectedGeneration) {
+        return !isFinishing()
+                && expectedGeneration == playbackGeneration
+                && playbackChannel == channel;
+    }
+
+    private void handleProviderAuthorizationFailure() {
+        if (playbackChannel == null || currentPlaybackSource == null
+                || !currentPlaybackSource.hasResolver()) {
+            showPlaybackFailure();
+            return;
+        }
+
+        Channel channel = playbackChannel;
+        long expectedGeneration = playbackGeneration;
+        if (!tokenRefreshAttempted) {
+            tokenRefreshAttempted = true;
+            setStatus("RENOVANDO", R.color.amber);
+            codecInfo.setText("Renovando autorización");
+            if (player != null) {
+                player.stop();
+                player.clearMediaItems();
+            }
+            resolveAndPlay(channel, expectedGeneration);
+            return;
+        }
+
+        if (!fallbackAttempted) {
+            fallbackAttempted = true;
+            setStatus("RESPALDO", R.color.amber);
+            codecInfo.setText("Probando respaldo del canal");
+            startResolvedPlayback(
+                    channel,
+                    ResolvedPlaybackSource.fallback(
+                            channel,
+                            currentPlaybackSource.getResolverId(),
+                            PLAYER_USER_AGENT
+                    ),
+                    expectedGeneration
+            );
+            return;
+        }
+        showPlaybackFailure();
+    }
+
+    private void showPlaybackFailure() {
+        setStatus("ERROR", R.color.red);
+        codecInfo.setText("Canal no disponible");
+        overlayAwaitingPlayback = true;
+        showOverlay(true);
+    }
+
     private void retryCurrentPlayback(String expectedMediaId, long expectedGeneration) {
         if (player == null || expectedGeneration != playbackGeneration) return;
         MediaItem current = player.getCurrentMediaItem();
         if (current == null || !expectedMediaId.equals(current.mediaId)) return;
 
         player.stop();
-        player.setMediaItem(current);
+        if (playbackChannel != null && currentPlaybackSource != null) {
+            player.setMediaSource(mediaSourceFor(playbackChannel, currentPlaybackSource));
+        } else {
+            player.setMediaItem(current);
+        }
         prepareAndPlay();
     }
 
     private void startPlaybackFromInput() {
-        if (player == null || player.getCurrentMediaItem() == null) return;
+        if (player == null) return;
         if (player.getPlayerError() != null || player.getPlaybackState() == Player.STATE_IDLE) {
+            StreamResolver resolver = streamResolverRegistry.find(playbackChannel);
+            if (resolver != null) {
+                if (playbackResolutionTask != null && !playbackResolutionTask.isDone()) return;
+                tokenRefreshAttempted = false;
+                fallbackAttempted = false;
+                currentPlaybackSource = null;
+                player.stop();
+                player.clearMediaItems();
+                resolveAndPlay(playbackChannel, playbackGeneration);
+                return;
+            }
+            if (player.getCurrentMediaItem() == null) return;
             playbackRecoveryPolicy.reset();
             retryCurrentPlayback(
                     player.getCurrentMediaItem().mediaId,
@@ -366,8 +549,8 @@ public final class MainActivity extends Activity {
         player.play();
     }
 
-    private static MediaItem mediaItemFor(Channel channel) {
-        Uri uri = Uri.parse(channel.getStreamUri().toString());
+    private static MediaItem mediaItemFor(Channel channel, URI playbackUri) {
+        Uri uri = Uri.parse(playbackUri.toString());
         MediaItem.Builder builder = new MediaItem.Builder()
                 .setUri(uri)
                 .setMediaId(PlaybackPreferences.channelIdentity(channel));
@@ -967,6 +1150,8 @@ public final class MainActivity extends Activity {
         exiting = true;
         if (exitDialog != null) exitDialog.dismiss();
         playlistGeneration++;
+        playbackGeneration++;
+        cancelPlaybackResolution();
         mainHandler.removeCallbacksAndMessages(null);
         if (player != null) player.pause();
 
@@ -1065,8 +1250,35 @@ public final class MainActivity extends Activity {
     }
 
     private static String shortMessage(Throwable error) {
+        int responseCode = httpResponseCode(error);
+        if (responseCode == 401 || responseCode == 403) {
+            return "Autorización rechazada.";
+        }
         String message = error == null ? null : error.getMessage();
-        return message == null || message.isBlank() ? "Error desconocido." : message;
+        if (message == null || message.isBlank()) return "Error desconocido.";
+        return message
+                .replaceAll("(?i)https?://[^\\s]+", "URL")
+                .replaceAll("(?i)(access_token|token|serverKey)=([^&\\s]+)", "$1=[oculto]");
+    }
+
+    private boolean isProviderAuthorizationError(PlaybackException error) {
+        if (currentPlaybackSource == null || !currentPlaybackSource.hasResolver()) {
+            return false;
+        }
+        int responseCode = httpResponseCode(error);
+        return responseCode == 401 || responseCode == 403;
+    }
+
+    private static int httpResponseCode(Throwable error) {
+        Throwable current = error;
+        int depth = 0;
+        while (current != null && depth++ < 20) {
+            if (current instanceof HttpDataSource.InvalidResponseCodeException) {
+                return ((HttpDataSource.InvalidResponseCodeException) current).responseCode;
+            }
+            current = current.getCause();
+        }
+        return -1;
     }
 
     private void enterImmersiveMode() {
@@ -1120,6 +1332,8 @@ public final class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         playlistGeneration++;
+        playbackGeneration++;
+        cancelPlaybackResolution();
         mainHandler.removeCallbacksAndMessages(null);
         if (qualityDialog != null) qualityDialog.dismiss();
         if (appUpdater != null) appUpdater.destroy();
