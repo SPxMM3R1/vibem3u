@@ -48,11 +48,5 @@ public final class EpgData {
         return null;
     }
 
-    public List<EpgProgramme> getProgrammes(String channelId) {
-        if (channelId == null || channelId.isBlank()) return Collections.emptyList();
-        List<EpgProgramme> programmes = programmesByChannel.get(channelId);
-        return programmes == null ? Collections.emptyList() : programmes;
-    }
-
     public int getProgrammeCount() { return programmeCount; }
 }
