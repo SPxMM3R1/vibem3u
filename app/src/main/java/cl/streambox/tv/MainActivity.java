@@ -71,6 +71,7 @@ public final class MainActivity extends Activity {
     private static final long OVERLAY_TIMEOUT_MS = 4_500;
     private static final long PLAYER_RETRY_DELAY_MS = 2_500;
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
+    private static final long NO_RESOLUTION_REQUEST = -1L;
     private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.15 (Android TV)";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -126,6 +127,7 @@ public final class MainActivity extends Activity {
     private Runnable scheduledPlaybackRetry;
     private Future<?> playbackResolutionTask;
     private long playbackResolutionRequestId;
+    private long activePlaybackSourceRequestId = NO_RESOLUTION_REQUEST;
     private Channel playbackChannel;
     private ResolvedPlaybackSource currentPlaybackSource;
     private boolean tokenRefreshAttempted;
@@ -264,7 +266,7 @@ public final class MainActivity extends Activity {
                 discardProviderMedia = currentPlaybackSource.isDynamicallyResolved();
             }
             playbackChannel = null;
-            currentPlaybackSource = null;
+            discardCurrentPlaybackSource();
             if (discardProviderMedia && player != null) {
                 player.stop();
                 player.clearMediaItems();
@@ -477,7 +479,7 @@ public final class MainActivity extends Activity {
         cancelPlaybackResolution();
         playbackRecoveryPolicy.reset();
         playbackChannel = channel;
-        currentPlaybackSource = null;
+        discardCurrentPlaybackSource();
         tokenRefreshAttempted = false;
         fallbackAttempted = false;
         qualityPreferenceAppliedFor = null;
@@ -530,11 +532,10 @@ public final class MainActivity extends Activity {
         // A cancelled resolver may still finish its HTTP call. Incrementing
         // the request generation makes its token unusable even if its
         // callback arrives after a new channel or retry has started.
+        if (playbackResolutionTask == null) return;
         playbackResolutionRequestId++;
-        if (playbackResolutionTask != null) {
-            playbackResolutionTask.cancel(true);
-            playbackResolutionTask = null;
-        }
+        playbackResolutionTask.cancel(true);
+        playbackResolutionTask = null;
     }
 
     private void resolveAndPlay(Channel channel, long expectedGeneration) {
@@ -544,7 +545,8 @@ public final class MainActivity extends Activity {
             startResolvedPlayback(
                     channel,
                     ResolvedPlaybackSource.direct(channel, PLAYER_USER_AGENT),
-                    expectedGeneration
+                    expectedGeneration,
+                    NO_RESOLUTION_REQUEST
             );
             return;
         }
@@ -552,7 +554,9 @@ public final class MainActivity extends Activity {
         cancelPlaybackResolution();
         // A resolver source is ephemeral. Never leave the previous token as
         // the source while a new resolver request is in flight.
-        currentPlaybackSource = null;
+        discardCurrentPlaybackSource();
+        player.stop();
+        player.clearMediaItems();
         long requestId = ++playbackResolutionRequestId;
         playbackResolutionTask = networkExecutor.submit(() -> {
             try {
@@ -561,7 +565,7 @@ public final class MainActivity extends Activity {
                     if (!isCurrentPlayback(channel, expectedGeneration)
                             || requestId != playbackResolutionRequestId) return;
                     playbackResolutionTask = null;
-                    startResolvedPlayback(channel, source, expectedGeneration);
+                    startResolvedPlayback(channel, source, expectedGeneration, requestId);
                 });
             } catch (Exception error) {
                 if (Thread.currentThread().isInterrupted()) return;
@@ -590,19 +594,37 @@ public final class MainActivity extends Activity {
         startResolvedPlayback(
                 channel,
                 ResolvedPlaybackSource.fallback(channel, resolver.getId(), PLAYER_USER_AGENT),
-                expectedGeneration
+                expectedGeneration,
+                NO_RESOLUTION_REQUEST
         );
     }
 
     private void startResolvedPlayback(
             Channel channel,
             ResolvedPlaybackSource source,
-            long expectedGeneration
+            long expectedGeneration,
+            long expectedResolutionRequestId
     ) {
         if (player == null || !isCurrentPlayback(channel, expectedGeneration)) return;
+        if (source.isDynamicallyResolved()
+                && (expectedResolutionRequestId == NO_RESOLUTION_REQUEST
+                || expectedResolutionRequestId != playbackResolutionRequestId)) {
+            // A resolver callback can arrive after cancellation. Never hand
+            // that token to Media3, even if the channel itself is unchanged.
+            return;
+        }
+        cancelScheduledPlaybackRetry();
+        activePlaybackSourceRequestId = source.isDynamicallyResolved()
+                ? expectedResolutionRequestId
+                : NO_RESOLUTION_REQUEST;
         currentPlaybackSource = source;
         player.setMediaSource(mediaSourceFor(channel, source));
         prepareAndPlay();
+    }
+
+    private void discardCurrentPlaybackSource() {
+        currentPlaybackSource = null;
+        activePlaybackSourceRequestId = NO_RESOLUTION_REQUEST;
     }
 
     private MediaSource mediaSourceFor(Channel channel, ResolvedPlaybackSource source) {
@@ -623,7 +645,8 @@ public final class MainActivity extends Activity {
     }
 
     private boolean isCurrentPlayback(Channel channel, long expectedGeneration) {
-        return !isFinishing()
+        return !exiting
+                && !isFinishing()
                 && expectedGeneration == playbackGeneration
                 && playbackChannel == channel;
     }
@@ -643,7 +666,7 @@ public final class MainActivity extends Activity {
             codecInfo.setText("Renovando autorización");
             // Drop the rejected URL before requesting the replacement token.
             // It must not be available to a generic retry path.
-            currentPlaybackSource = null;
+            discardCurrentPlaybackSource();
             if (player != null) {
                 player.stop();
                 player.clearMediaItems();
@@ -663,7 +686,8 @@ public final class MainActivity extends Activity {
                             currentPlaybackSource.getResolverId(),
                             PLAYER_USER_AGENT
                     ),
-                    expectedGeneration
+                    expectedGeneration,
+                    NO_RESOLUTION_REQUEST
             );
             return;
         }
@@ -688,7 +712,7 @@ public final class MainActivity extends Activity {
         if (playbackChannel != null && streamResolverRegistry.find(playbackChannel) != null) {
             player.stop();
             player.clearMediaItems();
-            currentPlaybackSource = null;
+            discardCurrentPlaybackSource();
             resolveAndPlay(playbackChannel, expectedGeneration);
             return;
         }
@@ -710,7 +734,7 @@ public final class MainActivity extends Activity {
                 if (playbackResolutionTask != null && !playbackResolutionTask.isDone()) return;
                 tokenRefreshAttempted = false;
                 fallbackAttempted = false;
-                currentPlaybackSource = null;
+                discardCurrentPlaybackSource();
                 player.stop();
                 player.clearMediaItems();
                 resolveAndPlay(playbackChannel, playbackGeneration);
@@ -1448,6 +1472,12 @@ public final class MainActivity extends Activity {
         if (currentPlaybackSource == null || !currentPlaybackSource.hasResolver()) {
             return false;
         }
+        if (currentPlaybackSource.isDynamicallyResolved()
+                && activePlaybackSourceRequestId != playbackResolutionRequestId) {
+            // Ignore an authorization error from a Media3 item that was
+            // superseded while its callback was still being delivered.
+            return false;
+        }
         int responseCode = httpResponseCode(error);
         return responseCode == 401 || responseCode == 403;
     }
@@ -1512,7 +1542,7 @@ public final class MainActivity extends Activity {
             // Leaving the activity ends this resolver session. Resuming it
             // will obtain a new token instead of reviving a stale MediaItem.
             cancelPlaybackResolution();
-            currentPlaybackSource = null;
+            discardCurrentPlaybackSource();
             if (player != null) {
                 player.stop();
                 player.clearMediaItems();
