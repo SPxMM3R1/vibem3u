@@ -26,8 +26,8 @@ android {
         applicationId = "cl.streambox.tv"
         minSdk = 23
         targetSdk = 36
-        versionCode = 26
-        versionName = "0.4.21"
+        versionCode = 27
+        versionName = "0.4.22"
     }
 
     buildTypes {
