@@ -113,6 +113,7 @@ public final class MainActivity extends Activity {
     private boolean refreshAfterSettings;
     private boolean overlayAwaitingPlayback;
     private boolean exiting;
+    private boolean resourcesReleased;
     private Dialog exitDialog;
     private Dialog qualityDialog;
     private LinearLayout qualityDialogOptions;
@@ -1351,21 +1352,79 @@ public final class MainActivity extends Activity {
     private void exitApplication() {
         if (exiting) return;
         exiting = true;
-        if (exitDialog != null) exitDialog.dismiss();
+        releaseAppResources();
+        closeApplicationTasksAndProcess();
+    }
+
+    private void releaseAppResources() {
+        if (resourcesReleased) return;
+        resourcesReleased = true;
         playlistGeneration++;
         playbackGeneration++;
+        cancelScheduledPlaybackRetry();
         cancelPlaybackResolution();
         mainHandler.removeCallbacksAndMessages(null);
-        if (player != null) player.pause();
 
+        if (exitDialog != null) {
+            exitDialog.dismiss();
+            exitDialog = null;
+        }
+        if (qualityDialog != null) {
+            qualityDialog.dismiss();
+            qualityDialog = null;
+            qualityDialogOptions = null;
+            qualityDialogSubtitleSwitch = null;
+            qualityDialogChannelIdentity = null;
+        }
+        if (appUpdater != null) {
+            appUpdater.destroy();
+            appUpdater = null;
+        }
+        networkExecutor.shutdownNow();
+
+        playbackChannel = null;
+        discardCurrentPlaybackSource();
+        channels.clear();
+        epgData = EpgData.empty();
+        qualityPreferenceAppliedFor = null;
+        subtitlePreferenceAppliedFor = null;
+        subtitleTextObservedFor = null;
+
+        if (channelLogo != null) {
+            channelLogo.setImageDrawable(null);
+        }
+        if (channelLogoCache != null) {
+            channelLogoCache.clearMemory();
+        }
+
+        if (player != null) {
+            ExoPlayer releasedPlayer = player;
+            player = null;
+            if (playerView != null) {
+                playerView.setPlayer(null);
+            }
+            try {
+                releasedPlayer.stop();
+                releasedPlayer.clearMediaItems();
+            } finally {
+                releasedPlayer.release();
+            }
+        }
+    }
+
+    private void closeApplicationTasksAndProcess() {
         ActivityManager activityManager = getSystemService(ActivityManager.class);
-        if (activityManager == null || activityManager.getAppTasks().isEmpty()) {
-            finishAndRemoveTask();
-            return;
+        if (activityManager != null) {
+            for (ActivityManager.AppTask task : activityManager.getAppTasks()) {
+                task.finishAndRemoveTask();
+            }
         }
-        for (ActivityManager.AppTask task : activityManager.getAppTasks()) {
-            task.finishAndRemoveTask();
-        }
+        finishAndRemoveTask();
+
+        // All app-owned resources have already been released above. Ending
+        // our own process prevents Android TV from retaining this activity's
+        // executor/Media3 heap as a cached process after explicit exit.
+        android.os.Process.killProcess(android.os.Process.myPid());
     }
 
     private void openSettings() {
@@ -1555,17 +1614,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        playlistGeneration++;
-        playbackGeneration++;
-        cancelPlaybackResolution();
-        mainHandler.removeCallbacksAndMessages(null);
-        if (qualityDialog != null) qualityDialog.dismiss();
-        if (appUpdater != null) appUpdater.destroy();
-        networkExecutor.shutdownNow();
-        if (player != null) {
-            player.release();
-            player = null;
-        }
+        releaseAppResources();
         super.onDestroy();
     }
 

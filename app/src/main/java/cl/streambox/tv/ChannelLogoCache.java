@@ -50,6 +50,11 @@ public final class ChannelLogoCache {
         );
     }
 
+    /** Drops decoded logos held only for the current app session. */
+    public synchronized void clearMemory() {
+        memoryCache.evictAll();
+    }
+
     public synchronized Bitmap load(URI logoUri) throws IOException {
         return load(logoUri, 0, 0);
     }
