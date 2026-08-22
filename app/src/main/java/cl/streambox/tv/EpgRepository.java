@@ -9,7 +9,7 @@ import java.net.URI;
 public final class EpgRepository {
     private static final int MAX_EPG_BYTES = 32 * 1024 * 1024;
     private static final long REVALIDATION_INTERVAL_MS = 5L * 60L * 1000L;
-    private static final String USER_AGENT = "VibeM3U/0.4.22 (Android TV)";
+    private static final String USER_AGENT = "VibeM3U/0.4.23 (Android TV)";
     private static final String ACCEPT = "application/xml, text/xml, text/plain, */*";
 
     private final HttpResourceCache cache;
