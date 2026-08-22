@@ -58,9 +58,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -76,6 +78,7 @@ public final class MainActivity extends Activity {
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
+    private final ExecutorService logoCacheExecutor = Executors.newFixedThreadPool(2);
     private PlaylistRepository repository;
     private EpgRepository epgRepository;
     private final PlaybackRecoveryPolicy playbackRecoveryPolicy = new PlaybackRecoveryPolicy();
@@ -123,6 +126,9 @@ public final class MainActivity extends Activity {
     private String subtitlePreferenceAppliedFor;
     private String subtitleTextObservedFor;
     private int playlistGeneration;
+    private long logoRequestGeneration;
+    private String displayedLogoIdentity = "";
+    private final Set<String> logoRevalidatedThisSession = new HashSet<>();
     private boolean playerUsesVolumeNormalization;
     private long playbackGeneration;
     private Runnable scheduledPlaybackRetry;
@@ -831,10 +837,15 @@ public final class MainActivity extends Activity {
     private void loadChannelLogo(Channel channel, boolean revalidate) {
         URI logoUri = channel.getLogoUri();
         String fallback = initials(channel.getName());
-        channelLogo.setImageDrawable(null);
-        channelLogo.setVisibility(View.GONE);
-        channelLogoFallback.setText(fallback);
-        channelLogoFallback.setVisibility(View.VISIBLE);
+        String expectedIdentity = PlaybackPreferences.channelIdentity(channel);
+        long requestGeneration = ++logoRequestGeneration;
+        if (!expectedIdentity.equals(displayedLogoIdentity)) {
+            channelLogo.setImageDrawable(null);
+            channelLogo.setVisibility(View.GONE);
+            channelLogoFallback.setText(fallback);
+            channelLogoFallback.setVisibility(View.VISIBLE);
+            displayedLogoIdentity = "";
+        }
         if (logoUri == null || !("http".equalsIgnoreCase(logoUri.getScheme()) || "https".equalsIgnoreCase(logoUri.getScheme()))) {
             return;
         }
@@ -846,42 +857,59 @@ public final class MainActivity extends Activity {
         int targetHeightPx = channelLogo.getHeight() > 0
                 ? channelLogo.getHeight()
                 : dpToPx(54);
-        String expectedIdentity = PlaybackPreferences.channelIdentity(channel);
-        networkExecutor.submit(() -> {
-            try {
-                ChannelLogoCache.CacheLoad initial = channelLogoCache.loadCacheFirst(
-                        logoUri,
-                        targetWidthPx,
-                        targetHeightPx
-                );
-                android.graphics.Bitmap bitmap = initial.getBitmap();
-                mainHandler.post(() -> {
-                    if (!isCurrentLogo(expectedIndex, expectedIdentity) || isFinishing()) return;
-                    channelLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                    channelLogo.setImageBitmap(bitmap);
-                    channelLogo.setVisibility(View.VISIBLE);
-                    channelLogoFallback.setVisibility(View.GONE);
-                });
-
-                if (!revalidate || !initial.isFromCache()) return;
-
-                ChannelLogoCache.RefreshResult refreshed = channelLogoCache.refreshIfChanged(
-                        logoUri,
-                        targetWidthPx,
-                        targetHeightPx
-                );
-                if (!refreshed.isChanged()) return;
-                mainHandler.post(() -> {
-                    if (!isCurrentLogo(expectedIndex, expectedIdentity) || isFinishing()) return;
-                    channelLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                    channelLogo.setImageBitmap(refreshed.getBitmap());
-                    channelLogo.setVisibility(View.VISIBLE);
-                    channelLogoFallback.setVisibility(View.GONE);
-                });
-            } catch (Exception ignored) {
-                // El logo en caché ya mostrado permanece si falla la actualización.
+        boolean shouldRevalidate = revalidate
+                || logoRevalidatedThisSession.add(logoUri.toString());
+        logoCacheExecutor.submit(() -> {
+            android.graphics.Bitmap cached = channelLogoCache.loadCached(
+                    logoUri,
+                    targetWidthPx,
+                    targetHeightPx
+            );
+            if (cached != null) {
+                mainHandler.post(() -> showChannelLogo(
+                        cached,
+                        expectedIndex,
+                        expectedIdentity,
+                        requestGeneration
+                ));
             }
+
+            if (cached != null && !shouldRevalidate) return;
+            networkExecutor.submit(() -> {
+                try {
+                    ChannelLogoCache.RefreshResult refreshed = channelLogoCache.refreshIfChanged(
+                            logoUri,
+                            targetWidthPx,
+                            targetHeightPx
+                    );
+                    if (cached != null && !refreshed.isChanged()) return;
+                    mainHandler.post(() -> showChannelLogo(
+                            refreshed.getBitmap(),
+                            expectedIndex,
+                            expectedIdentity,
+                            requestGeneration
+                    ));
+                } catch (Exception ignored) {
+                    // El logo en caché ya mostrado permanece si falla la actualización.
+                }
+            });
         });
+    }
+
+    private void showChannelLogo(
+            android.graphics.Bitmap bitmap,
+            int expectedIndex,
+            String expectedIdentity,
+            long requestGeneration
+    ) {
+        if (requestGeneration != logoRequestGeneration
+                || !isCurrentLogo(expectedIndex, expectedIdentity)
+                || isFinishing()) return;
+        channelLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        channelLogo.setImageBitmap(bitmap);
+        channelLogo.setVisibility(View.VISIBLE);
+        channelLogoFallback.setVisibility(View.GONE);
+        displayedLogoIdentity = expectedIdentity;
     }
 
     private boolean isCurrentLogo(int expectedIndex, String expectedIdentity) {
@@ -1456,6 +1484,7 @@ public final class MainActivity extends Activity {
             appUpdater = null;
         }
         networkExecutor.shutdownNow();
+        logoCacheExecutor.shutdownNow();
 
         playbackChannel = null;
         discardCurrentPlaybackSource();
@@ -1468,6 +1497,8 @@ public final class MainActivity extends Activity {
         if (channelLogo != null) {
             channelLogo.setImageDrawable(null);
         }
+        displayedLogoIdentity = "";
+        logoRevalidatedThisSession.clear();
         if (channelLogoCache != null) {
             channelLogoCache.clearMemory();
         }

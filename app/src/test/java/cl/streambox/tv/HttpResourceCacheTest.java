@@ -67,4 +67,20 @@ public class HttpResourceCacheTest {
         assertEquals("etag-2", cached.getEtag());
         assertEquals("last-2", cached.getLastModified());
     }
+
+    @Test
+    public void rewrittenBodyWithoutMetadataPersistsAcrossInstances() throws Exception {
+        File directory = temporaryFolder.newFolder("render-cache");
+        String key = "render-v1:https://example.test/logo.svg#156x108";
+        byte[] rendered = new byte[]{1, 2, 3, 4};
+
+        HttpResourceCache first = new HttpResourceCache(directory, 3, 1024);
+        first.rewriteCached(key, rendered);
+
+        HttpResourceCache second = new HttpResourceCache(directory, 3, 1024);
+        HttpResourceCache.CachedResource cached = second.readCached(key, 1024);
+
+        assertNotNull(cached);
+        assertArrayEquals(rendered, cached.getBytes());
+    }
 }

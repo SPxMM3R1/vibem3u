@@ -15,6 +15,7 @@ import com.caverock.androidsvg.SVG;
 import com.caverock.androidsvg.SVGParseException;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -24,6 +25,8 @@ public final class ChannelLogoCache {
     private static final int MAX_LOGO_BYTES = 2 * 1024 * 1024;
     private static final int MAX_DISK_FILES = 96;
     private static final long MAX_DISK_BYTES = 24L * 1024L * 1024L;
+    private static final long MAX_RENDER_DISK_BYTES = 32L * 1024L * 1024L;
+    private static final int MAX_RENDERED_LOGO_BYTES = 4 * 1024 * 1024;
     private static final int DECODE_OVERSAMPLE = 4;
     private static final int MAX_RENDER_EDGE_PX = 4096;
     private static final int ALPHA_TRIM_THRESHOLD = 2;
@@ -32,6 +35,7 @@ public final class ChannelLogoCache {
 
     private final LruCache<String, Bitmap> memoryCache;
     private final HttpResourceCache resourceCache;
+    private final HttpResourceCache renderedCache;
 
     public static final class CacheLoad {
         private final Bitmap bitmap;
@@ -84,6 +88,13 @@ public final class ChannelLogoCache {
                 MAX_DISK_FILES,
                 MAX_DISK_BYTES
         );
+        renderedCache = new HttpResourceCache(
+                context,
+                "channel_logo_renders_v1",
+                MAX_DISK_FILES,
+                MAX_RENDER_DISK_BYTES,
+                false
+        );
     }
 
     /** Drops decoded logos held only for the current app session. */
@@ -91,15 +102,15 @@ public final class ChannelLogoCache {
         memoryCache.evictAll();
     }
 
-    public synchronized Bitmap load(URI logoUri) throws IOException {
+    public Bitmap load(URI logoUri) throws IOException {
         return load(logoUri, 0, 0);
     }
 
-    public synchronized Bitmap load(URI logoUri, int targetWidthPx, int targetHeightPx) throws IOException {
+    public Bitmap load(URI logoUri, int targetWidthPx, int targetHeightPx) throws IOException {
         return loadCacheFirst(logoUri, targetWidthPx, targetHeightPx).getBitmap();
     }
 
-    public synchronized Bitmap load(
+    public Bitmap load(
             URI logoUri,
             int targetWidthPx,
             int targetHeightPx,
@@ -116,14 +127,14 @@ public final class ChannelLogoCache {
      * Returns a usable logo immediately from memory or disk. Only a missing
      * logo goes to the network in this method.
      */
-    public synchronized CacheLoad loadCacheFirst(
+    public CacheLoad loadCacheFirst(
             URI logoUri,
             int targetWidthPx,
             int targetHeightPx
     ) throws IOException {
         String url = logoUri.toString();
         String memoryKey = displayCacheKey(url, targetWidthPx, targetHeightPx);
-        Bitmap cachedBitmap = readCachedBitmap(url, memoryKey, targetWidthPx, targetHeightPx);
+        Bitmap cachedBitmap = loadCached(logoUri, targetWidthPx, targetHeightPx);
         if (cachedBitmap != null) {
             return new CacheLoad(cachedBitmap, true);
         }
@@ -142,7 +153,7 @@ public final class ChannelLogoCache {
      * the result of {@link #loadCacheFirst(URI, int, int)} before invoking this
      * method, so a slow or unavailable server never hides the cached logo.
      */
-    public synchronized RefreshResult refreshIfChanged(
+    public RefreshResult refreshIfChanged(
             URI logoUri,
             int targetWidthPx,
             int targetHeightPx
@@ -155,6 +166,26 @@ public final class ChannelLogoCache {
                 USER_AGENT,
                 "image/*,*/*;q=0.8"
         );
+        if (!fetched.isChanged()) {
+            Bitmap current = readRenderedBitmap(memoryKey);
+            if (current == null) {
+                current = decodeLogo(
+                        fetched.getResource().getBytes(),
+                        url,
+                        targetWidthPx,
+                        targetHeightPx
+                );
+                if (current != null) {
+                    memoryCache.put(memoryKey, current);
+                    writeRenderedBitmap(memoryKey, current);
+                }
+            }
+            if (current == null) {
+                throw new IOException("El logo no tiene un formato de imagen compatible.");
+            }
+            return new RefreshResult(current, false);
+        }
+
         byte[] bytes = fetched.getResource().getBytes();
         Bitmap refreshedBitmap = decodeLogo(bytes, url, targetWidthPx, targetHeightPx);
         if (refreshedBitmap == null) {
@@ -163,19 +194,16 @@ public final class ChannelLogoCache {
 
         resourceCache.commit(url, fetched, bytes);
         memoryCache.put(memoryKey, refreshedBitmap);
+        writeRenderedBitmap(memoryKey, refreshedBitmap);
         return new RefreshResult(refreshedBitmap, fetched.isChanged());
     }
 
-    private Bitmap readCachedBitmap(
-            String url,
-            String memoryKey,
-            int targetWidthPx,
-            int targetHeightPx
-    ) {
-        Bitmap memoryBitmap = memoryCache.get(memoryKey);
-        if (memoryBitmap != null && !memoryBitmap.isRecycled()) {
-            return memoryBitmap;
-        }
+    /** Returns only local data and never performs a network request. */
+    public Bitmap loadCached(URI logoUri, int targetWidthPx, int targetHeightPx) {
+        String url = logoUri.toString();
+        String memoryKey = displayCacheKey(url, targetWidthPx, targetHeightPx);
+        Bitmap renderedBitmap = readRenderedBitmap(memoryKey);
+        if (renderedBitmap != null) return renderedBitmap;
 
         try {
             HttpResourceCache.CachedResource cached = resourceCache.readCached(
@@ -191,10 +219,11 @@ public final class ChannelLogoCache {
             );
             if (diskBitmap != null) {
                 memoryCache.put(memoryKey, diskBitmap);
+                writeRenderedBitmap(memoryKey, diskBitmap);
                 return diskBitmap;
             }
         } catch (IOException ignored) {
-            // A broken local entry is removed below and treated as a miss.
+            // The raw entry is removed below and treated as a miss.
         }
         resourceCache.remove(url);
         return null;
@@ -220,7 +249,47 @@ public final class ChannelLogoCache {
 
         resourceCache.commit(url, fetched, bytes);
         memoryCache.put(memoryKey, downloadedBitmap);
+        writeRenderedBitmap(memoryKey, downloadedBitmap);
         return downloadedBitmap;
+    }
+
+    private Bitmap readRenderedBitmap(String memoryKey) {
+        Bitmap memoryBitmap = memoryCache.get(memoryKey);
+        if (memoryBitmap != null && !memoryBitmap.isRecycled()) {
+            return memoryBitmap;
+        }
+        try {
+            HttpResourceCache.CachedResource rendered = renderedCache.readCached(
+                    memoryKey,
+                    MAX_RENDERED_LOGO_BYTES
+            );
+            if (rendered == null) return null;
+            Bitmap bitmap = BitmapFactory.decodeByteArray(
+                    rendered.getBytes(),
+                    0,
+                    rendered.getBytes().length
+            );
+            if (bitmap != null) {
+                memoryCache.put(memoryKey, bitmap);
+                return bitmap;
+            }
+        } catch (IOException ignored) {
+            // A corrupt rendered entry is regenerated from the raw logo.
+        }
+        renderedCache.remove(memoryKey);
+        return null;
+    }
+
+    private void writeRenderedBitmap(String memoryKey, Bitmap bitmap) {
+        if (bitmap == null || bitmap.isRecycled()) return;
+        try (ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) return;
+            byte[] bytes = output.toByteArray();
+            if (bytes.length == 0 || bytes.length > MAX_RENDERED_LOGO_BYTES) return;
+            renderedCache.rewriteCached(memoryKey, bytes);
+        } catch (IOException ignored) {
+            // The raw persistent cache remains available as a fallback.
+        }
     }
 
     private static Bitmap decodeLogo(byte[] bytes, String url, int targetWidthPx, int targetHeightPx)
