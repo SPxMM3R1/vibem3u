@@ -82,15 +82,31 @@ final class HttpResourceCache {
     private static final int READ_TIMEOUT_MS = 25_000;
 
     private final File directory;
+    private final File legacyDirectory;
     private final int maxFiles;
     private final long maxBytes;
 
     HttpResourceCache(Context context, String directoryName, int maxFiles, long maxBytes) {
-        this(new File(context.getCacheDir(), directoryName), maxFiles, maxBytes);
+        this(
+                new File(context.getFilesDir(), directoryName),
+                new File(context.getCacheDir(), directoryName),
+                maxFiles,
+                maxBytes
+        );
     }
 
     HttpResourceCache(File directory, int maxFiles, long maxBytes) {
+        this(directory, null, maxFiles, maxBytes);
+    }
+
+    private HttpResourceCache(
+            File directory,
+            File legacyDirectory,
+            int maxFiles,
+            long maxBytes
+    ) {
         this.directory = directory;
+        this.legacyDirectory = legacyDirectory;
         this.maxFiles = maxFiles;
         this.maxBytes = maxBytes;
         if (!directory.exists()) {
@@ -100,7 +116,15 @@ final class HttpResourceCache {
     }
 
     synchronized CachedResource readCached(String url, int maxResourceBytes) throws IOException {
-        File bodyFile = bodyFile(url);
+        File sourceDirectory = directory;
+        File bodyFile = bodyFile(directory, url);
+        if (!bodyFile.isFile() && legacyDirectory != null) {
+            File legacyBodyFile = bodyFile(legacyDirectory, url);
+            if (legacyBodyFile.isFile()) {
+                sourceDirectory = legacyDirectory;
+                bodyFile = legacyBodyFile;
+            }
+        }
         if (!bodyFile.isFile()) return null;
         if (bodyFile.length() <= 0 || bodyFile.length() > maxResourceBytes) {
             remove(url);
@@ -109,7 +133,10 @@ final class HttpResourceCache {
 
         try {
             byte[] bytes = readLimited(new FileInputStream(bodyFile), maxResourceBytes);
-            Properties metadata = readMetadata(metadataFile(url));
+            Properties metadata = readMetadata(metadataFile(sourceDirectory, url));
+            if (sourceDirectory != directory) {
+                migrateLegacy(url, bytes, metadata);
+            }
             bodyFile.setLastModified(System.currentTimeMillis());
             return new CachedResource(
                     bytes,
@@ -187,15 +214,7 @@ final class HttpResourceCache {
         if (!resource.getLastModified().isBlank()) {
             metadata.setProperty("last_modified", resource.getLastModified());
         }
-        File metadataTarget = metadataFile(url);
-        File metadataTemporary = new File(directory, metadataTarget.getName() + ".tmp");
-        try (OutputStreamWriter writer = new OutputStreamWriter(
-                new FileOutputStream(metadataTemporary),
-                StandardCharsets.UTF_8
-        )) {
-            metadata.store(writer, "VibeM3U resource cache");
-        }
-        replaceFile(metadataTemporary, metadataTarget);
+        writeMetadata(url, metadata);
         trim();
     }
 
@@ -218,16 +237,22 @@ final class HttpResourceCache {
 
     synchronized void remove(String url) {
         //noinspection ResultOfMethodCallIgnored
-        bodyFile(url).delete();
+        bodyFile(directory, url).delete();
         //noinspection ResultOfMethodCallIgnored
-        metadataFile(url).delete();
+        metadataFile(directory, url).delete();
+        if (legacyDirectory != null) {
+            //noinspection ResultOfMethodCallIgnored
+            bodyFile(legacyDirectory, url).delete();
+            //noinspection ResultOfMethodCallIgnored
+            metadataFile(legacyDirectory, url).delete();
+        }
     }
 
-    private File bodyFile(String url) {
+    private static File bodyFile(File directory, String url) {
         return new File(directory, cacheKey(url) + ".body");
     }
 
-    private File metadataFile(String url) {
+    private static File metadataFile(File directory, String url) {
         return new File(directory, cacheKey(url) + ".properties");
     }
 
@@ -240,6 +265,29 @@ final class HttpResourceCache {
         }
         replaceFile(temporary, target);
         target.setLastModified(System.currentTimeMillis());
+    }
+
+    private void writeMetadata(String url, Properties metadata) throws IOException {
+        File metadataTarget = metadataFile(directory, url);
+        File metadataTemporary = new File(directory, metadataTarget.getName() + ".tmp");
+        try (OutputStreamWriter writer = new OutputStreamWriter(
+                new FileOutputStream(metadataTemporary),
+                StandardCharsets.UTF_8
+        )) {
+            metadata.store(writer, "VibeM3U resource cache");
+        }
+        replaceFile(metadataTemporary, metadataTarget);
+    }
+
+    private void migrateLegacy(String url, byte[] bytes, Properties metadata) {
+        try {
+            writeMetadata(url, metadata);
+            writeBody(url, bytes);
+            trim();
+        } catch (IOException ignored) {
+            // The legacy copy remains usable for this read. A later successful
+            // network response will recreate the persistent entry.
+        }
     }
 
     private static Properties readMetadata(File file) throws IOException {
