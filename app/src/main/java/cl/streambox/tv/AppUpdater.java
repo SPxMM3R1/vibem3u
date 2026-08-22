@@ -41,6 +41,7 @@ final class AppUpdater {
     private File pendingApk;
     private String deferredDialogMessage;
     private boolean checkStarted;
+    private boolean manualCheckInProgress;
     private boolean downloading;
     private boolean installRequested;
     private boolean awaitingUnknownSources;
@@ -53,20 +54,44 @@ final class AppUpdater {
         this.mainHandler = mainHandler;
     }
 
+    interface CheckListener {
+        void onUpdateAvailable(UpdateInfo update);
+        void onUpToDate();
+        void onError(Throwable error);
+    }
+
     void checkForUpdates() {
         if (checkStarted || destroyed) return;
         checkStarted = true;
+        runCheck(null);
+    }
+
+    void checkForUpdates(CheckListener listener) {
+        if (manualCheckInProgress || destroyed) return;
+        manualCheckInProgress = true;
+        runCheck(listener);
+    }
+
+    private void runCheck(CheckListener listener) {
         executor.submit(() -> {
             try {
                 UpdateInfo update = repository.findAvailableUpdate(currentVersionName());
-                if (update != null) {
-                    mainHandler.post(() -> {
-                        availableUpdate = update;
-                        if (canPresentDialog()) showUpdateDialog(update, null);
-                    });
-                }
-            } catch (Exception ignored) {
-                // Una caída de GitHub nunca debe interrumpir la reproducción.
+                mainHandler.post(() -> {
+                    manualCheckInProgress = false;
+                    if (destroyed) return;
+                    if (update == null) {
+                        if (listener != null) listener.onUpToDate();
+                        return;
+                    }
+                    availableUpdate = update;
+                    if (listener != null) listener.onUpdateAvailable(update);
+                    if (canPresentDialog()) showUpdateDialog(update, null);
+                });
+            } catch (Exception error) {
+                mainHandler.post(() -> {
+                    manualCheckInProgress = false;
+                    if (!destroyed && listener != null) listener.onError(error);
+                });
             }
         });
     }

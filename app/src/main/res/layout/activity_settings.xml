@@ -4,146 +4,275 @@
     android:layout_height="match_parent"
     android:background="#F2050A0D">
 
-    <LinearLayout
-        android:layout_width="640dp"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:orientation="vertical">
+    <ScrollView
+        android:id="@+id/settings_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:fadeScrollbars="true"
+        android:clipToPadding="false"
+        android:paddingTop="34dp"
+        android:paddingBottom="34dp">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/settings_title"
-            android:textColor="@color/white"
-            android:textSize="30sp"
-            android:textStyle="bold" />
-
-        <TextView
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="@string/settings_description"
-            android:textColor="@color/muted"
-            android:textSize="17sp" />
+            android:layout_height="wrap_content">
 
-        <EditText
-            android:id="@+id/playlist_url"
-            android:layout_width="match_parent"
-            android:layout_height="58dp"
-            android:layout_marginTop="24dp"
-            android:background="#FF182429"
-            android:hint="@string/playlist_url_hint"
-            android:imeOptions="actionDone"
-            android:inputType="textUri"
-            android:paddingHorizontal="16dp"
-            android:selectAllOnFocus="false"
-            android:singleLine="true"
-            android:textColor="@color/white"
-            android:textColorHint="#78909C"
-            android:textSize="17sp" />
-
-        <TextView
-            android:id="@+id/url_error"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:textColor="@color/red"
-            android:textSize="14sp"
-            android:visibility="gone" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="@string/channel_controls_title"
-            android:textColor="@color/white"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <Switch
-            android:id="@+id/invert_channel_keys"
-            android:layout_width="match_parent"
-            android:layout_height="54dp"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/focus_button"
-            android:focusable="true"
-            android:paddingHorizontal="14dp"
-            android:text="@string/invert_channel_keys"
-            android:textColor="@color/white"
-            android:textSize="16sp"
-            android:thumbTint="@color/cyan" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="@string/invert_channel_keys_description"
-            android:textColor="@color/muted"
-            android:textSize="13sp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="@string/audio_settings_title"
-            android:textColor="@color/white"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <Switch
-            android:id="@+id/normalize_volume"
-            android:layout_width="match_parent"
-            android:layout_height="54dp"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/focus_button"
-            android:focusable="true"
-            android:paddingHorizontal="14dp"
-            android:text="@string/normalize_volume"
-            android:textColor="@color/white"
-            android:textSize="16sp"
-            android:thumbTint="@color/cyan" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="@string/normalize_volume_description"
-            android:textColor="@color/muted"
-            android:textSize="13sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:gravity="end"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/cancel_button"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="760dp"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="12dp"
-                android:background="@drawable/focus_button"
-                android:text="@string/cancel"
-                android:textColor="@color/white"
-                android:textSize="15sp" />
+                android:layout_gravity="center"
+                android:orientation="vertical">
 
-            <Button
-                android:id="@+id/save_button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/focus_button"
-                android:text="@string/save_and_play"
-                android:textColor="@color/white"
-                android:textSize="15sp" />
-        </LinearLayout>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="VIBEM3U"
+                    android:textColor="@color/cyan"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:text="@string/remote_help"
-            android:textColor="#90A4AE"
-            android:textSize="14sp" />
-    </LinearLayout>
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/settings_title"
+                    android:textColor="@color/white"
+                    android:textSize="31sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="7dp"
+                    android:text="@string/settings_description"
+                    android:textColor="@color/muted"
+                    android:textSize="15sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="22dp"
+                    android:background="@drawable/settings_card"
+                    android:orientation="vertical"
+                    android:padding="22dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_source_title"
+                        android:textColor="@color/white"
+                        android:textSize="19sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/settings_source_description"
+                        android:textColor="@color/muted"
+                        android:textSize="13sp" />
+
+                    <EditText
+                        android:id="@+id/playlist_url"
+                        android:layout_width="match_parent"
+                        android:layout_height="58dp"
+                        android:layout_marginTop="16dp"
+                        android:background="@drawable/settings_input"
+                        android:hint="@string/playlist_url_hint"
+                        android:imeOptions="actionDone"
+                        android:inputType="textUri"
+                        android:selectAllOnFocus="false"
+                        android:singleLine="true"
+                        android:textColor="@color/white"
+                        android:textColorHint="#78909C"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:id="@+id/url_error"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="7dp"
+                        android:textColor="@color/red"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/settings_card"
+                    android:orientation="vertical"
+                    android:padding="22dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_playback_title"
+                        android:textColor="@color/white"
+                        android:textSize="19sp"
+                        android:textStyle="bold" />
+
+                    <Switch
+                        android:id="@+id/invert_channel_keys"
+                        android:layout_width="match_parent"
+                        android:layout_height="54dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/focus_button"
+                        android:focusable="true"
+                        android:paddingHorizontal="14dp"
+                        android:text="@string/invert_channel_keys"
+                        android:textColor="@color/white"
+                        android:textSize="15sp"
+                        android:thumbTint="@color/cyan" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/invert_channel_keys_description"
+                        android:textColor="@color/muted"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/settings_card"
+                    android:orientation="vertical"
+                    android:padding="22dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/audio_settings_title"
+                        android:textColor="@color/white"
+                        android:textSize="19sp"
+                        android:textStyle="bold" />
+
+                    <Switch
+                        android:id="@+id/normalize_volume"
+                        android:layout_width="match_parent"
+                        android:layout_height="54dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/focus_button"
+                        android:focusable="true"
+                        android:paddingHorizontal="14dp"
+                        android:text="@string/normalize_volume"
+                        android:textColor="@color/white"
+                        android:textSize="15sp"
+                        android:thumbTint="@color/cyan" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/normalize_volume_description"
+                        android:textColor="@color/muted"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/settings_card"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical"
+                    android:padding="22dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/app_settings_title"
+                        android:textColor="@color/white"
+                        android:textSize="19sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/current_version"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="5dp"
+                        android:textColor="@color/cyan"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/settings_cache_description"
+                        android:textColor="@color/muted"
+                        android:textSize="13sp" />
+
+                    <Button
+                        android:id="@+id/check_updates_button"
+                        android:layout_width="wrap_content"
+                        android:layout_height="46dp"
+                        android:layout_marginTop="15dp"
+                        android:background="@drawable/focus_button"
+                        android:focusable="true"
+                        android:includeFontPadding="false"
+                        android:minHeight="0dp"
+                        android:minWidth="0dp"
+                        android:text="@string/check_updates"
+                        android:textColor="@color/white"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:id="@+id/update_status"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:textColor="@color/muted"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:gravity="end"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/cancel_button"
+                        android:layout_width="132dp"
+                        android:layout_height="42dp"
+                        android:layout_marginEnd="10dp"
+                        android:background="@drawable/focus_button"
+                        android:includeFontPadding="false"
+                        android:minHeight="0dp"
+                        android:minWidth="0dp"
+                        android:text="@string/cancel"
+                        android:textColor="@color/white"
+                        android:textSize="13sp" />
+
+                    <Button
+                        android:id="@+id/save_button"
+                        android:layout_width="176dp"
+                        android:layout_height="42dp"
+                        android:background="@drawable/focus_button"
+                        android:includeFontPadding="false"
+                        android:minHeight="0dp"
+                        android:minWidth="0dp"
+                        android:text="@string/save_and_play"
+                        android:textColor="@color/white"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:gravity="center"
+                    android:text="@string/remote_help"
+                    android:textColor="#90A4AE"
+                    android:textSize="13sp" />
+            </LinearLayout>
+        </FrameLayout>
+    </ScrollView>
 </FrameLayout>
