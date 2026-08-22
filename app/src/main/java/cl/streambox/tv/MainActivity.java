@@ -75,8 +75,8 @@ public final class MainActivity extends Activity {
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
-    private final PlaylistRepository repository = new PlaylistRepository();
-    private final EpgRepository epgRepository = new EpgRepository();
+    private PlaylistRepository repository;
+    private EpgRepository epgRepository;
     private final PlaybackRecoveryPolicy playbackRecoveryPolicy = new PlaybackRecoveryPolicy();
     private final StreamResolverRegistry streamResolverRegistry = new StreamResolverRegistry();
     private final List<Channel> channels = new ArrayList<>();
@@ -104,6 +104,8 @@ public final class MainActivity extends Activity {
     private PlaybackPreferences playbackPreferences;
     private ChannelLogoCache channelLogoCache;
     private EpgData epgData = EpgData.empty();
+    private String loadedPlaylistUrl = "";
+    private String activeEpgUrl = "";
     private int channelIndex;
     private boolean loadFailed;
     private boolean settingsOpen;
@@ -154,6 +156,8 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        repository = new PlaylistRepository(this);
+        epgRepository = new EpgRepository(this);
         channelLogoCache = new ChannelLogoCache(this);
         playbackPreferences = new PlaybackPreferences(this);
         bindViews();
@@ -257,47 +261,176 @@ public final class MainActivity extends Activity {
         loadingPanel.setVisibility(View.VISIBLE);
         loadingProgress.setVisibility(View.VISIBLE);
         loadingText.setText(R.string.loading_playlist);
-        epgData = EpgData.empty();
-        mainHandler.removeCallbacks(updateProgramme);
+        boolean sourceChanged = !url.equals(loadedPlaylistUrl);
+        if (sourceChanged) {
+            channels.clear();
+            channelIndex = 0;
+            epgData = EpgData.empty();
+            activeEpgUrl = "";
+            mainHandler.removeCallbacks(updateProgramme);
+        }
         hideOverlay.run();
 
-        if (!isNetworkAvailable()) {
-            showPlaylistError("No hay conexión a Internet.");
-            return;
-        }
-
+        boolean existingPlaylist = !channels.isEmpty();
         networkExecutor.submit(() -> {
+            boolean usablePlaylist = existingPlaylist;
             try {
-                Playlist downloaded = repository.download(url);
+                Playlist cached = repository.loadCached(url);
+                if (cached != null) {
+                    usablePlaylist = true;
+                    Playlist cachedPlaylist = cached;
+                    mainHandler.post(() -> applyPlaylist(
+                            cachedPlaylist,
+                            url,
+                            generation,
+                            false
+                    ));
+                    loadCachedEpg(cachedPlaylist, generation);
+                }
+
+                if (!isNetworkAvailable()) {
+                    boolean hasUsablePlaylist = usablePlaylist;
+                    mainHandler.post(() -> {
+                        if (generation != playlistGeneration || isFinishing()) return;
+                        if (hasUsablePlaylist) {
+                            loadingPanel.setVisibility(View.GONE);
+                        } else {
+                            showPlaylistError("No hay conexión a Internet.");
+                        }
+                    });
+                    return;
+                }
+
+                PlaylistRepository.LoadResult result = repository.downloadIfChanged(url);
                 mainHandler.post(() -> {
                     if (generation != playlistGeneration || isFinishing()) return;
-                    channels.clear();
-                    channels.addAll(downloaded.getChannels());
-                    channelIndex = playbackPreferences.findInitialChannelIndex(channels);
-                    loadingPanel.setVisibility(View.GONE);
-                    playChannel(channelIndex);
+                    if (result.isChanged() || channels.isEmpty()) {
+                        applyPlaylist(
+                                result.getPlaylist(),
+                                url,
+                                generation,
+                                result.isChanged()
+                        );
+                    } else {
+                        loadingPanel.setVisibility(View.GONE);
+                    }
                 });
 
-                if (downloaded.getEpgUri() != null) {
-                    try {
-                        EpgData downloadedEpg = epgRepository.download(downloaded.getEpgUri());
-                        mainHandler.post(() -> {
-                            if (generation != playlistGeneration || isFinishing()) return;
-                            epgData = downloadedEpg;
-                            mainHandler.removeCallbacks(updateProgramme);
-                            updateProgramme.run();
-                        });
-                    } catch (Exception ignored) {
-                        // La reproducción continúa usando el grupo del canal como respaldo.
-                    }
-                }
+                loadEpgForPlaylist(result.getPlaylist(), generation);
             } catch (Exception error) {
+                boolean hasUsablePlaylist = usablePlaylist || existingPlaylist;
                 mainHandler.post(() -> {
                     if (generation != playlistGeneration || isFinishing()) return;
-                    showPlaylistError(shortMessage(error));
+                    if (hasUsablePlaylist) {
+                        loadingPanel.setVisibility(View.GONE);
+                    } else {
+                        showPlaylistError(shortMessage(error));
+                    }
                 });
             }
         });
+    }
+
+    private void loadCachedEpg(Playlist playlist, int generation) {
+        URI epgUri = playlist.getEpgUri();
+        if (epgUri == null) return;
+        try {
+            EpgData cached = epgRepository.loadCached(epgUri);
+            if (cached == null) return;
+            mainHandler.post(() -> applyEpgData(cached, epgUri, generation));
+        } catch (Exception ignored) {
+            // La reproducción continúa usando el grupo del canal como respaldo.
+        }
+    }
+
+    private void loadEpgForPlaylist(Playlist playlist, int generation) {
+        URI epgUri = playlist.getEpgUri();
+        if (epgUri == null) return;
+        try {
+            EpgData cached = epgRepository.loadCached(epgUri);
+            if (cached != null) {
+                mainHandler.post(() -> applyEpgData(cached, epgUri, generation));
+            }
+            if (!isNetworkAvailable()) return;
+
+            EpgRepository.LoadResult result = epgRepository.downloadIfChanged(epgUri);
+            if (result.isChanged() || cached == null) {
+                mainHandler.post(() -> applyEpgData(result.getData(), epgUri, generation));
+            }
+        } catch (Exception ignored) {
+            // La reproducción continúa usando el grupo del canal como respaldo.
+        }
+    }
+
+    private void applyEpgData(EpgData data, URI epgUri, int generation) {
+        if (generation != playlistGeneration || isFinishing()) return;
+        String expectedUrl = epgUri == null ? "" : epgUri.toString();
+        if (!expectedUrl.equals(activeEpgUrl)) return;
+        epgData = data == null ? EpgData.empty() : data;
+        mainHandler.removeCallbacks(updateProgramme);
+        updateProgramme.run();
+    }
+
+    private void applyPlaylist(
+            Playlist playlist,
+            String sourceUrl,
+            int generation,
+            boolean contentChanged
+    ) {
+        if (generation != playlistGeneration || isFinishing()) return;
+
+        boolean hadChannels = !channels.isEmpty();
+        Channel previousChannel = hadChannels
+                ? channels.get(Math.max(0, Math.min(channelIndex, channels.size() - 1)))
+                : null;
+        String previousIdentity = previousChannel == null
+                ? ""
+                : PlaybackPreferences.channelIdentity(previousChannel);
+        URI previousStreamUri = previousChannel == null
+                ? null
+                : previousChannel.getStreamUri();
+
+        channels.clear();
+        channels.addAll(playlist.getChannels());
+        if (channels.isEmpty()) {
+            showPlaylistError(getString(R.string.empty_playlist));
+            return;
+        }
+
+        channelIndex = hadChannels
+                ? PlaybackPreferences.findChannelIndex(
+                        channels,
+                        previousIdentity,
+                        channelIndex
+                )
+                : playbackPreferences.findInitialChannelIndex(channels);
+        loadedPlaylistUrl = sourceUrl;
+
+        String nextEpgUrl = playlist.getEpgUri() == null
+                ? ""
+                : playlist.getEpgUri().toString();
+        if (!nextEpgUrl.equals(activeEpgUrl)) {
+            activeEpgUrl = nextEpgUrl;
+            epgData = EpgData.empty();
+            mainHandler.removeCallbacks(updateProgramme);
+        }
+
+        loadingPanel.setVisibility(View.GONE);
+        Channel selectedChannel = channels.get(channelIndex);
+        boolean sameChannel = previousChannel != null
+                && previousIdentity.equals(PlaybackPreferences.channelIdentity(selectedChannel));
+        boolean streamChanged = sameChannel
+                && previousStreamUri != null
+                && !previousStreamUri.equals(selectedChannel.getStreamUri());
+
+        if (!hadChannels || !sameChannel || streamChanged) {
+            playChannel(channelIndex, contentChanged);
+        } else {
+            channelNumber.setText(String.format(Locale.ROOT, "%03d", channelIndex + 1));
+            channelName.setText(selectedChannel.getName());
+            updateProgrammeInfo();
+            loadChannelLogo(selectedChannel, contentChanged);
+        }
     }
 
     private void showPlaylistError(String detail) {
@@ -312,6 +445,10 @@ public final class MainActivity extends Activity {
     }
 
     private void playChannel(int requestedIndex) {
+        playChannel(requestedIndex, false);
+    }
+
+    private void playChannel(int requestedIndex, boolean revalidateLogo) {
         if (channels.isEmpty()) return;
         channelIndex = (requestedIndex % channels.size() + channels.size()) % channels.size();
         Channel channel = channels.get(channelIndex);
@@ -344,7 +481,7 @@ public final class MainActivity extends Activity {
         videoInfo.setText("Resolución pendiente");
         codecInfo.setText("Analizando stream…");
         setStatus("CARGANDO", R.color.amber);
-        loadChannelLogo(channel);
+        loadChannelLogo(channel, revalidateLogo);
         showOverlayForChannelStart();
     }
 
@@ -596,7 +733,7 @@ public final class MainActivity extends Activity {
         liveProgress.setProgress(progress);
     }
 
-    private void loadChannelLogo(Channel channel) {
+    private void loadChannelLogo(Channel channel, boolean revalidate) {
         URI logoUri = channel.getLogoUri();
         String fallback = initials(channel.getName());
         channelLogo.setImageDrawable(null);
@@ -619,7 +756,8 @@ public final class MainActivity extends Activity {
                 android.graphics.Bitmap bitmap = channelLogoCache.load(
                         logoUri,
                         targetWidthPx,
-                        targetHeightPx
+                        targetHeightPx,
+                        revalidate
                 );
                 mainHandler.post(() -> {
                     if (expectedIndex != channelIndex || isFinishing()) return;
@@ -1185,6 +1323,10 @@ public final class MainActivity extends Activity {
                         player = null;
                     }
                     createPlayer();
+                    channels.clear();
+                    loadedPlaylistUrl = "";
+                    activeEpgUrl = "";
+                    epgData = EpgData.empty();
                 }
                 refreshAfterSettings = true;
             } else if (url.isBlank()) {

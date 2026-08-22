@@ -3,8 +3,9 @@
 [![Android CI](https://github.com/SPxMM3R1/vibem3u/actions/workflows/android-ci.yml/badge.svg)](https://github.com/SPxMM3R1/vibem3u/actions/workflows/android-ci.yml)
 
 Reproductor M3U para Android TV inspirado en la experiencia de un set-top box:
-abre directamente la señal, descarga la lista nuevamente en cada inicio y muestra
-una barra compacta al cambiar de canal.
+abre directamente la señal, muestra primero la lista y la programación desde su
+caché local, valida cambios en segundo plano y muestra una barra compacta al
+cambiar de canal.
 
 La versión 0.4.4 recuerda el último canal, permite fijar una variante de video por
 canal, presenta el reloj dentro de un panel con el mismo estilo de la información
@@ -42,6 +43,15 @@ ya podrán anunciarse y descargarse desde la propia app.
 En Configuración se puede activar la normalización general de volumen. Esta opción
 procesa el audio PCM para reducir diferencias entre canales y puede desactivar el
 passthrough de audio digital mientras está activa.
+
+La programación y los logos se conservan en una caché privada. Al volver a abrir
+la aplicación se reutiliza la copia disponible mientras se valida la M3U y el XML
+con `ETag`/`Last-Modified`; si el servidor expone esos validadores y confirma que
+no cambiaron, no se vuelve a descargar el contenido completo. Los tokens temporales de los proveedores
+dinámicos no se guardan en la copia de la lista.
+
+Configuración también muestra la versión instalada y permite buscar manualmente
+una actualización desde GitHub.
 
 ## Compilación automática
 
