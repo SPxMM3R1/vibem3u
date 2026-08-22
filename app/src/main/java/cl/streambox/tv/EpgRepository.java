@@ -13,6 +13,7 @@ public final class EpgRepository {
     private static final String ACCEPT = "application/xml, text/xml, text/plain, */*";
 
     private final HttpResourceCache cache;
+    private final EpgSnapshotCache snapshotCache;
 
     public EpgRepository(Context context) {
         cache = new HttpResourceCache(
@@ -20,6 +21,9 @@ public final class EpgRepository {
                 "epg_cache",
                 3,
                 48L * 1024L * 1024L
+        );
+        snapshotCache = new EpgSnapshotCache(
+                new java.io.File(context.getFilesDir(), "epg_snapshots_v1")
         );
     }
 
@@ -29,7 +33,7 @@ public final class EpgRepository {
         HttpResourceCache.CachedResource resource = cache.readCached(url, MAX_EPG_BYTES);
         if (resource == null) return null;
         try {
-            return parse(resource.getBytes());
+            return parseCached(url, resource.getBytes());
         } catch (IOException error) {
             cache.remove(url);
             return null;
@@ -46,7 +50,7 @@ public final class EpgRepository {
                 REVALIDATION_INTERVAL_MS
         )) {
             try {
-                return new LoadResult(parse(cached.getBytes()), false);
+                return new LoadResult(parseCached(url, cached.getBytes()), false);
             } catch (IOException error) {
                 cache.remove(url);
             }
@@ -60,12 +64,12 @@ public final class EpgRepository {
         );
         EpgData data;
         try {
-            data = parse(fetched.getResource().getBytes());
+            data = parseCached(url, fetched.getResource().getBytes());
         } catch (IOException error) {
             if (fetched.isChanged()) throw error;
             cache.remove(url);
             fetched = cache.fetch(url, MAX_EPG_BYTES, USER_AGENT, ACCEPT);
-            data = parse(fetched.getResource().getBytes());
+            data = parseCached(url, fetched.getResource().getBytes());
         }
 
         cache.commit(url, fetched, fetched.getResource().getBytes());
@@ -79,6 +83,14 @@ public final class EpgRepository {
 
     private static EpgData parse(byte[] bytes) throws IOException {
         return EpgParser.parse(new ByteArrayInputStream(bytes));
+    }
+
+    private EpgData parseCached(String url, byte[] bytes) throws IOException {
+        EpgData snapshot = snapshotCache.load(url, bytes);
+        if (snapshot != null) return snapshot;
+        EpgData parsed = parse(bytes);
+        snapshotCache.store(url, bytes, parsed);
+        return parsed;
     }
 
     private static String validUrl(URI epgUri) throws IOException {

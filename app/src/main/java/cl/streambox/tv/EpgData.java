@@ -10,11 +10,13 @@ public final class EpgData {
     private static final EpgData EMPTY = new EpgData(Collections.emptyList());
 
     private final Map<String, List<EpgProgramme>> programmesByChannel;
+    private final List<EpgProgramme> programmes;
     private final int programmeCount;
 
     public EpgData(List<EpgProgramme> programmes) {
+        this.programmes = Collections.unmodifiableList(new ArrayList<>(programmes));
         Map<String, List<EpgProgramme>> mutable = new LinkedHashMap<>();
-        for (EpgProgramme programme : programmes) {
+        for (EpgProgramme programme : this.programmes) {
             List<EpgProgramme> channelProgrammes = mutable.get(programme.getChannelId());
             if (channelProgrammes == null) {
                 channelProgrammes = new ArrayList<>();
@@ -30,7 +32,7 @@ public final class EpgData {
             immutable.put(entry.getKey(), Collections.unmodifiableList(entry.getValue()));
         }
         programmesByChannel = Collections.unmodifiableMap(immutable);
-        programmeCount = programmes.size();
+        programmeCount = this.programmes.size();
     }
 
     public static EpgData empty() { return EMPTY; }
@@ -49,4 +51,6 @@ public final class EpgData {
     }
 
     public int getProgrammeCount() { return programmeCount; }
+
+    List<EpgProgramme> getProgrammes() { return programmes; }
 }
