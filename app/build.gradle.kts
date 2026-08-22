@@ -6,6 +6,10 @@ android {
     namespace = "cl.streambox.tv"
     compileSdk = 36
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     val ciKeystorePath = System.getenv("VIBEM3U_KEYSTORE_PATH")
     val ciSigningConfig = if (!ciKeystorePath.isNullOrBlank()) {
         signingConfigs.create("github") {
