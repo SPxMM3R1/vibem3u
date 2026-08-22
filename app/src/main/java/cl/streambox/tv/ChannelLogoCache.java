@@ -33,6 +33,42 @@ public final class ChannelLogoCache {
     private final LruCache<String, Bitmap> memoryCache;
     private final HttpResourceCache resourceCache;
 
+    public static final class CacheLoad {
+        private final Bitmap bitmap;
+        private final boolean fromCache;
+
+        CacheLoad(Bitmap bitmap, boolean fromCache) {
+            this.bitmap = bitmap;
+            this.fromCache = fromCache;
+        }
+
+        public Bitmap getBitmap() {
+            return bitmap;
+        }
+
+        public boolean isFromCache() {
+            return fromCache;
+        }
+    }
+
+    public static final class RefreshResult {
+        private final Bitmap bitmap;
+        private final boolean changed;
+
+        RefreshResult(Bitmap bitmap, boolean changed) {
+            this.bitmap = bitmap;
+            this.changed = changed;
+        }
+
+        public Bitmap getBitmap() {
+            return bitmap;
+        }
+
+        public boolean isChanged() {
+            return changed;
+        }
+    }
+
     public ChannelLogoCache(Context context) {
         int availableKb = (int) Math.min(Integer.MAX_VALUE, Runtime.getRuntime().maxMemory() / 1024L);
         int memoryCacheKb = Math.max(4 * 1024, Math.min(16 * 1024, availableKb / 16));
@@ -60,7 +96,7 @@ public final class ChannelLogoCache {
     }
 
     public synchronized Bitmap load(URI logoUri, int targetWidthPx, int targetHeightPx) throws IOException {
-        return load(logoUri, targetWidthPx, targetHeightPx, false);
+        return loadCacheFirst(logoUri, targetWidthPx, targetHeightPx).getBitmap();
     }
 
     public synchronized Bitmap load(
@@ -69,38 +105,107 @@ public final class ChannelLogoCache {
             int targetHeightPx,
             boolean revalidate
     ) throws IOException {
+        CacheLoad initial = loadCacheFirst(logoUri, targetWidthPx, targetHeightPx);
+        if (revalidate && initial.isFromCache()) {
+            return refreshIfChanged(logoUri, targetWidthPx, targetHeightPx).getBitmap();
+        }
+        return initial.getBitmap();
+    }
+
+    /**
+     * Returns a usable logo immediately from memory or disk. Only a missing
+     * logo goes to the network in this method.
+     */
+    public synchronized CacheLoad loadCacheFirst(
+            URI logoUri,
+            int targetWidthPx,
+            int targetHeightPx
+    ) throws IOException {
         String url = logoUri.toString();
         String memoryKey = displayCacheKey(url, targetWidthPx, targetHeightPx);
-        if (!revalidate) {
-            Bitmap memoryBitmap = memoryCache.get(memoryKey);
-            if (memoryBitmap != null && !memoryBitmap.isRecycled()) {
-                return memoryBitmap;
-            }
+        Bitmap cachedBitmap = readCachedBitmap(url, memoryKey, targetWidthPx, targetHeightPx);
+        if (cachedBitmap != null) {
+            return new CacheLoad(cachedBitmap, true);
         }
 
-        if (!revalidate) {
-            try {
-                HttpResourceCache.CachedResource cached = resourceCache.readCached(
-                        url,
-                        MAX_LOGO_BYTES
-                );
-                if (cached == null) throw new IOException("No hay una copia local.");
-                Bitmap diskBitmap = decodeLogo(
-                        cached.getBytes(),
-                        url,
-                        targetWidthPx,
-                        targetHeightPx
-                );
-                if (diskBitmap != null) {
-                    memoryCache.put(memoryKey, diskBitmap);
-                    return diskBitmap;
-                }
-                resourceCache.remove(url);
-            } catch (IOException ignored) {
-                resourceCache.remove(url);
-            }
+        Bitmap downloadedBitmap = fetchAndDecode(
+                url,
+                targetWidthPx,
+                targetHeightPx,
+                memoryKey
+        );
+        return new CacheLoad(downloadedBitmap, false);
+    }
+
+    /**
+     * Revalidates one logo using its own HTTP validators. The caller can show
+     * the result of {@link #loadCacheFirst(URI, int, int)} before invoking this
+     * method, so a slow or unavailable server never hides the cached logo.
+     */
+    public synchronized RefreshResult refreshIfChanged(
+            URI logoUri,
+            int targetWidthPx,
+            int targetHeightPx
+    ) throws IOException {
+        String url = logoUri.toString();
+        String memoryKey = displayCacheKey(url, targetWidthPx, targetHeightPx);
+        HttpResourceCache.FetchResult fetched = resourceCache.fetch(
+                url,
+                MAX_LOGO_BYTES,
+                USER_AGENT,
+                "image/*,*/*;q=0.8"
+        );
+        byte[] bytes = fetched.getResource().getBytes();
+        Bitmap refreshedBitmap = decodeLogo(bytes, url, targetWidthPx, targetHeightPx);
+        if (refreshedBitmap == null) {
+            throw new IOException("El logo no tiene un formato de imagen compatible.");
         }
 
+        resourceCache.commit(url, fetched, bytes);
+        memoryCache.put(memoryKey, refreshedBitmap);
+        return new RefreshResult(refreshedBitmap, fetched.isChanged());
+    }
+
+    private Bitmap readCachedBitmap(
+            String url,
+            String memoryKey,
+            int targetWidthPx,
+            int targetHeightPx
+    ) {
+        Bitmap memoryBitmap = memoryCache.get(memoryKey);
+        if (memoryBitmap != null && !memoryBitmap.isRecycled()) {
+            return memoryBitmap;
+        }
+
+        try {
+            HttpResourceCache.CachedResource cached = resourceCache.readCached(
+                    url,
+                    MAX_LOGO_BYTES
+            );
+            if (cached == null) return null;
+            Bitmap diskBitmap = decodeLogo(
+                    cached.getBytes(),
+                    url,
+                    targetWidthPx,
+                    targetHeightPx
+            );
+            if (diskBitmap != null) {
+                memoryCache.put(memoryKey, diskBitmap);
+                return diskBitmap;
+            }
+        } catch (IOException ignored) {
+            // A broken local entry is removed below and treated as a miss.
+        }
+        resourceCache.remove(url);
+        return null;
+    }
+
+    private Bitmap fetchAndDecode(
+            String url,
+            int targetWidthPx,
+            int targetHeightPx,
+            String memoryKey
+    ) throws IOException {
         HttpResourceCache.FetchResult fetched = resourceCache.fetch(
                 url,
                 MAX_LOGO_BYTES,

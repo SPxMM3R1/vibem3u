@@ -817,25 +817,51 @@ public final class MainActivity extends Activity {
         int targetHeightPx = channelLogo.getHeight() > 0
                 ? channelLogo.getHeight()
                 : dpToPx(54);
+        String expectedIdentity = PlaybackPreferences.channelIdentity(channel);
         networkExecutor.submit(() -> {
             try {
-                android.graphics.Bitmap bitmap = channelLogoCache.load(
+                ChannelLogoCache.CacheLoad initial = channelLogoCache.loadCacheFirst(
                         logoUri,
                         targetWidthPx,
-                        targetHeightPx,
-                        revalidate
+                        targetHeightPx
                 );
+                android.graphics.Bitmap bitmap = initial.getBitmap();
                 mainHandler.post(() -> {
-                    if (expectedIndex != channelIndex || isFinishing()) return;
+                    if (!isCurrentLogo(expectedIndex, expectedIdentity) || isFinishing()) return;
                     channelLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
                     channelLogo.setImageBitmap(bitmap);
                     channelLogo.setVisibility(View.VISIBLE);
                     channelLogoFallback.setVisibility(View.GONE);
                 });
+
+                if (!revalidate || !initial.isFromCache()) return;
+
+                ChannelLogoCache.RefreshResult refreshed = channelLogoCache.refreshIfChanged(
+                        logoUri,
+                        targetWidthPx,
+                        targetHeightPx
+                );
+                if (!refreshed.isChanged()) return;
+                mainHandler.post(() -> {
+                    if (!isCurrentLogo(expectedIndex, expectedIdentity) || isFinishing()) return;
+                    channelLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                    channelLogo.setImageBitmap(refreshed.getBitmap());
+                    channelLogo.setVisibility(View.VISIBLE);
+                    channelLogoFallback.setVisibility(View.GONE);
+                });
             } catch (Exception ignored) {
-                // El monograma del canal permanece visible como respaldo.
+                // El logo en caché ya mostrado permanece si falla la actualización.
             }
         });
+    }
+
+    private boolean isCurrentLogo(int expectedIndex, String expectedIdentity) {
+        if (expectedIndex != channelIndex || expectedIndex < 0 || expectedIndex >= channels.size()) {
+            return false;
+        }
+        return expectedIdentity.equals(
+                PlaybackPreferences.channelIdentity(channels.get(expectedIndex))
+        );
     }
 
     private int dpToPx(int dp) {
