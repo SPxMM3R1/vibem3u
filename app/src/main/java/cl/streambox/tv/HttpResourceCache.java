@@ -267,7 +267,7 @@ final class HttpResourceCache {
     }
 
     private void writeBody(String url, byte[] bytes) throws IOException {
-        File target = bodyFile(url);
+        File target = bodyFile(directory, url);
         File temporary = new File(directory, target.getName() + ".tmp");
         try (FileOutputStream output = new FileOutputStream(temporary)) {
             output.write(bytes);
