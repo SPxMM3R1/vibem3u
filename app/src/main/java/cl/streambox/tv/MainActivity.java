@@ -1254,8 +1254,21 @@ public final class MainActivity extends Activity {
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        if (isChannelNavigationKey(keyCode)) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                // Android TV remotes emit repeated ACTION_DOWN events while
+                // a channel key is held. Handle every repeat so holding
+                // Channel +/− (and the existing D-pad aliases) scrolls
+                // through channels continuously.
+                playChannel(channelIndex + channelNavigationDelta(keyCode));
+            }
+            // Consume ACTION_UP as well so the focused player/view cannot
+            // reinterpret the release as another navigation action.
+            return true;
+        }
+
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
-            int keyCode = event.getKeyCode();
             if (keyCode == KeyEvent.KEYCODE_BACK && event.getRepeatCount() == 0) {
                 handleBackAction();
                 return true;
@@ -1269,14 +1282,6 @@ public final class MainActivity extends Activity {
                 return true;
             }
             if (event.getRepeatCount() == 0) {
-                if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
-                    playChannel(channelIndex + (isChannelNavigationInverted() ? 1 : -1));
-                    return true;
-                }
-                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN) {
-                    playChannel(channelIndex + (isChannelNavigationInverted() ? -1 : 1));
-                    return true;
-                }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                     showStreamQualityDialog();
                     return true;
@@ -1298,6 +1303,21 @@ public final class MainActivity extends Activity {
             }
         }
         return super.dispatchKeyEvent(event);
+    }
+
+    private static boolean isChannelNavigationKey(int keyCode) {
+        return keyCode == KeyEvent.KEYCODE_DPAD_UP
+                || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                || keyCode == KeyEvent.KEYCODE_CHANNEL_UP
+                || keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN;
+    }
+
+    private int channelNavigationDelta(int keyCode) {
+        boolean inverted = isChannelNavigationInverted();
+        boolean movesUp = keyCode == KeyEvent.KEYCODE_DPAD_UP
+                || keyCode == KeyEvent.KEYCODE_CHANNEL_UP;
+        if (movesUp) return inverted ? 1 : -1;
+        return inverted ? -1 : 1;
     }
 
     private void registerBackCallback() {
