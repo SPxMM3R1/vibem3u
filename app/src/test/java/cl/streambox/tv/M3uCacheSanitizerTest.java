@@ -1,5 +1,6 @@
 package cl.streambox.tv;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -22,5 +23,18 @@ public final class M3uCacheSanitizerTest {
         assertTrue(sanitized.contains("https://mdstrm.example/mega.m3u8"));
         assertFalse(sanitized.contains("access_token=temporary"));
         assertTrue(sanitized.contains("https://example.org/other.m3u8?token=keep"));
+    }
+
+    @Test
+    public void removesLegacyProviderFragmentsToo() {
+        String playlist = "#EXTM3U\n"
+                + "#EXTINF:-1 tvg-id=\"0104\",TVN\n"
+                + "https://mdstrm.example/live.m3u8#access_token=legacy\n";
+
+        String sanitized = M3uCacheSanitizer.forDisk(playlist);
+
+        assertTrue(sanitized.contains("https://mdstrm.example/live.m3u8\n"));
+        assertFalse(sanitized.contains("legacy"));
+        assertEquals(sanitized, M3uCacheSanitizer.forDisk(sanitized));
     }
 }

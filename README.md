@@ -50,6 +50,12 @@ con `ETag`/`Last-Modified`; si el servidor expone esos validadores y confirma qu
 no cambiaron, no se vuelve a descargar el contenido completo. Los tokens temporales de los proveedores
 dinámicos no se guardan en la copia de la lista.
 
+TVN y Meganoticias se resuelven únicamente en memoria. Cada apertura, reanudación
+después de salir de la aplicación y reintento de un canal resuelto descarta la URL
+anterior y solicita un token nuevo; las respuestas del resolutor se marcan como no
+cacheables. Al leer una caché creada por una versión anterior, la aplicación elimina
+las credenciales del respaldo antes de usarla o la descarta si no puede migrarla.
+
 Configuración también muestra la versión instalada y permite buscar manualmente
 una actualización desde GitHub.
 

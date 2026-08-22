@@ -26,19 +26,14 @@ public final class PlaylistRepository {
 
     public Playlist loadCached(String url) throws IOException {
         URI playlistUri = parseUri(url);
-        HttpResourceCache.CachedResource resource = cache.readCached(url, MAX_PLAYLIST_BYTES);
+        HttpResourceCache.CachedResource resource = readSanitizedCached(url);
         if (resource == null) return null;
-        try {
-            return parseAndValidate(resource.getBytes(), playlistUri);
-        } catch (IOException error) {
-            cache.remove(url);
-            return null;
-        }
+        return parseCachedOrRemove(url, resource, playlistUri);
     }
 
     public LoadResult downloadIfChanged(String url) throws IOException {
         URI playlistUri = parseUri(url);
-        HttpResourceCache.CachedResource cached = cache.readCached(url, MAX_PLAYLIST_BYTES);
+        HttpResourceCache.CachedResource cached = readSanitizedCached(url);
         HttpResourceCache.FetchResult fetched = cache.fetch(
                 url,
                 MAX_PLAYLIST_BYTES,
@@ -69,6 +64,48 @@ public final class PlaylistRepository {
         cache.commit(url, fetched, diskContent);
         boolean changed = cached == null || !Arrays.equals(cached.getBytes(), diskContent);
         return new LoadResult(playlist, changed);
+    }
+
+    /**
+     * Reads and migrates old playlist entries before HttpResourceCache can
+     * answer a conditional request with them. This closes the 304 path for
+     * entries written by older builds that may still contain a provider token.
+     */
+    private HttpResourceCache.CachedResource readSanitizedCached(String url)
+            throws IOException {
+        HttpResourceCache.CachedResource cached = cache.readCached(url, MAX_PLAYLIST_BYTES);
+        if (cached == null) return null;
+
+        String content = new String(cached.getBytes(), StandardCharsets.UTF_8);
+        String sanitized = M3uCacheSanitizer.forDisk(content);
+        if (content.equals(sanitized)) return cached;
+
+        byte[] sanitizedBytes = sanitized.getBytes(StandardCharsets.UTF_8);
+        try {
+            cache.rewriteCached(url, sanitizedBytes);
+        } catch (IOException error) {
+            // Never return the unsanitized legacy entry if migration fails.
+            cache.remove(url);
+            return null;
+        }
+        return new HttpResourceCache.CachedResource(
+                sanitizedBytes,
+                cached.getEtag(),
+                cached.getLastModified()
+        );
+    }
+
+    private Playlist parseCachedOrRemove(
+            String url,
+            HttpResourceCache.CachedResource resource,
+            URI playlistUri
+    ) {
+        try {
+            return parseAndValidate(resource.getBytes(), playlistUri);
+        } catch (IOException error) {
+            cache.remove(url);
+            return null;
+        }
     }
 
     /** Compatibility entry point for callers that do not need change metadata. */

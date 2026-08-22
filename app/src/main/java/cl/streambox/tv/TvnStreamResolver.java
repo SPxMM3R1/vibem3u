@@ -63,6 +63,8 @@ public final class TvnStreamResolver implements StreamResolver {
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("Referer", LIVE_PAGE);
         headers.put("Origin", "https://live.tvn.cl");
+        headers.put("Cache-Control", "no-store, no-cache, max-age=0");
+        headers.put("Pragma", "no-cache");
         return headers;
     }
 }

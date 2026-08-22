@@ -180,13 +180,7 @@ final class HttpResourceCache {
         CachedResource resource = result.getResource();
         if (resource == null || bytes == null || bytes.length == 0) return;
 
-        File target = bodyFile(url);
-        File temporary = new File(directory, target.getName() + ".tmp");
-        try (FileOutputStream output = new FileOutputStream(temporary)) {
-            output.write(bytes);
-            output.getFD().sync();
-        }
-        replaceFile(temporary, target);
+        writeBody(url, bytes);
 
         Properties metadata = new Properties();
         if (!resource.getEtag().isBlank()) metadata.setProperty("etag", resource.getEtag());
@@ -205,6 +199,23 @@ final class HttpResourceCache {
         trim();
     }
 
+    /**
+     * Replaces only the cached body while preserving its HTTP validators.
+     *
+     * <p>This is used to migrate entries written by an older version before
+     * they can be parsed or returned to the player. It deliberately does not
+     * create a network result, so it cannot manufacture or persist resolver
+     * credentials as if they were a fresh response.</p>
+     */
+    synchronized void rewriteCached(String url, byte[] bytes) throws IOException {
+        if (bytes == null || bytes.length == 0) {
+            remove(url);
+            return;
+        }
+        writeBody(url, bytes);
+        trim();
+    }
+
     synchronized void remove(String url) {
         //noinspection ResultOfMethodCallIgnored
         bodyFile(url).delete();
@@ -218,6 +229,17 @@ final class HttpResourceCache {
 
     private File metadataFile(String url) {
         return new File(directory, cacheKey(url) + ".properties");
+    }
+
+    private void writeBody(String url, byte[] bytes) throws IOException {
+        File target = bodyFile(url);
+        File temporary = new File(directory, target.getName() + ".tmp");
+        try (FileOutputStream output = new FileOutputStream(temporary)) {
+            output.write(bytes);
+            output.getFD().sync();
+        }
+        replaceFile(temporary, target);
+        target.setLastModified(System.currentTimeMillis());
     }
 
     private static Properties readMetadata(File file) throws IOException {

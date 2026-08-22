@@ -250,18 +250,30 @@ public final class MainActivity extends Activity {
     }
 
     private void refreshPlaylist(String url) {
+        boolean sourceChanged = !url.equals(loadedPlaylistUrl);
+        boolean resetPlayback = sourceChanged || channels.isEmpty();
         int generation = ++playlistGeneration;
         playbackGeneration++;
         cancelScheduledPlaybackRetry();
         cancelPlaybackResolution();
         playbackRecoveryPolicy.reset();
-        playbackChannel = null;
-        currentPlaybackSource = null;
+        if (resetPlayback) {
+            boolean discardProviderMedia = playbackChannel != null
+                    && streamResolverRegistry.find(playbackChannel) != null;
+            if (!discardProviderMedia && currentPlaybackSource != null) {
+                discardProviderMedia = currentPlaybackSource.isDynamicallyResolved();
+            }
+            playbackChannel = null;
+            currentPlaybackSource = null;
+            if (discardProviderMedia && player != null) {
+                player.stop();
+                player.clearMediaItems();
+            }
+        }
         loadFailed = false;
         loadingPanel.setVisibility(View.VISIBLE);
         loadingProgress.setVisibility(View.VISIBLE);
         loadingText.setText(R.string.loading_playlist);
-        boolean sourceChanged = !url.equals(loadedPlaylistUrl);
         if (sourceChanged) {
             channels.clear();
             channelIndex = 0;
@@ -422,10 +434,18 @@ public final class MainActivity extends Activity {
         boolean streamChanged = sameChannel
                 && previousStreamUri != null
                 && !previousStreamUri.equals(selectedChannel.getStreamUri());
+        StreamResolver resolver = streamResolverRegistry.find(selectedChannel);
+        boolean resolverNeedsResolution = resolver != null
+                && (currentPlaybackSource == null
+                || !currentPlaybackSource.isDynamicallyResolved());
 
-        if (!hadChannels || !sameChannel || streamChanged) {
+        if (!hadChannels || !sameChannel || streamChanged || resolverNeedsResolution) {
             playChannel(channelIndex, contentChanged);
         } else {
+            // The source may have been resolved for the previous Channel
+            // object. Keep the fresh in-memory source, but associate it with
+            // the current playlist object for future retries.
+            playbackChannel = selectedChannel;
             channelNumber.setText(String.format(Locale.ROOT, "%03d", channelIndex + 1));
             channelName.setText(selectedChannel.getName());
             updateProgrammeInfo();
@@ -507,6 +527,10 @@ public final class MainActivity extends Activity {
     }
 
     private void cancelPlaybackResolution() {
+        // A cancelled resolver may still finish its HTTP call. Incrementing
+        // the request generation makes its token unusable even if its
+        // callback arrives after a new channel or retry has started.
+        playbackResolutionRequestId++;
         if (playbackResolutionTask != null) {
             playbackResolutionTask.cancel(true);
             playbackResolutionTask = null;
@@ -526,6 +550,9 @@ public final class MainActivity extends Activity {
         }
 
         cancelPlaybackResolution();
+        // A resolver source is ephemeral. Never leave the previous token as
+        // the source while a new resolver request is in flight.
+        currentPlaybackSource = null;
         long requestId = ++playbackResolutionRequestId;
         playbackResolutionTask = networkExecutor.submit(() -> {
             try {
@@ -614,6 +641,9 @@ public final class MainActivity extends Activity {
             tokenRefreshAttempted = true;
             setStatus("RENOVANDO", R.color.amber);
             codecInfo.setText("Renovando autorización");
+            // Drop the rejected URL before requesting the replacement token.
+            // It must not be available to a generic retry path.
+            currentPlaybackSource = null;
             if (player != null) {
                 player.stop();
                 player.clearMediaItems();
@@ -651,6 +681,17 @@ public final class MainActivity extends Activity {
         if (player == null || expectedGeneration != playbackGeneration) return;
         MediaItem current = player.getCurrentMediaItem();
         if (current == null || !expectedMediaId.equals(current.mediaId)) return;
+
+        // A resolver-backed channel must never retry the old MediaItem URL:
+        // that URL contains the previous short-lived token. Resolve again for
+        // every automatic retry, including errors that are not 401/403.
+        if (playbackChannel != null && streamResolverRegistry.find(playbackChannel) != null) {
+            player.stop();
+            player.clearMediaItems();
+            currentPlaybackSource = null;
+            resolveAndPlay(playbackChannel, expectedGeneration);
+            return;
+        }
 
         player.stop();
         if (playbackChannel != null && currentPlaybackSource != null) {
@@ -1467,7 +1508,18 @@ public final class MainActivity extends Activity {
     protected void onPause() {
         if (appUpdater != null) appUpdater.onHostPause();
         cancelScheduledPlaybackRetry();
-        if (player != null) player.pause();
+        if (playbackChannel != null && streamResolverRegistry.find(playbackChannel) != null) {
+            // Leaving the activity ends this resolver session. Resuming it
+            // will obtain a new token instead of reviving a stale MediaItem.
+            cancelPlaybackResolution();
+            currentPlaybackSource = null;
+            if (player != null) {
+                player.stop();
+                player.clearMediaItems();
+            }
+        } else if (player != null) {
+            player.pause();
+        }
         super.onPause();
     }
 

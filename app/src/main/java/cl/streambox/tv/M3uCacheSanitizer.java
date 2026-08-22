@@ -3,7 +3,7 @@ package cl.streambox.tv;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Removes renewable provider query tokens before a playlist is persisted. */
+/** Removes renewable provider credentials before a playlist is persisted. */
 final class M3uCacheSanitizer {
     private static final Pattern TVG_ID_PATTERN = Pattern.compile(
             "\\btvg-id\\s*=\\s*\\\"([^\\\"]*)\\\"",
@@ -23,7 +23,7 @@ final class M3uCacheSanitizer {
                 pendingTvgId = extractTvgId(line);
                 result.append(rawLine);
             } else if (!line.isEmpty() && !line.startsWith("#") && isRenewableProvider(pendingTvgId)) {
-                result.append(stripQuery(rawLine));
+                result.append(stripQueryAndFragment(rawLine));
                 pendingTvgId = "";
             } else {
                 result.append(rawLine);
@@ -44,12 +44,17 @@ final class M3uCacheSanitizer {
                 || "MeganoticiasAhora.cl".equalsIgnoreCase(tvgId);
     }
 
-    private static String stripQuery(String value) {
+    private static String stripQueryAndFragment(String value) {
         int queryStart = value.indexOf('?');
-        if (queryStart < 0) return value;
-        int fragmentStart = value.indexOf('#', queryStart);
-        return fragmentStart < 0
-                ? value.substring(0, queryStart)
-                : value.substring(0, queryStart) + value.substring(fragmentStart);
+        int fragmentStart = value.indexOf('#');
+        int credentialStart;
+        if (queryStart < 0) {
+            credentialStart = fragmentStart;
+        } else if (fragmentStart < 0) {
+            credentialStart = queryStart;
+        } else {
+            credentialStart = Math.min(queryStart, fragmentStart);
+        }
+        return credentialStart < 0 ? value : value.substring(0, credentialStart);
     }
 }

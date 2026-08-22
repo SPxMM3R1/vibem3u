@@ -44,6 +44,12 @@ public final class TokenHttpClient {
             connection.setInstanceFollowRedirects(true);
             connection.setUseCaches(false);
             connection.setDoInput(true);
+            // Resolver pages and token responses are credentials, never
+            // reusable application resources. These headers also prevent an
+            // intermediary HTTP cache from serving a previous response.
+            connection.setRequestProperty("Cache-Control", "no-store, no-cache, max-age=0");
+            connection.setRequestProperty("Pragma", "no-cache");
+            connection.setRequestProperty("Expires", "0");
             if (headers != null) {
                 for (Map.Entry<String, String> header : headers.entrySet()) {
                     if (header.getKey() != null && header.getValue() != null) {
