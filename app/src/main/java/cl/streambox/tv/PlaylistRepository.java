@@ -20,7 +20,8 @@ public final class PlaylistRepository {
                 context,
                 "playlist_cache",
                 4,
-                16L * 1024L * 1024L
+                16L * 1024L * 1024L,
+                false
         );
     }
 

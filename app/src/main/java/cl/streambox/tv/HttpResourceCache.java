@@ -87,9 +87,19 @@ final class HttpResourceCache {
     private final long maxBytes;
 
     HttpResourceCache(Context context, String directoryName, int maxFiles, long maxBytes) {
+        this(context, directoryName, maxFiles, maxBytes, true);
+    }
+
+    HttpResourceCache(
+            Context context,
+            String directoryName,
+            int maxFiles,
+            long maxBytes,
+            boolean migrateLegacy
+    ) {
         this(
                 new File(context.getFilesDir(), directoryName),
-                new File(context.getCacheDir(), directoryName),
+                migrateLegacy ? new File(context.getCacheDir(), directoryName) : null,
                 maxFiles,
                 maxBytes
         );
