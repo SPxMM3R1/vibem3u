@@ -125,7 +125,12 @@ final class EpgSnapshotCache {
     private void trim() {
         File[] files = directory.listFiles((dir, name) -> name.endsWith(".bin"));
         if (files == null || files.length <= MAX_SNAPSHOTS) return;
-        Arrays.sort(files, Comparator.comparingLong(File::lastModified).reversed());
+        Arrays.sort(files, new Comparator<>() {
+            @Override
+            public int compare(File first, File second) {
+                return Long.compare(second.lastModified(), first.lastModified());
+            }
+        });
         for (int index = MAX_SNAPSHOTS; index < files.length; index++) {
             remove(files[index]);
         }
