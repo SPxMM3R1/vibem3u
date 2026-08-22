@@ -254,6 +254,11 @@ public final class MainActivity extends Activity {
 
     private void refreshPlaylist(String url) {
         boolean sourceChanged = !url.equals(loadedPlaylistUrl);
+        boolean keepCurrentUi = !sourceChanged && !channels.isEmpty();
+        EpgData visibleEpg = keepCurrentUi && epgData.getProgrammeCount() > 0
+                ? epgData
+                : null;
+        String visibleEpgUrl = visibleEpg == null ? "" : activeEpgUrl;
         boolean resetPlayback = sourceChanged || channels.isEmpty();
         int generation = ++playlistGeneration;
         playbackGeneration++;
@@ -274,9 +279,11 @@ public final class MainActivity extends Activity {
             }
         }
         loadFailed = false;
-        loadingPanel.setVisibility(View.VISIBLE);
-        loadingProgress.setVisibility(View.VISIBLE);
-        loadingText.setText(R.string.loading_playlist);
+        if (!keepCurrentUi) {
+            loadingPanel.setVisibility(View.VISIBLE);
+            loadingProgress.setVisibility(View.VISIBLE);
+            loadingText.setText(R.string.loading_playlist);
+        }
         if (sourceChanged) {
             channels.clear();
             channelIndex = 0;
@@ -284,26 +291,30 @@ public final class MainActivity extends Activity {
             activeEpgUrl = "";
             mainHandler.removeCallbacks(updateProgramme);
         }
-        hideOverlay.run();
+        if (!keepCurrentUi) {
+            hideOverlay.run();
+        }
 
         boolean existingPlaylist = !channels.isEmpty();
         networkExecutor.submit(() -> {
             boolean usablePlaylist = existingPlaylist;
-            EpgData cachedEpg = null;
-            String cachedEpgUrl = "";
+            EpgData cachedEpg = visibleEpg;
+            String cachedEpgUrl = visibleEpgUrl;
             try {
                 Playlist cached = repository.loadCached(url);
                 if (cached != null) {
                     usablePlaylist = true;
                     Playlist cachedPlaylist = cached;
-                    mainHandler.post(() -> applyPlaylist(
-                            cachedPlaylist,
-                            url,
-                            generation,
-                            false
-                    ));
-                    cachedEpg = loadCachedEpg(cachedPlaylist, generation);
-                    cachedEpgUrl = epgUrl(cachedPlaylist);
+                    if (!keepCurrentUi) {
+                        mainHandler.post(() -> applyPlaylist(
+                                cachedPlaylist,
+                                url,
+                                generation,
+                                false
+                        ));
+                        cachedEpg = loadCachedEpg(cachedPlaylist, generation);
+                        cachedEpgUrl = epgUrl(cachedPlaylist);
+                    }
                 }
 
                 if (!isNetworkAvailable()) {
