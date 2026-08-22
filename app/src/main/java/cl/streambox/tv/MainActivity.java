@@ -289,6 +289,8 @@ public final class MainActivity extends Activity {
         boolean existingPlaylist = !channels.isEmpty();
         networkExecutor.submit(() -> {
             boolean usablePlaylist = existingPlaylist;
+            EpgData cachedEpg = null;
+            String cachedEpgUrl = "";
             try {
                 Playlist cached = repository.loadCached(url);
                 if (cached != null) {
@@ -300,7 +302,8 @@ public final class MainActivity extends Activity {
                             generation,
                             false
                     ));
-                    loadCachedEpg(cachedPlaylist, generation);
+                    cachedEpg = loadCachedEpg(cachedPlaylist, generation);
+                    cachedEpgUrl = epgUrl(cachedPlaylist);
                 }
 
                 if (!isNetworkAvailable()) {
@@ -331,7 +334,12 @@ public final class MainActivity extends Activity {
                     }
                 });
 
-                loadEpgForPlaylist(result.getPlaylist(), generation);
+                String resultEpgUrl = epgUrl(result.getPlaylist());
+                loadEpgForPlaylist(
+                        result.getPlaylist(),
+                        generation,
+                        cachedEpgUrl.equals(resultEpgUrl) ? cachedEpg : null
+                );
             } catch (Exception error) {
                 boolean hasUsablePlaylist = usablePlaylist || existingPlaylist;
                 mainHandler.post(() -> {
@@ -346,25 +354,30 @@ public final class MainActivity extends Activity {
         });
     }
 
-    private void loadCachedEpg(Playlist playlist, int generation) {
+    private EpgData loadCachedEpg(Playlist playlist, int generation) {
         URI epgUri = playlist.getEpgUri();
-        if (epgUri == null) return;
+        if (epgUri == null) return null;
         try {
             EpgData cached = epgRepository.loadCached(epgUri);
-            if (cached == null) return;
+            if (cached == null) return null;
             mainHandler.post(() -> applyEpgData(cached, epgUri, generation));
+            return cached;
         } catch (Exception ignored) {
             // La reproducción continúa usando el grupo del canal como respaldo.
+            return null;
         }
     }
 
-    private void loadEpgForPlaylist(Playlist playlist, int generation) {
+    private void loadEpgForPlaylist(Playlist playlist, int generation, EpgData cached) {
         URI epgUri = playlist.getEpgUri();
         if (epgUri == null) return;
         try {
-            EpgData cached = epgRepository.loadCached(epgUri);
-            if (cached != null) {
-                mainHandler.post(() -> applyEpgData(cached, epgUri, generation));
+            if (cached == null) {
+                cached = epgRepository.loadCached(epgUri);
+                if (cached != null) {
+                    EpgData cachedData = cached;
+                    mainHandler.post(() -> applyEpgData(cachedData, epgUri, generation));
+                }
             }
             if (!isNetworkAvailable()) return;
 
@@ -375,6 +388,11 @@ public final class MainActivity extends Activity {
         } catch (Exception ignored) {
             // La reproducción continúa usando el grupo del canal como respaldo.
         }
+    }
+
+    private static String epgUrl(Playlist playlist) {
+        URI epgUri = playlist == null ? null : playlist.getEpgUri();
+        return epgUri == null ? "" : epgUri.toString();
     }
 
     private void applyEpgData(EpgData data, URI epgUri, int generation) {
