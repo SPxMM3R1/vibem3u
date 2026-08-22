@@ -8,6 +8,7 @@ import java.net.URI;
 
 public final class EpgRepository {
     private static final int MAX_EPG_BYTES = 32 * 1024 * 1024;
+    private static final long REVALIDATION_INTERVAL_MS = 5L * 60L * 1000L;
     private static final String USER_AGENT = "VibeM3U/0.4.21 (Android TV)";
     private static final String ACCEPT = "application/xml, text/xml, text/plain, */*";
 
@@ -38,6 +39,18 @@ public final class EpgRepository {
     public LoadResult downloadIfChanged(URI epgUri) throws IOException {
         String url = validUrl(epgUri);
         if (url == null) return new LoadResult(EpgData.empty(), false);
+
+        HttpResourceCache.CachedResource cached = cache.readCached(url, MAX_EPG_BYTES);
+        if (cached != null && cached.isFresh(
+                System.currentTimeMillis(),
+                REVALIDATION_INTERVAL_MS
+        )) {
+            try {
+                return new LoadResult(parse(cached.getBytes()), false);
+            } catch (IOException error) {
+                cache.remove(url);
+            }
+        }
 
         HttpResourceCache.FetchResult fetched = cache.fetch(
                 url,

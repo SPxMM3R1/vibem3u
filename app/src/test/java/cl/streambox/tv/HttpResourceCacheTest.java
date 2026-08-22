@@ -39,6 +39,7 @@ public class HttpResourceCacheTest {
         assertArrayEquals(body, cached.getBytes());
         assertEquals("etag-1", cached.getEtag());
         assertEquals("last-1", cached.getLastModified());
+        org.junit.Assert.assertTrue(cached.getCheckedAtMillis() > 0L);
     }
 
     @Test

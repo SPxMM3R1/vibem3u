@@ -34,11 +34,17 @@ final class HttpResourceCache {
         private final byte[] bytes;
         private final String etag;
         private final String lastModified;
+        private final long checkedAtMillis;
 
         CachedResource(byte[] bytes, String etag, String lastModified) {
+            this(bytes, etag, lastModified, 0L);
+        }
+
+        CachedResource(byte[] bytes, String etag, String lastModified, long checkedAtMillis) {
             this.bytes = bytes;
             this.etag = etag == null ? "" : etag;
             this.lastModified = lastModified == null ? "" : lastModified;
+            this.checkedAtMillis = checkedAtMillis;
         }
 
         byte[] getBytes() {
@@ -51,6 +57,17 @@ final class HttpResourceCache {
 
         String getLastModified() {
             return lastModified;
+        }
+
+        long getCheckedAtMillis() {
+            return checkedAtMillis;
+        }
+
+        boolean isFresh(long nowMillis, long maxAgeMillis) {
+            if (checkedAtMillis <= 0L || maxAgeMillis <= 0L) return false;
+            if (etag.isBlank() && lastModified.isBlank()) return false;
+            return nowMillis >= checkedAtMillis
+                    && nowMillis - checkedAtMillis < maxAgeMillis;
         }
     }
 
@@ -151,7 +168,8 @@ final class HttpResourceCache {
             return new CachedResource(
                     bytes,
                     metadata.getProperty("etag", ""),
-                    metadata.getProperty("last_modified", "")
+                    metadata.getProperty("last_modified", ""),
+                    parseLong(metadata.getProperty("checked_at", "0"))
             );
         } catch (IOException error) {
             remove(url);
@@ -188,7 +206,19 @@ final class HttpResourceCache {
 
             int responseCode = connection.getResponseCode();
             if (responseCode == HttpURLConnection.HTTP_NOT_MODIFIED && cached != null) {
-                return new FetchResult(cached, false, false);
+                CachedResource validated = new CachedResource(
+                        cached.getBytes(),
+                        cached.getEtag(),
+                        cached.getLastModified(),
+                        System.currentTimeMillis()
+                );
+                try {
+                    writeMetadata(url, metadataFor(validated));
+                } catch (IOException ignored) {
+                    // The validated body remains usable even if only the
+                    // freshness marker could not be persisted.
+                }
+                return new FetchResult(validated, false, false);
             }
             if (responseCode < 200 || responseCode >= 300) {
                 throw new IOException("El servidor respondió HTTP " + responseCode + ".");
@@ -197,7 +227,12 @@ final class HttpResourceCache {
             byte[] bytes = readLimited(connection.getInputStream(), maxResourceBytes);
             String etag = valueOrEmpty(connection.getHeaderField("ETag"));
             String lastModified = valueOrEmpty(connection.getHeaderField("Last-Modified"));
-            CachedResource fresh = new CachedResource(bytes, etag, lastModified);
+            CachedResource fresh = new CachedResource(
+                    bytes,
+                    etag,
+                    lastModified,
+                    System.currentTimeMillis()
+            );
             boolean changed = cached == null || !Arrays.equals(cached.getBytes(), bytes);
             return new FetchResult(fresh, changed, true);
         } catch (IOException error) {
@@ -219,12 +254,7 @@ final class HttpResourceCache {
 
         writeBody(url, bytes);
 
-        Properties metadata = new Properties();
-        if (!resource.getEtag().isBlank()) metadata.setProperty("etag", resource.getEtag());
-        if (!resource.getLastModified().isBlank()) {
-            metadata.setProperty("last_modified", resource.getLastModified());
-        }
-        writeMetadata(url, metadata);
+        writeMetadata(url, metadataFor(resource));
         trim();
     }
 
@@ -287,6 +317,19 @@ final class HttpResourceCache {
             metadata.store(writer, "VibeM3U resource cache");
         }
         replaceFile(metadataTemporary, metadataTarget);
+    }
+
+    private static Properties metadataFor(CachedResource resource) {
+        Properties metadata = new Properties();
+        if (!resource.getEtag().isBlank()) metadata.setProperty("etag", resource.getEtag());
+        if (!resource.getLastModified().isBlank()) {
+            metadata.setProperty("last_modified", resource.getLastModified());
+        }
+        long checkedAtMillis = resource.getCheckedAtMillis() > 0L
+                ? resource.getCheckedAtMillis()
+                : System.currentTimeMillis();
+        metadata.setProperty("checked_at", Long.toString(checkedAtMillis));
+        return metadata;
     }
 
     private void migrateLegacy(String url, byte[] bytes, Properties metadata) {
@@ -368,6 +411,14 @@ final class HttpResourceCache {
 
     private static String valueOrEmpty(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private static long parseLong(String value) {
+        try {
+            return Long.parseLong(value == null ? "" : value.trim());
+        } catch (NumberFormatException ignored) {
+            return 0L;
+        }
     }
 
     private static String cacheKey(String value) {
