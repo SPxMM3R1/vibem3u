@@ -9,4 +9,18 @@
         <item name="android:colorAccent">@color/cyan</item>
         <item name="android:windowBackground">@color/black</item>
     </style>
+
+    <style name="Theme.VibeM3U.Settings" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:windowDimAmount">0.66</item>
+        <item name="android:colorAccent">@color/cyan</item>
+    </style>
 </resources>

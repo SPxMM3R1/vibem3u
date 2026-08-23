@@ -36,6 +36,8 @@ public final class SettingsActivity extends Activity {
     private TextView updateStatus;
     private AppUpdater appUpdater;
     private boolean hasExistingUrl;
+    private TextView[] tabs;
+    private View[] tabPages;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,6 +64,20 @@ public final class SettingsActivity extends Activity {
         updateStatus = findViewById(R.id.update_status);
         Button cancelButton = findViewById(R.id.cancel_button);
         Button saveButton = findViewById(R.id.save_button);
+        tabs = new TextView[]{
+                findViewById(R.id.tab_general),
+                findViewById(R.id.tab_playback),
+                findViewById(R.id.tab_source),
+                findViewById(R.id.tab_interface),
+                findViewById(R.id.tab_updates)
+        };
+        tabPages = new View[]{
+                findViewById(R.id.tab_page_general),
+                findViewById(R.id.tab_page_playback),
+                findViewById(R.id.tab_page_source),
+                findViewById(R.id.tab_page_interface),
+                findViewById(R.id.tab_page_updates)
+        };
 
         appUpdater = new AppUpdater(this, updateExecutor, mainHandler);
         urlInput.setText(existingUrl);
@@ -75,15 +91,53 @@ public final class SettingsActivity extends Activity {
         cancelButton.setOnClickListener(v -> finish());
         saveButton.setOnClickListener(v -> save());
         updateButton.setOnClickListener(v -> checkForUpdates());
+        for (int index = 0; index < tabs.length; index++) {
+            final int tabIndex = index;
+            tabs[index].setOnClickListener(v -> showTab(tabIndex, true));
+        }
         urlInput.setOnEditorActionListener((v, actionId, event) -> {
             save();
             return true;
         });
 
         if (hasExistingUrl) {
-            invertChannelKeys.requestFocus();
+            showTab(0, false);
+            normalizeVolume.requestFocus();
         } else {
+            showTab(2, false);
             urlInput.requestFocus();
+        }
+    }
+
+    private void showTab(int selectedIndex, boolean requestFocus) {
+        if (tabs == null || tabPages == null) return;
+        int safeIndex = Math.max(0, Math.min(selectedIndex, tabs.length - 1));
+        for (int index = 0; index < tabs.length; index++) {
+            boolean selected = index == safeIndex;
+            tabs[index].setSelected(selected);
+            tabs[index].setTextColor(getColor(selected ? R.color.black : R.color.white));
+            tabPages[index].setVisibility(selected ? View.VISIBLE : View.GONE);
+        }
+        if (requestFocus) {
+            View focusTarget;
+            switch (safeIndex) {
+                case 1:
+                    focusTarget = invertChannelKeys;
+                    break;
+                case 2:
+                    focusTarget = urlInput;
+                    break;
+                case 3:
+                    focusTarget = findViewById(R.id.interface_info);
+                    break;
+                case 4:
+                    focusTarget = updateButton;
+                    break;
+                default:
+                    focusTarget = normalizeVolume;
+                    break;
+            }
+            focusTarget.requestFocus();
         }
     }
 

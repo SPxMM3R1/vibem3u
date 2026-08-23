@@ -6,7 +6,7 @@
     <string name="loading_playlist">Descargando lista de canales…</string>
     <string name="empty_playlist">La lista no contiene canales reproducibles.</string>
     <string name="playlist_error">No se pudo descargar la lista.\nPulsa OK para reintentar o mantén OK para configurar.</string>
-    <string name="settings_title">Configuración de VibeM3U</string>
+    <string name="settings_title">Opciones</string>
     <string name="settings_description">Organiza la fuente, la reproducción, el audio y las actualizaciones desde un solo lugar.</string>
     <string name="settings_source_title">Fuente de canales</string>
     <string name="settings_source_description">Indica la dirección M3U que utiliza VibeM3U. Cuando el servidor lo permite, se valida sin volver a descargarla completa si no cambió.</string>
@@ -49,4 +49,21 @@
     <string name="audio_settings_title">Audio</string>
     <string name="normalize_volume">Normalizar volumen entre canales</string>
     <string name="normalize_volume_description">Ajusta lentamente el nivel de cada canal para reducir saltos de volumen.</string>
+    <string name="settings_close_hint">BACK · Cerrar</string>
+    <string name="settings_tab_general">General</string>
+    <string name="settings_tab_playback">Reproducción</string>
+    <string name="settings_tab_source">Fuente</string>
+    <string name="settings_tab_interface">Interfaz</string>
+    <string name="settings_tab_updates">Actualizaciones</string>
+    <string name="settings_general_heading">General</string>
+    <string name="settings_cache_title">Caché inteligente</string>
+    <string name="settings_tip_title">Consejo</string>
+    <string name="settings_tip_description">Los cambios se aplican automáticamente. La programación y los logos se actualizan en segundo plano.</string>
+    <string name="settings_playback_heading">Reproducción</string>
+    <string name="settings_source_heading">Fuente de canales</string>
+    <string name="settings_interface_heading">Interfaz</string>
+    <string name="settings_interface_description">Usa las flechas para navegar y OK para seleccionar. Mantén OK durante la reproducción para abrir estas opciones; las pestañas se cambian con ◀ y ▶.</string>
+    <string name="settings_updates_heading">Actualizaciones</string>
+    <string name="settings_updates_description">Comprueba si existe una versión nueva de VibeM3U y conserva la configuración actual.</string>
+    <string name="settings_remote_help">◀ ▶ Cambiar pestaña   ·   ▲ ▼ Navegar   ·   OK Seleccionar   ·   BACK Volver</string>
 </resources>
