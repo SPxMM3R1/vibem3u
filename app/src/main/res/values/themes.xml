@@ -20,7 +20,7 @@
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowIsFloating">false</item>
         <item name="android:backgroundDimEnabled">true</item>
-        <item name="android:windowDimAmount">0.66</item>
+        <item name="android:backgroundDimAmount">0.66</item>
         <item name="android:colorAccent">@color/cyan</item>
     </style>
 </resources>
