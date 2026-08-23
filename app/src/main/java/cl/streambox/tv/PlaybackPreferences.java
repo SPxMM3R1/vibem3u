@@ -13,6 +13,7 @@ final class PlaybackPreferences {
     private static final String KEY_LAST_CHANNEL = "last_channel";
     private static final String KEY_LAST_INDEX = "last_index";
     private static final String QUALITY_PREFIX = "quality_";
+    private static final String AUTOMATIC_QUALITY_VALUE = "auto";
     private static final String SUBTITLES_PREFIX = "subtitles_";
 
     static final class QualityPreference {
@@ -50,7 +51,9 @@ final class PlaybackPreferences {
 
     QualityPreference getQuality(Channel channel) {
         String value = preferences.getString(qualityKey(channel), "");
-        if (value == null || value.isBlank()) return null;
+        if (value == null || value.isBlank() || AUTOMATIC_QUALITY_VALUE.equals(value)) {
+            return null;
+        }
         String[] parts = value.split(",", -1);
         if (parts.length != 3) return null;
         try {
@@ -70,8 +73,16 @@ final class PlaybackPreferences {
                 .apply();
     }
 
+    boolean isAutomaticQuality(Channel channel) {
+        return AUTOMATIC_QUALITY_VALUE.equals(
+                preferences.getString(qualityKey(channel), "")
+        );
+    }
+
     void useAutomaticQuality(Channel channel) {
-        preferences.edit().remove(qualityKey(channel)).apply();
+        preferences.edit()
+                .putString(qualityKey(channel), AUTOMATIC_QUALITY_VALUE)
+                .apply();
     }
 
     boolean getSubtitles(Channel channel) {

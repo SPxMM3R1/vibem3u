@@ -1021,7 +1021,23 @@ public final class MainActivity extends Activity {
         PlaybackPreferences.QualityPreference preference =
                 playbackPreferences.getQuality(channel);
         if (preference == null) {
-            qualityPreferenceAppliedFor = channelIdentity;
+            if (playbackPreferences.isAutomaticQuality(channel)) {
+                qualityPreferenceAppliedFor = channelIdentity;
+                player.setTrackSelectionParameters(player.getTrackSelectionParameters()
+                        .buildUpon()
+                        .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                        .build());
+                return;
+            }
+            List<VideoTrackOption> options = collectVideoTrackOptions(tracks);
+            if (!options.isEmpty()) {
+                // No stored preference means the default is the best available
+                // bitrate. Adaptive quality remains available when the user
+                // explicitly selects "Automático" in the channel menu.
+                applyFixedQuality(channel, options.get(0), false);
+            } else {
+                qualityPreferenceAppliedFor = channelIdentity;
+            }
             return;
         }
 
@@ -1112,9 +1128,10 @@ public final class MainActivity extends Activity {
                 collectVideoTrackOptions(player.getCurrentTracks());
         PlaybackPreferences.QualityPreference preference =
                 playbackPreferences.getQuality(channel);
-        VideoTrackOption selectedOption = preference == null
-                ? null
-                : findClosestQuality(options, preference);
+        boolean automaticQuality = playbackPreferences.isAutomaticQuality(channel);
+        VideoTrackOption selectedOption = preference != null
+                ? findClosestQuality(options, preference)
+                : (automaticQuality || options.isEmpty() ? null : options.get(0));
 
         Dialog dialog = new Dialog(this);
         qualityDialog = dialog;
@@ -1147,7 +1164,7 @@ public final class MainActivity extends Activity {
 
         if (options.size() != 1) {
             automaticButton = createQualityButton(
-                    (preference == null ? "\u2713 " : "")
+                    (automaticQuality ? "\u2713 " : "")
                             + getString(R.string.stream_quality_automatic)
             );
             automaticButton.setOnClickListener(view -> {
@@ -1155,7 +1172,7 @@ public final class MainActivity extends Activity {
                 dialog.dismiss();
             });
             container.addView(automaticButton);
-            if (preference == null) focusTarget = automaticButton;
+            if (automaticQuality) focusTarget = automaticButton;
         }
 
         for (VideoTrackOption option : options) {
