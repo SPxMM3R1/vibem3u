@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="settings_outer_horizontal">64dp</dimen>
+    <dimen name="settings_outer_vertical">30dp</dimen>
+    <dimen name="settings_panel_padding_horizontal">14dp</dimen>
+    <dimen name="settings_panel_padding_top">10dp</dimen>
+    <dimen name="settings_panel_padding_bottom">8dp</dimen>
+
+    <dimen name="settings_header_height">48dp</dimen>
+    <dimen name="settings_header_padding_horizontal">8dp</dimen>
+    <dimen name="settings_header_icon_width">42dp</dimen>
+    <dimen name="settings_header_icon_text_size">27sp</dimen>
+    <dimen name="settings_title_text_size">23sp</dimen>
+    <dimen name="settings_close_text_size">12sp</dimen>
+
+    <dimen name="settings_tabs_height">46dp</dimen>
+    <dimen name="settings_tabs_padding">3dp</dimen>
+    <dimen name="settings_tab_text_size">12sp</dimen>
+    <dimen name="settings_content_padding_top">10dp</dimen>
+    <dimen name="settings_content_padding_bottom">6dp</dimen>
+    <dimen name="settings_page_horizontal_padding">2dp</dimen>
+
+    <dimen name="settings_heading_text_size">18sp</dimen>
+    <dimen name="settings_section_margin_top">8dp</dimen>
+    <dimen name="settings_card_padding">14dp</dimen>
+    <dimen name="settings_card_title_text_size">15sp</dimen>
+    <dimen name="settings_control_height">50dp</dimen>
+    <dimen name="settings_control_text_size">14sp</dimen>
+    <dimen name="settings_body_text_size">12sp</dimen>
+    <dimen name="settings_help_width">170dp</dimen>
+    <dimen name="settings_help_padding">14dp</dimen>
+    <dimen name="settings_help_icon_text_size">24sp</dimen>
+    <dimen name="settings_help_title_text_size">15sp</dimen>
+    <dimen name="settings_info_padding">16dp</dimen>
+    <dimen name="settings_info_text_size">14sp</dimen>
+    <dimen name="settings_action_height">48dp</dimen>
+    <dimen name="settings_action_text_size">14sp</dimen>
+
+    <dimen name="settings_footer_height">44dp</dimen>
+    <dimen name="settings_footer_button_height">40dp</dimen>
+    <dimen name="settings_cancel_button_width">112dp</dimen>
+    <dimen name="settings_save_button_width">170dp</dimen>
+    <dimen name="settings_footer_text_size">12sp</dimen>
+    <dimen name="settings_remote_hint_height">22dp</dimen>
+    <dimen name="settings_remote_hint_text_size">11sp</dimen>
+</resources>
