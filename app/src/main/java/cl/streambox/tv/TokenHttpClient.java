@@ -3,6 +3,7 @@ package cl.streambox.tv;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -154,6 +155,104 @@ public final class TokenHttpClient {
             output.write(buffer, 0, count);
         }
         return output.toByteArray();
+    }
+
+    public String postJsonText(
+            String url,
+            Map<String, String> headers,
+            String json,
+            int maxResponseBytes
+    ) throws IOException {
+        return new String(
+                postJson(url, headers, json, maxResponseBytes).getBody(),
+                StandardCharsets.UTF_8
+        );
+    }
+
+    public Response postJson(
+            String url,
+            Map<String, String> headers,
+            String json,
+            int maxResponseBytes
+    ) throws IOException {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new IOException("Solicitud cancelada.");
+        }
+        URI uri;
+        try {
+            uri = URI.create(url);
+        } catch (IllegalArgumentException error) {
+            throw new IOException("URL no válida.");
+        }
+        if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
+            throw new IOException("URL HTTPS no válida.");
+        }
+
+        byte[] requestBody = (json == null ? "{}" : json)
+                .getBytes(StandardCharsets.UTF_8);
+        if (requestBody.length > 256 * 1024) {
+            throw new IOException("Solicitud demasiado grande.");
+        }
+
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) uri.toURL().openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(READ_TIMEOUT_MS);
+            connection.setInstanceFollowRedirects(false);
+            connection.setUseCaches(false);
+            connection.setDoInput(true);
+            connection.setDoOutput(true);
+            connection.setFixedLengthStreamingMode(requestBody.length);
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            connection.setRequestProperty("Cache-Control", "no-store, no-cache, max-age=0");
+            connection.setRequestProperty("Pragma", "no-cache");
+            connection.setRequestProperty("Expires", "0");
+            if (headers != null) {
+                for (Map.Entry<String, String> header : headers.entrySet()) {
+                    if (header.getKey() != null && header.getValue() != null) {
+                        connection.setRequestProperty(header.getKey(), header.getValue());
+                    }
+                }
+            }
+            if (connection.getRequestProperty("User-Agent") == null) {
+                connection.setRequestProperty("User-Agent", BROWSER_USER_AGENT);
+            }
+            try (OutputStream output = connection.getOutputStream()) {
+                output.write(requestBody);
+            }
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode < 200 || responseCode >= 300) {
+                throw new HttpStatusException(responseCode);
+            }
+            try (InputStream input = connection.getInputStream()) {
+                URI finalUri;
+                try {
+                    finalUri = connection.getURL().toURI();
+                } catch (URISyntaxException error) {
+                    throw new IOException("El servidor devolvió una URL inválida.", error);
+                }
+                Map<String, String> responseHeaders = new LinkedHashMap<>();
+                for (Map.Entry<String, java.util.List<String>> entry
+                        : connection.getHeaderFields().entrySet()) {
+                    if (entry.getKey() != null && entry.getValue() != null
+                            && !entry.getValue().isEmpty()) {
+                        responseHeaders.put(entry.getKey(), entry.getValue().get(0));
+                    }
+                }
+                return new Response(
+                        responseCode,
+                        finalUri,
+                        connection.getContentType(),
+                        responseHeaders,
+                        readLimited(input, Math.max(1, maxResponseBytes))
+                );
+            }
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
     }
 
     public static final class Response {

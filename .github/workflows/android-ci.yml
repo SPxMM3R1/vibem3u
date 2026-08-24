@@ -48,7 +48,10 @@ jobs:
         shell: bash
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
+          ./gradlew --no-daemon \
+            testDebugUnitTest testExperimentalUnitTest \
+            lintDebug lintExperimental \
+            assembleDebug assembleExperimental
 
       - name: Verificar firma compatible
         if: ${{ env.ANDROID_DEBUG_KEYSTORE_BASE64 != '' }}
@@ -71,10 +74,51 @@ jobs:
           echo "Certificado SHA-256: $actual"
           test "$actual" = "$expected"
 
+          experimental_output="$(
+            "$apksigner_path" verify --print-certs \
+              app/build/outputs/apk/experimental/app-experimental.apk 2>&1
+          )"
+          echo "$experimental_output"
+          experimental_actual="$(
+            printf '%s\n' "$experimental_output" \
+              | grep -oE '[0-9a-fA-F]{64}' | head -n 1 | tr 'A-F' 'a-f'
+          )"
+          echo "Certificado experimental SHA-256: $experimental_actual"
+          test "$experimental_actual" = "$expected"
+
+      - name: Verificar instalación paralela
+        shell: bash
+        run: |
+          aapt_path="$(
+            find "$ANDROID_HOME/build-tools" -type f -name aapt \
+              | sort -V | tail -n 1
+          )"
+          stable_package="$(
+            "$aapt_path" dump badging app/build/outputs/apk/debug/app-debug.apk \
+              | sed -n "s/^package: name='\([^']*\)'.*/\1/p"
+          )"
+          experimental_package="$(
+            "$aapt_path" dump badging \
+              app/build/outputs/apk/experimental/app-experimental.apk \
+              | sed -n "s/^package: name='\([^']*\)'.*/\1/p"
+          )"
+          echo "Paquete estable: $stable_package"
+          echo "Paquete experimental: $experimental_package"
+          test "$stable_package" = "cl.streambox.tv"
+          test "$experimental_package" = "cl.streambox.tv.experimental"
+
       - name: Publicar APK de la compilación
         uses: actions/upload-artifact@v7
         with:
           name: VibeM3U-debug-${{ github.sha }}
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publicar APK experimental paralelo
+        uses: actions/upload-artifact@v7
+        with:
+          name: VibeM3U-experimental-${{ github.sha }}
+          path: app/build/outputs/apk/experimental/app-experimental.apk
           if-no-files-found: error
           retention-days: 30

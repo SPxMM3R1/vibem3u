@@ -29,7 +29,7 @@ public final class ResolverCatalog {
     private static final int MAX_ALIASES_PER_CHANNEL = 12;
     private static final Pattern SAFE_ID = Pattern.compile("[a-z0-9][a-z0-9_-]{0,31}");
     private static final Set<String> ENGINES = setOf(
-            "tvn", "meganoticias", "24horas", "tvvoo", "highfly"
+            "tvn", "meganoticias", "24horas", "tvvoo", "highfly", "vavoo"
     );
     private static final Map<String, Set<String>> ALLOWED_CONFIG_HOSTS = allowedHosts();
 
@@ -49,6 +49,22 @@ public final class ResolverCatalog {
     public List<ResolverDefinition> getProviders() { return providers; }
     public ResolverDefinition getById(String id) {
         return id == null ? null : providersById.get(id.toLowerCase(Locale.ROOT));
+    }
+
+    ResolverCatalog replacingProvider(ResolverDefinition replacement) {
+        if (replacement == null) return this;
+        List<ResolverDefinition> result = new ArrayList<>();
+        boolean replaced = false;
+        for (ResolverDefinition provider : providers) {
+            if (provider.getId().equals(replacement.getId())) {
+                result.add(replacement);
+                replaced = true;
+            } else {
+                result.add(provider);
+            }
+        }
+        if (!replaced) result.add(replacement);
+        return new ResolverCatalog(version, result);
     }
 
     public ResolverDefinition find(Channel channel) {
@@ -105,7 +121,10 @@ public final class ResolverCatalog {
         if (!SAFE_ID.matcher(id).matches()) throw new IOException("ID de resolutor inválido.");
         String displayName = requiredString(object, "name", 64);
         String engine = requiredString(object, "engine", 32).toLowerCase(Locale.ROOT);
-        if (!ENGINES.contains(engine)) throw new IOException("Motor de resolutor desconocido.");
+        if (!ENGINES.contains(engine)
+                || ("vavoo".equals(engine) && !BuildConfig.ENABLE_EXPERIMENTAL_VAVOO)) {
+            throw new IOException("Motor de resolutor desconocido.");
+        }
         boolean enabled = object.optBoolean("enabledByDefault", true);
         long ttlSeconds = Math.max(0L, Math.min(3600L, object.optLong("cacheTtlSeconds", 0L)));
 
@@ -270,6 +289,9 @@ public final class ResolverCatalog {
         result.put("tvvoo", setOf("tvvoo.hayd.uk"));
         result.put("highfly", setOf(
                 "sports.highfly.dev", "leaf.highfly.dev", "raw.githubusercontent.com"
+        ));
+        result.put("vavoo", setOf(
+                "www.vavoo.tv", "www.vypn.net", "vavoo.to", "kool.to"
         ));
         return Collections.unmodifiableMap(result);
     }

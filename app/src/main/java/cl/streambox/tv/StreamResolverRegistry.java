@@ -84,6 +84,14 @@ public final class StreamResolverRegistry {
         return result;
     }
 
+    public void clearSensitiveState() {
+        for (StreamResolver resolver : resolvers) {
+            if (resolver instanceof VavooStreamResolver) {
+                ((VavooStreamResolver) resolver).clearSensitiveState();
+            }
+        }
+    }
+
     private static StreamResolver create(ResolverDefinition definition) {
         return switch (definition.getEngine()) {
             case "tvn" -> new TvnStreamResolver(definition);
@@ -91,6 +99,12 @@ public final class StreamResolverRegistry {
             case "24horas" -> new TwentyFourHoursStreamResolver(definition);
             case "tvvoo" -> new TvVooStreamResolver(definition);
             case "highfly" -> new HighflyStreamResolver(definition);
+            case "vavoo" -> {
+                if (!BuildConfig.ENABLE_EXPERIMENTAL_VAVOO) {
+                    throw new IllegalArgumentException("Motor Vavoo no disponible.");
+                }
+                yield new VavooStreamResolver(definition);
+            }
             default -> throw new IllegalArgumentException("Motor de resolutor desconocido.");
         };
     }

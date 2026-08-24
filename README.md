@@ -72,3 +72,25 @@ GitHub Actions realiza toda la compilación:
 
 Para publicar una nueva versión, primero actualiza `versionCode` y `versionName`,
 y luego crea una etiqueta que coincida con la versión, por ejemplo `v0.3.0`.
+
+## Edición experimental paralela
+
+El proyecto también genera `app-experimental.apk`, con el paquete
+`cl.streambox.tv.experimental` y el nombre **VibeM3U Experimental**. Puede
+instalarse junto a la edición estable porque mantiene preferencias, cachés y
+datos privados independientes.
+
+Esta variante contiene una prueba de resolución Vavoo directa. Sustituye solo
+el motor de las entradas que ya declaran `x-resolver="tvvoo"`, permanece
+desactivada por defecto y conserva la URL de la M3U como respaldo. No captura
+canales por coincidencias parciales del nombre. La sesión y las URLs resultantes
+viven únicamente en RAM; al cerrar la aplicación se descartan.
+
+Para probarla, instala el artefacto **VibeM3U-experimental** de Android CI y
+activa **Vavoo directo experimental** en `Opciones > Resolutores`. La edición
+experimental no ofrece instalar Releases estables encima de su paquete.
+
+El experimento se limita a endpoints públicos y señales sin login ni DRM. La
+implementación del comportamiento del catálogo se contrastó con el proyecto
+[OwnerPlugins/vavoo](https://github.com/OwnerPlugins/vavoo), sin incorporar su
+interfaz Enigma2, su proxy local, su telemetría ni la desactivación global de TLS.

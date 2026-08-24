@@ -188,12 +188,15 @@ public final class MainActivity extends Activity {
         registerBackCallback();
         enterImmersiveMode();
         createPlayer();
-        appUpdater = new AppUpdater(this, networkExecutor, mainHandler);
-        mainHandler.postDelayed(appUpdater::checkForUpdates, UPDATE_CHECK_DELAY_MS);
+        if (BuildConfig.ENABLE_APP_UPDATES) {
+            appUpdater = new AppUpdater(this, networkExecutor, mainHandler);
+            mainHandler.postDelayed(appUpdater::checkForUpdates, UPDATE_CHECK_DELAY_MS);
+        }
         updateClock.run();
     }
 
     private void reloadResolverRegistry() {
+        if (streamResolverRegistry != null) streamResolverRegistry.clearSensitiveState();
         try {
             streamResolverRegistry = new StreamResolverRegistry(
                     resolverCatalogRepository.load(),
@@ -1516,6 +1519,7 @@ public final class MainActivity extends Activity {
         cancelScheduledPlaybackRetry();
         cancelPlaybackResolution();
         resolverCoordinator.clear();
+        if (streamResolverRegistry != null) streamResolverRegistry.clearSensitiveState();
         mainHandler.removeCallbacksAndMessages(null);
 
         if (exitDialog != null) {
@@ -1794,7 +1798,7 @@ public final class MainActivity extends Activity {
         if (responseCode == 401 || responseCode == 403) {
             return "Autorización rechazada.";
         }
-        if (responseCode == 404) return "Fuente caducada.";
+        if (responseCode == 404 || responseCode == 410) return "Fuente caducada.";
         String message = error == null ? null : error.getMessage();
         if (message == null || message.isBlank()) return "Error desconocido.";
         return message
@@ -1813,7 +1817,8 @@ public final class MainActivity extends Activity {
             return false;
         }
         int responseCode = httpResponseCode(error);
-        return responseCode == 401 || responseCode == 403 || responseCode == 404;
+        return responseCode == 401 || responseCode == 403
+                || responseCode == 404 || responseCode == 410;
     }
 
     private static int httpResponseCode(Throwable error) {

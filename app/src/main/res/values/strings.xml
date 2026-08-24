@@ -38,6 +38,7 @@
     <string name="update_found">Hay una versión nueva: %1$s</string>
     <string name="update_up_to_date">Ya tienes la versión más reciente.</string>
     <string name="update_check_error">No se pudo comprobar: %1$s</string>
+    <string name="experimental_updates_disabled">Edición experimental instalada en paralelo. Sus APK se publican como artefactos de prueba.</string>
     <string name="unknown_error">error desconocido</string>
     <string name="retry">Reintentar</string>
     <string name="stream_quality_automatic">Automático</string>

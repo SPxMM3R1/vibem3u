@@ -170,7 +170,13 @@ public final class SettingsActivity extends Activity {
         cancelButton.setVisibility(hasExistingUrl ? View.VISIBLE : View.GONE);
         cancelButton.setOnClickListener(v -> finish());
         saveButton.setOnClickListener(v -> save());
-        updateButton.setOnClickListener(v -> checkForUpdates());
+        if (BuildConfig.ENABLE_APP_UPDATES) {
+            updateButton.setOnClickListener(v -> checkForUpdates());
+        } else {
+            updateButton.setEnabled(false);
+            updateStatus.setText(R.string.experimental_updates_disabled);
+            updateStatus.setVisibility(View.VISIBLE);
+        }
         resolverUpdateButton.setOnClickListener(v -> checkResolverUpdates());
         for (int index = 0; index < tabs.length; index++) {
             final int tabIndex = index;
@@ -516,6 +522,7 @@ public final class SettingsActivity extends Activity {
     }
 
     private void checkForUpdates() {
+        if (!BuildConfig.ENABLE_APP_UPDATES) return;
         updateButton.setEnabled(false);
         updateStatus.setText(R.string.update_checking);
         updateStatus.setVisibility(View.VISIBLE);

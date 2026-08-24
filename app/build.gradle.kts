@@ -28,10 +28,22 @@ android {
         targetSdk = 36
         versionCode = 40
         versionName = "0.4.35"
+        buildConfigField("boolean", "ENABLE_EXPERIMENTAL_VAVOO", "false")
+        buildConfigField("boolean", "ENABLE_APP_UPDATES", "true")
     }
 
     buildTypes {
         getByName("debug") {
+            ciSigningConfig?.let { signingConfig = it }
+        }
+
+        create("experimental") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".experimental"
+            versionNameSuffix = "-experimental"
+            matchingFallbacks += listOf("debug")
+            buildConfigField("boolean", "ENABLE_EXPERIMENTAL_VAVOO", "true")
+            buildConfigField("boolean", "ENABLE_APP_UPDATES", "false")
             ciSigningConfig?.let { signingConfig = it }
         }
 

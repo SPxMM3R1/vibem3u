@@ -1,0 +1,82 @@
+package cl.streambox.tv;
+
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+
+/** Experimental direct Vavoo engine, available only in the parallel APK. */
+public final class VavooStreamResolver implements StreamResolver {
+    private final ResolverDefinition definition;
+    private final VavooSessionClient sessionClient;
+    private final HlsStreamValidator validator;
+
+    public VavooStreamResolver(ResolverDefinition definition) {
+        this(definition, new VavooSessionClient(definition), new HlsStreamValidator());
+    }
+
+    VavooStreamResolver(
+            ResolverDefinition definition,
+            VavooSessionClient sessionClient,
+            HlsStreamValidator validator
+    ) {
+        this.definition = definition;
+        this.sessionClient = sessionClient;
+        this.validator = validator;
+    }
+
+    @Override public String getId() { return definition.getId(); }
+
+    @Override
+    public boolean supports(Channel channel) {
+        return definition.matchesExplicit(channel)
+                || definition.matchesTvgId(channel)
+                || definition.matchesHost(channel);
+    }
+
+    @Override public String stableSourceId(Channel channel) {
+        return definition.stableSourceId(channel);
+    }
+
+    @Override public long cacheTtlMillis() { return definition.getCacheTtlMillis(); }
+
+    @Override
+    public ResolvedPlaybackSource resolve(Channel channel) throws IOException {
+        LinkedHashSet<String> aliases = new LinkedHashSet<>(definition.resolverAliases(channel));
+        List<URI> candidates = sessionClient.resolveCandidates(
+                channel,
+                new ArrayList<>(aliases)
+        );
+        IOException lastError = null;
+        Map<String, String> playbackHeaders = new LinkedHashMap<>();
+        playbackHeaders.put("User-Agent", "MediaHubMX/2");
+        for (URI candidate : candidates) {
+            try {
+                validator.validate(candidate, playbackHeaders);
+                return ResolvedPlaybackSource.dynamic(
+                        getId(),
+                        stableSourceId(channel),
+                        candidate,
+                        playbackHeaders,
+                        "MediaHubMX/2",
+                        expiresAt()
+                );
+            } catch (IOException error) {
+                lastError = error;
+            }
+        }
+        throw new IOException("Vavoo no entregó un HLS reproducible.", lastError);
+    }
+
+    void clearSensitiveState() {
+        sessionClient.clear();
+    }
+
+    private long expiresAt() {
+        long ttl = cacheTtlMillis();
+        return ttl <= 0L ? 0L : System.currentTimeMillis() + ttl;
+    }
+}
