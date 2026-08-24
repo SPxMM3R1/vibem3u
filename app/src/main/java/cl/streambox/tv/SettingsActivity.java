@@ -466,7 +466,8 @@ public final class SettingsActivity extends Activity {
                 TypedValue.COMPLEX_UNIT_PX,
                 getResources().getDimension(R.dimen.settings_control_text_size)
         );
-        int channelCount = resolverGroupCounts.getOrDefault(definition.getId(), 0);
+        Integer storedCount = resolverGroupCounts.get(definition.getId());
+        int channelCount = storedCount == null ? 0 : storedCount;
         groupSwitch.setText(getResources().getQuantityString(
                 R.plurals.resolver_group_channels,
                 channelCount,

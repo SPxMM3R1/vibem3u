@@ -195,7 +195,8 @@ public final class ResolverCatalog {
 
     private static void validateConfig(String engine, Map<String, String> config)
             throws IOException {
-        Set<String> allowedHosts = ALLOWED_CONFIG_HOSTS.getOrDefault(engine, Collections.emptySet());
+        Set<String> allowedHosts = ALLOWED_CONFIG_HOSTS.get(engine);
+        if (allowedHosts == null) allowedHosts = Collections.emptySet();
         for (Map.Entry<String, String> entry : config.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();

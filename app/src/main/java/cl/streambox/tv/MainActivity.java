@@ -70,7 +70,7 @@ public final class MainActivity extends Activity {
     private static final long PLAYER_RETRY_DELAY_MS = 2_500;
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
     private static final long NO_RESOLUTION_REQUEST = -1L;
-    private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.34 (Android TV)";
+    private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.35 (Android TV)";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
@@ -1586,7 +1586,8 @@ public final class MainActivity extends Activity {
         ArrayList<Integer> resolverCounts = new ArrayList<>();
         for (ResolverDefinition definition : streamResolverRegistry.getDefinitions()) {
             resolverIds.add(definition.getId());
-            resolverCounts.add(resolverChannelCounts.getOrDefault(definition.getId(), 0));
+            Integer count = resolverChannelCounts.get(definition.getId());
+            resolverCounts.add(count == null ? 0 : count);
         }
         intent.putExtra(
                         SettingsActivity.EXTRA_RESOLVER_CATALOG_VERSION,

@@ -31,7 +31,7 @@ public final class ChannelLogoCache {
     private static final int MAX_RENDER_EDGE_PX = 4096;
     private static final int ALPHA_TRIM_THRESHOLD = 2;
     private static final int DEFAULT_SVG_SIZE_PX = 512;
-    private static final String USER_AGENT = "VibeM3U/0.4.34 (Android TV)";
+    private static final String USER_AGENT = "VibeM3U/0.4.35 (Android TV)";
 
     private final LruCache<String, Bitmap> memoryCache;
     private final HttpResourceCache resourceCache;
