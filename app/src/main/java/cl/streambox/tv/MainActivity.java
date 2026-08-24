@@ -15,8 +15,6 @@ import android.os.Bundle;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.TypedValue;
-import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.Window;
@@ -24,11 +22,8 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.widget.Button;
-import android.widget.CompoundButton;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.ProgressBar;
-import android.widget.Switch;
 import android.widget.TextView;
 import android.window.OnBackInvokedDispatcher;
 
@@ -130,18 +125,6 @@ public final class MainActivity extends Activity {
     private boolean exiting;
     private boolean resourcesReleased;
     private Dialog exitDialog;
-    private Dialog qualityDialog;
-    private LinearLayout qualityDialogOptions;
-    private LinearLayout qualityDialogSubtitleOptions;
-    private TextView qualityDialogSubtitleStatus;
-    private Switch qualityDialogSubtitleSwitch;
-    private TextView qualityDialogQualityTab;
-    private TextView qualityDialogSubtitlesTab;
-    private View qualityDialogQualityPage;
-    private View qualityDialogSubtitlesPage;
-    private View qualityDialogQualityFocusTarget;
-    private int qualityDialogTab;
-    private String qualityDialogChannelIdentity;
     private String qualityPreferenceAppliedFor;
     private String subtitlePreferenceAppliedFor;
     private String subtitleTextObservedFor;
@@ -1124,7 +1107,7 @@ public final class MainActivity extends Activity {
             if (!options.isEmpty()) {
                 // No stored preference means the default is the best available
                 // bitrate. Adaptive quality remains available when the user
-                // explicitly selects "Automático" in the channel menu.
+                // explicitly selects "Automático" in Playback settings.
                 applyFixedQuality(channel, options.get(0), false);
             } else {
                 qualityPreferenceAppliedFor = channelIdentity;
@@ -1182,7 +1165,6 @@ public final class MainActivity extends Activity {
         subtitleTextObservedFor = channelIdentity;
         subtitlePreferenceAppliedFor = null;
         applySavedSubtitlePreference(player.getCurrentTracks());
-        maybeAddSubtitleOptionToQualityDialog();
     }
 
     private static boolean hasNonBlankTextCue(CueGroup cueGroup) {
@@ -1207,264 +1189,6 @@ public final class MainActivity extends Activity {
             }
         }
         return false;
-    }
-
-    private void showStreamQualityDialog() {
-        if (player == null || channels.isEmpty()
-                || channelIndex < 0 || channelIndex >= channels.size()) return;
-        if (qualityDialog != null && qualityDialog.isShowing()) return;
-
-        Channel channel = channels.get(channelIndex);
-        List<VideoTrackOption> options =
-                collectVideoTrackOptions(player.getCurrentTracks());
-        PlaybackPreferences.QualityPreference preference =
-                playbackPreferences.getQuality(channel);
-        boolean automaticQuality = playbackPreferences.isAutomaticQuality(channel);
-        VideoTrackOption selectedOption = preference != null
-                ? findClosestQuality(options, preference)
-                : (automaticQuality || options.isEmpty() ? null : options.get(0));
-
-        Dialog dialog = new Dialog(this);
-        qualityDialog = dialog;
-        dialog.setContentView(R.layout.dialog_stream_quality);
-        dialog.setCanceledOnTouchOutside(false);
-
-        qualityDialogQualityTab = dialog.findViewById(R.id.quality_tab_quality);
-        qualityDialogSubtitlesTab = dialog.findViewById(R.id.quality_tab_subtitles);
-        qualityDialogQualityPage = dialog.findViewById(R.id.quality_page);
-        qualityDialogSubtitlesPage = dialog.findViewById(R.id.quality_subtitles_page);
-        qualityDialogSubtitleOptions = dialog.findViewById(R.id.quality_subtitle_options);
-        qualityDialogSubtitleStatus = dialog.findViewById(R.id.quality_subtitle_status);
-        qualityDialogTab = 0;
-
-        TextView description = dialog.findViewById(
-                R.id.stream_quality_description
-        );
-        description.setText(getString(
-                options.size() <= 1
-                        ? R.string.stream_quality_unavailable
-                        : R.string.stream_quality_description,
-                channel.getName()
-        ));
-
-        LinearLayout container = dialog.findViewById(
-                R.id.stream_quality_options
-        );
-        qualityDialogOptions = container;
-        qualityDialogSubtitleSwitch = null;
-        qualityDialogChannelIdentity = PlaybackPreferences.channelIdentity(channel);
-        qualityDialogSubtitlesTab.setVisibility(View.VISIBLE);
-        qualityDialogSubtitleStatus.setVisibility(View.VISIBLE);
-        View focusTarget = null;
-        Button automaticButton = null;
-        if (hasObservedSubtitleText(channel)) {
-            qualityDialogSubtitleSwitch = createSubtitleSwitch(channel);
-            qualityDialogSubtitleOptions.addView(qualityDialogSubtitleSwitch);
-            qualityDialogSubtitleStatus.setVisibility(View.GONE);
-        }
-
-        if (options.size() != 1) {
-            automaticButton = createQualityButton(
-                    (automaticQuality ? "\u2713 " : "")
-                            + getString(R.string.stream_quality_automatic)
-            );
-            automaticButton.setOnClickListener(view -> {
-                useAutomaticQuality(channel);
-                dialog.dismiss();
-            });
-            container.addView(automaticButton);
-            if (automaticQuality) focusTarget = automaticButton;
-        }
-
-        for (VideoTrackOption option : options) {
-            boolean selected = option == selectedOption;
-            Button button = createQualityButton(
-                    (selected ? "\u2713 " : "") + option.label()
-            );
-            button.setOnClickListener(view -> {
-                applyFixedQuality(channel, option, true);
-                dialog.dismiss();
-            });
-            container.addView(button);
-            if (selected || options.size() == 1) focusTarget = button;
-        }
-
-        if (focusTarget == null) focusTarget = automaticButton;
-        qualityDialogQualityFocusTarget = focusTarget;
-        qualityDialogQualityTab.setOnClickListener(view -> setQualityDialogTab(0, true));
-        qualityDialogSubtitlesTab.setOnClickListener(view -> setQualityDialogTab(1, true));
-        dialog.setOnKeyListener((ignored, keyCode, event) -> {
-            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                setQualityDialogTab(qualityDialogTab - 1, true);
-                return true;
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                setQualityDialogTab(qualityDialogTab + 1, true);
-                return true;
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_UP
-                    && isQualityDialogTopFocus(dialog.getWindow() == null
-                    ? null
-                    : dialog.getWindow().getCurrentFocus())) {
-                if (qualityDialogTab == 1) {
-                    qualityDialogSubtitlesTab.requestFocus();
-                } else {
-                    qualityDialogQualityTab.requestFocus();
-                }
-                return true;
-            }
-            return false;
-        });
-        setQualityDialogTab(0, false);
-        if (focusTarget != null) {
-            View initialFocus = focusTarget;
-            dialog.setOnShowListener(ignored -> initialFocus.requestFocus());
-        }
-        dialog.setOnDismissListener(ignored -> {
-            if (qualityDialog == dialog) {
-                qualityDialog = null;
-                qualityDialogOptions = null;
-                qualityDialogSubtitleOptions = null;
-                qualityDialogSubtitleStatus = null;
-                qualityDialogSubtitleSwitch = null;
-                qualityDialogQualityTab = null;
-                qualityDialogSubtitlesTab = null;
-                qualityDialogQualityPage = null;
-                qualityDialogSubtitlesPage = null;
-                qualityDialogQualityFocusTarget = null;
-                qualityDialogChannelIdentity = null;
-            }
-            if (!isFinishing() && !isDestroyed()) enterImmersiveMode();
-        });
-
-        Window window = dialog.getWindow();
-        if (window != null) {
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            WindowManager.LayoutParams attributes = window.getAttributes();
-            attributes.width = WindowManager.LayoutParams.WRAP_CONTENT;
-            attributes.height = WindowManager.LayoutParams.WRAP_CONTENT;
-            attributes.dimAmount = 0.68f;
-            window.setAttributes(attributes);
-        }
-        dialog.show();
-    }
-
-    private void setQualityDialogTab(int requestedTab, boolean requestFocus) {
-        if (qualityDialogQualityTab == null
-                || qualityDialogSubtitlesTab == null
-                || qualityDialogQualityPage == null
-                || qualityDialogSubtitlesPage == null) return;
-
-        int safeTab = requestedTab <= 0 ? 0 : 1;
-        qualityDialogTab = safeTab;
-
-        boolean qualitySelected = safeTab == 0;
-        qualityDialogQualityTab.setSelected(qualitySelected);
-        qualityDialogSubtitlesTab.setSelected(!qualitySelected);
-        qualityDialogQualityTab.setTextColor(getColor(
-                qualitySelected ? R.color.black : R.color.white
-        ));
-        qualityDialogSubtitlesTab.setTextColor(getColor(
-                qualitySelected ? R.color.white : R.color.black
-        ));
-        qualityDialogQualityPage.setVisibility(qualitySelected ? View.VISIBLE : View.GONE);
-        qualityDialogSubtitlesPage.setVisibility(qualitySelected ? View.GONE : View.VISIBLE);
-
-        if (requestFocus) {
-            View target = qualitySelected
-                    ? qualityDialogQualityFocusTarget
-                    : qualityDialogSubtitleSwitch;
-            if (target != null) target.requestFocus();
-            else if (qualitySelected) qualityDialogQualityTab.requestFocus();
-            else qualityDialogSubtitlesTab.requestFocus();
-        }
-    }
-
-    private boolean isQualityDialogTopFocus(View focused) {
-        if (focused == null) return false;
-        View topContent = qualityDialogTab == 1
-                ? qualityDialogSubtitleSwitch
-                : qualityDialogQualityFocusTarget;
-        return focused == topContent;
-    }
-
-    private void maybeAddSubtitleOptionToQualityDialog() {
-        if (qualityDialog == null
-                || !qualityDialog.isShowing()
-                || qualityDialogSubtitleOptions == null
-                || qualityDialogSubtitleSwitch != null
-                || player == null
-                || channels.isEmpty()
-                || channelIndex < 0
-                || channelIndex >= channels.size()) return;
-
-        Channel channel = channels.get(channelIndex);
-        String channelIdentity = PlaybackPreferences.channelIdentity(channel);
-        if (!channelIdentity.equals(qualityDialogChannelIdentity)
-                || !channelIdentity.equals(subtitleTextObservedFor)) return;
-
-        qualityDialogSubtitleSwitch = createSubtitleSwitch(channel);
-        qualityDialogSubtitleOptions.addView(qualityDialogSubtitleSwitch, 0);
-        if (qualityDialogSubtitleStatus != null) {
-            qualityDialogSubtitleStatus.setVisibility(View.GONE);
-        }
-    }
-
-    private Switch createSubtitleSwitch(Channel channel) {
-        Switch subtitlesSwitch = new Switch(this);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(34)
-        );
-        params.bottomMargin = dp(6);
-        subtitlesSwitch.setLayoutParams(params);
-        subtitlesSwitch.setBackgroundResource(R.drawable.focus_button_compact);
-        subtitlesSwitch.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        subtitlesSwitch.setIncludeFontPadding(false);
-        subtitlesSwitch.setMinHeight(0);
-        subtitlesSwitch.setMinWidth(0);
-        subtitlesSwitch.setPadding(dp(12), 0, dp(12), 0);
-        subtitlesSwitch.setTextColor(getColor(R.color.white));
-        subtitlesSwitch.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
-        subtitlesSwitch.setAllCaps(false);
-        subtitlesSwitch.setChecked(playbackPreferences.getSubtitles(channel));
-        updateSubtitleSwitchLabel(subtitlesSwitch);
-        subtitlesSwitch.setOnCheckedChangeListener((button, checked) -> {
-            playbackPreferences.rememberSubtitles(channel, checked);
-            updateSubtitleSwitchLabel(button);
-            subtitlePreferenceAppliedFor = null;
-            applySavedSubtitlePreference(player.getCurrentTracks());
-        });
-        return subtitlesSwitch;
-    }
-
-    private void updateSubtitleSwitchLabel(CompoundButton button) {
-        button.setText(button.isChecked()
-                ? R.string.subtitles_enabled
-                : R.string.subtitles_disabled);
-    }
-
-    private Button createQualityButton(String text) {
-        Button button = new Button(this);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(34)
-        );
-        params.bottomMargin = dp(6);
-        button.setLayoutParams(params);
-        button.setBackgroundResource(R.drawable.focus_button_compact);
-        button.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        button.setIncludeFontPadding(false);
-        button.setMinHeight(0);
-        button.setMinWidth(0);
-        button.setPadding(dp(12), 0, dp(12), 0);
-        button.setText(text);
-        button.setTextColor(getColor(R.color.white));
-        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
-        button.setAllCaps(false);
-        return button;
     }
 
     private void useAutomaticQuality(Channel channel) {
@@ -1633,7 +1357,7 @@ public final class MainActivity extends Activity {
             }
             if (event.getRepeatCount() == 0) {
                 if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    showStreamQualityDialog();
+                    openSettings(SettingsActivity.TAB_PLAYBACK);
                     return true;
                 }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_INFO) {
@@ -1744,15 +1468,6 @@ public final class MainActivity extends Activity {
             exitDialog.dismiss();
             exitDialog = null;
         }
-        if (qualityDialog != null) {
-            qualityDialog.dismiss();
-            qualityDialog = null;
-            qualityDialogOptions = null;
-            qualityDialogSubtitleOptions = null;
-            qualityDialogSubtitleStatus = null;
-            qualityDialogSubtitleSwitch = null;
-            qualityDialogChannelIdentity = null;
-        }
         if (appUpdater != null) {
             appUpdater.destroy();
             appUpdater = null;
@@ -1808,10 +1523,118 @@ public final class MainActivity extends Activity {
         android.os.Process.killProcess(android.os.Process.myPid());
     }
 
+    private Intent createSettingsIntent(int initialTab) {
+        Intent intent = new Intent(this, SettingsActivity.class);
+        if (initialTab >= 0) {
+            intent.putExtra(SettingsActivity.EXTRA_INITIAL_TAB, initialTab);
+        }
+        if (channels.isEmpty()
+                || channelIndex < 0
+                || channelIndex >= channels.size()) return intent;
+
+        Channel channel = channels.get(channelIndex);
+        intent.putExtra(SettingsActivity.EXTRA_CHANNEL_INDEX, channelIndex)
+                .putExtra(SettingsActivity.EXTRA_CHANNEL_TVG_ID, channel.getTvgId())
+                .putExtra(SettingsActivity.EXTRA_CHANNEL_NAME, channel.getName());
+
+        List<VideoTrackOption> options = player == null
+                ? Collections.emptyList()
+                : collectVideoTrackOptions(player.getCurrentTracks());
+        ArrayList<String> labels = new ArrayList<>();
+        ArrayList<Integer> bitrates = new ArrayList<>();
+        ArrayList<Integer> widths = new ArrayList<>();
+        ArrayList<Integer> heights = new ArrayList<>();
+        for (VideoTrackOption option : options) {
+            labels.add(option.label());
+            bitrates.add(option.bitrate);
+            widths.add(option.width);
+            heights.add(option.height);
+        }
+        PlaybackPreferences.QualityPreference preference =
+                playbackPreferences.getQuality(channel);
+        boolean automaticQuality = playbackPreferences.isAutomaticQuality(channel);
+        VideoTrackOption selectedOption = preference != null
+                ? findClosestQuality(options, preference)
+                : (automaticQuality || options.isEmpty() ? null : options.get(0));
+        int selectedIndex = selectedOption == null ? -1 : options.indexOf(selectedOption);
+        if (selectedIndex < 0 && options.size() == 1) selectedIndex = 0;
+
+        intent.putStringArrayListExtra(SettingsActivity.EXTRA_QUALITY_LABELS, labels)
+                .putIntegerArrayListExtra(SettingsActivity.EXTRA_QUALITY_BITRATES, bitrates)
+                .putIntegerArrayListExtra(SettingsActivity.EXTRA_QUALITY_WIDTHS, widths)
+                .putIntegerArrayListExtra(SettingsActivity.EXTRA_QUALITY_HEIGHTS, heights)
+                .putExtra(SettingsActivity.EXTRA_QUALITY_SELECTED_INDEX, selectedIndex)
+                .putExtra(SettingsActivity.EXTRA_QUALITY_AUTOMATIC, automaticQuality)
+                .putExtra(
+                        SettingsActivity.EXTRA_SUBTITLES_AVAILABLE,
+                        hasObservedSubtitleText(channel)
+                )
+                .putExtra(
+                        SettingsActivity.EXTRA_SUBTITLES_ENABLED,
+                        playbackPreferences.getSubtitles(channel)
+                );
+        return intent;
+    }
+
     private void openSettings() {
+        openSettings(-1);
+    }
+
+    private void openSettings(int initialTab) {
         if (settingsOpen) return;
         settingsOpen = true;
-        startActivityForResult(new Intent(this, SettingsActivity.class), SETTINGS_REQUEST);
+        startActivityForResult(createSettingsIntent(initialTab), SETTINGS_REQUEST);
+    }
+
+    private void applyPlaybackSettingsResult(Intent data) {
+        if (data == null
+                || channels.isEmpty()
+                || channelIndex < 0
+                || channelIndex >= channels.size()) return;
+
+        int expectedIndex = data.getIntExtra(
+                SettingsActivity.EXTRA_CHANNEL_INDEX,
+                -1
+        );
+        if (expectedIndex != channelIndex) return;
+        Channel channel = channels.get(channelIndex);
+        String expectedTvgId = data.getStringExtra(
+                SettingsActivity.EXTRA_CHANNEL_TVG_ID
+        );
+        String expectedName = data.getStringExtra(SettingsActivity.EXTRA_CHANNEL_NAME);
+        if (expectedTvgId != null && !expectedTvgId.isBlank()
+                && !expectedTvgId.equals(channel.getTvgId())) return;
+        if (expectedName != null && !expectedName.equals(channel.getName())) return;
+
+        if (data.hasExtra(SettingsActivity.EXTRA_QUALITY_AUTOMATIC)) {
+            boolean automatic = data.getBooleanExtra(
+                    SettingsActivity.EXTRA_QUALITY_AUTOMATIC,
+                    false
+            );
+            if (automatic) {
+                playbackPreferences.useAutomaticQuality(channel);
+            } else if (data.hasExtra(SettingsActivity.EXTRA_QUALITY_BITRATE)
+                    && data.hasExtra(SettingsActivity.EXTRA_QUALITY_WIDTH)
+                    && data.hasExtra(SettingsActivity.EXTRA_QUALITY_HEIGHT)) {
+                playbackPreferences.rememberQuality(
+                        channel,
+                        data.getIntExtra(SettingsActivity.EXTRA_QUALITY_BITRATE, 0),
+                        data.getIntExtra(SettingsActivity.EXTRA_QUALITY_WIDTH, 0),
+                        data.getIntExtra(SettingsActivity.EXTRA_QUALITY_HEIGHT, 0)
+                );
+            }
+            qualityPreferenceAppliedFor = null;
+            if (player != null) applySavedQualityPreference(player.getCurrentTracks());
+        }
+
+        if (data.hasExtra(SettingsActivity.EXTRA_SUBTITLES_ENABLED)) {
+            playbackPreferences.rememberSubtitles(
+                    channel,
+                    data.getBooleanExtra(SettingsActivity.EXTRA_SUBTITLES_ENABLED, true)
+            );
+            subtitlePreferenceAppliedFor = null;
+            if (player != null) applySavedSubtitlePreference(player.getCurrentTracks());
+        }
     }
 
     @Override
@@ -1822,6 +1645,7 @@ public final class MainActivity extends Activity {
             settingsOpen = false;
             String url = getPlaylistUrl();
             if (resultCode == RESULT_OK && !url.isBlank()) {
+                applyPlaybackSettingsResult(data);
                 if (playerUsesVolumeNormalization != isVolumeNormalizationEnabled()) {
                     if (player != null) {
                         player.release();

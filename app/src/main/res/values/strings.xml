@@ -21,7 +21,7 @@
     <string name="channel_controls_title">Cambio de canales</string>
     <string name="invert_channel_keys">Invertir botones arriba y abajo</string>
     <string name="invert_channel_keys_description">Activado: ↑ avanza al canal siguiente y ↓ vuelve al anterior.</string>
-    <string name="remote_help">Durante la reproducción: ↑/↓ cambia de canal · OK muestra información · → opciones del canal · mantener OK configuración.</string>
+    <string name="remote_help">Durante la reproducción: ↑/↓ cambia de canal · OK muestra información · → abre Reproducción · mantener OK configuración.</string>
     <string name="update_title">Actualización disponible</string>
     <string name="update_available">VibeM3U %1$s está lista para instalar.</string>
     <string name="update_later">Más tarde</string>
@@ -40,16 +40,12 @@
     <string name="update_check_error">No se pudo comprobar: %1$s</string>
     <string name="unknown_error">error desconocido</string>
     <string name="retry">Reintentar</string>
-    <string name="stream_quality_title">Opciones del canal</string>
-    <string name="stream_quality_description">%1$s · Automático adapta la calidad a la conexión.</string>
-    <string name="stream_quality_unavailable">%1$s · Este stream sólo informa una calidad.</string>
     <string name="stream_quality_automatic">Automático</string>
     <string name="subtitles_enabled">Subtítulos  · ACTIVADOS</string>
     <string name="subtitles_disabled">Subtítulos  · DESACTIVADOS</string>
     <string name="audio_settings_title">Audio</string>
     <string name="normalize_volume">Normalizar volumen entre canales</string>
     <string name="normalize_volume_description">Ajusta lentamente el nivel de cada canal para reducir saltos de volumen.</string>
-    <string name="settings_close_hint">BACK · Cerrar</string>
     <string name="settings_tab_general">General</string>
     <string name="settings_tab_playback">Reproducción</string>
     <string name="settings_tab_source">Fuente</string>
@@ -60,9 +56,15 @@
     <string name="settings_tip_title">Consejo</string>
     <string name="settings_tip_description">Los cambios se aplican automáticamente. La programación y los logos se actualizan en segundo plano.</string>
     <string name="settings_playback_heading">Reproducción</string>
+    <string name="settings_current_channel_title">Canal actual</string>
+    <string name="settings_current_channel_description">Estas opciones corresponden al canal que está reproduciéndose ahora.</string>
+    <string name="settings_no_current_channel">No hay un canal en reproducción.</string>
+    <string name="settings_quality_title">Calidad de video</string>
+    <string name="settings_quality_no_options">El canal todavía no informa sus calidades disponibles.</string>
+    <string name="settings_subtitles_title">Subtítulos</string>
     <string name="settings_source_heading">Fuente de canales</string>
     <string name="settings_interface_heading">Interfaz</string>
-    <string name="settings_interface_description">Usa las flechas para navegar y OK para seleccionar. Mantén OK durante la reproducción para abrir estas opciones; las pestañas se cambian con ◀ y ▶.</string>
+    <string name="settings_interface_description">Usa las flechas para navegar y OK para seleccionar. Mantén OK durante la reproducción para abrir Opciones generales; el botón derecho entra directamente en Reproducción y las pestañas se cambian con ◀ y ▶.</string>
     <string name="settings_updates_heading">Actualizaciones</string>
     <string name="settings_updates_description">Comprueba si existe una versión nueva de VibeM3U y conserva la configuración actual.</string>
     <string name="settings_remote_help">◀ ▶ Cambiar pestaña   ·   ▲ ▼ Navegar   ·   OK Seleccionar   ·   BACK Volver</string>
@@ -70,6 +72,5 @@
     <string name="epg_next">A continuación</string>
     <string name="epg_no_information">Sin información disponible</string>
     <string name="epg_no_next_programme">No hay información siguiente</string>
-    <string name="subtitles_tab_description">Activa o desactiva los subtítulos cuando el canal entrega texto real.</string>
     <string name="subtitles_waiting_for_text">No se han detectado subtítulos de texto en este stream.</string>
 </resources>

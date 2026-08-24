@@ -8,6 +8,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
@@ -15,18 +16,38 @@ import android.view.WindowInsetsController;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.Switch;
 import android.widget.TextView;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class SettingsActivity extends Activity {
     private static final float SETTINGS_PANEL_ASPECT_RATIO = 16f / 10f;
+    public static final int TAB_GENERAL = 0;
+    public static final int TAB_PLAYBACK = 1;
     public static final String PREFS = "streambox_settings";
     public static final String KEY_PLAYLIST_URL = "playlist_url";
     public static final String KEY_INVERT_CHANNEL_KEYS = "invert_channel_keys";
     public static final String KEY_NORMALIZE_VOLUME = "normalize_volume";
+    public static final String EXTRA_INITIAL_TAB = "initial_tab";
+    public static final String EXTRA_CHANNEL_INDEX = "channel_index";
+    public static final String EXTRA_CHANNEL_TVG_ID = "channel_tvg_id";
+    public static final String EXTRA_CHANNEL_NAME = "channel_name";
+    public static final String EXTRA_QUALITY_LABELS = "quality_labels";
+    public static final String EXTRA_QUALITY_BITRATES = "quality_bitrates";
+    public static final String EXTRA_QUALITY_WIDTHS = "quality_widths";
+    public static final String EXTRA_QUALITY_HEIGHTS = "quality_heights";
+    public static final String EXTRA_QUALITY_SELECTED_INDEX = "quality_selected_index";
+    public static final String EXTRA_QUALITY_AUTOMATIC = "quality_automatic";
+    public static final String EXTRA_QUALITY_BITRATE = "quality_bitrate";
+    public static final String EXTRA_QUALITY_WIDTH = "quality_width";
+    public static final String EXTRA_QUALITY_HEIGHT = "quality_height";
+    public static final String EXTRA_SUBTITLES_AVAILABLE = "subtitles_available";
+    public static final String EXTRA_SUBTITLES_ENABLED = "subtitles_enabled";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService updateExecutor = Executors.newSingleThreadExecutor();
@@ -44,6 +65,25 @@ public final class SettingsActivity extends Activity {
     private Button saveButton;
     private Button cancelButton;
     private int selectedTabIndex;
+    private TextView currentChannelName;
+    private LinearLayout qualityOptionsContainer;
+    private TextView qualityStatus;
+    private Switch subtitlesSwitch;
+    private TextView subtitlesStatus;
+    private View playbackFirstFocus;
+    private int currentChannelIndex = -1;
+    private String currentChannelTvgId = "";
+    private boolean hasCurrentChannel;
+    private boolean subtitlesAvailable;
+    private boolean automaticQuality;
+    private int selectedQualityIndex = -1;
+    private ArrayList<String> qualityLabels = new ArrayList<>();
+    private ArrayList<Integer> qualityBitrates = new ArrayList<>();
+    private ArrayList<Integer> qualityWidths = new ArrayList<>();
+    private ArrayList<Integer> qualityHeights = new ArrayList<>();
+    private Button automaticQualityButton;
+    private final List<Button> qualityOptionButtons = new ArrayList<>();
+    private final List<Button> qualityFocusButtons = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -71,6 +111,11 @@ public final class SettingsActivity extends Activity {
         updateStatus = findViewById(R.id.update_status);
         cancelButton = findViewById(R.id.cancel_button);
         saveButton = findViewById(R.id.save_button);
+        currentChannelName = findViewById(R.id.settings_current_channel_name);
+        qualityOptionsContainer = findViewById(R.id.settings_quality_options);
+        qualityStatus = findViewById(R.id.settings_quality_status);
+        subtitlesSwitch = findViewById(R.id.settings_subtitles_switch);
+        subtitlesStatus = findViewById(R.id.settings_subtitles_status);
         tabs = new TextView[]{
                 findViewById(R.id.tab_general),
                 findViewById(R.id.tab_playback),
@@ -93,6 +138,7 @@ public final class SettingsActivity extends Activity {
         normalizeVolume.setChecked(prefs.getBoolean(KEY_NORMALIZE_VOLUME, false));
         TextView versionText = findViewById(R.id.current_version);
         versionText.setText(getString(R.string.current_version, BuildConfig.VERSION_NAME));
+        initializeCurrentChannelOptions(getIntent());
 
         cancelButton.setVisibility(hasExistingUrl ? View.VISIBLE : View.GONE);
         cancelButton.setOnClickListener(v -> finish());
@@ -107,13 +153,158 @@ public final class SettingsActivity extends Activity {
             return true;
         });
 
-        if (hasExistingUrl) {
-            showTab(0, false);
-            normalizeVolume.requestFocus();
-        } else {
-            showTab(2, false);
-            urlInput.requestFocus();
+        int defaultTab = hasExistingUrl ? TAB_GENERAL : 2;
+        int initialTab = getIntent().getIntExtra(EXTRA_INITIAL_TAB, defaultTab);
+        showTab(initialTab, false);
+        firstFocusForTab(selectedTabIndex).requestFocus();
+    }
+
+    private void initializeCurrentChannelOptions(Intent intent) {
+        currentChannelIndex = intent.getIntExtra(EXTRA_CHANNEL_INDEX, -1);
+        currentChannelTvgId = safeString(intent.getStringExtra(EXTRA_CHANNEL_TVG_ID));
+        String channelName = safeString(intent.getStringExtra(EXTRA_CHANNEL_NAME));
+        hasCurrentChannel = currentChannelIndex >= 0 && !channelName.isBlank();
+        currentChannelName.setText(hasCurrentChannel
+                ? channelName
+                : getString(R.string.settings_no_current_channel));
+
+        ArrayList<String> labels = intent.getStringArrayListExtra(EXTRA_QUALITY_LABELS);
+        if (labels != null) qualityLabels = labels;
+        ArrayList<Integer> bitrates = intent.getIntegerArrayListExtra(EXTRA_QUALITY_BITRATES);
+        if (bitrates != null) qualityBitrates = bitrates;
+        ArrayList<Integer> widths = intent.getIntegerArrayListExtra(EXTRA_QUALITY_WIDTHS);
+        if (widths != null) qualityWidths = widths;
+        ArrayList<Integer> heights = intent.getIntegerArrayListExtra(EXTRA_QUALITY_HEIGHTS);
+        if (heights != null) qualityHeights = heights;
+
+        automaticQuality = intent.getBooleanExtra(EXTRA_QUALITY_AUTOMATIC, false)
+                && qualityLabels.size() > 1;
+        selectedQualityIndex = intent.getIntExtra(EXTRA_QUALITY_SELECTED_INDEX, -1);
+        if (selectedQualityIndex < 0
+                || selectedQualityIndex >= qualityLabels.size()) {
+            selectedQualityIndex = automaticQuality || qualityLabels.isEmpty()
+                    ? -1
+                    : 0;
         }
+        renderQualityOptions();
+
+        subtitlesAvailable = intent.getBooleanExtra(EXTRA_SUBTITLES_AVAILABLE, false);
+        subtitlesSwitch.setVisibility(subtitlesAvailable ? View.VISIBLE : View.GONE);
+        subtitlesStatus.setVisibility(subtitlesAvailable ? View.GONE : View.VISIBLE);
+        if (subtitlesAvailable) {
+            subtitlesSwitch.setChecked(intent.getBooleanExtra(EXTRA_SUBTITLES_ENABLED, true));
+            updateSubtitleSwitchLabel();
+            subtitlesSwitch.setOnCheckedChangeListener((button, checked) ->
+                    updateSubtitleSwitchLabel());
+        }
+        updatePlaybackFirstFocus();
+    }
+
+    private void renderQualityOptions() {
+        qualityOptionsContainer.removeAllViews();
+        qualityOptionButtons.clear();
+        qualityFocusButtons.clear();
+        automaticQualityButton = null;
+
+        if (qualityLabels.isEmpty()) {
+            qualityStatus.setVisibility(View.VISIBLE);
+            return;
+        }
+        qualityStatus.setVisibility(View.GONE);
+
+        if (qualityLabels.size() > 1) {
+            automaticQualityButton = createQualityOptionButton(
+                    getString(R.string.stream_quality_automatic)
+            );
+            automaticQualityButton.setOnClickListener(view -> {
+                automaticQuality = true;
+                selectedQualityIndex = -1;
+                updateQualityOptionLabels();
+            });
+            qualityOptionsContainer.addView(automaticQualityButton);
+            qualityFocusButtons.add(automaticQualityButton);
+        }
+
+        for (int index = 0; index < qualityLabels.size(); index++) {
+            final int optionIndex = index;
+            Button button = createQualityOptionButton(qualityLabels.get(index));
+            button.setOnClickListener(view -> {
+                automaticQuality = false;
+                selectedQualityIndex = optionIndex;
+                updateQualityOptionLabels();
+            });
+            qualityOptionsContainer.addView(button);
+            qualityOptionButtons.add(button);
+            qualityFocusButtons.add(button);
+        }
+        updateQualityOptionLabels();
+    }
+
+    private Button createQualityOptionButton(String text) {
+        Button button = new Button(this);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                getResources().getDimensionPixelSize(R.dimen.settings_control_height)
+        );
+        params.bottomMargin = dp(6);
+        button.setLayoutParams(params);
+        button.setId(View.generateViewId());
+        button.setBackgroundResource(R.drawable.settings_section_card);
+        button.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        button.setIncludeFontPadding(false);
+        button.setMinHeight(0);
+        button.setMinWidth(0);
+        button.setPadding(dp(12), 0, dp(12), 0);
+        button.setTextColor(getColor(R.color.white));
+        button.setTextSize(
+                TypedValue.COMPLEX_UNIT_PX,
+                getResources().getDimension(R.dimen.settings_control_text_size)
+        );
+        button.setAllCaps(false);
+        button.setText(text);
+        return button;
+    }
+
+    private void updateQualityOptionLabels() {
+        if (automaticQualityButton != null) {
+            automaticQualityButton.setText(
+                    (automaticQuality ? "\u2713 " : "")
+                            + getString(R.string.stream_quality_automatic)
+            );
+        }
+        for (int index = 0; index < qualityOptionButtons.size(); index++) {
+            qualityOptionButtons.get(index).setText(
+                    (index == selectedQualityIndex ? "\u2713 " : "")
+                            + qualityLabels.get(index)
+            );
+        }
+    }
+
+    private void updateSubtitleSwitchLabel() {
+        subtitlesSwitch.setText(subtitlesSwitch.isChecked()
+                ? R.string.subtitles_enabled
+                : R.string.subtitles_disabled);
+    }
+
+    private void updatePlaybackFirstFocus() {
+        if (!qualityFocusButtons.isEmpty()) {
+            playbackFirstFocus = qualityFocusButtons.get(0);
+        } else if (subtitlesAvailable) {
+            playbackFirstFocus = subtitlesSwitch;
+        } else {
+            playbackFirstFocus = invertChannelKeys;
+        }
+        if (tabs != null && tabs.length > TAB_PLAYBACK) {
+            tabs[TAB_PLAYBACK].setNextFocusDownId(playbackFirstFocus.getId());
+        }
+    }
+
+    private String safeString(String value) {
+        return value == null ? "" : value;
+    }
+
+    private int dp(int value) {
+        return Math.max(1, Math.round(value * getResources().getDisplayMetrics().density));
     }
 
     private void fitSettingsPanelToAspectRatio() {
@@ -157,24 +348,7 @@ public final class SettingsActivity extends Activity {
             tabPages[index].setVisibility(selected ? View.VISIBLE : View.GONE);
         }
         if (requestFocus) {
-            View focusTarget;
-            switch (safeIndex) {
-                case 1:
-                    focusTarget = invertChannelKeys;
-                    break;
-                case 2:
-                    focusTarget = urlInput;
-                    break;
-                case 3:
-                    focusTarget = findViewById(R.id.interface_info);
-                    break;
-                case 4:
-                    focusTarget = updateButton;
-                    break;
-                default:
-                    focusTarget = normalizeVolume;
-                    break;
-            }
+            View focusTarget = firstFocusForTab(safeIndex);
             focusTarget.requestFocus();
         }
     }
@@ -182,7 +356,7 @@ public final class SettingsActivity extends Activity {
     private View firstFocusForTab(int tabIndex) {
         switch (tabIndex) {
             case 1:
-                return invertChannelKeys;
+                return playbackFirstFocus == null ? invertChannelKeys : playbackFirstFocus;
             case 2:
                 return urlInput;
             case 3:
@@ -252,7 +426,40 @@ public final class SettingsActivity extends Activity {
                 .putBoolean(KEY_INVERT_CHANNEL_KEYS, invertChannelKeys.isChecked())
                 .putBoolean(KEY_NORMALIZE_VOLUME, normalizeVolume.isChecked())
                 .apply();
-        setResult(RESULT_OK, new Intent().putExtra(KEY_PLAYLIST_URL, value));
+        Intent result = new Intent().putExtra(KEY_PLAYLIST_URL, value);
+        if (hasCurrentChannel) {
+            result.putExtra(EXTRA_CHANNEL_INDEX, currentChannelIndex)
+                    .putExtra(EXTRA_CHANNEL_TVG_ID, currentChannelTvgId)
+                    .putExtra(EXTRA_CHANNEL_NAME, currentChannelName.getText().toString());
+            if (!qualityLabels.isEmpty() && selectedQualityIndex >= 0
+                && selectedQualityIndex < qualityLabels.size()) {
+                result.putExtra(EXTRA_QUALITY_AUTOMATIC, false)
+                        .putExtra(
+                                EXTRA_QUALITY_BITRATE,
+                                selectedQualityIndex < qualityBitrates.size()
+                                        ? qualityBitrates.get(selectedQualityIndex)
+                                        : 0
+                        )
+                        .putExtra(
+                                EXTRA_QUALITY_WIDTH,
+                                selectedQualityIndex < qualityWidths.size()
+                                        ? qualityWidths.get(selectedQualityIndex)
+                                        : 0
+                        )
+                        .putExtra(
+                                EXTRA_QUALITY_HEIGHT,
+                                selectedQualityIndex < qualityHeights.size()
+                                        ? qualityHeights.get(selectedQualityIndex)
+                                        : 0
+                        );
+            } else if (!qualityLabels.isEmpty()) {
+                result.putExtra(EXTRA_QUALITY_AUTOMATIC, true);
+            }
+            if (subtitlesAvailable) {
+                result.putExtra(EXTRA_SUBTITLES_ENABLED, subtitlesSwitch.isChecked());
+            }
+        }
+        setResult(RESULT_OK, result);
         finish();
     }
 
