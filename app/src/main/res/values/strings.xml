@@ -21,7 +21,7 @@
     <string name="channel_controls_title">Cambio de canales</string>
     <string name="invert_channel_keys">Invertir botones arriba y abajo</string>
     <string name="invert_channel_keys_description">Activado: ↑ avanza al canal siguiente y ↓ vuelve al anterior.</string>
-    <string name="remote_help">Durante la reproducción: ↑/↓ cambia de canal · OK muestra información · → abre Reproducción · mantener OK configuración.</string>
+    <string name="remote_help">Durante la reproducción: ↑/↓ cambia de canal · OK muestra información · mantener OK configuración.</string>
     <string name="update_title">Actualización disponible</string>
     <string name="update_available">VibeM3U %1$s está lista para instalar.</string>
     <string name="update_later">Más tarde</string>
@@ -64,7 +64,7 @@
     <string name="settings_subtitles_title">Subtítulos</string>
     <string name="settings_source_heading">Fuente de canales</string>
     <string name="settings_interface_heading">Interfaz</string>
-    <string name="settings_interface_description">Usa las flechas para navegar y OK para seleccionar. Mantén OK durante la reproducción para abrir Opciones generales; el botón derecho entra directamente en Reproducción y las pestañas se cambian con ◀ y ▶.</string>
+    <string name="settings_interface_description">Usa las flechas para navegar y OK para seleccionar. Mantén OK durante la reproducción para abrir Opciones generales; las pestañas se cambian con ◀ y ▶.</string>
     <string name="settings_updates_heading">Actualizaciones</string>
     <string name="settings_updates_description">Comprueba si existe una versión nueva de VibeM3U y conserva la configuración actual.</string>
     <string name="settings_remote_help">◀ ▶ Cambiar pestaña   ·   ▲ ▼ Navegar   ·   OK Seleccionar   ·   BACK Volver</string>

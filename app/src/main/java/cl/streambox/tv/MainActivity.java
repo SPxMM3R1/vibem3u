@@ -1342,6 +1342,12 @@ public final class MainActivity extends Activity {
             return true;
         }
 
+        // Keep the right arrow inert during playback. The settings tabs are
+        // navigated only after the settings screen has been opened explicitly.
+        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            return true;
+        }
+
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
             if (keyCode == KeyEvent.KEYCODE_BACK && event.getRepeatCount() == 0) {
                 handleBackAction();
@@ -1356,10 +1362,6 @@ public final class MainActivity extends Activity {
                 return true;
             }
             if (event.getRepeatCount() == 0) {
-                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    openSettings(SettingsActivity.TAB_PLAYBACK);
-                    return true;
-                }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_INFO) {
                     if (loadFailed) {
                         refreshPlaylist(getPlaylistUrl());
