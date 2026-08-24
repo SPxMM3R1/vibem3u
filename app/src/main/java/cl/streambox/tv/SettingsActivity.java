@@ -8,11 +8,13 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.Switch;
 import android.widget.TextView;
 
@@ -20,6 +22,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class SettingsActivity extends Activity {
+    private static final float SETTINGS_PANEL_ASPECT_RATIO = 16f / 10f;
     public static final String PREFS = "streambox_settings";
     public static final String KEY_PLAYLIST_URL = "playlist_url";
     public static final String KEY_INVERT_CHANNEL_KEYS = "invert_channel_keys";
@@ -47,6 +50,7 @@ public final class SettingsActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
         enterImmersiveMode();
+        fitSettingsPanelToAspectRatio();
 
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         String existingUrl = prefs.getString(KEY_PLAYLIST_URL, "");
@@ -110,6 +114,36 @@ public final class SettingsActivity extends Activity {
             showTab(2, false);
             urlInput.requestFocus();
         }
+    }
+
+    private void fitSettingsPanelToAspectRatio() {
+        View root = findViewById(R.id.settings_root);
+        View panel = findViewById(R.id.settings_panel);
+        root.post(() -> {
+            int availableWidth = root.getWidth()
+                    - root.getPaddingLeft()
+                    - root.getPaddingRight();
+            int availableHeight = root.getHeight()
+                    - root.getPaddingTop()
+                    - root.getPaddingBottom();
+            if (availableWidth <= 0 || availableHeight <= 0) return;
+
+            int panelWidth;
+            int panelHeight;
+            if ((float) availableWidth / availableHeight > SETTINGS_PANEL_ASPECT_RATIO) {
+                panelHeight = availableHeight;
+                panelWidth = Math.round(panelHeight * SETTINGS_PANEL_ASPECT_RATIO);
+            } else {
+                panelWidth = availableWidth;
+                panelHeight = Math.round(panelWidth / SETTINGS_PANEL_ASPECT_RATIO);
+            }
+
+            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) panel.getLayoutParams();
+            params.width = panelWidth;
+            params.height = panelHeight;
+            params.gravity = Gravity.CENTER;
+            panel.setLayoutParams(params);
+        });
     }
 
     private void showTab(int selectedIndex, boolean requestFocus) {
