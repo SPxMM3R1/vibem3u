@@ -1291,17 +1291,17 @@ public final class MainActivity extends Activity {
         qualityDialogQualityFocusTarget = focusTarget;
         qualityDialogQualityTab.setOnClickListener(view -> setQualityDialogTab(0, true));
         qualityDialogSubtitlesTab.setOnClickListener(view -> setQualityDialogTab(1, true));
-        dialog.setOnKeyListener((ignored, event) -> {
+        dialog.setOnKeyListener((ignored, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-            if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_LEFT) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
                 setQualityDialogTab(qualityDialogTab - 1, true);
                 return true;
             }
-            if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                 setQualityDialogTab(qualityDialogTab + 1, true);
                 return true;
             }
-            if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_UP
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP
                     && isQualityDialogTopFocus(dialog.getWindow() == null
                     ? null
                     : dialog.getWindow().getCurrentFocus())) {
@@ -1560,7 +1560,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showOverlay(boolean keepVisible) {
-        hideLightEpg();
+        hideLightEpg.run();
         mainHandler.removeCallbacks(hideLightEpg);
         channelOverlay.setVisibility(View.VISIBLE);
         clock.setVisibility(View.VISIBLE);
