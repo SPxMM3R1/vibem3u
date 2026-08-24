@@ -2,13 +2,14 @@ package cl.streambox.tv;
 
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import java.io.IOException;
 
-public final class ExperimentalResolverCatalogTest {
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
+
+public final class ExperimentalEngineIsolationTest {
     @Test
-    public void acceptsVavooOnlyInExperimentalBuild() throws Exception {
+    public void stableBuildRejectsExperimentalVavooCatalog() {
         String json = "{"
                 + "\"schemaVersion\":1,"
                 + "\"catalogVersion\":\"1\","
@@ -23,9 +24,7 @@ public final class ExperimentalResolverCatalogTest {
                 + "\"catalogBase\":\"https://vavoo.to\""
                 + "}}]}";
 
-        assertTrue(BuildConfig.ENABLE_EXPERIMENTAL_VAVOO);
-        ResolverDefinition definition = ResolverCatalog.parse(json).getById("tvvoo");
-        assertEquals("vavoo", definition.getEngine());
-        assertFalse(definition.isEnabledByDefault());
+        assertFalse(BuildConfig.ENABLE_EXPERIMENTAL_VAVOO);
+        assertThrows(IOException.class, () -> ResolverCatalog.parse(json));
     }
 }
