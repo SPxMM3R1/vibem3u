@@ -103,8 +103,24 @@
                 android:gravity="center"
                 android:nextFocusDown="@id/playlist_url"
                 android:nextFocusLeft="@id/tab_playback"
-                android:nextFocusRight="@id/tab_interface"
+                android:nextFocusRight="@id/tab_resolvers"
                 android:text="@string/settings_tab_source"
+                android:textColor="@color/white"
+                android:textSize="@dimen/settings_tab_text_size" />
+
+            <TextView
+                android:id="@+id/tab_resolvers"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/settings_tab"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:nextFocusDown="@id/update_resolvers_button"
+                android:nextFocusLeft="@id/tab_source"
+                android:nextFocusRight="@id/tab_interface"
+                android:text="@string/settings_tab_resolvers"
                 android:textColor="@color/white"
                 android:textSize="@dimen/settings_tab_text_size" />
 
@@ -118,7 +134,7 @@
                 android:focusable="true"
                 android:gravity="center"
                 android:nextFocusDown="@id/interface_info"
-                android:nextFocusLeft="@id/tab_source"
+                android:nextFocusLeft="@id/tab_resolvers"
                 android:nextFocusRight="@id/tab_updates"
                 android:text="@string/settings_tab_interface"
                 android:textColor="@color/white"
@@ -513,6 +529,97 @@
                             android:textSize="@dimen/settings_body_text_size"
                             android:visibility="gone" />
                     </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/tab_page_resolvers"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingStart="@dimen/settings_page_horizontal_padding"
+                    android:paddingEnd="@dimen/settings_page_horizontal_padding"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_resolvers_heading"
+                        android:textColor="@color/cyan"
+                        android:textSize="@dimen/settings_heading_text_size"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/settings_section_margin_top"
+                        android:background="@drawable/settings_section_card"
+                        android:orientation="vertical"
+                        android:padding="@dimen/settings_card_padding">
+
+                        <TextView
+                            android:id="@+id/resolver_catalog_version"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/settings_card_title_text_size"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="@string/resolver_catalog_description"
+                            android:textColor="@color/muted"
+                            android:textSize="@dimen/settings_body_text_size" />
+
+                        <Button
+                            android:id="@+id/update_resolvers_button"
+                            android:layout_width="match_parent"
+                            android:layout_height="@dimen/settings_action_height"
+                            android:layout_marginTop="12dp"
+                            android:background="@drawable/focus_button"
+                            android:focusable="true"
+                            android:includeFontPadding="false"
+                            android:minHeight="0dp"
+                            android:minWidth="0dp"
+                            android:nextFocusUp="@id/tab_resolvers"
+                            android:nextFocusDown="@id/save_button"
+                            android:text="@string/update_resolvers"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/settings_action_text_size" />
+
+                        <TextView
+                            android:id="@+id/resolver_update_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:textColor="@color/muted"
+                            android:textSize="@dimen/settings_body_text_size"
+                            android:visibility="gone" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/settings_section_margin_top"
+                        android:text="@string/resolver_groups_title"
+                        android:textColor="@color/cyan"
+                        android:textSize="@dimen/settings_card_title_text_size"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/resolver_groups_description"
+                        android:textColor="@color/muted"
+                        android:textSize="@dimen/settings_body_text_size" />
+
+                    <LinearLayout
+                        android:id="@+id/resolver_groups_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
                 </LinearLayout>
 
                 <LinearLayout

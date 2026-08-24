@@ -9,4 +9,14 @@ public interface StreamResolver {
     boolean supports(Channel channel);
 
     ResolvedPlaybackSource resolve(Channel channel) throws IOException;
+
+    default String stableSourceId(Channel channel) {
+        if (channel == null) return "";
+        String tvgId = channel.getTvgId();
+        return tvgId == null || tvgId.isBlank() ? channel.getName() : tvgId;
+    }
+
+    default long cacheTtlMillis() {
+        return 0L;
+    }
 }

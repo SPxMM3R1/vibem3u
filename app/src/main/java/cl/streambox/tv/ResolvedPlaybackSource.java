@@ -12,6 +12,8 @@ public final class ResolvedPlaybackSource {
     private final Map<String, String> requestHeaders;
     private final String userAgent;
     private final String resolverId;
+    private final String stableSourceId;
+    private final long expiresAtMillis;
     private final boolean dynamicallyResolved;
 
     private ResolvedPlaybackSource(
@@ -19,6 +21,8 @@ public final class ResolvedPlaybackSource {
             Map<String, String> requestHeaders,
             String userAgent,
             String resolverId,
+            String stableSourceId,
+            long expiresAtMillis,
             boolean dynamicallyResolved
     ) {
         this.playbackUri = Objects.requireNonNull(playbackUri, "playbackUri");
@@ -29,6 +33,10 @@ public final class ResolvedPlaybackSource {
         );
         this.userAgent = userAgent == null ? "" : userAgent;
         this.resolverId = resolverId == null || resolverId.isBlank() ? null : resolverId;
+        this.stableSourceId = stableSourceId == null || stableSourceId.isBlank()
+                ? null
+                : stableSourceId;
+        this.expiresAtMillis = Math.max(0L, expiresAtMillis);
         this.dynamicallyResolved = dynamicallyResolved;
     }
 
@@ -39,6 +47,8 @@ public final class ResolvedPlaybackSource {
                 Collections.emptyMap(),
                 userAgent,
                 null,
+                null,
+                0L,
                 false
         );
     }
@@ -54,6 +64,27 @@ public final class ResolvedPlaybackSource {
                 requestHeaders,
                 userAgent,
                 resolverId,
+                null,
+                0L,
+                true
+        );
+    }
+
+    public static ResolvedPlaybackSource dynamic(
+            String resolverId,
+            String stableSourceId,
+            URI playbackUri,
+            Map<String, String> requestHeaders,
+            String userAgent,
+            long expiresAtMillis
+    ) {
+        return new ResolvedPlaybackSource(
+                playbackUri,
+                requestHeaders,
+                userAgent,
+                resolverId,
+                stableSourceId,
+                expiresAtMillis,
                 true
         );
     }
@@ -69,6 +100,8 @@ public final class ResolvedPlaybackSource {
                 Collections.emptyMap(),
                 userAgent,
                 resolverId,
+                null,
+                0L,
                 false
         );
     }
@@ -91,6 +124,18 @@ public final class ResolvedPlaybackSource {
 
     public boolean hasResolver() {
         return resolverId != null;
+    }
+
+    public String getStableSourceId() {
+        return stableSourceId == null ? "" : stableSourceId;
+    }
+
+    public long getExpiresAtMillis() {
+        return expiresAtMillis;
+    }
+
+    public boolean isExpired(long nowMillis) {
+        return expiresAtMillis > 0L && nowMillis >= expiresAtMillis;
     }
 
     public boolean isDynamicallyResolved() {

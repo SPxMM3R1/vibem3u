@@ -45,4 +45,24 @@ public final class ProviderStreamParsersTest {
                 "{\"access_token\":\"dummy token with spaces\"}"
         );
     }
+
+    @Test
+    public void supportsCatalogDrivenMegaPatternsAndJsonPath() throws Exception {
+        ProviderStreamParsers.MeganoticiasConfig config =
+                ProviderStreamParsers.parseMeganoticiasConfig(
+                        "window.signal = { stream: 'changed-stream', secret: 'changed-key' };",
+                        "stream\\s*:\\s*'([^']+)'",
+                        "secret\\s*:\\s*'([^']+)'"
+                );
+
+        assertEquals("changed-stream", config.getStreamId());
+        assertEquals("changed-key", config.getServerKey());
+        assertEquals(
+                "fresh.token-2",
+                ProviderStreamParsers.parseMeganoticiasAccessToken(
+                        "{\"data\":{\"authorization\":\"fresh.token-2\"}}",
+                        "data.authorization"
+                )
+        );
+    }
 }

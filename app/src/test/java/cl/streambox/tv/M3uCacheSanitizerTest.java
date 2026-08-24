@@ -37,4 +37,31 @@ public final class M3uCacheSanitizerTest {
         assertFalse(sanitized.contains("legacy"));
         assertEquals(sanitized, M3uCacheSanitizer.forDisk(sanitized));
     }
+
+    @Test
+    public void neverPersistsTvVooSessionPathsAndKeepsStableMetadata() {
+        String playlist = "#EXTM3U\n"
+                + "#EXTINF:-1 tvg-id=\"SkySportsNFL.uk@TvVoo\" "
+                + "x-resolver=\"tvvoo\" x-resolver-ids=\"stable-one;stable-two\",NFL\n"
+                + "http://temporary.example/sunshine/SECRET/hls/index.m3u8\n";
+
+        String sanitized = M3uCacheSanitizer.forDisk(playlist);
+
+        assertTrue(sanitized.contains("x-resolver-ids=\"stable-one;stable-two\""));
+        assertTrue(sanitized.contains("https://resolver.invalid/tvvoo.m3u8"));
+        assertFalse(sanitized.contains("SECRET"));
+        assertEquals(sanitized, M3uCacheSanitizer.forDisk(sanitized));
+    }
+
+    @Test
+    public void keepsNonCredentialQueryParametersForDynamicFallbacks() {
+        String playlist = "#EXTM3U\n"
+                + "#EXTINF:-1 tvg-id=\"0201\" x-resolver=\"24horas\",24 Horas\n"
+                + "https://mdstrm.com/live.m3u8?quality=high&access_token=secret\n";
+
+        String sanitized = M3uCacheSanitizer.forDisk(playlist);
+
+        assertTrue(sanitized.contains("?quality=high"));
+        assertFalse(sanitized.contains("access_token"));
+    }
 }

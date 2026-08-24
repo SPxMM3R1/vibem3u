@@ -1,5 +1,8 @@
 package cl.streambox.tv;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.io.IOException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -35,32 +38,64 @@ final class ProviderStreamParsers {
     private ProviderStreamParsers() {}
 
     static TvnConfig parseTvn(String html) throws IOException {
+        return parseTvn(html, "", "", TVN_DEFAULT_ID);
+    }
+
+    static TvnConfig parseTvn(
+            String html,
+            String configuredIdPattern,
+            String configuredTokenPattern,
+            String defaultId
+    ) throws IOException {
         if (html == null || html.isBlank()) {
             throw new IOException("TVN no publico la configuracion del reproductor.");
         }
 
         String streamId = null;
         String accessToken = null;
-        Matcher fields = TVN_FIELD_PATTERN.matcher(html);
-        while (fields.find()) {
-            String field = fields.group(1);
-            String value = fields.group(2);
-            if ("id".equals(field)
-                    && streamId == null
-                    && SAFE_STREAM_ID_PATTERN.matcher(value).matches()) {
-                streamId = value;
-            } else if ("access_token".equals(field) && accessToken == null) {
-                accessToken = value;
+        if ((configuredIdPattern == null || configuredIdPattern.isBlank())
+                && (configuredTokenPattern == null || configuredTokenPattern.isBlank())) {
+            Matcher fields = TVN_FIELD_PATTERN.matcher(html);
+            while (fields.find()) {
+                String field = fields.group(1);
+                String value = fields.group(2);
+                if ("id".equals(field)
+                        && streamId == null
+                        && SAFE_STREAM_ID_PATTERN.matcher(value).matches()) {
+                    streamId = value;
+                } else if ("access_token".equals(field) && accessToken == null) {
+                    accessToken = value;
+                }
+                if (streamId != null && accessToken != null) break;
             }
-            if (streamId != null && accessToken != null) break;
+        } else {
+            streamId = firstCaptured(html, configuredIdPattern);
+            accessToken = firstCaptured(html, configuredTokenPattern);
         }
         if (accessToken == null) {
             throw new IOException("TVN no publico la autorizacion del reproductor.");
         }
+        String fallbackId = defaultId == null || defaultId.isBlank()
+                ? TVN_DEFAULT_ID
+                : defaultId.trim();
         return new TvnConfig(
-                streamId == null ? TVN_DEFAULT_ID : streamId,
+                streamId == null || !SAFE_STREAM_ID_PATTERN.matcher(streamId).matches()
+                        ? fallbackId
+                        : streamId,
                 validateToken(accessToken, "TVN")
         );
+    }
+
+    private static String firstCaptured(String input, String expression) throws IOException {
+        if (expression == null || expression.isBlank()) return null;
+        try {
+            Matcher matcher = Pattern.compile(expression, Pattern.CASE_INSENSITIVE).matcher(input);
+            return matcher.find() && matcher.groupCount() >= 1
+                    ? matcher.group(1).trim()
+                    : null;
+        } catch (RuntimeException error) {
+            throw new IOException("El patrón del proveedor es inválido.", error);
+        }
     }
 
     static MeganoticiasConfig parseMeganoticiasConfig(String html) throws IOException {
@@ -96,6 +131,28 @@ final class ProviderStreamParsers {
         return new MeganoticiasConfig(streamId, serverKey);
     }
 
+    static MeganoticiasConfig parseMeganoticiasConfig(
+            String html,
+            String configuredIdPattern,
+            String configuredServerKeyPattern
+    ) throws IOException {
+        if ((configuredIdPattern == null || configuredIdPattern.isBlank())
+                && (configuredServerKeyPattern == null
+                || configuredServerKeyPattern.isBlank())) {
+            return parseMeganoticiasConfig(html);
+        }
+        if (html == null || html.isBlank()) {
+            throw new IOException("Meganoticias no publico la configuracion del reproductor.");
+        }
+        String streamId = firstCaptured(html, configuredIdPattern);
+        String serverKey = firstCaptured(html, configuredServerKeyPattern);
+        if (streamId == null || !SAFE_STREAM_ID_PATTERN.matcher(streamId).matches()
+                || serverKey == null || serverKey.isBlank()) {
+            throw new IOException("Meganoticias no publico la configuracion del reproductor.");
+        }
+        return new MeganoticiasConfig(streamId, serverKey);
+    }
+
     private static int findObjectEnd(String html, int objectStart) {
         int limit = Math.min(html.length(), objectStart + MAX_MEGA_CONFIG_BLOCK_LENGTH);
         int depth = 0;
@@ -125,14 +182,32 @@ final class ProviderStreamParsers {
     }
 
     static String parseMeganoticiasAccessToken(String json) throws IOException {
+        return parseMeganoticiasAccessToken(json, "access_token");
+    }
+
+    static String parseMeganoticiasAccessToken(String json, String tokenPath)
+            throws IOException {
         if (json == null || json.isBlank()) {
             throw new IOException("Meganoticias devolvio una respuesta invalida.");
         }
-        Matcher matcher = JSON_ACCESS_TOKEN_PATTERN.matcher(json);
-        if (!matcher.find()) {
-            throw new IOException("Meganoticias devolvio una respuesta invalida.");
+        try {
+            Object value = ResolverPayloadParsers.jsonValueAtPath(
+                    new JSONObject(json),
+                    tokenPath
+            );
+            if (value instanceof String) {
+                return validateToken((String) value, "Meganoticias");
+            }
+        } catch (JSONException ignored) {
+            // Compatibility fallback below accepts the original flat response.
         }
-        return validateToken(matcher.group(1), "Meganoticias");
+        if ("access_token".equals(tokenPath)) {
+            Matcher matcher = JSON_ACCESS_TOKEN_PATTERN.matcher(json);
+            if (matcher.find()) {
+                return validateToken(matcher.group(1), "Meganoticias");
+            }
+        }
+        throw new IOException("Meganoticias devolvio una respuesta invalida.");
     }
 
     private static String validateToken(String token, String provider) throws IOException {

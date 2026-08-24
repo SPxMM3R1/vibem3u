@@ -38,4 +38,28 @@ public class M3uParserTest {
         assertEquals("Canal 1", channels.get(0).getName());
         assertNull(channels.get(0).getLogoUri());
     }
+
+    @Test
+    public void preservesDeclarativeResolverAttributes() {
+        String playlist = "#EXTM3U\n"
+                + "#EXTINF:-1 tvg-id=\"SkySportsNFL.uk@TvVoo\" "
+                + "x-resolver=\"tvvoo\" "
+                + "x-resolver-endpoint=\"https://tvvoo.hayd.uk/stream/tv\" "
+                + "x-resolver-ids=\"first;second\" "
+                + "x-resolver-refresh=\"on_play\",Sky Sports NFL\n"
+                + "https://example.org/fallback.m3u8\n";
+
+        Channel channel = M3uParser.parse(
+                playlist,
+                URI.create("https://example.org/list.m3u")
+        ).get(0);
+
+        assertEquals("tvvoo", channel.getAttributes().get("x-resolver"));
+        assertEquals(
+                "https://tvvoo.hayd.uk/stream/tv",
+                channel.getAttributes().get("x-resolver-endpoint")
+        );
+        assertEquals("first;second", channel.getAttributes().get("x-resolver-ids"));
+        assertEquals("on_play", channel.getAttributes().get("x-resolver-refresh"));
+    }
 }

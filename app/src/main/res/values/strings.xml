@@ -49,6 +49,7 @@
     <string name="settings_tab_general">General</string>
     <string name="settings_tab_playback">Reproducción</string>
     <string name="settings_tab_source">Fuente</string>
+    <string name="settings_tab_resolvers">Resolutores</string>
     <string name="settings_tab_interface">Interfaz</string>
     <string name="settings_tab_updates">Actualizaciones</string>
     <string name="settings_general_heading">General</string>
@@ -63,6 +64,18 @@
     <string name="settings_quality_no_options">El canal todavía no informa sus calidades disponibles.</string>
     <string name="settings_subtitles_title">Subtítulos</string>
     <string name="settings_source_heading">Fuente de canales</string>
+    <string name="settings_resolvers_heading">Fuentes dinámicas</string>
+    <string name="resolver_catalog_version">Catálogo de resolutores · %1$s</string>
+    <string name="resolver_catalog_description">Las reglas de identificación, endpoints y aliases se actualizan por separado. La app solo acepta datos validados para sus motores integrados; nunca descarga ni ejecuta código.</string>
+    <string name="update_resolvers">Actualizar resolutores</string>
+    <string name="resolver_update_checking">Buscando reglas nuevas…</string>
+    <string name="resolver_update_installed">Catálogo %1$s instalado. Se aplicará al guardar.</string>
+    <string name="resolver_update_up_to_date">Los resolutores ya están actualizados.</string>
+    <string name="resolver_update_error">No se pudo obtener un catálogo válido. Se conserva la versión instalada.</string>
+    <string name="resolver_catalog_load_error">No se pudo leer el catálogo. Se mantiene la compatibilidad integrada.</string>
+    <string name="resolver_groups_title">Grupos de canales</string>
+    <string name="resolver_groups_description">Desactiva un proveedor para ocultar todos sus canales. Las fuentes directas y los demás grupos no cambian.</string>
+    <string name="unknown_version">desconocida</string>
     <string name="settings_interface_heading">Interfaz</string>
     <string name="settings_interface_description">Usa las flechas para navegar y OK para seleccionar. Mantén OK durante la reproducción para abrir Opciones generales; las pestañas se cambian con ◀ y ▶.</string>
     <string name="settings_updates_heading">Actualizaciones</string>
@@ -73,4 +86,9 @@
     <string name="epg_no_information">Sin información disponible</string>
     <string name="epg_no_next_programme">No hay información siguiente</string>
     <string name="subtitles_waiting_for_text">No se han detectado subtítulos de texto en este stream.</string>
+
+    <plurals name="resolver_group_channels">
+        <item quantity="one">%1$s · %2$d canal</item>
+        <item quantity="other">%1$s · %2$d canales</item>
+    </plurals>
 </resources>

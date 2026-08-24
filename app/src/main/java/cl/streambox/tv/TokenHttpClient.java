@@ -5,8 +5,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Small cancellable HTTP client for provider pages and token APIs. */
@@ -20,6 +23,18 @@ public final class TokenHttpClient {
     private static final int MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 
     public String getText(String url, Map<String, String> headers) throws IOException {
+        return new String(
+                get(url, headers, MAX_RESPONSE_BYTES, null).getBody(),
+                StandardCharsets.UTF_8
+        );
+    }
+
+    public Response get(
+            String url,
+            Map<String, String> headers,
+            int maxResponseBytes,
+            String range
+    ) throws IOException {
         if (Thread.currentThread().isInterrupted()) {
             throw new IOException("Solicitud cancelada.");
         }
@@ -57,16 +72,39 @@ public final class TokenHttpClient {
                     }
                 }
             }
+            if (range != null && !range.isBlank()) {
+                connection.setRequestProperty("Range", range);
+            }
             if (connection.getRequestProperty("User-Agent") == null) {
                 connection.setRequestProperty("User-Agent", BROWSER_USER_AGENT);
             }
 
             int responseCode = connection.getResponseCode();
             if (responseCode < 200 || responseCode >= 300) {
-                throw new IOException("HTTP " + responseCode);
+                throw new HttpStatusException(responseCode);
             }
             try (InputStream input = connection.getInputStream()) {
-                return readUtf8(input);
+                URI finalUri;
+                try {
+                    finalUri = connection.getURL().toURI();
+                } catch (URISyntaxException error) {
+                    throw new IOException("El servidor devolvió una URL inválida.", error);
+                }
+                Map<String, String> responseHeaders = new LinkedHashMap<>();
+                for (Map.Entry<String, java.util.List<String>> entry
+                        : connection.getHeaderFields().entrySet()) {
+                    if (entry.getKey() != null && entry.getValue() != null
+                            && !entry.getValue().isEmpty()) {
+                        responseHeaders.put(entry.getKey(), entry.getValue().get(0));
+                    }
+                }
+                return new Response(
+                        responseCode,
+                        finalUri,
+                        connection.getContentType(),
+                        responseHeaders,
+                        readLimited(input, Math.max(1, maxResponseBytes))
+                );
             }
         } finally {
             if (connection != null) {
@@ -100,7 +138,7 @@ public final class TokenHttpClient {
         return result.toString();
     }
 
-    private static String readUtf8(InputStream input) throws IOException {
+    private static byte[] readLimited(InputStream input, int maximumBytes) throws IOException {
         ByteArrayOutputStream output = new ByteArrayOutputStream(64 * 1024);
         byte[] buffer = new byte[16 * 1024];
         int total = 0;
@@ -110,11 +148,50 @@ public final class TokenHttpClient {
                 throw new IOException("Solicitud cancelada.");
             }
             total += count;
-            if (total > MAX_RESPONSE_BYTES) {
+            if (total > maximumBytes) {
                 throw new IOException("Respuesta demasiado grande.");
             }
             output.write(buffer, 0, count);
         }
-        return output.toString(StandardCharsets.UTF_8.name());
+        return output.toByteArray();
+    }
+
+    public static final class Response {
+        private final int statusCode;
+        private final URI finalUri;
+        private final String contentType;
+        private final Map<String, String> headers;
+        private final byte[] body;
+
+        Response(
+                int statusCode,
+                URI finalUri,
+                String contentType,
+                Map<String, String> headers,
+                byte[] body
+        ) {
+            this.statusCode = statusCode;
+            this.finalUri = finalUri;
+            this.contentType = contentType == null ? "" : contentType;
+            this.headers = Collections.unmodifiableMap(new LinkedHashMap<>(headers));
+            this.body = body;
+        }
+
+        public int getStatusCode() { return statusCode; }
+        public URI getFinalUri() { return finalUri; }
+        public String getContentType() { return contentType; }
+        public Map<String, String> getHeaders() { return headers; }
+        public byte[] getBody() { return body; }
+    }
+
+    public static final class HttpStatusException extends IOException {
+        private final int statusCode;
+
+        HttpStatusException(int statusCode) {
+            super("HTTP " + statusCode);
+            this.statusCode = statusCode;
+        }
+
+        public int getStatusCode() { return statusCode; }
     }
 }

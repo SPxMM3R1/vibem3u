@@ -21,7 +21,9 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -29,6 +31,10 @@ public final class SettingsActivity extends Activity {
     private static final float SETTINGS_PANEL_ASPECT_RATIO = 16f / 10f;
     public static final int TAB_GENERAL = 0;
     public static final int TAB_PLAYBACK = 1;
+    public static final int TAB_SOURCE = 2;
+    public static final int TAB_RESOLVERS = 3;
+    public static final int TAB_INTERFACE = 4;
+    public static final int TAB_UPDATES = 5;
     public static final String PREFS = "streambox_settings";
     public static final String KEY_PLAYLIST_URL = "playlist_url";
     public static final String KEY_INVERT_CHANNEL_KEYS = "invert_channel_keys";
@@ -48,6 +54,9 @@ public final class SettingsActivity extends Activity {
     public static final String EXTRA_QUALITY_HEIGHT = "quality_height";
     public static final String EXTRA_SUBTITLES_AVAILABLE = "subtitles_available";
     public static final String EXTRA_SUBTITLES_ENABLED = "subtitles_enabled";
+    public static final String EXTRA_RESOLVER_CATALOG_VERSION = "resolver_catalog_version";
+    public static final String EXTRA_RESOLVER_IDS = "resolver_ids";
+    public static final String EXTRA_RESOLVER_COUNTS = "resolver_counts";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService updateExecutor = Executors.newSingleThreadExecutor();
@@ -70,6 +79,15 @@ public final class SettingsActivity extends Activity {
     private TextView qualityStatus;
     private Switch subtitlesSwitch;
     private TextView subtitlesStatus;
+    private TextView resolverCatalogVersion;
+    private Button resolverUpdateButton;
+    private TextView resolverUpdateStatus;
+    private LinearLayout resolverGroupsContainer;
+    private ResolverCatalogRepository resolverCatalogRepository;
+    private ResolverPreferences resolverPreferences;
+    private ResolverCatalog resolverCatalog;
+    private final Map<String, Switch> resolverGroupSwitches = new LinkedHashMap<>();
+    private final Map<String, Integer> resolverGroupCounts = new LinkedHashMap<>();
     private View playbackFirstFocus;
     private int currentChannelIndex = -1;
     private String currentChannelTvgId = "";
@@ -116,10 +134,15 @@ public final class SettingsActivity extends Activity {
         qualityStatus = findViewById(R.id.settings_quality_status);
         subtitlesSwitch = findViewById(R.id.settings_subtitles_switch);
         subtitlesStatus = findViewById(R.id.settings_subtitles_status);
+        resolverCatalogVersion = findViewById(R.id.resolver_catalog_version);
+        resolverUpdateButton = findViewById(R.id.update_resolvers_button);
+        resolverUpdateStatus = findViewById(R.id.resolver_update_status);
+        resolverGroupsContainer = findViewById(R.id.resolver_groups_container);
         tabs = new TextView[]{
                 findViewById(R.id.tab_general),
                 findViewById(R.id.tab_playback),
                 findViewById(R.id.tab_source),
+                findViewById(R.id.tab_resolvers),
                 findViewById(R.id.tab_interface),
                 findViewById(R.id.tab_updates)
         };
@@ -127,11 +150,14 @@ public final class SettingsActivity extends Activity {
                 findViewById(R.id.tab_page_general),
                 findViewById(R.id.tab_page_playback),
                 findViewById(R.id.tab_page_source),
+                findViewById(R.id.tab_page_resolvers),
                 findViewById(R.id.tab_page_interface),
                 findViewById(R.id.tab_page_updates)
         };
 
         appUpdater = new AppUpdater(this, updateExecutor, mainHandler);
+        resolverCatalogRepository = new ResolverCatalogRepository(this);
+        resolverPreferences = new ResolverPreferences(this);
         urlInput.setText(existingUrl);
         urlInput.setSelection(urlInput.length());
         invertChannelKeys.setChecked(prefs.getBoolean(KEY_INVERT_CHANNEL_KEYS, false));
@@ -139,11 +165,13 @@ public final class SettingsActivity extends Activity {
         TextView versionText = findViewById(R.id.current_version);
         versionText.setText(getString(R.string.current_version, BuildConfig.VERSION_NAME));
         initializeCurrentChannelOptions(getIntent());
+        initializeResolverOptions(getIntent());
 
         cancelButton.setVisibility(hasExistingUrl ? View.VISIBLE : View.GONE);
         cancelButton.setOnClickListener(v -> finish());
         saveButton.setOnClickListener(v -> save());
         updateButton.setOnClickListener(v -> checkForUpdates());
+        resolverUpdateButton.setOnClickListener(v -> checkResolverUpdates());
         for (int index = 0; index < tabs.length; index++) {
             final int tabIndex = index;
             tabs[index].setOnClickListener(v -> showTab(tabIndex, true));
@@ -153,7 +181,7 @@ public final class SettingsActivity extends Activity {
             return true;
         });
 
-        int defaultTab = hasExistingUrl ? TAB_GENERAL : 2;
+        int defaultTab = hasExistingUrl ? TAB_GENERAL : TAB_SOURCE;
         int initialTab = getIntent().getIntExtra(EXTRA_INITIAL_TAB, defaultTab);
         showTab(initialTab, false);
         firstFocusForTab(selectedTabIndex).requestFocus();
@@ -360,12 +388,124 @@ public final class SettingsActivity extends Activity {
             case 2:
                 return urlInput;
             case 3:
-                return findViewById(R.id.interface_info);
+                return resolverUpdateButton;
             case 4:
+                return findViewById(R.id.interface_info);
+            case 5:
                 return updateButton;
             default:
                 return normalizeVolume;
         }
+    }
+
+    private void initializeResolverOptions(Intent intent) {
+        ArrayList<String> resolverIds = intent.getStringArrayListExtra(EXTRA_RESOLVER_IDS);
+        ArrayList<Integer> resolverCounts = intent.getIntegerArrayListExtra(EXTRA_RESOLVER_COUNTS);
+        if (resolverIds != null) {
+            for (int index = 0; index < resolverIds.size(); index++) {
+                int count = resolverCounts != null && index < resolverCounts.size()
+                        ? resolverCounts.get(index)
+                        : 0;
+                resolverGroupCounts.put(resolverIds.get(index), Math.max(0, count));
+            }
+        }
+
+        try {
+            resolverCatalog = resolverCatalogRepository.load();
+            renderResolverOptions();
+        } catch (Exception error) {
+            String fallbackVersion = safeString(intent.getStringExtra(
+                    EXTRA_RESOLVER_CATALOG_VERSION
+            ));
+            resolverCatalogVersion.setText(getString(
+                    R.string.resolver_catalog_version,
+                    fallbackVersion.isBlank() ? getString(R.string.unknown_version) : fallbackVersion
+            ));
+            resolverUpdateStatus.setText(R.string.resolver_catalog_load_error);
+            resolverUpdateStatus.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void renderResolverOptions() {
+        if (resolverCatalog == null) return;
+        resolverCatalogVersion.setText(getString(
+                R.string.resolver_catalog_version,
+                resolverCatalog.getVersion()
+        ));
+        resolverGroupsContainer.removeAllViews();
+        resolverGroupSwitches.clear();
+
+        View previous = resolverUpdateButton;
+        for (ResolverDefinition definition : resolverCatalog.getProviders()) {
+            Switch groupSwitch = createResolverGroupSwitch(definition);
+            resolverGroupsContainer.addView(groupSwitch);
+            resolverGroupSwitches.put(definition.getId(), groupSwitch);
+            previous.setNextFocusDownId(groupSwitch.getId());
+            groupSwitch.setNextFocusUpId(previous.getId());
+            previous = groupSwitch;
+        }
+        previous.setNextFocusDownId(saveButton.getId());
+    }
+
+    private Switch createResolverGroupSwitch(ResolverDefinition definition) {
+        Switch groupSwitch = new Switch(this);
+        groupSwitch.setId(View.generateViewId());
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                getResources().getDimensionPixelSize(R.dimen.settings_control_height)
+        );
+        params.topMargin = dp(7);
+        groupSwitch.setLayoutParams(params);
+        groupSwitch.setBackgroundResource(R.drawable.settings_section_card);
+        groupSwitch.setFocusable(true);
+        groupSwitch.setGravity(Gravity.CENTER_VERTICAL);
+        groupSwitch.setPadding(dp(12), 0, dp(12), 0);
+        groupSwitch.setShowText(false);
+        groupSwitch.setTextColor(getColor(R.color.white));
+        groupSwitch.setTextSize(
+                TypedValue.COMPLEX_UNIT_PX,
+                getResources().getDimension(R.dimen.settings_control_text_size)
+        );
+        int channelCount = resolverGroupCounts.getOrDefault(definition.getId(), 0);
+        groupSwitch.setText(getResources().getQuantityString(
+                R.plurals.resolver_group_channels,
+                channelCount,
+                definition.getDisplayName(),
+                channelCount
+        ));
+        groupSwitch.setChecked(resolverPreferences.isEnabled(definition));
+        if (Build.VERSION.SDK_INT >= 21) {
+            groupSwitch.setThumbTintList(getColorStateList(R.color.cyan));
+        }
+        return groupSwitch;
+    }
+
+    private void checkResolverUpdates() {
+        resolverUpdateButton.setEnabled(false);
+        resolverUpdateStatus.setText(R.string.resolver_update_checking);
+        resolverUpdateStatus.setVisibility(View.VISIBLE);
+        updateExecutor.submit(() -> {
+            try {
+                ResolverCatalogRepository.UpdateResult update =
+                        resolverCatalogRepository.downloadAndInstall();
+                mainHandler.post(() -> {
+                    resolverUpdateButton.setEnabled(true);
+                    resolverCatalog = update.getCatalog();
+                    renderResolverOptions();
+                    resolverUpdateStatus.setText(update.isChanged()
+                            ? getString(
+                                    R.string.resolver_update_installed,
+                                    resolverCatalog.getVersion()
+                            )
+                            : R.string.resolver_update_up_to_date);
+                });
+            } catch (Exception error) {
+                mainHandler.post(() -> {
+                    resolverUpdateButton.setEnabled(true);
+                    resolverUpdateStatus.setText(R.string.resolver_update_error);
+                });
+            }
+        });
     }
 
     private void moveTabFromRemote(int delta) {
@@ -426,6 +566,14 @@ public final class SettingsActivity extends Activity {
                 .putBoolean(KEY_INVERT_CHANNEL_KEYS, invertChannelKeys.isChecked())
                 .putBoolean(KEY_NORMALIZE_VOLUME, normalizeVolume.isChecked())
                 .apply();
+        for (Map.Entry<String, Switch> entry : resolverGroupSwitches.entrySet()) {
+            ResolverDefinition definition = resolverCatalog == null
+                    ? null
+                    : resolverCatalog.getById(entry.getKey());
+            if (definition != null) {
+                resolverPreferences.setEnabled(definition, entry.getValue().isChecked());
+            }
+        }
         Intent result = new Intent().putExtra(KEY_PLAYLIST_URL, value);
         if (hasCurrentChannel) {
             result.putExtra(EXTRA_CHANNEL_INDEX, currentChannelIndex)

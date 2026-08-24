@@ -79,7 +79,11 @@ public final class MainActivity extends Activity {
     private PlaylistRepository repository;
     private EpgRepository epgRepository;
     private final PlaybackRecoveryPolicy playbackRecoveryPolicy = new PlaybackRecoveryPolicy();
-    private final StreamResolverRegistry streamResolverRegistry = new StreamResolverRegistry();
+    private final ResolverCoordinator resolverCoordinator = new ResolverCoordinator();
+    private ResolverCatalogRepository resolverCatalogRepository;
+    private ResolverPreferences resolverPreferences;
+    private StreamResolverRegistry streamResolverRegistry;
+    private Map<String, Integer> resolverChannelCounts = Collections.emptyMap();
     private final List<Channel> channels = new ArrayList<>();
 
     private PlayerView playerView;
@@ -177,6 +181,9 @@ public final class MainActivity extends Activity {
         epgRepository = new EpgRepository(this);
         channelLogoCache = new ChannelLogoCache(this);
         playbackPreferences = new PlaybackPreferences(this);
+        resolverCatalogRepository = new ResolverCatalogRepository(this);
+        resolverPreferences = new ResolverPreferences(this);
+        reloadResolverRegistry();
         bindViews();
         registerBackCallback();
         enterImmersiveMode();
@@ -184,6 +191,19 @@ public final class MainActivity extends Activity {
         appUpdater = new AppUpdater(this, networkExecutor, mainHandler);
         mainHandler.postDelayed(appUpdater::checkForUpdates, UPDATE_CHECK_DELAY_MS);
         updateClock.run();
+    }
+
+    private void reloadResolverRegistry() {
+        try {
+            streamResolverRegistry = new StreamResolverRegistry(
+                    resolverCatalogRepository.load(),
+                    resolverPreferences
+            );
+        } catch (Exception ignored) {
+            // The two original exact-ID resolvers remain available even if a
+            // local catalogue update was interrupted or became incompatible.
+            streamResolverRegistry = new StreamResolverRegistry();
+        }
     }
 
     private void bindViews() {
@@ -264,7 +284,7 @@ public final class MainActivity extends Activity {
                 overlayAwaitingPlayback = true;
                 showOverlay(true);
                 cancelScheduledPlaybackRetry();
-                if (isProviderAuthorizationError(error)) {
+                if (isProviderRefreshError(error)) {
                     handleProviderAuthorizationFailure();
                     return;
                 }
@@ -504,8 +524,17 @@ public final class MainActivity extends Activity {
                 ? null
                 : previousChannel.getStreamUri();
 
+        List<Channel> sourceChannels = playlist.getChannels();
+        resolverChannelCounts = streamResolverRegistry.countChannels(sourceChannels);
+        List<Channel> enabledChannels = new ArrayList<>();
+        for (Channel candidate : sourceChannels) {
+            if (streamResolverRegistry.isChannelEnabled(candidate)) {
+                enabledChannels.add(candidate);
+            }
+        }
+
         channels.clear();
-        channels.addAll(playlist.getChannels());
+        channels.addAll(enabledChannels);
         if (channels.isEmpty()) {
             showPlaylistError(getString(R.string.empty_playlist));
             return;
@@ -636,9 +665,23 @@ public final class MainActivity extends Activity {
         playbackResolutionRequestId++;
         playbackResolutionTask.cancel(true);
         playbackResolutionTask = null;
+        if (playbackChannel != null && streamResolverRegistry != null) {
+            resolverCoordinator.invalidate(
+                    playbackChannel,
+                    streamResolverRegistry.find(playbackChannel)
+            );
+        }
     }
 
     private void resolveAndPlay(Channel channel, long expectedGeneration) {
+        resolveAndPlay(channel, expectedGeneration, false);
+    }
+
+    private void resolveAndPlay(
+            Channel channel,
+            long expectedGeneration,
+            boolean forceRefresh
+    ) {
         if (player == null || !isCurrentPlayback(channel, expectedGeneration)) return;
         StreamResolver resolver = streamResolverRegistry.find(channel);
         if (resolver == null) {
@@ -660,7 +703,11 @@ public final class MainActivity extends Activity {
         long requestId = ++playbackResolutionRequestId;
         playbackResolutionTask = networkExecutor.submit(() -> {
             try {
-                ResolvedPlaybackSource source = resolver.resolve(channel);
+                ResolvedPlaybackSource source = resolverCoordinator.resolve(
+                        channel,
+                        resolver,
+                        forceRefresh
+                );
                 mainHandler.post(() -> {
                     if (!isCurrentPlayback(channel, expectedGeneration)
                             || requestId != playbackResolutionRequestId) return;
@@ -763,15 +810,17 @@ public final class MainActivity extends Activity {
         if (!tokenRefreshAttempted) {
             tokenRefreshAttempted = true;
             setStatus("RENOVANDO", R.color.amber);
-            codecInfo.setText("Renovando autorización");
+            codecInfo.setText("Renovando fuente");
             // Drop the rejected URL before requesting the replacement token.
             // It must not be available to a generic retry path.
             discardCurrentPlaybackSource();
+            StreamResolver resolver = streamResolverRegistry.find(channel);
+            resolverCoordinator.invalidate(channel, resolver);
             if (player != null) {
                 player.stop();
                 player.clearMediaItems();
             }
-            resolveAndPlay(channel, expectedGeneration);
+            resolveAndPlay(channel, expectedGeneration, true);
             return;
         }
 
@@ -810,10 +859,12 @@ public final class MainActivity extends Activity {
         // that URL contains the previous short-lived token. Resolve again for
         // every automatic retry, including errors that are not 401/403.
         if (playbackChannel != null && streamResolverRegistry.find(playbackChannel) != null) {
+            StreamResolver resolver = streamResolverRegistry.find(playbackChannel);
+            resolverCoordinator.invalidate(playbackChannel, resolver);
             player.stop();
             player.clearMediaItems();
             discardCurrentPlaybackSource();
-            resolveAndPlay(playbackChannel, expectedGeneration);
+            resolveAndPlay(playbackChannel, expectedGeneration, true);
             return;
         }
 
@@ -1464,6 +1515,7 @@ public final class MainActivity extends Activity {
         playbackGeneration++;
         cancelScheduledPlaybackRetry();
         cancelPlaybackResolution();
+        resolverCoordinator.clear();
         mainHandler.removeCallbacksAndMessages(null);
 
         if (exitDialog != null) {
@@ -1530,6 +1582,18 @@ public final class MainActivity extends Activity {
         if (initialTab >= 0) {
             intent.putExtra(SettingsActivity.EXTRA_INITIAL_TAB, initialTab);
         }
+        ArrayList<String> resolverIds = new ArrayList<>();
+        ArrayList<Integer> resolverCounts = new ArrayList<>();
+        for (ResolverDefinition definition : streamResolverRegistry.getDefinitions()) {
+            resolverIds.add(definition.getId());
+            resolverCounts.add(resolverChannelCounts.getOrDefault(definition.getId(), 0));
+        }
+        intent.putExtra(
+                        SettingsActivity.EXTRA_RESOLVER_CATALOG_VERSION,
+                        streamResolverRegistry.getCatalogVersion()
+                )
+                .putStringArrayListExtra(SettingsActivity.EXTRA_RESOLVER_IDS, resolverIds)
+                .putIntegerArrayListExtra(SettingsActivity.EXTRA_RESOLVER_COUNTS, resolverCounts);
         if (channels.isEmpty()
                 || channelIndex < 0
                 || channelIndex >= channels.size()) return intent;
@@ -1648,6 +1712,8 @@ public final class MainActivity extends Activity {
             String url = getPlaylistUrl();
             if (resultCode == RESULT_OK && !url.isBlank()) {
                 applyPlaybackSettingsResult(data);
+                resolverCoordinator.clear();
+                reloadResolverRegistry();
                 if (playerUsesVolumeNormalization != isVolumeNormalizationEnabled()) {
                     if (player != null) {
                         player.release();
@@ -1727,6 +1793,7 @@ public final class MainActivity extends Activity {
         if (responseCode == 401 || responseCode == 403) {
             return "Autorización rechazada.";
         }
+        if (responseCode == 404) return "Fuente caducada.";
         String message = error == null ? null : error.getMessage();
         if (message == null || message.isBlank()) return "Error desconocido.";
         return message
@@ -1734,7 +1801,7 @@ public final class MainActivity extends Activity {
                 .replaceAll("(?i)(access_token|token|serverKey)=([^&\\s]+)", "$1=[oculto]");
     }
 
-    private boolean isProviderAuthorizationError(PlaybackException error) {
+    private boolean isProviderRefreshError(PlaybackException error) {
         if (currentPlaybackSource == null || !currentPlaybackSource.hasResolver()) {
             return false;
         }
@@ -1745,7 +1812,7 @@ public final class MainActivity extends Activity {
             return false;
         }
         int responseCode = httpResponseCode(error);
-        return responseCode == 401 || responseCode == 403;
+        return responseCode == 401 || responseCode == 403 || responseCode == 404;
     }
 
     private static int httpResponseCode(Throwable error) {
