@@ -133,6 +133,7 @@ public final class MainActivity extends Activity {
     private Dialog qualityDialog;
     private LinearLayout qualityDialogOptions;
     private LinearLayout qualityDialogSubtitleOptions;
+    private TextView qualityDialogSubtitleStatus;
     private Switch qualityDialogSubtitleSwitch;
     private TextView qualityDialogQualityTab;
     private TextView qualityDialogSubtitlesTab;
@@ -1233,6 +1234,7 @@ public final class MainActivity extends Activity {
         qualityDialogQualityPage = dialog.findViewById(R.id.quality_page);
         qualityDialogSubtitlesPage = dialog.findViewById(R.id.quality_subtitles_page);
         qualityDialogSubtitleOptions = dialog.findViewById(R.id.quality_subtitle_options);
+        qualityDialogSubtitleStatus = dialog.findViewById(R.id.quality_subtitle_status);
         qualityDialogTab = 0;
 
         TextView description = dialog.findViewById(
@@ -1251,14 +1253,14 @@ public final class MainActivity extends Activity {
         qualityDialogOptions = container;
         qualityDialogSubtitleSwitch = null;
         qualityDialogChannelIdentity = PlaybackPreferences.channelIdentity(channel);
+        qualityDialogSubtitlesTab.setVisibility(View.VISIBLE);
+        qualityDialogSubtitleStatus.setVisibility(View.VISIBLE);
         View focusTarget = null;
         Button automaticButton = null;
         if (hasObservedSubtitleText(channel)) {
             qualityDialogSubtitleSwitch = createSubtitleSwitch(channel);
             qualityDialogSubtitleOptions.addView(qualityDialogSubtitleSwitch);
-            qualityDialogSubtitlesTab.setVisibility(View.VISIBLE);
-        } else {
-            qualityDialogSubtitlesTab.setVisibility(View.GONE);
+            qualityDialogSubtitleStatus.setVisibility(View.GONE);
         }
 
         if (options.size() != 1) {
@@ -1324,6 +1326,7 @@ public final class MainActivity extends Activity {
                 qualityDialog = null;
                 qualityDialogOptions = null;
                 qualityDialogSubtitleOptions = null;
+                qualityDialogSubtitleStatus = null;
                 qualityDialogSubtitleSwitch = null;
                 qualityDialogQualityTab = null;
                 qualityDialogSubtitlesTab = null;
@@ -1354,9 +1357,7 @@ public final class MainActivity extends Activity {
                 || qualityDialogQualityPage == null
                 || qualityDialogSubtitlesPage == null) return;
 
-        boolean subtitlesAvailable = qualityDialogSubtitlesTab.getVisibility() == View.VISIBLE;
         int safeTab = requestedTab <= 0 ? 0 : 1;
-        if (safeTab == 1 && !subtitlesAvailable) safeTab = 0;
         qualityDialogTab = safeTab;
 
         boolean qualitySelected = safeTab == 0;
@@ -1406,7 +1407,9 @@ public final class MainActivity extends Activity {
 
         qualityDialogSubtitleSwitch = createSubtitleSwitch(channel);
         qualityDialogSubtitleOptions.addView(qualityDialogSubtitleSwitch, 0);
-        qualityDialogSubtitlesTab.setVisibility(View.VISIBLE);
+        if (qualityDialogSubtitleStatus != null) {
+            qualityDialogSubtitleStatus.setVisibility(View.GONE);
+        }
     }
 
     private Switch createSubtitleSwitch(Channel channel) {
@@ -1741,6 +1744,8 @@ public final class MainActivity extends Activity {
             qualityDialog.dismiss();
             qualityDialog = null;
             qualityDialogOptions = null;
+            qualityDialogSubtitleOptions = null;
+            qualityDialogSubtitleStatus = null;
             qualityDialogSubtitleSwitch = null;
             qualityDialogChannelIdentity = null;
         }

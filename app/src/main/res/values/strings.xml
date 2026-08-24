@@ -71,4 +71,5 @@
     <string name="epg_no_information">Sin información disponible</string>
     <string name="epg_no_next_programme">No hay información siguiente</string>
     <string name="subtitles_tab_description">Activa o desactiva los subtítulos cuando el canal entrega texto real.</string>
+    <string name="subtitles_waiting_for_text">No se han detectado subtítulos de texto en este stream.</string>
 </resources>

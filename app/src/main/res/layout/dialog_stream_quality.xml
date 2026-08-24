@@ -127,6 +127,21 @@
                     android:textColor="@color/muted"
                     android:textSize="9sp" />
 
+                <TextView
+                    android:id="@+id/quality_subtitle_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/focus_button_compact"
+                    android:includeFontPadding="false"
+                    android:paddingStart="12dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="10dp"
+                    android:text="@string/subtitles_waiting_for_text"
+                    android:textColor="@color/muted"
+                    android:textSize="10sp" />
+
                 <LinearLayout
                     android:id="@+id/quality_subtitle_options"
                     android:layout_width="match_parent"
