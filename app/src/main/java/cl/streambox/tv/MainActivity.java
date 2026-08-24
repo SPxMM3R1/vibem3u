@@ -1416,12 +1416,16 @@ public final class MainActivity extends Activity {
         Switch subtitlesSwitch = new Switch(this);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(38)
+                dp(34)
         );
-        params.bottomMargin = dp(4);
+        params.bottomMargin = dp(6);
         subtitlesSwitch.setLayoutParams(params);
         subtitlesSwitch.setBackgroundResource(R.drawable.focus_button_compact);
-        subtitlesSwitch.setPadding(dp(12), 0, dp(8), 0);
+        subtitlesSwitch.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        subtitlesSwitch.setIncludeFontPadding(false);
+        subtitlesSwitch.setMinHeight(0);
+        subtitlesSwitch.setMinWidth(0);
+        subtitlesSwitch.setPadding(dp(12), 0, dp(12), 0);
         subtitlesSwitch.setTextColor(getColor(R.color.white));
         subtitlesSwitch.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
         subtitlesSwitch.setAllCaps(false);
