@@ -294,9 +294,15 @@ final class VavooSessionClient {
             }
             if (best >= 100) scored.add(new ScoredEntry(entry, best));
         }
-        scored.sort(Comparator
-                .comparingInt((ScoredEntry value) -> value.score).reversed()
-                .thenComparing(value -> value.entry.name));
+        Collections.sort(scored, new Comparator<ScoredEntry>() {
+            @Override
+            public int compare(ScoredEntry left, ScoredEntry right) {
+                int byScore = Integer.compare(right.score, left.score);
+                return byScore != 0
+                        ? byScore
+                        : left.entry.name.compareTo(right.entry.name);
+            }
+        });
         List<CatalogEntry> result = new ArrayList<>();
         for (ScoredEntry value : scored) result.add(value.entry);
         return result;
