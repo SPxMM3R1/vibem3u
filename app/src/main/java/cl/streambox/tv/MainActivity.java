@@ -1305,9 +1305,11 @@ public final class MainActivity extends Activity {
                     && isQualityDialogTopFocus(dialog.getWindow() == null
                     ? null
                     : dialog.getWindow().getCurrentFocus())) {
-                qualityDialogTab == 1
-                        ? qualityDialogSubtitlesTab.requestFocus()
-                        : qualityDialogQualityTab.requestFocus();
+                if (qualityDialogTab == 1) {
+                    qualityDialogSubtitlesTab.requestFocus();
+                } else {
+                    qualityDialogQualityTab.requestFocus();
+                }
                 return true;
             }
             return false;
