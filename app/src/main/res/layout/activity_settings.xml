@@ -215,6 +215,7 @@
                                     android:background="@drawable/settings_section_card"
                                     android:focusable="true"
                                     android:nextFocusUp="@id/tab_general"
+                                    android:nextFocusDown="@id/save_button"
                                     android:paddingStart="12dp"
                                     android:paddingEnd="12dp"
                                     android:showText="false"
@@ -335,6 +336,7 @@
                             android:background="@drawable/settings_section_card"
                             android:focusable="true"
                             android:nextFocusUp="@id/tab_playback"
+                            android:nextFocusDown="@id/save_button"
                             android:paddingStart="12dp"
                             android:paddingEnd="12dp"
                             android:showText="false"
@@ -404,6 +406,7 @@
                             android:imeOptions="actionDone"
                             android:inputType="textUri"
                             android:nextFocusUp="@id/tab_source"
+                            android:nextFocusDown="@id/save_button"
                             android:singleLine="true"
                             android:textColor="@color/white"
                             android:textColorHint="#78909C"
@@ -445,6 +448,7 @@
                         android:background="@drawable/settings_section_card"
                         android:focusable="true"
                         android:nextFocusUp="@id/tab_interface"
+                        android:nextFocusDown="@id/save_button"
                         android:padding="@dimen/settings_info_padding"
                         android:text="@string/settings_interface_description"
                         android:textColor="@color/muted"
@@ -503,6 +507,7 @@
                             android:minHeight="0dp"
                             android:minWidth="0dp"
                             android:nextFocusUp="@id/tab_updates"
+                            android:nextFocusDown="@id/save_button"
                             android:text="@string/check_updates"
                             android:textColor="@color/white"
                             android:textSize="@dimen/settings_action_text_size" />
@@ -527,37 +532,33 @@
             android:orientation="horizontal">
 
             <Button
-                android:id="@+id/cancel_button"
-                android:layout_width="@dimen/settings_cancel_button_width"
+                android:id="@+id/save_button"
+                android:layout_width="@dimen/settings_save_button_width"
                 android:layout_height="@dimen/settings_footer_button_height"
                 android:layout_marginEnd="8dp"
                 android:background="@drawable/focus_button"
+                android:focusable="true"
                 android:includeFontPadding="false"
                 android:minHeight="0dp"
                 android:minWidth="0dp"
-                android:text="@string/cancel"
+                android:nextFocusRight="@id/cancel_button"
+                android:text="@string/save_and_play"
                 android:textColor="@color/white"
                 android:textSize="@dimen/settings_footer_text_size" />
 
             <Button
-                android:id="@+id/save_button"
-                android:layout_width="@dimen/settings_save_button_width"
+                android:id="@+id/cancel_button"
+                android:layout_width="@dimen/settings_cancel_button_width"
                 android:layout_height="@dimen/settings_footer_button_height"
                 android:background="@drawable/focus_button"
+                android:focusable="true"
                 android:includeFontPadding="false"
                 android:minHeight="0dp"
                 android:minWidth="0dp"
-                android:text="@string/save_and_play"
+                android:nextFocusLeft="@id/save_button"
+                android:text="@string/cancel"
                 android:textColor="@color/white"
                 android:textSize="@dimen/settings_footer_text_size" />
         </LinearLayout>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="@dimen/settings_remote_hint_height"
-            android:gravity="center"
-            android:text="@string/settings_remote_help"
-            android:textColor="#90A4AE"
-            android:textSize="@dimen/settings_remote_hint_text_size" />
     </LinearLayout>
 </FrameLayout>

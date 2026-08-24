@@ -38,6 +38,9 @@ public final class SettingsActivity extends Activity {
     private boolean hasExistingUrl;
     private TextView[] tabs;
     private View[] tabPages;
+    private Button saveButton;
+    private Button cancelButton;
+    private int selectedTabIndex;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,8 +65,8 @@ public final class SettingsActivity extends Activity {
         normalizeVolume = findViewById(R.id.normalize_volume);
         updateButton = findViewById(R.id.check_updates_button);
         updateStatus = findViewById(R.id.update_status);
-        Button cancelButton = findViewById(R.id.cancel_button);
-        Button saveButton = findViewById(R.id.save_button);
+        cancelButton = findViewById(R.id.cancel_button);
+        saveButton = findViewById(R.id.save_button);
         tabs = new TextView[]{
                 findViewById(R.id.tab_general),
                 findViewById(R.id.tab_playback),
@@ -112,6 +115,7 @@ public final class SettingsActivity extends Activity {
     private void showTab(int selectedIndex, boolean requestFocus) {
         if (tabs == null || tabPages == null) return;
         int safeIndex = Math.max(0, Math.min(selectedIndex, tabs.length - 1));
+        selectedTabIndex = safeIndex;
         for (int index = 0; index < tabs.length; index++) {
             boolean selected = index == safeIndex;
             tabs[index].setSelected(selected);
@@ -139,6 +143,27 @@ public final class SettingsActivity extends Activity {
             }
             focusTarget.requestFocus();
         }
+    }
+
+    private View firstFocusForTab(int tabIndex) {
+        switch (tabIndex) {
+            case 1:
+                return invertChannelKeys;
+            case 2:
+                return urlInput;
+            case 3:
+                return findViewById(R.id.interface_info);
+            case 4:
+                return updateButton;
+            default:
+                return normalizeVolume;
+        }
+    }
+
+    private void moveTabFromRemote(int delta) {
+        int nextIndex = (selectedTabIndex + delta + tabs.length) % tabs.length;
+        showTab(nextIndex, false);
+        tabs[nextIndex].requestFocus();
     }
 
     private void checkForUpdates() {
@@ -201,6 +226,21 @@ public final class SettingsActivity extends Activity {
     public boolean dispatchKeyEvent(android.view.KeyEvent event) {
         if (!hasExistingUrl && event.getKeyCode() == android.view.KeyEvent.KEYCODE_BACK) {
             return true;
+        }
+        if (event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
+            if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_LEFT) {
+                moveTabFromRemote(-1);
+                return true;
+            }
+            if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_RIGHT) {
+                moveTabFromRemote(1);
+                return true;
+            }
+            if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_UP
+                    && getCurrentFocus() == firstFocusForTab(selectedTabIndex)) {
+                tabs[selectedTabIndex].requestFocus();
+                return true;
+            }
         }
         return super.dispatchKeyEvent(event);
     }

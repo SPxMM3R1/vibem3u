@@ -26,6 +26,9 @@ public class EpgParserTest {
         EpgProgramme current = data.findCurrent("0104", currentTime);
         assertNotNull(current);
         assertEquals("Noticias Central", current.getTitle());
+        EpgProgramme next = data.findNext("0104", currentTime);
+        assertNotNull(next);
+        assertEquals("Programa siguiente", next.getTitle());
         assertNull(data.findCurrent("canal-inexistente", currentTime));
     }
 

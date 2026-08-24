@@ -12,7 +12,7 @@
     <string name="settings_source_description">Indica la dirección M3U que utiliza VibeM3U. Cuando el servidor lo permite, se valida sin volver a descargarla completa si no cambió.</string>
     <string name="settings_playback_title">Reproducción</string>
     <string name="playlist_url_hint">https://ejemplo.com/lista.m3u</string>
-    <string name="save_and_play">Guardar y reproducir</string>
+    <string name="save_and_play">Guardar</string>
     <string name="exit_dialog_title">¿Salir de VibeM3U?</string>
     <string name="stay_watching">Seguir viendo</string>
     <string name="exit">Salir</string>

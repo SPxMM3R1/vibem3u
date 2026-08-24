@@ -132,7 +132,14 @@ public final class MainActivity extends Activity {
     private Dialog exitDialog;
     private Dialog qualityDialog;
     private LinearLayout qualityDialogOptions;
+    private LinearLayout qualityDialogSubtitleOptions;
     private Switch qualityDialogSubtitleSwitch;
+    private TextView qualityDialogQualityTab;
+    private TextView qualityDialogSubtitlesTab;
+    private View qualityDialogQualityPage;
+    private View qualityDialogSubtitlesPage;
+    private View qualityDialogQualityFocusTarget;
+    private int qualityDialogTab;
     private String qualityDialogChannelIdentity;
     private String qualityPreferenceAppliedFor;
     private String subtitlePreferenceAppliedFor;
@@ -1221,6 +1228,13 @@ public final class MainActivity extends Activity {
         dialog.setContentView(R.layout.dialog_stream_quality);
         dialog.setCanceledOnTouchOutside(false);
 
+        qualityDialogQualityTab = dialog.findViewById(R.id.quality_tab_quality);
+        qualityDialogSubtitlesTab = dialog.findViewById(R.id.quality_tab_subtitles);
+        qualityDialogQualityPage = dialog.findViewById(R.id.quality_page);
+        qualityDialogSubtitlesPage = dialog.findViewById(R.id.quality_subtitles_page);
+        qualityDialogSubtitleOptions = dialog.findViewById(R.id.quality_subtitle_options);
+        qualityDialogTab = 0;
+
         TextView description = dialog.findViewById(
                 R.id.stream_quality_description
         );
@@ -1241,8 +1255,10 @@ public final class MainActivity extends Activity {
         Button automaticButton = null;
         if (hasObservedSubtitleText(channel)) {
             qualityDialogSubtitleSwitch = createSubtitleSwitch(channel);
-            container.addView(qualityDialogSubtitleSwitch);
-            focusTarget = qualityDialogSubtitleSwitch;
+            qualityDialogSubtitleOptions.addView(qualityDialogSubtitleSwitch);
+            qualityDialogSubtitlesTab.setVisibility(View.VISIBLE);
+        } else {
+            qualityDialogSubtitlesTab.setVisibility(View.GONE);
         }
 
         if (options.size() != 1) {
@@ -1272,6 +1288,31 @@ public final class MainActivity extends Activity {
         }
 
         if (focusTarget == null) focusTarget = automaticButton;
+        qualityDialogQualityFocusTarget = focusTarget;
+        qualityDialogQualityTab.setOnClickListener(view -> setQualityDialogTab(0, true));
+        qualityDialogSubtitlesTab.setOnClickListener(view -> setQualityDialogTab(1, true));
+        dialog.setOnKeyListener((ignored, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_LEFT) {
+                setQualityDialogTab(qualityDialogTab - 1, true);
+                return true;
+            }
+            if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                setQualityDialogTab(qualityDialogTab + 1, true);
+                return true;
+            }
+            if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_UP
+                    && isQualityDialogTopFocus(dialog.getWindow() == null
+                    ? null
+                    : dialog.getWindow().getCurrentFocus())) {
+                qualityDialogTab == 1
+                        ? qualityDialogSubtitlesTab.requestFocus()
+                        : qualityDialogQualityTab.requestFocus();
+                return true;
+            }
+            return false;
+        });
+        setQualityDialogTab(0, false);
         if (focusTarget != null) {
             View initialFocus = focusTarget;
             dialog.setOnShowListener(ignored -> initialFocus.requestFocus());
@@ -1280,7 +1321,13 @@ public final class MainActivity extends Activity {
             if (qualityDialog == dialog) {
                 qualityDialog = null;
                 qualityDialogOptions = null;
+                qualityDialogSubtitleOptions = null;
                 qualityDialogSubtitleSwitch = null;
+                qualityDialogQualityTab = null;
+                qualityDialogSubtitlesTab = null;
+                qualityDialogQualityPage = null;
+                qualityDialogSubtitlesPage = null;
+                qualityDialogQualityFocusTarget = null;
                 qualityDialogChannelIdentity = null;
             }
             if (!isFinishing() && !isDestroyed()) enterImmersiveMode();
@@ -1299,10 +1346,51 @@ public final class MainActivity extends Activity {
         dialog.show();
     }
 
+    private void setQualityDialogTab(int requestedTab, boolean requestFocus) {
+        if (qualityDialogQualityTab == null
+                || qualityDialogSubtitlesTab == null
+                || qualityDialogQualityPage == null
+                || qualityDialogSubtitlesPage == null) return;
+
+        boolean subtitlesAvailable = qualityDialogSubtitlesTab.getVisibility() == View.VISIBLE;
+        int safeTab = requestedTab <= 0 ? 0 : 1;
+        if (safeTab == 1 && !subtitlesAvailable) safeTab = 0;
+        qualityDialogTab = safeTab;
+
+        boolean qualitySelected = safeTab == 0;
+        qualityDialogQualityTab.setSelected(qualitySelected);
+        qualityDialogSubtitlesTab.setSelected(!qualitySelected);
+        qualityDialogQualityTab.setTextColor(getColor(
+                qualitySelected ? R.color.black : R.color.white
+        ));
+        qualityDialogSubtitlesTab.setTextColor(getColor(
+                qualitySelected ? R.color.white : R.color.black
+        ));
+        qualityDialogQualityPage.setVisibility(qualitySelected ? View.VISIBLE : View.GONE);
+        qualityDialogSubtitlesPage.setVisibility(qualitySelected ? View.GONE : View.VISIBLE);
+
+        if (requestFocus) {
+            View target = qualitySelected
+                    ? qualityDialogQualityFocusTarget
+                    : qualityDialogSubtitleSwitch;
+            if (target != null) target.requestFocus();
+            else if (qualitySelected) qualityDialogQualityTab.requestFocus();
+            else qualityDialogSubtitlesTab.requestFocus();
+        }
+    }
+
+    private boolean isQualityDialogTopFocus(View focused) {
+        if (focused == null) return false;
+        View topContent = qualityDialogTab == 1
+                ? qualityDialogSubtitleSwitch
+                : qualityDialogQualityFocusTarget;
+        return focused == topContent;
+    }
+
     private void maybeAddSubtitleOptionToQualityDialog() {
         if (qualityDialog == null
                 || !qualityDialog.isShowing()
-                || qualityDialogOptions == null
+                || qualityDialogSubtitleOptions == null
                 || qualityDialogSubtitleSwitch != null
                 || player == null
                 || channels.isEmpty()
@@ -1315,7 +1403,8 @@ public final class MainActivity extends Activity {
                 || !channelIdentity.equals(subtitleTextObservedFor)) return;
 
         qualityDialogSubtitleSwitch = createSubtitleSwitch(channel);
-        qualityDialogOptions.addView(qualityDialogSubtitleSwitch, 0);
+        qualityDialogSubtitleOptions.addView(qualityDialogSubtitleSwitch, 0);
+        qualityDialogSubtitlesTab.setVisibility(View.VISIBLE);
     }
 
     private Switch createSubtitleSwitch(Channel channel) {
