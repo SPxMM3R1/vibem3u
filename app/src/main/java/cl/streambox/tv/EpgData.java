@@ -50,6 +50,30 @@ public final class EpgData {
         return null;
     }
 
+    /**
+     * Returns the first programme after the programme currently in progress.
+     * If there is no current programme, the first future programme is used.
+     */
+    public EpgProgramme findNext(String channelId, long nowMillis) {
+        if (channelId == null || channelId.isBlank()) return null;
+        List<EpgProgramme> programmes = programmesByChannel.get(channelId);
+        if (programmes == null) return null;
+
+        boolean currentFound = false;
+        for (EpgProgramme programme : programmes) {
+            if (programme.getStartMillis() <= nowMillis
+                    && nowMillis < programme.getStopMillis()) {
+                currentFound = true;
+                continue;
+            }
+            if (programme.getStartMillis() > nowMillis
+                    && (currentFound || programme.getStartMillis() >= nowMillis)) {
+                return programme;
+            }
+        }
+        return null;
+    }
+
     public int getProgrammeCount() { return programmeCount; }
 
     List<EpgProgramme> getProgrammes() { return programmes; }

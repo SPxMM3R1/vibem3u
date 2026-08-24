@@ -64,6 +64,8 @@
         android:textSize="20sp"
         android:visibility="gone" />
 
+    <include layout="@layout/light_epg_overlay" />
+
     <LinearLayout
         android:id="@+id/channel_overlay"
         android:layout_width="match_parent"

@@ -71,6 +71,7 @@ import java.util.concurrent.Future;
 public final class MainActivity extends Activity {
     private static final int SETTINGS_REQUEST = 1001;
     private static final long OVERLAY_TIMEOUT_MS = 4_500;
+    private static final long LIGHT_EPG_TIMEOUT_MS = 6_500;
     private static final long PLAYER_RETRY_DELAY_MS = 2_500;
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
     private static final long NO_RESOLUTION_REQUEST = -1L;
@@ -92,6 +93,16 @@ public final class MainActivity extends Activity {
     private ProgressBar loadingProgress;
     private TextView loadingText;
     private TextView clock;
+    private View lightEpgOverlay;
+    private TextView lightEpgChannelNumber;
+    private TextView lightEpgChannelName;
+    private TextView lightEpgGroup;
+    private TextView lightEpgClock;
+    private ProgressBar lightEpgProgress;
+    private TextView lightEpgCurrentTitle;
+    private TextView lightEpgCurrentTime;
+    private TextView lightEpgNextTitle;
+    private TextView lightEpgNextTime;
     private ImageView channelLogo;
     private TextView channelLogoFallback;
     private TextView channelNumber;
@@ -145,6 +156,11 @@ public final class MainActivity extends Activity {
         channelOverlay.setVisibility(View.GONE);
         clock.setVisibility(View.GONE);
     };
+    private final Runnable hideLightEpg = () -> {
+        if (lightEpgOverlay != null) {
+            lightEpgOverlay.setVisibility(View.GONE);
+        }
+    };
     private final Runnable updateClock = new Runnable() {
         @Override public void run() {
             String currentTime = new SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -186,6 +202,16 @@ public final class MainActivity extends Activity {
         loadingProgress = findViewById(R.id.loading_progress);
         loadingText = findViewById(R.id.loading_text);
         clock = findViewById(R.id.clock);
+        lightEpgOverlay = findViewById(R.id.light_epg_overlay);
+        lightEpgChannelNumber = findViewById(R.id.light_epg_channel_number);
+        lightEpgChannelName = findViewById(R.id.light_epg_channel_name);
+        lightEpgGroup = findViewById(R.id.light_epg_group);
+        lightEpgClock = findViewById(R.id.light_epg_clock);
+        lightEpgProgress = findViewById(R.id.light_epg_progress);
+        lightEpgCurrentTitle = findViewById(R.id.light_epg_current_title);
+        lightEpgCurrentTime = findViewById(R.id.light_epg_current_time);
+        lightEpgNextTitle = findViewById(R.id.light_epg_next_title);
+        lightEpgNextTime = findViewById(R.id.light_epg_next_time);
         channelLogo = findViewById(R.id.channel_logo);
         channelLogoFallback = findViewById(R.id.channel_logo_fallback);
         channelNumber = findViewById(R.id.channel_number);
@@ -862,6 +888,7 @@ public final class MainActivity extends Activity {
                     : channel.getGroup());
             programmeTime.setVisibility(View.GONE);
             liveProgress.setIndeterminate(true);
+            updateLightEpgInfo();
             return;
         }
 
@@ -879,6 +906,62 @@ public final class MainActivity extends Activity {
         liveProgress.setIndeterminate(false);
         liveProgress.setMax(1000);
         liveProgress.setProgress(progress);
+        updateLightEpgInfo();
+    }
+
+    private void updateLightEpgInfo() {
+        if (lightEpgOverlay == null
+                || lightEpgOverlay.getVisibility() != View.VISIBLE
+                || channels.isEmpty()
+                || channelIndex < 0
+                || channelIndex >= channels.size()) return;
+
+        Channel channel = channels.get(channelIndex);
+        long now = System.currentTimeMillis();
+        SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
+        EpgProgramme current = epgData.findCurrent(channel.getTvgId(), now);
+        EpgProgramme next = epgData.findNext(channel.getTvgId(), now);
+
+        lightEpgChannelNumber.setText(String.format(Locale.ROOT, "%03d", channelIndex + 1));
+        lightEpgChannelName.setText(channel.getName());
+        lightEpgGroup.setText(channel.getGroup().isBlank()
+                ? getString(R.string.live_content)
+                : channel.getGroup());
+        lightEpgClock.setText(timeFormat.format(new Date(now)));
+
+        if (current == null) {
+            lightEpgCurrentTitle.setText(channel.getGroup().isBlank()
+                    ? getString(R.string.live_content)
+                    : channel.getGroup());
+            lightEpgCurrentTime.setText(R.string.epg_no_information);
+            lightEpgProgress.setIndeterminate(true);
+        } else {
+            lightEpgCurrentTitle.setText(current.getTitle());
+            lightEpgCurrentTime.setText(formatProgrammeRange(current, timeFormat));
+            long duration = current.getStopMillis() - current.getStartMillis();
+            int progress = duration <= 0 ? 0 : (int) Math.max(0, Math.min(1000,
+                    ((now - current.getStartMillis()) * 1000L) / duration));
+            lightEpgProgress.setIndeterminate(false);
+            lightEpgProgress.setMax(1000);
+            lightEpgProgress.setProgress(progress);
+        }
+
+        if (next == null) {
+            lightEpgNextTitle.setText(R.string.epg_no_next_programme);
+            lightEpgNextTime.setText("");
+        } else {
+            lightEpgNextTitle.setText(next.getTitle());
+            lightEpgNextTime.setText(formatProgrammeRange(next, timeFormat));
+        }
+    }
+
+    private static String formatProgrammeRange(
+            EpgProgramme programme,
+            SimpleDateFormat timeFormat
+    ) {
+        return timeFormat.format(new Date(programme.getStartMillis()))
+                + " — "
+                + timeFormat.format(new Date(programme.getStopMillis()));
     }
 
     private void loadChannelLogo(Channel channel, boolean revalidate) {
@@ -1386,6 +1469,8 @@ public final class MainActivity extends Activity {
     }
 
     private void showOverlay(boolean keepVisible) {
+        hideLightEpg();
+        mainHandler.removeCallbacks(hideLightEpg);
         channelOverlay.setVisibility(View.VISIBLE);
         clock.setVisibility(View.VISIBLE);
         mainHandler.removeCallbacks(hideOverlay);
@@ -1397,6 +1482,18 @@ public final class MainActivity extends Activity {
     private void showOverlayForChannelStart() {
         overlayAwaitingPlayback = true;
         showOverlay(true);
+    }
+
+    private void showLightEpg() {
+        if (channels.isEmpty() || channelIndex < 0 || channelIndex >= channels.size()) return;
+        mainHandler.removeCallbacks(hideOverlay);
+        mainHandler.removeCallbacks(hideLightEpg);
+        channelOverlay.setVisibility(View.GONE);
+        clock.setVisibility(View.GONE);
+        updateLightEpgInfo();
+        lightEpgOverlay.setVisibility(View.VISIBLE);
+        updateLightEpgInfo();
+        mainHandler.postDelayed(hideLightEpg, LIGHT_EPG_TIMEOUT_MS);
     }
 
     @Override
@@ -1412,6 +1509,14 @@ public final class MainActivity extends Activity {
             }
             // Consume ACTION_UP as well so the focused player/view cannot
             // reinterpret the release as another navigation action.
+            return true;
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN
+                    && event.getRepeatCount() == 0) {
+                showLightEpg();
+            }
             return true;
         }
 
@@ -1476,6 +1581,11 @@ public final class MainActivity extends Activity {
     }
 
     private void handleBackAction() {
+        if (lightEpgOverlay.getVisibility() == View.VISIBLE) {
+            mainHandler.removeCallbacks(hideLightEpg);
+            hideLightEpg.run();
+            return;
+        }
         if (channelOverlay.getVisibility() == View.VISIBLE
                 || clock.getVisibility() == View.VISIBLE) {
             overlayAwaitingPlayback = false;
@@ -1767,6 +1877,8 @@ public final class MainActivity extends Activity {
     @Override
     protected void onPause() {
         if (appUpdater != null) appUpdater.onHostPause();
+        mainHandler.removeCallbacks(hideLightEpg);
+        hideLightEpg.run();
         cancelScheduledPlaybackRetry();
         if (playbackChannel != null && streamResolverRegistry.find(playbackChannel) != null) {
             // Leaving the activity ends this resolver session. Resuming it

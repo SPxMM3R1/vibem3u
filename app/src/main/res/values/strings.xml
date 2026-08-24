@@ -66,4 +66,9 @@
     <string name="settings_updates_heading">Actualizaciones</string>
     <string name="settings_updates_description">Comprueba si existe una versión nueva de VibeM3U y conserva la configuración actual.</string>
     <string name="settings_remote_help">◀ ▶ Cambiar pestaña   ·   ▲ ▼ Navegar   ·   OK Seleccionar   ·   BACK Volver</string>
+    <string name="epg_now">Ahora</string>
+    <string name="epg_next">A continuación</string>
+    <string name="epg_no_information">Sin información disponible</string>
+    <string name="epg_no_next_programme">No hay información siguiente</string>
+    <string name="subtitles_tab_description">Activa o desactiva los subtítulos cuando el canal entrega texto real.</string>
 </resources>
