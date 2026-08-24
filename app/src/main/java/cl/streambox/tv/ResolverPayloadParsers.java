@@ -9,6 +9,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -170,7 +171,8 @@ final class ResolverPayloadParsers {
                 if (candidate != null) return candidate;
             }
         }
-        for (String key : object.keySet()) {
+        for (Iterator<String> keys = object.keys(); keys.hasNext();) {
+            String key = keys.next();
             boolean keyMatched = identifiers.contains(normalize(key));
             URI candidate = findManifestUri(
                     object.opt(key), identifiers, depth + 1, budget, matched || keyMatched

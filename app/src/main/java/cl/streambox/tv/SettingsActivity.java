@@ -497,7 +497,7 @@ public final class SettingsActivity extends Activity {
                                     R.string.resolver_update_installed,
                                     resolverCatalog.getVersion()
                             )
-                            : R.string.resolver_update_up_to_date);
+                            : getString(R.string.resolver_update_up_to_date));
                 });
             } catch (Exception error) {
                 mainHandler.post(() -> {

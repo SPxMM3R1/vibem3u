@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -154,7 +155,8 @@ public final class ResolverCatalog {
         if (object == null) return Collections.emptyMap();
         if (object.length() > maxEntries) throw new IOException("Configuración demasiado grande.");
         Map<String, String> values = new LinkedHashMap<>();
-        for (String key : object.keySet()) {
+        for (Iterator<String> keys = object.keys(); keys.hasNext();) {
+            String key = keys.next();
             Object raw = object.get(key);
             if (!(raw instanceof String) && !(raw instanceof Number)
                     && !(raw instanceof Boolean)) {
@@ -174,7 +176,8 @@ public final class ResolverCatalog {
         if (object == null) return Collections.emptyMap();
         if (object.length() > MAX_MATCH_VALUES) throw new IOException("Demasiados aliases.");
         Map<String, List<String>> result = new LinkedHashMap<>();
-        for (String key : object.keySet()) {
+        for (Iterator<String> keys = object.keys(); keys.hasNext();) {
+            String key = keys.next();
             JSONArray array = object.getJSONArray(key);
             if (array.length() > MAX_ALIASES_PER_CHANNEL) {
                 throw new IOException("Demasiados aliases para un canal.");

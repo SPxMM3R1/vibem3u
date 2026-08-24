@@ -107,12 +107,12 @@ final class M3uCacheSanitizer {
             if (!SENSITIVE_QUERY_KEYS.contains(key)) kept.add(parameter);
         }
         if (kept.isEmpty()) return base;
-        StringBuilder query = new StringBuilder();
+        StringBuilder sanitizedQuery = new StringBuilder();
         for (String part : kept) {
-            if (query.length() > 0) query.append('&');
-            query.append(part);
+            if (sanitizedQuery.length() > 0) sanitizedQuery.append('&');
+            sanitizedQuery.append(part);
         }
-        return base + "?" + query;
+        return base + "?" + sanitizedQuery;
     }
 
     private static Set<String> setOf(String... values) {
