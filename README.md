@@ -59,6 +59,12 @@ las credenciales del respaldo antes de usarla o la descarta si no puede migrarla
 Configuración también muestra la versión instalada y permite buscar manualmente
 una actualización desde GitHub.
 
+Desde 0.4.38, la sección **Resolutores** permite usar automáticamente TvVoo y
+Vavoo, limitar la reproducción al motor Vavoo propio o utilizar solamente el
+servicio TvVoo externo. El motor propio prueba HTTPS primero y solo usa el HTTP
+equivalente cuando la cadena TLS confirma que el certificado del nodo expiró;
+otros errores TLS siguen bloqueados.
+
 ## Compilación automática
 
 GitHub Actions realiza toda la compilación:
