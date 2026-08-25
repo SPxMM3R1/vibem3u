@@ -19,6 +19,7 @@ import javax.net.ssl.SSLPeerUnverifiedException;
 /** Resolves short-lived TvVoo candidates from stable catalogue aliases. */
 public final class TvVooStreamResolver implements StreamResolver {
     private static final String DEFAULT_ENDPOINT = "https://tvvoo.hayd.uk/stream/tv";
+    static final String PLAYBACK_USER_AGENT = "VAVOO/2.6";
 
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
@@ -67,6 +68,7 @@ public final class TvVooStreamResolver implements StreamResolver {
         int maxCandidates = definition.getIntConfig("maxCandidates", 16, 1, 32);
         boolean allowHttpFallback = definition.getBooleanConfig("allowHttpFallback", true);
         Map<String, String> jsonHeaders = Collections.singletonMap("Accept", "application/json");
+        Map<String, String> playbackHeaders = playbackHeaders();
 
         int aliasCount = 0;
         int candidateCount = 0;
@@ -83,13 +85,17 @@ public final class TvVooStreamResolver implements StreamResolver {
                 for (URI candidate : candidates) {
                     if (++candidateCount > maxCandidates) break;
                     try {
-                        URI accepted = validateCandidate(candidate, allowHttpFallback);
+                        URI accepted = validateCandidate(
+                                candidate,
+                                allowHttpFallback,
+                                playbackHeaders
+                        );
                         return ResolvedPlaybackSource.dynamic(
                                 getId(),
                                 stableSourceId(channel),
                                 accepted,
-                                Collections.emptyMap(),
-                                TokenHttpClient.BROWSER_USER_AGENT,
+                                playbackHeaders,
+                                PLAYBACK_USER_AGENT,
                                 expiresAt()
                         );
                     } catch (IOException error) {
@@ -107,10 +113,14 @@ public final class TvVooStreamResolver implements StreamResolver {
         );
     }
 
-    private URI validateCandidate(URI published, boolean allowHttpFallback) throws IOException {
+    private URI validateCandidate(
+            URI published,
+            boolean allowHttpFallback,
+            Map<String, String> playbackHeaders
+    ) throws IOException {
         String scheme = published.getScheme();
         if ("https".equalsIgnoreCase(scheme)) {
-            validator.validate(published, Collections.emptyMap());
+            validator.validate(published, playbackHeaders);
             return published;
         }
         if (!"http".equalsIgnoreCase(scheme)) {
@@ -118,13 +128,21 @@ public final class TvVooStreamResolver implements StreamResolver {
         }
         URI upgraded = withScheme(published, "https");
         try {
-            validator.validate(upgraded, Collections.emptyMap());
+            validator.validate(upgraded, playbackHeaders);
             return upgraded;
         } catch (IOException error) {
             if (!allowHttpFallback || !isCertificateFailure(error)) throw error;
-            validator.validate(published, Collections.emptyMap());
+            validator.validate(published, playbackHeaders);
             return published;
         }
+    }
+
+    static Map<String, String> playbackHeaders() {
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("User-Agent", PLAYBACK_USER_AGENT);
+        headers.put("Referer", "https://vavoo.to/");
+        headers.put("Origin", "https://vavoo.to");
+        return Collections.unmodifiableMap(headers);
     }
 
     private static List<String> generatedAliases(Channel channel) {

@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/** Validates a master/media playlist and reads the first media segment. */
+/** Validates a master/media playlist and samples a recent media segment. */
 public final class HlsStreamValidator {
     private static final int MAX_PLAYLIST_BYTES = 1024 * 1024;
     private static final int MAX_SEGMENT_PROBE_BYTES = 8 * 1024;
@@ -38,17 +38,28 @@ public final class HlsStreamValidator {
             current = loadPlaylist(resolve(current.finalUri, variant), safeHeaders);
         }
 
-        String segment = firstMediaReference(current.lines);
-        if (segment == null) throw new IOException("El HLS no publicó segmentos.");
-        TokenHttpClient.Response response = httpClient.get(
-                resolve(current.finalUri, segment).toString(),
-                safeHeaders,
-                MAX_SEGMENT_PROBE_BYTES,
-                "bytes=0-4095"
-        );
-        if (response.getBody().length == 0 || looksLikeErrorDocument(response.getBody())) {
-            throw new IOException("El primer segmento no es reproducible.");
+        List<String> segments = mediaReferences(current.lines);
+        if (segments.isEmpty()) throw new IOException("El HLS no publicó segmentos.");
+
+        IOException lastError = null;
+        for (int index : recentProbeOrder(segments.size())) {
+            try {
+                TokenHttpClient.Response response = httpClient.getPrefix(
+                        resolve(current.finalUri, segments.get(index)).toString(),
+                        safeHeaders,
+                        MAX_SEGMENT_PROBE_BYTES,
+                        "bytes=0-4095"
+                );
+                if (response.getBody().length == 0
+                        || looksLikeErrorDocument(response.getBody())) {
+                    throw new IOException("El segmento HLS no es reproducible.");
+                }
+                return;
+            } catch (IOException error) {
+                lastError = error;
+            }
         }
+        throw new IOException("El HLS no publicó un segmento reciente reproducible.", lastError);
     }
 
     private PlaylistResponse loadPlaylist(URI uri, Map<String, String> headers)
@@ -83,12 +94,20 @@ public final class HlsStreamValidator {
         return null;
     }
 
-    private static String firstMediaReference(List<String> lines) {
+    private static List<String> mediaReferences(List<String> lines) {
+        java.util.ArrayList<String> references = new java.util.ArrayList<>();
         for (String line : lines) {
             String value = line.trim();
-            if (!value.isBlank() && !value.startsWith("#")) return value;
+            if (!value.isBlank() && !value.startsWith("#")) references.add(value);
         }
-        return null;
+        return references;
+    }
+
+    static int[] recentProbeOrder(int segmentCount) {
+        if (segmentCount <= 0) return new int[0];
+        if (segmentCount == 1) return new int[]{0};
+        if (segmentCount == 2) return new int[]{0, 1};
+        return new int[]{segmentCount - 2, segmentCount - 1, segmentCount - 3};
     }
 
     private static URI resolve(URI base, String value) throws IOException {

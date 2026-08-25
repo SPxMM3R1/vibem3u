@@ -36,6 +36,32 @@ public final class TokenHttpClient {
             int maxResponseBytes,
             String range
     ) throws IOException {
+        return getInternal(url, headers, maxResponseBytes, range, false);
+    }
+
+    /**
+     * Reads at most {@code maxResponseBytes} and then closes the response.
+     *
+     * Some HLS origins ignore Range and return the complete media segment. A
+     * probe only needs the first bytes, so treating the remaining response as
+     * an oversized error would reject a healthy stream.
+     */
+    public Response getPrefix(
+            String url,
+            Map<String, String> headers,
+            int maxResponseBytes,
+            String range
+    ) throws IOException {
+        return getInternal(url, headers, maxResponseBytes, range, true);
+    }
+
+    private Response getInternal(
+            String url,
+            Map<String, String> headers,
+            int maxResponseBytes,
+            String range,
+            boolean prefixOnly
+    ) throws IOException {
         if (Thread.currentThread().isInterrupted()) {
             throw new IOException("Solicitud cancelada.");
         }
@@ -104,7 +130,9 @@ public final class TokenHttpClient {
                         finalUri,
                         connection.getContentType(),
                         responseHeaders,
-                        readLimited(input, Math.max(1, maxResponseBytes))
+                        prefixOnly
+                                ? readPrefix(input, Math.max(1, maxResponseBytes))
+                                : readLimited(input, Math.max(1, maxResponseBytes))
                 );
             }
         } finally {
@@ -153,6 +181,24 @@ public final class TokenHttpClient {
                 throw new IOException("Respuesta demasiado grande.");
             }
             output.write(buffer, 0, count);
+        }
+        return output.toByteArray();
+    }
+
+    static byte[] readPrefix(InputStream input, int maximumBytes) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream(
+                Math.min(16 * 1024, maximumBytes)
+        );
+        byte[] buffer = new byte[Math.min(16 * 1024, maximumBytes)];
+        int remaining = maximumBytes;
+        while (remaining > 0) {
+            if (Thread.currentThread().isInterrupted()) {
+                throw new IOException("Solicitud cancelada.");
+            }
+            int count = input.read(buffer, 0, Math.min(buffer.length, remaining));
+            if (count == -1) break;
+            output.write(buffer, 0, count);
+            remaining -= count;
         }
         return output.toByteArray();
     }

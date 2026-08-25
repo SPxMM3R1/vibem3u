@@ -51,8 +51,7 @@ public final class VavooStreamResolver implements StreamResolver {
                 new ArrayList<>(aliases)
         );
         IOException lastError = null;
-        Map<String, String> playbackHeaders = new LinkedHashMap<>();
-        playbackHeaders.put("User-Agent", "MediaHubMX/2");
+        Map<String, String> playbackHeaders = TvVooStreamResolver.playbackHeaders();
         for (URI candidate : candidates) {
             try {
                 validator.validate(candidate, playbackHeaders);
@@ -61,7 +60,7 @@ public final class VavooStreamResolver implements StreamResolver {
                         stableSourceId(channel),
                         candidate,
                         playbackHeaders,
-                        "MediaHubMX/2",
+                        TvVooStreamResolver.PLAYBACK_USER_AGENT,
                         expiresAt()
                 );
             } catch (IOException error) {

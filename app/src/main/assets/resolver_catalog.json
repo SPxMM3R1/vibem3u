@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026.08.24.1",
+  "catalogVersion": "2026.08.25.1",
   "providers": [
     {
       "id": "tvn",
@@ -56,7 +56,7 @@
       "name": "TvVoo",
       "engine": "tvvoo",
       "enabledByDefault": true,
-      "cacheTtlSeconds": 900,
+      "cacheTtlSeconds": 0,
       "match": {
         "tvgIds": ["PremierSports1.ie", "PremierSports2.ie", "SkySportsRacing.uk"],
         "tvgIdSuffixes": ["@TvVoo"]
