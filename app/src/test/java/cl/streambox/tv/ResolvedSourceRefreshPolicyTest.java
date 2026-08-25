@@ -29,12 +29,12 @@ public final class ResolvedSourceRefreshPolicyTest {
     }
 
     @Test
-    public void segmentFailuresNeverRefreshTheProviderResolver() {
+    public void missingSegmentIsRetriedButGoneSegmentRefreshesTheProvider() {
         assertFalse(ResolvedSourceRefreshPolicy.shouldRefresh(
                 404,
                 URI.create("https://cdn.example/live/segment-42.ts")
         ));
-        assertFalse(ResolvedSourceRefreshPolicy.shouldRefresh(
+        assertTrue(ResolvedSourceRefreshPolicy.shouldRefresh(
                 410,
                 URI.create("https://cdn.example/live/chunk-42.m4s")
         ));

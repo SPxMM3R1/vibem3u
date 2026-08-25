@@ -9,8 +9,11 @@ final class ResolvedSourceRefreshPolicy {
 
     static boolean shouldRefresh(int responseCode, URI failedRequestUri) {
         if (responseCode == 401 || responseCode == 403) return true;
-        if (responseCode != 404 && responseCode != 410) return false;
-        return isManifest(failedRequestUri);
+        // HTTP 410 is an explicit statement that the resource is gone. For a
+        // dynamically resolved HLS source that includes media segments, not
+        // only manifests: keeping the same generated host cannot recover it.
+        if (responseCode == 410) return true;
+        return responseCode == 404 && isManifest(failedRequestUri);
     }
 
     static boolean isManifest(URI uri) {

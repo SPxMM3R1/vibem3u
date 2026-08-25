@@ -294,6 +294,16 @@ public final class MainActivity extends Activity {
                 MediaItem current = player == null ? null : player.getCurrentMediaItem();
                 if (current != null && playbackRecoveryPolicy.tryConsumeRetry(error.errorCode)) {
                     schedulePlaybackRetry(current.mediaId, playbackGeneration);
+                    return;
+                }
+                // A generated host can disappear without returning an HTTP
+                // authorization code. After bounded retries of the same URL,
+                // discard it and resolve once more instead of remaining stuck
+                // on an unreachable source forever.
+                if (currentPlaybackSource != null
+                        && currentPlaybackSource.isDynamicallyResolved()
+                        && PlaybackRecoveryPolicy.isRecoverable(error.errorCode)) {
+                    handleProviderAuthorizationFailure();
                 }
             }
         });
@@ -768,6 +778,7 @@ public final class MainActivity extends Activity {
                 ? expectedResolutionRequestId
                 : NO_RESOLUTION_REQUEST;
         currentPlaybackSource = source;
+        playbackRecoveryPolicy.reset();
         player.setMediaSource(mediaSourceFor(channel, source));
         prepareAndPlay();
     }
