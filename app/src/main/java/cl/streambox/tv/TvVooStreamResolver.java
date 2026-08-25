@@ -24,14 +24,25 @@ public final class TvVooStreamResolver implements StreamResolver {
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
     private final HlsStreamValidator validator;
-    private final VavooStreamResolver directFallback;
+    private final StreamResolver directFallback;
+    private final TvVooResolutionMode resolutionMode;
 
     public TvVooStreamResolver(ResolverDefinition definition) {
+        this(definition, TvVooResolutionMode.BOTH);
+    }
+
+    public TvVooStreamResolver(
+            ResolverDefinition definition,
+            TvVooResolutionMode resolutionMode
+    ) {
         TokenHttpClient fastClient = new TokenHttpClient(4_000, 6_000);
         this.definition = definition;
         this.httpClient = fastClient;
         this.validator = new HlsStreamValidator(fastClient);
         this.directFallback = new VavooStreamResolver(definition);
+        this.resolutionMode = resolutionMode == null
+                ? TvVooResolutionMode.BOTH
+                : resolutionMode;
     }
 
     TvVooStreamResolver(
@@ -39,19 +50,29 @@ public final class TvVooStreamResolver implements StreamResolver {
             TokenHttpClient httpClient,
             HlsStreamValidator validator
     ) {
-        this(definition, httpClient, validator, new VavooStreamResolver(definition));
+        this(
+                definition,
+                httpClient,
+                validator,
+                new VavooStreamResolver(definition),
+                TvVooResolutionMode.BOTH
+        );
     }
 
     TvVooStreamResolver(
             ResolverDefinition definition,
             TokenHttpClient httpClient,
             HlsStreamValidator validator,
-            VavooStreamResolver directFallback
+            StreamResolver directFallback,
+            TvVooResolutionMode resolutionMode
     ) {
         this.definition = definition;
         this.httpClient = httpClient;
         this.validator = validator;
         this.directFallback = directFallback;
+        this.resolutionMode = resolutionMode == null
+                ? TvVooResolutionMode.BOTH
+                : resolutionMode;
     }
 
     @Override public String getId() { return definition.getId(); }
@@ -71,6 +92,10 @@ public final class TvVooStreamResolver implements StreamResolver {
 
     @Override
     public ResolvedPlaybackSource resolve(Channel channel) throws IOException {
+        if (!resolutionMode.usesExternalResolver()) {
+            return resolveDirect(channel, null);
+        }
+
         String endpointBase = channel.getAttributes().get("x-resolver-endpoint");
         if (endpointBase == null || endpointBase.isBlank()) {
             endpointBase = definition.getConfig("endpointBase", DEFAULT_ENDPOINT);
@@ -125,18 +150,25 @@ public final class TvVooStreamResolver implements StreamResolver {
             }
             if (candidateCount >= maxCandidates) break;
         }
-        if (definition.getBooleanConfig("directFallback", true)) {
-            try {
-                return directFallback.resolve(channel);
-            } catch (IOException directError) {
-                if (lastError != null) directError.addSuppressed(lastError);
-                throw new IOException(
-                        "TvVoo y Vavoo directo no entregaron una fuente reproducible.",
-                        directError
-                );
-            }
+        if (resolutionMode.usesDirectResolver()) {
+            return resolveDirect(channel, lastError);
         }
         throw new IOException("TvVoo no entregó una fuente reproducible.", lastError);
+    }
+
+    private ResolvedPlaybackSource resolveDirect(
+            Channel channel,
+            IOException externalError
+    ) throws IOException {
+        try {
+            return directFallback.resolve(channel);
+        } catch (IOException directError) {
+            if (externalError != null) directError.addSuppressed(externalError);
+            String message = resolutionMode == TvVooResolutionMode.DIRECT_ONLY
+                    ? "Vavoo directo no entregó una fuente reproducible."
+                    : "TvVoo y Vavoo directo no entregaron una fuente reproducible.";
+            throw new IOException(message, directError);
+        }
     }
 
     @Override

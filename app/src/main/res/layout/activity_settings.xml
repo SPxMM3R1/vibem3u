@@ -583,7 +583,7 @@
                             android:minHeight="0dp"
                             android:minWidth="0dp"
                             android:nextFocusUp="@id/tab_resolvers"
-                            android:nextFocusDown="@id/save_button"
+                            android:nextFocusDown="@id/tvvoo_mode_both"
                             android:text="@string/update_resolvers"
                             android:textColor="@color/white"
                             android:textSize="@dimen/settings_action_text_size" />
@@ -597,6 +597,81 @@
                             android:textSize="@dimen/settings_body_text_size"
                             android:visibility="gone" />
                     </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/settings_section_margin_top"
+                        android:text="@string/tvvoo_resolution_mode_title"
+                        android:textColor="@color/cyan"
+                        android:textSize="@dimen/settings_card_title_text_size"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/tvvoo_resolution_mode_description"
+                        android:textColor="@color/muted"
+                        android:textSize="@dimen/settings_body_text_size" />
+
+                    <RadioGroup
+                        android:id="@+id/tvvoo_resolution_mode_group"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/settings_section_card"
+                        android:orientation="vertical"
+                        android:padding="4dp">
+
+                        <RadioButton
+                            android:id="@+id/tvvoo_mode_both"
+                            android:layout_width="match_parent"
+                            android:layout_height="@dimen/settings_control_height"
+                            android:background="@drawable/focus_button"
+                            android:buttonTint="@color/cyan"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:nextFocusUp="@id/update_resolvers_button"
+                            android:nextFocusDown="@id/tvvoo_mode_direct"
+                            android:paddingStart="10dp"
+                            android:paddingEnd="10dp"
+                            android:text="@string/tvvoo_mode_both"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/settings_control_text_size" />
+
+                        <RadioButton
+                            android:id="@+id/tvvoo_mode_direct"
+                            android:layout_width="match_parent"
+                            android:layout_height="@dimen/settings_control_height"
+                            android:background="@drawable/focus_button"
+                            android:buttonTint="@color/cyan"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:nextFocusUp="@id/tvvoo_mode_both"
+                            android:nextFocusDown="@id/tvvoo_mode_external"
+                            android:paddingStart="10dp"
+                            android:paddingEnd="10dp"
+                            android:text="@string/tvvoo_mode_direct"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/settings_control_text_size" />
+
+                        <RadioButton
+                            android:id="@+id/tvvoo_mode_external"
+                            android:layout_width="match_parent"
+                            android:layout_height="@dimen/settings_control_height"
+                            android:background="@drawable/focus_button"
+                            android:buttonTint="@color/cyan"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:nextFocusUp="@id/tvvoo_mode_direct"
+                            android:nextFocusDown="@id/save_button"
+                            android:paddingStart="10dp"
+                            android:paddingEnd="10dp"
+                            android:text="@string/tvvoo_mode_external"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/settings_control_text_size" />
+                    </RadioGroup>
 
                     <TextView
                         android:layout_width="match_parent"

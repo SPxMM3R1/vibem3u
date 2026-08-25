@@ -32,7 +32,7 @@ public final class StreamResolverRegistry {
         List<StreamResolver> configured = new ArrayList<>();
         Map<String, StreamResolver> byProvider = new LinkedHashMap<>();
         for (ResolverDefinition definition : catalog.getProviders()) {
-            StreamResolver resolver = create(definition);
+            StreamResolver resolver = create(definition, preferences);
             configured.add(resolver);
             byProvider.put(definition.getId(), resolver);
         }
@@ -90,12 +90,18 @@ public final class StreamResolverRegistry {
         }
     }
 
-    private static StreamResolver create(ResolverDefinition definition) {
+    private static StreamResolver create(
+            ResolverDefinition definition,
+            ResolverPreferences preferences
+    ) {
         return switch (definition.getEngine()) {
             case "tvn" -> new TvnStreamResolver(definition);
             case "meganoticias" -> new MeganoticiasStreamResolver(definition);
             case "24horas" -> new TwentyFourHoursStreamResolver(definition);
-            case "tvvoo" -> new TvVooStreamResolver(definition);
+            case "tvvoo" -> new TvVooStreamResolver(
+                    definition,
+                    preferences.getTvVooResolutionMode()
+            );
             case "highfly" -> new HighflyStreamResolver(definition);
             case "vavoo" -> {
                 if (!BuildConfig.ENABLE_EXPERIMENTAL_VAVOO) {
