@@ -858,19 +858,10 @@ public final class MainActivity extends Activity {
         MediaItem current = player.getCurrentMediaItem();
         if (current == null || !expectedMediaId.equals(current.mediaId)) return;
 
-        // A resolver-backed channel must never retry the old MediaItem URL:
-        // that URL contains the previous short-lived token. Resolve again for
-        // every automatic retry, including errors that are not 401/403.
-        if (playbackChannel != null && streamResolverRegistry.find(playbackChannel) != null) {
-            StreamResolver resolver = streamResolverRegistry.find(playbackChannel);
-            resolverCoordinator.invalidate(playbackChannel, resolver);
-            player.stop();
-            player.clearMediaItems();
-            discardCurrentPlaybackSource();
-            resolveAndPlay(playbackChannel, expectedGeneration, true);
-            return;
-        }
-
+        // Segment timeouts, transient CDN failures and rolled live segments
+        // must keep the current resolved URL. Re-running the provider resolver
+        // here would rebuild Media3 for an error that did not invalidate the
+        // playlist or its token.
         player.stop();
         if (playbackChannel != null && currentPlaybackSource != null) {
             player.setMediaSource(mediaSourceFor(playbackChannel, currentPlaybackSource));
@@ -1798,7 +1789,11 @@ public final class MainActivity extends Activity {
         if (responseCode == 401 || responseCode == 403) {
             return "Autorización rechazada.";
         }
-        if (responseCode == 404 || responseCode == 410) return "Fuente caducada.";
+        if (responseCode == 404 || responseCode == 410) {
+            return ResolvedSourceRefreshPolicy.isManifest(failedRequestUri(error))
+                    ? "Fuente caducada."
+                    : "Segmento temporal no disponible.";
+        }
         String message = error == null ? null : error.getMessage();
         if (message == null || message.isBlank()) return "Error desconocido.";
         return message
@@ -1817,8 +1812,28 @@ public final class MainActivity extends Activity {
             return false;
         }
         int responseCode = httpResponseCode(error);
-        return responseCode == 401 || responseCode == 403
-                || responseCode == 404 || responseCode == 410;
+        return ResolvedSourceRefreshPolicy.shouldRefresh(
+                responseCode,
+                failedRequestUri(error)
+        );
+    }
+
+    private static URI failedRequestUri(Throwable error) {
+        Throwable current = error;
+        int depth = 0;
+        while (current != null && depth++ < 20) {
+            if (current instanceof HttpDataSource.InvalidResponseCodeException) {
+                Uri uri = ((HttpDataSource.InvalidResponseCodeException) current)
+                        .dataSpec.uri;
+                try {
+                    return URI.create(uri.toString());
+                } catch (IllegalArgumentException ignored) {
+                    return null;
+                }
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 
     private static int httpResponseCode(Throwable error) {
