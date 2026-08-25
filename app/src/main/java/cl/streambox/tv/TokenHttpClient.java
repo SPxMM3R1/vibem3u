@@ -19,9 +19,21 @@ public final class TokenHttpClient {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
                     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-    private static final int CONNECT_TIMEOUT_MS = 12_000;
-    private static final int READ_TIMEOUT_MS = 20_000;
+    private static final int DEFAULT_CONNECT_TIMEOUT_MS = 12_000;
+    private static final int DEFAULT_READ_TIMEOUT_MS = 20_000;
     private static final int MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
+
+    private final int connectTimeoutMs;
+    private final int readTimeoutMs;
+
+    public TokenHttpClient() {
+        this(DEFAULT_CONNECT_TIMEOUT_MS, DEFAULT_READ_TIMEOUT_MS);
+    }
+
+    TokenHttpClient(int connectTimeoutMs, int readTimeoutMs) {
+        this.connectTimeoutMs = Math.max(1_000, connectTimeoutMs);
+        this.readTimeoutMs = Math.max(1_000, readTimeoutMs);
+    }
 
     public String getText(String url, Map<String, String> headers) throws IOException {
         return new String(
@@ -81,8 +93,8 @@ public final class TokenHttpClient {
         try {
             connection = (HttpURLConnection) uri.toURL().openConnection();
             connection.setRequestMethod("GET");
-            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
-            connection.setReadTimeout(READ_TIMEOUT_MS);
+            connection.setConnectTimeout(connectTimeoutMs);
+            connection.setReadTimeout(readTimeoutMs);
             connection.setInstanceFollowRedirects(true);
             connection.setUseCaches(false);
             connection.setDoInput(true);
@@ -244,8 +256,8 @@ public final class TokenHttpClient {
         try {
             connection = (HttpURLConnection) uri.toURL().openConnection();
             connection.setRequestMethod("POST");
-            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
-            connection.setReadTimeout(READ_TIMEOUT_MS);
+            connection.setConnectTimeout(connectTimeoutMs);
+            connection.setReadTimeout(readTimeoutMs);
             connection.setInstanceFollowRedirects(false);
             connection.setUseCaches(false);
             connection.setDoInput(true);

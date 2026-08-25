@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026.08.25.2",
+  "catalogVersion": "2026.08.25.3",
   "providers": [
     {
       "id": "tvn",
@@ -63,8 +63,8 @@
       },
       "config": {
         "endpointBase": "https://tvvoo.hayd.uk/stream/tv",
-        "maxAliases": 8,
-        "maxCandidates": 16,
+        "maxAliases": 4,
+        "maxCandidates": 6,
         "streamsPath": "streams",
         "urlField": "url",
         "allowHttpFallback": true,

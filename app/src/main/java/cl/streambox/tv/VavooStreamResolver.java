@@ -15,7 +15,10 @@ public final class VavooStreamResolver implements StreamResolver {
     private final HlsStreamValidator validator;
 
     public VavooStreamResolver(ResolverDefinition definition) {
-        this(definition, new VavooSessionClient(definition), new HlsStreamValidator());
+        TokenHttpClient fastClient = new TokenHttpClient(5_000, 8_000);
+        this.definition = definition;
+        this.sessionClient = new VavooSessionClient(definition, fastClient);
+        this.validator = new HlsStreamValidator(fastClient);
     }
 
     VavooStreamResolver(

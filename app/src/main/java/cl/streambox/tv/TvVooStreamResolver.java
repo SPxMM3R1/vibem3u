@@ -27,12 +27,11 @@ public final class TvVooStreamResolver implements StreamResolver {
     private final VavooStreamResolver directFallback;
 
     public TvVooStreamResolver(ResolverDefinition definition) {
-        this(
-                definition,
-                new TokenHttpClient(),
-                new HlsStreamValidator(),
-                new VavooStreamResolver(definition)
-        );
+        TokenHttpClient fastClient = new TokenHttpClient(4_000, 6_000);
+        this.definition = definition;
+        this.httpClient = fastClient;
+        this.validator = new HlsStreamValidator(fastClient);
+        this.directFallback = new VavooStreamResolver(definition);
     }
 
     TvVooStreamResolver(
@@ -79,7 +78,10 @@ public final class TvVooStreamResolver implements StreamResolver {
         endpointBase = validEndpoint(endpointBase);
 
         LinkedHashSet<String> aliases = new LinkedHashSet<>(definition.resolverAliases(channel));
-        aliases.addAll(generatedAliases(channel));
+        // Explicit M3U aliases are authoritative. Generated aliases are only
+        // compatibility fallbacks; querying both delays the direct engine
+        // behind unrelated dead candidates.
+        if (aliases.isEmpty()) aliases.addAll(generatedAliases(channel));
         int maxAliases = definition.getIntConfig("maxAliases", 8, 1, 12);
         int maxCandidates = definition.getIntConfig("maxCandidates", 16, 1, 32);
         boolean allowHttpFallback = definition.getBooleanConfig("allowHttpFallback", true);
