@@ -70,7 +70,7 @@ public final class MainActivity extends Activity {
     private static final long PLAYER_RETRY_DELAY_MS = 2_500;
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
     private static final long NO_RESOLUTION_REQUEST = -1L;
-    private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.36 (Android TV)";
+    private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.37 (Android TV)";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
