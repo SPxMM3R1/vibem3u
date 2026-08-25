@@ -55,13 +55,19 @@ public final class VavooStreamResolver implements StreamResolver {
         );
         IOException lastError = null;
         Map<String, String> playbackHeaders = TvVooStreamResolver.playbackHeaders();
+        boolean allowHttpFallback = definition.getBooleanConfig("allowHttpFallback", true);
         for (URI candidate : candidates) {
             try {
-                validator.validate(candidate, playbackHeaders);
+                URI accepted = TvVooStreamResolver.validateCandidate(
+                        validator,
+                        candidate,
+                        allowHttpFallback,
+                        playbackHeaders
+                );
                 return ResolvedPlaybackSource.dynamic(
                         getId(),
                         stableSourceId(channel),
-                        candidate,
+                        accepted,
                         playbackHeaders,
                         TvVooStreamResolver.PLAYBACK_USER_AGENT,
                         expiresAt()

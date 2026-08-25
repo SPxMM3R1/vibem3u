@@ -4,6 +4,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.net.URI;
+import java.security.cert.CertificateExpiredException;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -58,6 +59,21 @@ public final class TvVooResolutionModeTest {
 
         assertThrows(IOException.class, () -> resolver.resolve(channel()));
         assertEquals(0, direct.resolveCalls);
+    }
+
+    @Test
+    public void httpFallbackAcceptsOnlyAnExpiredCertificate() {
+        IOException expired = new IOException(
+                "TLS",
+                new CertificateExpiredException("NotAfter: expired")
+        );
+        IOException unrelatedHandshake = new IOException(
+                "TLS",
+                new javax.net.ssl.SSLHandshakeException("certificate_unknown")
+        );
+
+        assertTrue(TvVooStreamResolver.isExpiredCertificateFailure(expired));
+        assertFalse(TvVooStreamResolver.isExpiredCertificateFailure(unrelatedHandshake));
     }
 
     private static TvVooStreamResolver resolver(

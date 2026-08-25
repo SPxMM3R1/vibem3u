@@ -5,6 +5,7 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.CertificateException;
+import java.security.cert.CertificateExpiredException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -129,6 +130,7 @@ public final class TvVooStreamResolver implements StreamResolver {
                     if (++candidateCount > maxCandidates) break;
                     try {
                         URI accepted = validateCandidate(
+                                validator,
                                 candidate,
                                 allowHttpFallback,
                                 playbackHeaders
@@ -176,15 +178,23 @@ public final class TvVooStreamResolver implements StreamResolver {
         directFallback.clearSensitiveState();
     }
 
-    private URI validateCandidate(
+    static URI validateCandidate(
+            HlsStreamValidator validator,
             URI published,
             boolean allowHttpFallback,
             Map<String, String> playbackHeaders
     ) throws IOException {
         String scheme = published.getScheme();
         if ("https".equalsIgnoreCase(scheme)) {
-            validator.validate(published, playbackHeaders);
-            return published;
+            try {
+                validator.validate(published, playbackHeaders);
+                return published;
+            } catch (IOException error) {
+                if (!allowHttpFallback || !isExpiredCertificateFailure(error)) throw error;
+                URI fallback = withScheme(published, "http");
+                validator.validate(fallback, playbackHeaders);
+                return fallback;
+            }
         }
         if (!"http".equalsIgnoreCase(scheme)) {
             throw new IOException("TvVoo publicó una URL inválida.");
@@ -194,7 +204,7 @@ public final class TvVooStreamResolver implements StreamResolver {
             validator.validate(upgraded, playbackHeaders);
             return upgraded;
         } catch (IOException error) {
-            if (!allowHttpFallback || !isCertificateFailure(error)) throw error;
+            if (!allowHttpFallback || !isExpiredCertificateFailure(error)) throw error;
             validator.validate(published, playbackHeaders);
             return published;
         }
@@ -274,13 +284,22 @@ public final class TvVooStreamResolver implements StreamResolver {
         }
     }
 
-    private static boolean isCertificateFailure(Throwable error) {
+    static boolean isExpiredCertificateFailure(Throwable error) {
         Throwable current = error;
         int depth = 0;
         while (current != null && depth++ < 12) {
+            if (current instanceof CertificateExpiredException) return true;
             if (current instanceof SSLHandshakeException
                     || current instanceof SSLPeerUnverifiedException
-                    || current instanceof CertificateException) return true;
+                    || current instanceof CertificateException) {
+                String message = current.getMessage();
+                String normalized = message == null
+                        ? ""
+                        : message.toLowerCase(Locale.ROOT);
+                if (normalized.contains("expired") || normalized.contains("notafter")) {
+                    return true;
+                }
+            }
             current = current.getCause();
         }
         return false;
