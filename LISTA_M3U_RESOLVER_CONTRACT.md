@@ -60,12 +60,44 @@ Reglas:
 
 - `x-resolver="tvvoo"` es obligatorio para las nuevas entradas.
 - `x-resolver-ids` contiene aliases estables, no URLs ni tokens.
+- Cuando existen `x-resolver-ids`, su orden es autoritativo: VibeM3U no genera
+  aliases adicionales que puedan retrasar o desviar la selección del canal.
 - Los aliases pueden mantenerse URL-encoded como ya aparecen en
   `TVVOO_STREAM_RESOLVER_IDS`; VibeM3U evita codificarlos dos veces.
 - La URL de la línea siguiente es solo compatibilidad para otros reproductores.
 - No crear un canal adicional por cada alias o país.
 - Premier Sports 1, Premier Sports 2 y Sky Sports Racing también deben recibir
   metadatos explícitos aunque conserven su `tvg-id` histórico.
+
+El proveedor `tvvoo` del `resolver-catalog.json` debe conservar
+`directFallback: true` y los endpoints HTTPS permitidos de Vavoo (`www.vavoo.tv`
+o `www.vypn.net` para la sesión; `vavoo.to` y `kool.to` para catálogo y
+resolución). Este fallback es lógica interna de VibeM3U: la lista no debe
+publicar firmas, URLs resueltas ni cabeceras de reproducción. Si
+`tvvoo.hayd.uk` no entrega un candidato sano, la app obtiene una firma nueva,
+busca únicamente el canal solicitado mediante sus aliases y elimina la firma
+de RAM al terminar la resolución.
+
+Configuración mínima recomendada para ese proveedor:
+
+```json
+{
+  "endpointBase": "https://tvvoo.hayd.uk/stream/tv",
+  "maxAliases": 4,
+  "maxCandidates": 6,
+  "directFallback": true,
+  "pingUrl": "https://www.vavoo.tv/api/app/ping",
+  "fallbackPingUrl": "https://www.vypn.net/api/app/ping",
+  "catalogBase": "https://vavoo.to",
+  "fallbackCatalogBase": "https://kool.to",
+  "catalogPath": "mediahubmx-catalog.json",
+  "resolvePath": "mediahubmx-resolve.json",
+  "maxSearchTargets": 4,
+  "maxSearchPages": 2,
+  "maxSearchItems": 100,
+  "maxResolveCandidates": 6
+}
+```
 
 ## Highfly
 
