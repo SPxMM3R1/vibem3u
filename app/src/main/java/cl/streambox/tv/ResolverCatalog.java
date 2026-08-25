@@ -286,7 +286,9 @@ public final class ResolverCatalog {
                 "www.meganoticias.cl", "meganoticias.cl", "api.mega.cl", "mdstrm.com"
         ));
         result.put("24horas", setOf("www.24horas.cl", "24horas.cl", "mdstrm.com"));
-        result.put("tvvoo", setOf("tvvoo.hayd.uk"));
+        result.put("tvvoo", setOf(
+                "tvvoo.hayd.uk", "www.vavoo.tv", "www.vypn.net", "vavoo.to", "kool.to"
+        ));
         result.put("highfly", setOf(
                 "sports.highfly.dev", "leaf.highfly.dev", "raw.githubusercontent.com"
         ));

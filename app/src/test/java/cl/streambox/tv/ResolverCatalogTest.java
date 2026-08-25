@@ -62,6 +62,23 @@ public final class ResolverCatalogTest {
     }
 
     @Test
+    public void acceptsOnlyKnownDirectVavooHostsForTvVooFallback() throws Exception {
+        String valid = catalogJson().replace(
+                "\"endpointBase\":\"https://tvvoo.hayd.uk/stream/tv\"",
+                "\"endpointBase\":\"https://tvvoo.hayd.uk/stream/tv\","
+                        + "\"pingUrl\":\"https://www.vypn.net/api/app/ping\","
+                        + "\"catalogBase\":\"https://vavoo.to\""
+        );
+        ResolverCatalog.parse(valid);
+
+        String invalid = valid.replace(
+                "https://www.vypn.net/api/app/ping",
+                "https://attacker.invalid/api/app/ping"
+        );
+        assertThrows(IOException.class, () -> ResolverCatalog.parse(invalid));
+    }
+
+    @Test
     public void m3uAliasesTakePriorityAndNameMapRemainsACompatibilityFallback()
             throws Exception {
         String json = catalogJson().replace(

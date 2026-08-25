@@ -86,9 +86,7 @@ public final class StreamResolverRegistry {
 
     public void clearSensitiveState() {
         for (StreamResolver resolver : resolvers) {
-            if (resolver instanceof VavooStreamResolver) {
-                ((VavooStreamResolver) resolver).clearSensitiveState();
-            }
+            resolver.clearSensitiveState();
         }
     }
 

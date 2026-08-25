@@ -24,9 +24,15 @@ public final class TvVooStreamResolver implements StreamResolver {
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
     private final HlsStreamValidator validator;
+    private final VavooStreamResolver directFallback;
 
     public TvVooStreamResolver(ResolverDefinition definition) {
-        this(definition, new TokenHttpClient(), new HlsStreamValidator());
+        this(
+                definition,
+                new TokenHttpClient(),
+                new HlsStreamValidator(),
+                new VavooStreamResolver(definition)
+        );
     }
 
     TvVooStreamResolver(
@@ -34,9 +40,19 @@ public final class TvVooStreamResolver implements StreamResolver {
             TokenHttpClient httpClient,
             HlsStreamValidator validator
     ) {
+        this(definition, httpClient, validator, new VavooStreamResolver(definition));
+    }
+
+    TvVooStreamResolver(
+            ResolverDefinition definition,
+            TokenHttpClient httpClient,
+            HlsStreamValidator validator,
+            VavooStreamResolver directFallback
+    ) {
         this.definition = definition;
         this.httpClient = httpClient;
         this.validator = validator;
+        this.directFallback = directFallback;
     }
 
     @Override public String getId() { return definition.getId(); }
@@ -107,10 +123,23 @@ public final class TvVooStreamResolver implements StreamResolver {
             }
             if (candidateCount >= maxCandidates) break;
         }
-        throw new IOException(
-                "TvVoo no entregó una fuente reproducible.",
-                lastError
-        );
+        if (definition.getBooleanConfig("directFallback", true)) {
+            try {
+                return directFallback.resolve(channel);
+            } catch (IOException directError) {
+                if (lastError != null) directError.addSuppressed(lastError);
+                throw new IOException(
+                        "TvVoo y Vavoo directo no entregaron una fuente reproducible.",
+                        directError
+                );
+            }
+        }
+        throw new IOException("TvVoo no entregó una fuente reproducible.", lastError);
+    }
+
+    @Override
+    public void clearSensitiveState() {
+        directFallback.clearSensitiveState();
     }
 
     private URI validateCandidate(

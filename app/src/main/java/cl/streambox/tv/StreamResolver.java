@@ -19,4 +19,9 @@ public interface StreamResolver {
     default long cacheTtlMillis() {
         return 0L;
     }
+
+    /** Drops provider credentials and other session-only sensitive state. */
+    default void clearSensitiveState() {
+        // Most resolvers do not hold credentials between requests.
+    }
 }

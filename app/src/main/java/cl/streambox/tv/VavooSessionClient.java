@@ -25,7 +25,6 @@ final class VavooSessionClient {
     private static final int MAX_PING_BYTES = 256 * 1024;
     private static final int MAX_CATALOG_PAGE_BYTES = 8 * 1024 * 1024;
     private static final int MAX_RESOLVE_BYTES = 512 * 1024;
-    private static final long SIGNATURE_REUSE_MS = 4 * 60 * 1000L;
     private static final long CATALOG_REUSE_MS = 30 * 60 * 1000L;
     private static final String CLIENT_VERSION = "3.0.2";
     private static final String APP_PACKAGE = "net.vypn.app";
@@ -39,8 +38,7 @@ final class VavooSessionClient {
 
     private String signature;
     private long signatureCreatedAt;
-    private List<CatalogEntry> catalog = Collections.emptyList();
-    private long catalogCreatedAt;
+    private final Map<String, CachedCatalog> catalogsByTarget = new LinkedHashMap<>();
     private String activeBase;
 
     VavooSessionClient(ResolverDefinition definition) {
@@ -58,32 +56,41 @@ final class VavooSessionClient {
         if (channel == null) throw new IOException("Canal Vavoo ausente.");
         int maximum = definition.getIntConfig("maxResolveCandidates", 8, 1, 12);
         IOException firstError = null;
-        for (int pass = 0; pass < 2; pass++) {
-            try {
-                String currentSignature = signature(pass > 0);
-                List<CatalogEntry> entries = catalog(currentSignature, pass > 0);
-                List<CatalogEntry> matches = rankedMatches(channel, aliases, entries);
-                if (matches.isEmpty()) {
-                    throw new IOException("El canal no aparece en el catálogo Vavoo.");
-                }
-
-                LinkedHashSet<URI> resolved = new LinkedHashSet<>();
-                int attempted = 0;
-                for (CatalogEntry match : matches) {
-                    if (attempted++ >= maximum) break;
-                    try {
-                        URI candidate = resolveEntry(match, currentSignature);
-                        if (candidate != null) resolved.add(candidate);
-                    } catch (IOException error) {
-                        if (firstError == null) firstError = error;
+        List<Target> targets = targets(channel, aliases);
+        clearSessionOnly();
+        try {
+            for (int pass = 0; pass < 2; pass++) {
+                try {
+                    // A signature is authorization material. Generate a new
+                    // one for every channel open and retain it only while this
+                    // resolve call is active.
+                    String currentSignature = signature(true);
+                    List<CatalogEntry> entries = catalog(currentSignature, targets, pass > 0);
+                    List<CatalogEntry> matches = rankedMatches(channel, aliases, entries);
+                    if (matches.isEmpty()) {
+                        throw new IOException("El canal no aparece en el catálogo Vavoo.");
                     }
+
+                    LinkedHashSet<URI> resolved = new LinkedHashSet<>();
+                    int attempted = 0;
+                    for (CatalogEntry match : matches) {
+                        if (attempted++ >= maximum) break;
+                        try {
+                            URI candidate = resolveEntry(match, currentSignature);
+                            if (candidate != null) resolved.add(candidate);
+                        } catch (IOException error) {
+                            if (firstError == null) firstError = error;
+                        }
+                    }
+                    if (!resolved.isEmpty()) {
+                        return Collections.unmodifiableList(new ArrayList<>(resolved));
+                    }
+                } catch (IOException error) {
+                    if (firstError == null) firstError = error;
                 }
-                if (!resolved.isEmpty()) {
-                    return Collections.unmodifiableList(new ArrayList<>(resolved));
-                }
-            } catch (IOException error) {
-                if (firstError == null) firstError = error;
+                clearSessionOnly();
             }
+        } finally {
             clearSessionOnly();
         }
         throw new IOException("Vavoo no entregó una fuente reproducible.", firstError);
@@ -92,13 +99,12 @@ final class VavooSessionClient {
     synchronized void clear() {
         signature = null;
         signatureCreatedAt = 0L;
-        catalog = Collections.emptyList();
-        catalogCreatedAt = 0L;
+        catalogsByTarget.clear();
     }
 
     private String signature(boolean force) throws IOException {
         long now = System.currentTimeMillis();
-        if (!force && signature != null && now - signatureCreatedAt < SIGNATURE_REUSE_MS) {
+        if (!force && signature != null) {
             return signature;
         }
         String primary = checkedUrl(
@@ -137,14 +143,58 @@ final class VavooSessionClient {
         throw new IOException("No se pudo iniciar una sesión Vavoo.", failure);
     }
 
-    private List<CatalogEntry> catalog(String currentSignature, boolean force)
+    private List<CatalogEntry> catalog(
+            String currentSignature,
+            List<Target> targets,
+            boolean force
+    )
             throws IOException {
-        long now = System.currentTimeMillis();
-        if (!force && !catalog.isEmpty() && now - catalogCreatedAt < CATALOG_REUSE_MS) {
-            return catalog;
+        int maxTargets = definition.getIntConfig("maxSearchTargets", 4, 1, 8);
+        LinkedHashMap<String, CatalogEntry> loaded = new LinkedHashMap<>();
+        IOException lastError = null;
+        int searched = 0;
+        for (Target target : targets) {
+            if (searched++ >= maxTargets) break;
+            try {
+                for (CatalogEntry entry : catalogForTarget(currentSignature, target, force)) {
+                    loaded.put(entry.id + "\n" + entry.sourceUrl, entry);
+                }
+            } catch (IOException error) {
+                lastError = error;
+            }
         }
-        int maxPages = definition.getIntConfig("maxCatalogPages", 60, 1, 100);
-        int maxItems = definition.getIntConfig("maxCatalogItems", 15000, 300, 20000);
+        if (loaded.isEmpty()) {
+            throw new IOException("Vavoo devolvió un catálogo vacío.", lastError);
+        }
+        return Collections.unmodifiableList(new ArrayList<>(loaded.values()));
+    }
+
+    private List<CatalogEntry> catalogForTarget(
+            String currentSignature,
+            Target target,
+            boolean force
+    ) throws IOException {
+        long now = System.currentTimeMillis();
+        CachedCatalog cached = catalogsByTarget.get(target.key());
+        if (!force && cached != null && now - cached.createdAt < CATALOG_REUSE_MS) {
+            return cached.entries;
+        }
+        List<CatalogEntry> loaded = searchCatalog(currentSignature, target, true);
+        if (loaded.isEmpty() && !target.country.isBlank()) {
+            loaded = searchCatalog(currentSignature, target, false);
+        }
+        List<CatalogEntry> immutable = Collections.unmodifiableList(loaded);
+        catalogsByTarget.put(target.key(), new CachedCatalog(immutable, now));
+        return immutable;
+    }
+
+    private List<CatalogEntry> searchCatalog(
+            String currentSignature,
+            Target target,
+            boolean filterCountry
+    ) throws IOException {
+        int maxPages = definition.getIntConfig("maxSearchPages", 2, 1, 4);
+        int maxItems = definition.getIntConfig("maxSearchItems", 100, 10, 300);
         String cursor = null;
         List<CatalogEntry> loaded = new ArrayList<>();
         for (int page = 0; page < maxPages && loaded.size() < maxItems; page++) {
@@ -155,9 +205,13 @@ final class VavooSessionClient {
                 payload.put("catalogId", "iptv");
                 payload.put("id", "iptv");
                 payload.put("adult", false);
-                payload.put("search", "");
+                payload.put("search", target.searchName);
                 payload.put("sort", "");
-                payload.put("filter", new JSONObject());
+                JSONObject filter = new JSONObject();
+                if (filterCountry && !target.country.isBlank()) {
+                    filter.put("group", countryGroup(target.country));
+                }
+                payload.put("filter", filter);
                 payload.put("cursor", cursor == null ? JSONObject.NULL : cursor);
                 payload.put("clientVersion", CLIENT_VERSION);
             } catch (JSONException impossible) {
@@ -186,10 +240,7 @@ final class VavooSessionClient {
             cursor = response.optString("nextCursor", "").trim();
             if (cursor.isBlank()) break;
         }
-        if (loaded.isEmpty()) throw new IOException("Vavoo devolvió un catálogo vacío.");
-        catalog = Collections.unmodifiableList(loaded);
-        catalogCreatedAt = now;
-        return catalog;
+        return loaded;
     }
 
     private URI resolveEntry(CatalogEntry entry, String currentSignature) throws IOException {
@@ -537,6 +588,24 @@ final class VavooSessionClient {
         };
     }
 
+    private static String countryGroup(String value) {
+        return switch (countryKey(value)) {
+            case "unitedkingdom" -> "United Kingdom";
+            case "unitedstates" -> "United States";
+            case "argentina" -> "Argentina";
+            case "spain" -> "Spain";
+            case "france" -> "France";
+            case "germany" -> "Germany";
+            case "italy" -> "Italy";
+            case "portugal" -> "Portugal";
+            case "netherlands" -> "Netherlands";
+            case "poland" -> "Poland";
+            case "turkey" -> "Turkey";
+            case "ireland" -> "Ireland";
+            default -> value;
+        };
+    }
+
     private static Set<String> setOf(String... values) {
         LinkedHashSet<String> result = new LinkedHashSet<>();
         Collections.addAll(result, values);
@@ -544,11 +613,13 @@ final class VavooSessionClient {
     }
 
     static final class Target {
+        final String searchName;
         final String exactName;
         final String relaxedName;
         final String country;
 
         Target(String name, String country) {
+            this.searchName = name == null ? "" : name.trim();
             this.exactName = normalizedName(name, false);
             this.relaxedName = normalizedName(name, true);
             this.country = country == null ? "" : country;
@@ -556,6 +627,16 @@ final class VavooSessionClient {
 
         String key() {
             return exactName + "|" + country;
+        }
+    }
+
+    private static final class CachedCatalog {
+        final List<CatalogEntry> entries;
+        final long createdAt;
+
+        CachedCatalog(List<CatalogEntry> entries, long createdAt) {
+            this.entries = entries;
+            this.createdAt = createdAt;
         }
     }
 

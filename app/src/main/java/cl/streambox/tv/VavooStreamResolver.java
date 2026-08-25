@@ -8,7 +8,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
-/** Experimental direct Vavoo engine, available only in the parallel APK. */
+/** Direct Vavoo engine used by the experimental provider and TvVoo fallback. */
 public final class VavooStreamResolver implements StreamResolver {
     private final ResolverDefinition definition;
     private final VavooSessionClient sessionClient;
@@ -70,7 +70,8 @@ public final class VavooStreamResolver implements StreamResolver {
         throw new IOException("Vavoo no entregó un HLS reproducible.", lastError);
     }
 
-    void clearSensitiveState() {
+    @Override
+    public void clearSensitiveState() {
         sessionClient.clear();
     }
 

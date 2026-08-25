@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026.08.25.1",
+  "catalogVersion": "2026.08.25.2",
   "providers": [
     {
       "id": "tvn",
@@ -67,7 +67,18 @@
         "maxCandidates": 16,
         "streamsPath": "streams",
         "urlField": "url",
-        "allowHttpFallback": true
+        "allowHttpFallback": true,
+        "directFallback": true,
+        "pingUrl": "https://www.vavoo.tv/api/app/ping",
+        "fallbackPingUrl": "https://www.vypn.net/api/app/ping",
+        "catalogBase": "https://vavoo.to",
+        "fallbackCatalogBase": "https://kool.to",
+        "catalogPath": "mediahubmx-catalog.json",
+        "resolvePath": "mediahubmx-resolve.json",
+        "maxSearchTargets": 4,
+        "maxSearchPages": 2,
+        "maxSearchItems": 100,
+        "maxResolveCandidates": 6
       },
       "compatibilityAliases": {
         "Premier Sports 1": [
