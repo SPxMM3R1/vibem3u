@@ -63,13 +63,27 @@ public final class MeganoticiasStreamResolver implements StreamResolver {
 
     @Override
     public ResolvedPlaybackSource resolve(Channel channel) throws IOException {
+        return resolve(channel, ResolutionProgressListener.NONE);
+    }
+
+    @Override
+    public ResolvedPlaybackSource resolve(
+            Channel channel,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        ResolutionProgressListener progress = listener == null
+                ? ResolutionProgressListener.NONE
+                : listener;
         String livePage = config("pageUrl", LIVE_PAGE);
+        progress.onProgress(ResolutionProgress.of(ResolutionStage.PAGE_REQUEST));
+        String page = httpClient.getText(livePage, pageHeaders(livePage));
         ProviderStreamParsers.MeganoticiasConfig providerConfig =
                 ProviderStreamParsers.parseMeganoticiasConfig(
-                        httpClient.getText(livePage, pageHeaders(livePage)),
+                        page,
                         config("idPattern", ""),
                         config("serverKeyPattern", "")
                 );
+        progress.onProgress(ResolutionProgress.of(ResolutionStage.PAGE_PARSED));
 
         Map<String, String> query = new LinkedHashMap<>();
         query.put("id", providerConfig.getStreamId());
@@ -77,6 +91,7 @@ public final class MeganoticiasStreamResolver implements StreamResolver {
         query.put("type", "live");
         query.put("process", "access_token");
         query.put("key", providerConfig.getServerKey());
+        progress.onProgress(ResolutionProgress.of(ResolutionStage.TOKEN_REQUEST));
         String tokenJson = httpClient.getText(
                 TokenHttpClient.buildUrl(config("apiUrl", API_URL), query),
                 apiHeaders(livePage, config("playbackOrigin", "https://www.meganoticias.cl"))
@@ -89,6 +104,7 @@ public final class MeganoticiasStreamResolver implements StreamResolver {
         Map<String, String> playbackQuery = new LinkedHashMap<>();
         playbackQuery.put("access_token", accessToken);
         String template = config("playlistTemplate", PLAYLIST_BASE + "{streamId}.m3u8");
+        progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_BUILDING));
         String playbackUrl = TokenHttpClient.buildUrl(
                 template.replace("{streamId}", providerConfig.getStreamId()),
                 playbackQuery
@@ -98,7 +114,8 @@ public final class MeganoticiasStreamResolver implements StreamResolver {
                 livePage,
                 config("playbackOrigin", "https://www.meganoticias.cl")
         );
-        validator.validate(playbackUri, playbackHeaders);
+        validator.validate(playbackUri, playbackHeaders, progress);
+        progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_FOUND));
         return ResolvedPlaybackSource.dynamic(
                 getId(),
                 stableSourceId(channel),

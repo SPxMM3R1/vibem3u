@@ -58,17 +58,32 @@ public final class TvnStreamResolver implements StreamResolver {
 
     @Override
     public ResolvedPlaybackSource resolve(Channel channel) throws IOException {
+        return resolve(channel, ResolutionProgressListener.NONE);
+    }
+
+    @Override
+    public ResolvedPlaybackSource resolve(
+            Channel channel,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        ResolutionProgressListener progress = listener == null
+                ? ResolutionProgressListener.NONE
+                : listener;
         String livePage = config("pageUrl", LIVE_PAGE);
         String pageReferer = config("pageReferer", "https://www.tvn.cl/");
+        progress.onProgress(ResolutionProgress.of(ResolutionStage.PAGE_REQUEST));
+        String page = httpClient.getText(livePage, pageHeaders(pageReferer));
         ProviderStreamParsers.TvnConfig providerConfig = ProviderStreamParsers.parseTvn(
-                httpClient.getText(livePage, pageHeaders(pageReferer)),
+                page,
                 config("idPattern", ""),
                 config("tokenPattern", ""),
                 config("defaultStreamId", "57a498c4d7b86d600e5461cb")
         );
+        progress.onProgress(ResolutionProgress.of(ResolutionStage.PAGE_PARSED));
         Map<String, String> query = new LinkedHashMap<>();
         query.put("access_token", providerConfig.getAccessToken());
         String template = config("playlistTemplate", PLAYLIST_BASE + "{streamId}.m3u8");
+        progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_BUILDING));
         String playbackUrl = TokenHttpClient.buildUrl(
                 template.replace("{streamId}", providerConfig.getStreamId()),
                 query
@@ -78,7 +93,8 @@ public final class TvnStreamResolver implements StreamResolver {
                 livePage,
                 config("playbackOrigin", "https://live.tvn.cl")
         );
-        validator.validate(playbackUri, playbackHeaders);
+        validator.validate(playbackUri, playbackHeaders, progress);
+        progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_FOUND));
         return ResolvedPlaybackSource.dynamic(
                 getId(),
                 stableSourceId(channel),

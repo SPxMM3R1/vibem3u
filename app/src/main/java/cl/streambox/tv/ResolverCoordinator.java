@@ -15,6 +15,18 @@ public final class ResolverCoordinator {
             StreamResolver resolver,
             boolean forceRefresh
     ) throws IOException {
+        return resolve(channel, resolver, forceRefresh, ResolutionProgressListener.NONE);
+    }
+
+    public ResolvedPlaybackSource resolve(
+            Channel channel,
+            StreamResolver resolver,
+            boolean forceRefresh,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        ResolutionProgressListener progress = listener == null
+                ? ResolutionProgressListener.NONE
+                : listener;
         String key = key(channel, resolver);
         InFlight owner = new InFlight();
         InFlight existing;
@@ -26,16 +38,22 @@ public final class ResolverCoordinator {
             }
             if (!forceRefresh && resolver.cacheTtlMillis() > 0L) {
                 ResolvedPlaybackSource cached = memoryCache.get(key);
-                if (cached != null && !cached.isExpired(System.currentTimeMillis())) return cached;
+                if (cached != null && !cached.isExpired(System.currentTimeMillis())) {
+                    progress.onProgress(ResolutionProgress.of(ResolutionStage.CACHE_REUSED));
+                    return cached;
+                }
                 if (cached != null) memoryCache.remove(key);
             }
             existing = inFlight.get(key);
             if (existing == null) inFlight.put(key, owner);
         }
-        if (existing != null) return await(existing);
+        if (existing != null) {
+            progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_REQUEST));
+            return await(existing);
+        }
 
         try {
-            ResolvedPlaybackSource resolved = resolver.resolve(channel);
+            ResolvedPlaybackSource resolved = resolver.resolve(channel, progress);
             if (resolver.cacheTtlMillis() > 0L && resolved != null) {
                 synchronized (lock) {
                     if (inFlight.get(key) == owner) memoryCache.put(key, resolved);

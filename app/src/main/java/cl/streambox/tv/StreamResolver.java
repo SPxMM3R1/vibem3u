@@ -10,6 +10,17 @@ public interface StreamResolver {
 
     ResolvedPlaybackSource resolve(Channel channel) throws IOException;
 
+    /**
+     * Resolves a source while optionally reporting non-sensitive provider stages.
+     * Existing resolvers remain source-compatible through the default method.
+     */
+    default ResolvedPlaybackSource resolve(
+            Channel channel,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        return resolve(channel);
+    }
+
     default String stableSourceId(Channel channel) {
         if (channel == null) return "";
         String tvgId = channel.getTvgId();

@@ -93,8 +93,19 @@ public final class TvVooStreamResolver implements StreamResolver {
 
     @Override
     public ResolvedPlaybackSource resolve(Channel channel) throws IOException {
+        return resolve(channel, ResolutionProgressListener.NONE);
+    }
+
+    @Override
+    public ResolvedPlaybackSource resolve(
+            Channel channel,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        ResolutionProgressListener progress = listener == null
+                ? ResolutionProgressListener.NONE
+                : listener;
         if (!resolutionMode.usesExternalResolver()) {
-            return resolveDirect(channel, null);
+            return resolveDirect(channel, null, progress);
         }
 
         String endpointBase = channel.getAttributes().get("x-resolver-endpoint");
@@ -116,25 +127,41 @@ public final class TvVooStreamResolver implements StreamResolver {
 
         int aliasCount = 0;
         int candidateCount = 0;
+        int aliasTotal = Math.min(aliases.size(), maxAliases);
         IOException lastError = null;
         for (String alias : aliases) {
             if (++aliasCount > maxAliases) break;
+            progress.onProgress(ResolutionProgress.counted(
+                    ResolutionStage.ALIAS_ATTEMPT,
+                    aliasCount,
+                    aliasTotal
+            ));
             try {
                 String endpoint = endpointBase + "/" + encodedAlias(alias) + ".json";
+                progress.onProgress(ResolutionProgress.of(ResolutionStage.CATALOG_REQUEST));
+                String response = httpClient.getText(endpoint, jsonHeaders);
+                progress.onProgress(ResolutionProgress.of(ResolutionStage.CATALOG_PARSED));
                 List<URI> candidates = ResolverPayloadParsers.parseTvVooCandidates(
-                        httpClient.getText(endpoint, jsonHeaders),
+                        response,
                         definition.getConfig("streamsPath", "streams"),
                         definition.getConfig("urlField", "url")
                 );
                 for (URI candidate : candidates) {
                     if (++candidateCount > maxCandidates) break;
+                    progress.onProgress(ResolutionProgress.counted(
+                            ResolutionStage.SOURCE_CANDIDATE,
+                            candidateCount,
+                            maxCandidates
+                    ));
                     try {
                         URI accepted = validateCandidate(
                                 validator,
                                 candidate,
                                 allowHttpFallback,
-                                playbackHeaders
+                                playbackHeaders,
+                                progress
                         );
+                        progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_FOUND));
                         return ResolvedPlaybackSource.dynamic(
                                 getId(),
                                 stableSourceId(channel),
@@ -153,7 +180,7 @@ public final class TvVooStreamResolver implements StreamResolver {
             if (candidateCount >= maxCandidates) break;
         }
         if (resolutionMode.usesDirectResolver()) {
-            return resolveDirect(channel, lastError);
+            return resolveDirect(channel, lastError, progress);
         }
         throw new IOException("TvVoo no entregó una fuente reproducible.", lastError);
     }
@@ -162,8 +189,16 @@ public final class TvVooStreamResolver implements StreamResolver {
             Channel channel,
             IOException externalError
     ) throws IOException {
+        return resolveDirect(channel, externalError, ResolutionProgressListener.NONE);
+    }
+
+    private ResolvedPlaybackSource resolveDirect(
+            Channel channel,
+            IOException externalError,
+            ResolutionProgressListener listener
+    ) throws IOException {
         try {
-            return directFallback.resolve(channel);
+            return directFallback.resolve(channel, listener);
         } catch (IOException directError) {
             if (externalError != null) directError.addSuppressed(externalError);
             String message = resolutionMode == TvVooResolutionMode.DIRECT_ONLY
@@ -184,15 +219,31 @@ public final class TvVooStreamResolver implements StreamResolver {
             boolean allowHttpFallback,
             Map<String, String> playbackHeaders
     ) throws IOException {
+        return validateCandidate(
+                validator,
+                published,
+                allowHttpFallback,
+                playbackHeaders,
+                ResolutionProgressListener.NONE
+        );
+    }
+
+    static URI validateCandidate(
+            HlsStreamValidator validator,
+            URI published,
+            boolean allowHttpFallback,
+            Map<String, String> playbackHeaders,
+            ResolutionProgressListener listener
+    ) throws IOException {
         String scheme = published.getScheme();
         if ("https".equalsIgnoreCase(scheme)) {
             try {
-                validator.validate(published, playbackHeaders);
+                validator.validate(published, playbackHeaders, listener);
                 return published;
             } catch (IOException error) {
                 if (!allowHttpFallback || !isExpiredCertificateFailure(error)) throw error;
                 URI fallback = withScheme(published, "http");
-                validator.validate(fallback, playbackHeaders);
+                validator.validate(fallback, playbackHeaders, listener);
                 return fallback;
             }
         }
@@ -201,11 +252,11 @@ public final class TvVooStreamResolver implements StreamResolver {
         }
         URI upgraded = withScheme(published, "https");
         try {
-            validator.validate(upgraded, playbackHeaders);
+            validator.validate(upgraded, playbackHeaders, listener);
             return upgraded;
         } catch (IOException error) {
             if (!allowHttpFallback || !isExpiredCertificateFailure(error)) throw error;
-            validator.validate(published, playbackHeaders);
+            validator.validate(published, playbackHeaders, listener);
             return published;
         }
     }

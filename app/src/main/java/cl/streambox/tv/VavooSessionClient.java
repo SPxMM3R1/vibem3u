@@ -53,7 +53,18 @@ final class VavooSessionClient {
 
     synchronized List<URI> resolveCandidates(Channel channel, List<String> aliases)
             throws IOException {
+        return resolveCandidates(channel, aliases, ResolutionProgressListener.NONE);
+    }
+
+    synchronized List<URI> resolveCandidates(
+            Channel channel,
+            List<String> aliases,
+            ResolutionProgressListener listener
+    ) throws IOException {
         if (channel == null) throw new IOException("Canal Vavoo ausente.");
+        ResolutionProgressListener progress = listener == null
+                ? ResolutionProgressListener.NONE
+                : listener;
         int maximum = definition.getIntConfig("maxResolveCandidates", 8, 1, 12);
         IOException firstError = null;
         List<Target> targets = targets(channel, aliases);
@@ -64,8 +75,17 @@ final class VavooSessionClient {
                     // A signature is authorization material. Generate a new
                     // one for every channel open and retain it only while this
                     // resolve call is active.
+                    progress.onProgress(ResolutionProgress.of(ResolutionStage.SESSION));
                     String currentSignature = signature(true);
-                    List<CatalogEntry> entries = catalog(currentSignature, targets, pass > 0);
+                    progress.onProgress(ResolutionProgress.of(ResolutionStage.CATALOG_REQUEST));
+                    List<CatalogEntry> entries = catalog(
+                            currentSignature,
+                            targets,
+                            pass > 0,
+                            progress
+                    );
+                    progress.onProgress(ResolutionProgress.of(ResolutionStage.CATALOG_PARSED));
+                    progress.onProgress(ResolutionProgress.of(ResolutionStage.CATALOG_MATCHING));
                     List<CatalogEntry> matches = rankedMatches(channel, aliases, entries);
                     if (matches.isEmpty()) {
                         throw new IOException("El canal no aparece en el catálogo Vavoo.");
@@ -75,6 +95,11 @@ final class VavooSessionClient {
                     int attempted = 0;
                     for (CatalogEntry match : matches) {
                         if (attempted++ >= maximum) break;
+                        progress.onProgress(ResolutionProgress.counted(
+                                ResolutionStage.SOURCE_REQUEST,
+                                attempted,
+                                Math.min(matches.size(), maximum)
+                        ));
                         try {
                             URI candidate = resolveEntry(match, currentSignature);
                             if (candidate != null) resolved.add(candidate);
@@ -146,7 +171,8 @@ final class VavooSessionClient {
     private List<CatalogEntry> catalog(
             String currentSignature,
             List<Target> targets,
-            boolean force
+            boolean force,
+            ResolutionProgressListener listener
     )
             throws IOException {
         int maxTargets = definition.getIntConfig("maxSearchTargets", 4, 1, 8);
@@ -156,7 +182,12 @@ final class VavooSessionClient {
         for (Target target : targets) {
             if (searched++ >= maxTargets) break;
             try {
-                for (CatalogEntry entry : catalogForTarget(currentSignature, target, force)) {
+                for (CatalogEntry entry : catalogForTarget(
+                        currentSignature,
+                        target,
+                        force,
+                        listener
+                )) {
                     loaded.put(entry.id + "\n" + entry.sourceUrl, entry);
                 }
             } catch (IOException error) {
@@ -172,16 +203,17 @@ final class VavooSessionClient {
     private List<CatalogEntry> catalogForTarget(
             String currentSignature,
             Target target,
-            boolean force
+            boolean force,
+            ResolutionProgressListener listener
     ) throws IOException {
         long now = System.currentTimeMillis();
         CachedCatalog cached = catalogsByTarget.get(target.key());
         if (!force && cached != null && now - cached.createdAt < CATALOG_REUSE_MS) {
             return cached.entries;
         }
-        List<CatalogEntry> loaded = searchCatalog(currentSignature, target, true);
+        List<CatalogEntry> loaded = searchCatalog(currentSignature, target, true, listener);
         if (loaded.isEmpty() && !target.country.isBlank()) {
-            loaded = searchCatalog(currentSignature, target, false);
+            loaded = searchCatalog(currentSignature, target, false, listener);
         }
         List<CatalogEntry> immutable = Collections.unmodifiableList(loaded);
         catalogsByTarget.put(target.key(), new CachedCatalog(immutable, now));
@@ -191,13 +223,19 @@ final class VavooSessionClient {
     private List<CatalogEntry> searchCatalog(
             String currentSignature,
             Target target,
-            boolean filterCountry
+            boolean filterCountry,
+            ResolutionProgressListener listener
     ) throws IOException {
         int maxPages = definition.getIntConfig("maxSearchPages", 2, 1, 4);
         int maxItems = definition.getIntConfig("maxSearchItems", 100, 10, 300);
         String cursor = null;
         List<CatalogEntry> loaded = new ArrayList<>();
         for (int page = 0; page < maxPages && loaded.size() < maxItems; page++) {
+            listener.onProgress(ResolutionProgress.counted(
+                    ResolutionStage.CATALOG_PAGE,
+                    page + 1,
+                    maxPages
+            ));
             JSONObject payload = new JSONObject();
             try {
                 payload.put("language", language());

@@ -10,6 +10,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -42,6 +43,7 @@ public final class ResolverCoordinatorTest {
                 );
             }
         };
+        AtomicReference<ResolutionStage> cachedStage = new AtomicReference<>();
 
         assertEquals(
                 "https://example.org/session-1.m3u8",
@@ -49,8 +51,14 @@ public final class ResolverCoordinatorTest {
         );
         assertEquals(
                 "https://example.org/session-1.m3u8",
-                coordinator.resolve(channel, resolver, false).getPlaybackUri().toString()
+                coordinator.resolve(
+                        channel,
+                        resolver,
+                        false,
+                        progress -> cachedStage.set(progress.getStage())
+                ).getPlaybackUri().toString()
         );
+        assertEquals(ResolutionStage.CACHE_REUSED, cachedStage.get());
         assertEquals(
                 "https://example.org/session-2.m3u8",
                 coordinator.resolve(channel, resolver, true).getPlaybackUri().toString()

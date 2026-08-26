@@ -70,7 +70,7 @@ public final class MainActivity extends Activity {
     private static final long PLAYER_RETRY_DELAY_MS = 2_500;
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
     private static final long NO_RESOLUTION_REQUEST = -1L;
-    private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.40 (Android TV)";
+    private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.41 (Android TV)";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
@@ -145,6 +145,9 @@ public final class MainActivity extends Activity {
     private ResolvedPlaybackSource currentPlaybackSource;
     private boolean tokenRefreshAttempted;
     private boolean fallbackAttempted;
+    private String loadingMessageBase = "";
+    private boolean loadingMessageAnimating;
+    private int loadingDotCount;
 
     private final Runnable hideOverlay = () -> {
         channelOverlay.setVisibility(View.GONE);
@@ -169,6 +172,18 @@ public final class MainActivity extends Activity {
             if (!exiting && !isFinishing()) {
                 mainHandler.postDelayed(this, 30_000);
             }
+        }
+    };
+    private final Runnable animateLoadingText = new Runnable() {
+        @Override public void run() {
+            if (!loadingMessageAnimating
+                    || loadingPanel == null
+                    || loadingPanel.getVisibility() != View.VISIBLE) {
+                return;
+            }
+            loadingDotCount = (loadingDotCount + 1) % 4;
+            loadingText.setText(loadingMessageBase + dots(loadingDotCount));
+            mainHandler.postDelayed(this, 420L);
         }
     };
 
@@ -604,6 +619,7 @@ public final class MainActivity extends Activity {
 
     private void showPlaylistError(String detail) {
         loadFailed = true;
+        stopLoadingTextAnimation();
         loadingPanel.setVisibility(View.VISIBLE);
         String message = getString(R.string.playlist_error);
         if (detail != null && !detail.isBlank()) {
@@ -615,10 +631,125 @@ public final class MainActivity extends Activity {
     private void showLoadingState(String message) {
         if (loadingPanel == null || isFinishing()) return;
         loadingPanel.setVisibility(View.VISIBLE);
-        loadingText.setText(message == null ? "" : message);
+        String safeMessage = message == null ? "" : message.trim();
+        boolean animate = safeMessage.endsWith("…") || safeMessage.endsWith("...");
+        String base = stripTrailingEllipsis(safeMessage);
+        if (base.equals(loadingMessageBase) && animate == loadingMessageAnimating) return;
+
+        stopLoadingTextAnimation();
+        loadingMessageBase = base;
+        loadingMessageAnimating = animate;
+        loadingDotCount = 0;
+        if (animate) {
+            loadingText.setText(base);
+            mainHandler.postDelayed(animateLoadingText, 420L);
+        } else {
+            loadingText.setText(safeMessage);
+        }
+    }
+
+    private void showResolutionProgress(ResolutionProgress progress) {
+        if (progress == null || progress.getStage() == null) return;
+        int current = progress.getCurrent();
+        int total = progress.getTotal();
+        String message;
+        switch (progress.getStage()) {
+            case SESSION:
+                message = getString(R.string.loading_resolver_session);
+                break;
+            case CATALOG_REQUEST:
+                message = getString(R.string.loading_resolver_catalog);
+                break;
+            case CATALOG_PAGE:
+                message = current > 0 && total > 0
+                        ? getString(R.string.loading_resolver_catalog_page, current, total)
+                        : getString(R.string.loading_resolver_catalog);
+                break;
+            case CATALOG_PARSED:
+                message = getString(R.string.loading_resolver_catalog_parsed);
+                break;
+            case CATALOG_MATCHING:
+                message = getString(R.string.loading_resolver_matching);
+                break;
+            case ALIAS_ATTEMPT:
+                message = current > 0 && total > 0
+                        ? getString(R.string.loading_resolver_alias, current, total)
+                        : getString(R.string.loading_resolver_alias_unknown);
+                break;
+            case SOURCE_REQUEST:
+                message = current > 0 && total > 0
+                        ? getString(R.string.loading_resolver_source_request_count,
+                        current,
+                        total)
+                        : getString(R.string.loading_resolver_source_request);
+                break;
+            case SOURCE_CANDIDATE:
+                message = current > 0 && total > 0
+                        ? getString(R.string.loading_resolver_candidate, current, total)
+                        : getString(R.string.loading_resolver_candidate_unknown);
+                break;
+            case PAGE_REQUEST:
+                message = getString(R.string.loading_resolver_page);
+                break;
+            case PAGE_PARSED:
+                message = getString(R.string.loading_resolver_page_parsed);
+                break;
+            case TOKEN_REQUEST:
+                message = getString(R.string.loading_resolver_token);
+                break;
+            case SOURCE_BUILDING:
+                message = getString(R.string.loading_resolver_building);
+                break;
+            case HLS_PLAYLIST:
+                message = getString(R.string.loading_hls_playlist);
+                break;
+            case HLS_VARIANT:
+                message = getString(R.string.loading_hls_variant);
+                break;
+            case HLS_SEGMENT:
+                message = getString(R.string.loading_validating_segment);
+                break;
+            case SOURCE_FOUND:
+                message = getString(R.string.loading_resolver_source_ready);
+                break;
+            case CACHE_REUSED:
+                message = getString(R.string.loading_resolver_cache_reused);
+                break;
+            default:
+                return;
+        }
+        showLoadingState(message);
+    }
+
+    private void stopLoadingTextAnimation() {
+        mainHandler.removeCallbacks(animateLoadingText);
+        loadingMessageAnimating = false;
+        loadingMessageBase = "";
+        loadingDotCount = 0;
+    }
+
+    private static String stripTrailingEllipsis(String value) {
+        String result = value == null ? "" : value;
+        while (result.endsWith("…")) result = result.substring(0, result.length() - 1);
+        while (result.endsWith("...")) result = result.substring(0, result.length() - 3);
+        return result.trim();
+    }
+
+    private static String dots(int count) {
+        switch (count) {
+            case 1:
+                return ".";
+            case 2:
+                return "..";
+            case 3:
+                return "...";
+            default:
+                return "";
+        }
     }
 
     private void hideLoadingState() {
+        stopLoadingTextAnimation();
         if (loadingPanel != null) loadingPanel.setVisibility(View.GONE);
     }
 
@@ -741,6 +872,12 @@ public final class MainActivity extends Activity {
         player.clearMediaItems();
         long requestId = ++playbackResolutionRequestId;
         showLoadingState(getString(R.string.loading_resolver_initializing));
+        ResolutionProgressListener progressListener = progress -> mainHandler.post(() -> {
+            if (isCurrentPlayback(channel, expectedGeneration)
+                    && requestId == playbackResolutionRequestId) {
+                showResolutionProgress(progress);
+            }
+        });
         playbackResolutionTask = networkExecutor.submit(() -> {
             try {
                 mainHandler.post(() -> {
@@ -752,7 +889,8 @@ public final class MainActivity extends Activity {
                 ResolvedPlaybackSource source = resolverCoordinator.resolve(
                         channel,
                         resolver,
-                        forceRefresh
+                        forceRefresh,
+                        progressListener
                 );
                 mainHandler.post(() -> {
                     if (!isCurrentPlayback(channel, expectedGeneration)

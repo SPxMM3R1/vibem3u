@@ -50,20 +50,36 @@ public final class TwentyFourHoursStreamResolver implements StreamResolver {
 
     @Override
     public ResolvedPlaybackSource resolve(Channel channel) throws IOException {
+        return resolve(channel, ResolutionProgressListener.NONE);
+    }
+
+    @Override
+    public ResolvedPlaybackSource resolve(
+            Channel channel,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        ResolutionProgressListener progress = listener == null
+                ? ResolutionProgressListener.NONE
+                : listener;
         String pageUrl = definition.getConfig("pageUrl", DEFAULT_PAGE);
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("Referer", pageUrl);
         headers.put("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
         headers.put("Accept-Language", "es-CL,es;q=0.9,en;q=0.8");
+        progress.onProgress(ResolutionProgress.of(ResolutionStage.PAGE_REQUEST));
+        String page = httpClient.getText(pageUrl, headers);
         String streamId = ResolverPayloadParsers.parseTwentyFourHoursStreamId(
-                httpClient.getText(pageUrl, headers),
+                page,
                 definition.getConfig("streamIdPattern", ""),
                 definition.getConfig("defaultStreamId", DEFAULT_STREAM_ID)
         );
+        progress.onProgress(ResolutionProgress.of(ResolutionStage.PAGE_PARSED));
+        progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_BUILDING));
         String playback = definition.getConfig("playlistTemplate", DEFAULT_TEMPLATE)
                 .replace("{streamId}", streamId);
         URI playbackUri = URI.create(playback);
-        validator.validate(playbackUri, Collections.emptyMap());
+        validator.validate(playbackUri, Collections.emptyMap(), progress);
+        progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_FOUND));
         return ResolvedPlaybackSource.dynamic(
                 getId(),
                 stableSourceId(channel),

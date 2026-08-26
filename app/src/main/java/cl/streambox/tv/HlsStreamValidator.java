@@ -26,21 +26,35 @@ public final class HlsStreamValidator {
     }
 
     public void validate(URI playbackUri, Map<String, String> headers) throws IOException {
+        validate(playbackUri, headers, ResolutionProgressListener.NONE);
+    }
+
+    public void validate(
+            URI playbackUri,
+            Map<String, String> headers,
+            ResolutionProgressListener listener
+    ) throws IOException {
         if (playbackUri == null) throw new IOException("Fuente HLS inválida.");
         Map<String, String> safeHeaders = headers == null
                 ? Collections.emptyMap()
                 : headers;
+        ResolutionProgressListener progress = listener == null
+                ? ResolutionProgressListener.NONE
+                : listener;
+        progress.onProgress(ResolutionProgress.of(ResolutionStage.HLS_PLAYLIST));
         PlaylistResponse current = loadPlaylist(playbackUri, safeHeaders);
 
         for (int depth = 0; depth < MAX_PLAYLIST_DEPTH; depth++) {
             String variant = firstVariant(current.lines);
             if (variant == null) break;
+            progress.onProgress(ResolutionProgress.of(ResolutionStage.HLS_VARIANT));
             current = loadPlaylist(resolve(current.finalUri, variant), safeHeaders);
         }
 
         List<String> segments = mediaReferences(current.lines);
         if (segments.isEmpty()) throw new IOException("El HLS no publicó segmentos.");
 
+        progress.onProgress(ResolutionProgress.of(ResolutionStage.HLS_SEGMENT));
         IOException lastError = null;
         for (int index : recentProbeOrder(segments.size())) {
             try {

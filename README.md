@@ -59,7 +59,7 @@ las credenciales del respaldo antes de usarla o la descarta si no puede migrarla
 Configuración también muestra la versión instalada y permite buscar manualmente
 una actualización desde GitHub.
 
-Desde 0.4.40, la sección **Resolutores** permite usar automáticamente TvVoo y
+Desde 0.4.41, la sección **Resolutores** permite usar automáticamente TvVoo y
 Vavoo, limitar la reproducción al motor Vavoo propio o utilizar solamente el
 servicio TvVoo externo. El motor propio prueba HTTPS primero y solo usa el HTTP
 equivalente cuando la cadena TLS confirma que el certificado del nodo expiró;
@@ -72,6 +72,12 @@ configuración de Media3 y validación del primer segmento. No se muestran panel
 spinners, nombres repetidos del canal ni identificadores del resolutor. El texto se
 oculta cuando Media3 alcanza `STATE_READY`; el buffering posterior no vuelve a
 cubrir el video.
+
+Los resolutores ahora emiten subetapas reales, como preparación de sesión,
+descarga y análisis del catálogo, búsqueda de coincidencias, intento de aliases,
+solicitud de candidatos, validación de playlist/variante/segmento y construcción
+de la fuente para Media3. Los puntos suspensivos de las etapas en curso se animan
+sin añadir otro indicador gráfico.
 
 ## Compilación automática
 

@@ -48,22 +48,42 @@ public final class VavooStreamResolver implements StreamResolver {
 
     @Override
     public ResolvedPlaybackSource resolve(Channel channel) throws IOException {
+        return resolve(channel, ResolutionProgressListener.NONE);
+    }
+
+    @Override
+    public ResolvedPlaybackSource resolve(
+            Channel channel,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        ResolutionProgressListener progress = listener == null
+                ? ResolutionProgressListener.NONE
+                : listener;
         LinkedHashSet<String> aliases = new LinkedHashSet<>(definition.resolverAliases(channel));
         List<URI> candidates = sessionClient.resolveCandidates(
                 channel,
-                new ArrayList<>(aliases)
+                new ArrayList<>(aliases),
+                progress
         );
         IOException lastError = null;
         Map<String, String> playbackHeaders = TvVooStreamResolver.playbackHeaders();
         boolean allowHttpFallback = definition.getBooleanConfig("allowHttpFallback", true);
+        int candidateNumber = 0;
         for (URI candidate : candidates) {
+            progress.onProgress(ResolutionProgress.counted(
+                    ResolutionStage.SOURCE_CANDIDATE,
+                    ++candidateNumber,
+                    candidates.size()
+            ));
             try {
                 URI accepted = TvVooStreamResolver.validateCandidate(
                         validator,
                         candidate,
                         allowHttpFallback,
-                        playbackHeaders
+                        playbackHeaders,
+                        progress
                 );
+                progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_FOUND));
                 return ResolvedPlaybackSource.dynamic(
                         getId(),
                         stableSourceId(channel),
