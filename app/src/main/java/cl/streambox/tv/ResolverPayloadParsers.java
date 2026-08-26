@@ -13,66 +13,14 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /** Pure parsing of resolver-owned HTML and JSON payloads. */
 final class ResolverPayloadParsers {
     private static final int MAX_TVVOO_STREAMS = 16;
     private static final int MAX_MANIFEST_NODES = 4096;
     private static final int MAX_MANIFEST_DEPTH = 10;
-    private static final Pattern ANCHOR_TAG_PATTERN = Pattern.compile(
-            "<a\\b[^>]*>", Pattern.CASE_INSENSITIVE
-    );
-    private static final Pattern CLASS_ATTRIBUTE_PATTERN = Pattern.compile(
-            "\\bclass\\s*=\\s*[\"']([^\"']*)[\"']", Pattern.CASE_INSENSITIVE
-    );
-    private static final Pattern DATA_MS_ATTRIBUTE_PATTERN = Pattern.compile(
-            "\\bdata-ms\\s*=\\s*[\"']([a-zA-Z0-9_-]+)[\"']", Pattern.CASE_INSENSITIVE
-    );
 
     private ResolverPayloadParsers() {}
-
-    static String parseTwentyFourHoursStreamId(
-            String html,
-            String configuredPattern,
-            String fallbackId
-    ) throws IOException {
-        if (html == null || html.isBlank()) {
-            throw new IOException("24 Horas no publicó su configuración.");
-        }
-        String id;
-        if (configuredPattern == null || configuredPattern.isBlank()) {
-            id = activeTwentyFourHoursId(html);
-        } else {
-            Pattern pattern = Pattern.compile(configuredPattern, Pattern.CASE_INSENSITIVE);
-            Matcher matcher = pattern.matcher(html);
-            id = matcher.find() && matcher.groupCount() >= 1
-                    ? matcher.group(1).trim()
-                    : null;
-        }
-        if (id == null || id.isBlank()) id = fallbackId;
-        if (id == null || !id.matches("[A-Za-z0-9_-]{8,128}")) {
-            throw new IOException("24 Horas no publicó un stream válido.");
-        }
-        return id;
-    }
-
-    private static String activeTwentyFourHoursId(String html) {
-        Matcher tags = ANCHOR_TAG_PATTERN.matcher(html);
-        while (tags.find()) {
-            String tag = tags.group();
-            Matcher classes = CLASS_ATTRIBUTE_PATTERN.matcher(tag);
-            if (!classes.find()) continue;
-            String classValue = " " + classes.group(1).toLowerCase(Locale.ROOT)
-                    .replaceAll("\\s+", " ").trim() + " ";
-            if (!classValue.contains(" playertablink ")
-                    || !classValue.contains(" active ")) continue;
-            Matcher streamId = DATA_MS_ATTRIBUTE_PATTERN.matcher(tag);
-            if (streamId.find()) return streamId.group(1).trim();
-        }
-        return null;
-    }
 
     static List<URI> parseTvVooCandidates(String json) throws IOException {
         return parseTvVooCandidates(json, "streams", "url");

@@ -31,6 +31,13 @@ public final class ResolverCatalog {
     private static final Set<String> ENGINES = setOf(
             "tvn", "meganoticias", "24horas", "tvvoo", "highfly", "vavoo"
     );
+    /**
+     * Engines kept in the parser only so an older remote catalogue can be
+     * accepted and safely filtered instead of disabling all catalogue
+     * updates. They are never exposed to the registry.
+     */
+    private static final Set<String> RETIRED_ENGINES = setOf("24horas");
+    private static final Set<String> RETIRED_PROVIDER_IDS = setOf("24horas");
     private static final Map<String, Set<String>> ALLOWED_CONFIG_HOSTS = allowedHosts();
 
     private final String version;
@@ -107,7 +114,17 @@ public final class ResolverCatalog {
                 if (!ids.add(definition.getId())) {
                     throw new IOException("Resolutor duplicado.");
                 }
+                if (RETIRED_PROVIDER_IDS.contains(definition.getId())
+                        || RETIRED_ENGINES.contains(definition.getEngine())) {
+                    // A previously installed catalogue may still contain the
+                    // retired 24 Horas entry. Ignore it while keeping the
+                    // remaining providers available for updates.
+                    continue;
+                }
                 definitions.add(definition);
+            }
+            if (definitions.isEmpty()) {
+                throw new IOException("Catálogo sin resolutores compatibles.");
             }
             return new ResolverCatalog(version, definitions);
         } catch (JSONException error) {

@@ -53,6 +53,32 @@ public final class ResolverCatalogTest {
     }
 
     @Test
+    public void retiredTwentyFourHoursProviderIsIgnoredFromOlderCatalogues() throws Exception {
+        String legacy = catalogJson().replace(
+                "\"providers\":[",
+                "\"providers\":["
+                        + "{\"id\":\"24horas\",\"name\":\"24 Horas\","
+                        + "\"engine\":\"24horas\","
+                        + "\"match\":{\"tvgIds\":[\"0201\"]},\"config\":{}},"
+        );
+
+        ResolverCatalog catalog = ResolverCatalog.parse(legacy);
+
+        assertNull(catalog.getById("24horas"));
+        assertNull(catalog.find(channel(
+                "0201",
+                "https://mdstrm.com/live-stream-playlist/current.m3u8",
+                attributes("x-resolver", "24horas")
+        )));
+        assertNull(catalog.find(channel(
+                "0201",
+                "https://mdstrm.com/live-stream-playlist/current.m3u8",
+                attributes()
+        )));
+        assertEquals(3, catalog.getProviders().size());
+    }
+
+    @Test
     public void rejectsExecutableOrUnapprovedNetworkConfiguration() {
         String invalid = catalogJson().replace(
                 "https://tvvoo.hayd.uk/stream/tv",

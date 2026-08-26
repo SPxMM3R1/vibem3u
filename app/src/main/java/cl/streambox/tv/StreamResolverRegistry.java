@@ -97,7 +97,6 @@ public final class StreamResolverRegistry {
         return switch (definition.getEngine()) {
             case "tvn" -> new TvnStreamResolver(definition);
             case "meganoticias" -> new MeganoticiasStreamResolver(definition);
-            case "24horas" -> new TwentyFourHoursStreamResolver(definition);
             case "tvvoo" -> new TvVooStreamResolver(
                     definition,
                     preferences.getTvVooResolutionMode()

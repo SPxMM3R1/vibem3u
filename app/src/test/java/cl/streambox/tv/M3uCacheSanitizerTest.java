@@ -56,7 +56,7 @@ public final class M3uCacheSanitizerTest {
     @Test
     public void keepsNonCredentialQueryParametersForDynamicFallbacks() {
         String playlist = "#EXTM3U\n"
-                + "#EXTINF:-1 tvg-id=\"0201\" x-resolver=\"24horas\",24 Horas\n"
+                + "#EXTINF:-1 tvg-id=\"0104\" x-resolver=\"tvn\",TVN\n"
                 + "https://mdstrm.com/live.m3u8?quality=high&access_token=secret\n";
 
         String sanitized = M3uCacheSanitizer.forDisk(playlist);
