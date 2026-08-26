@@ -15,60 +15,28 @@
         app:show_buffering="never"
         app:use_controller="false" />
 
-    <LinearLayout
+    <FrameLayout
         android:id="@+id/loading_panel"
-        android:layout_width="480dp"
-        android:layout_height="wrap_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:layout_gravity="center"
-        android:background="@drawable/loading_panel_background"
-        android:elevation="10dp"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:paddingHorizontal="32dp"
-        android:paddingVertical="24dp">
-
-        <ProgressBar
-            android:id="@+id/loading_progress"
-            style="?android:attr/progressBarStyleLarge"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:indeterminateTint="@color/cyan" />
+        android:background="@android:color/transparent"
+        android:gravity="center">
 
         <TextView
             android:id="@+id/loading_text"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_gravity="center"
+            android:ellipsize="end"
             android:gravity="center"
-            android:maxWidth="560dp"
+            android:includeFontPadding="false"
+            android:maxLines="1"
             android:text="@string/loading_playlist"
             android:textColor="@color/white"
+            android:paddingHorizontal="32dp"
             android:textSize="18sp" />
-
-        <TextView
-            android:id="@+id/loading_channel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:gravity="center"
-            android:maxLines="1"
-            android:ellipsize="end"
-            android:textColor="@color/cyan"
-            android:textSize="14sp"
-            android:visibility="gone" />
-
-        <TextView
-            android:id="@+id/loading_detail"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:gravity="center"
-            android:maxLines="2"
-            android:ellipsize="end"
-            android:textColor="@color/muted"
-            android:textSize="12sp"
-            android:visibility="gone" />
-    </LinearLayout>
+    </FrameLayout>
 
     <TextView
         android:id="@+id/clock"

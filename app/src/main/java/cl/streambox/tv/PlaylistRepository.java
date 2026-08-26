@@ -9,7 +9,7 @@ import java.util.Arrays;
 
 public final class PlaylistRepository {
     private static final int MAX_PLAYLIST_BYTES = 8 * 1024 * 1024;
-    private static final String USER_AGENT = "VibeM3U/0.4.39 (Android TV)";
+    private static final String USER_AGENT = "VibeM3U/0.4.40 (Android TV)";
     private static final String ACCEPT =
             "application/vnd.apple.mpegurl, audio/x-mpegurl, text/plain, */*";
 
