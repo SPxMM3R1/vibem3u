@@ -70,7 +70,7 @@ public final class MainActivity extends Activity {
     private static final long PLAYER_RETRY_DELAY_MS = 2_500;
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
     private static final long NO_RESOLUTION_REQUEST = -1L;
-    private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.38 (Android TV)";
+    private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.39 (Android TV)";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
@@ -91,6 +91,8 @@ public final class MainActivity extends Activity {
     private View loadingPanel;
     private ProgressBar loadingProgress;
     private TextView loadingText;
+    private TextView loadingChannel;
+    private TextView loadingDetail;
     private TextView clock;
     private View lightEpgOverlay;
     private TextView lightEpgChannelNumber;
@@ -215,6 +217,8 @@ public final class MainActivity extends Activity {
         loadingPanel = findViewById(R.id.loading_panel);
         loadingProgress = findViewById(R.id.loading_progress);
         loadingText = findViewById(R.id.loading_text);
+        loadingChannel = findViewById(R.id.loading_channel);
+        loadingDetail = findViewById(R.id.loading_detail);
         clock = findViewById(R.id.clock);
         lightEpgOverlay = findViewById(R.id.light_epg_overlay);
         lightEpgChannelNumber = findViewById(R.id.light_epg_channel_number);
@@ -265,6 +269,9 @@ public final class MainActivity extends Activity {
             @Override public void onPlaybackStateChanged(int playbackState) {
                 updateStreamStatus(playbackState);
                 updateDiagnostics();
+                if (playbackState == Player.STATE_READY && !loadFailed) {
+                    hideLoadingState();
+                }
             }
 
             @Override public void onVideoSizeChanged(VideoSize videoSize) {
@@ -293,6 +300,11 @@ public final class MainActivity extends Activity {
                 }
                 MediaItem current = player == null ? null : player.getCurrentMediaItem();
                 if (current != null && playbackRecoveryPolicy.tryConsumeRetry(error.errorCode)) {
+                    showLoadingState(
+                            getString(R.string.loading_network_retry),
+                            playbackChannel,
+                            shortMessage(error)
+                    );
                     schedulePlaybackRetry(current.mediaId, playbackGeneration);
                     return;
                 }
@@ -304,6 +316,8 @@ public final class MainActivity extends Activity {
                         && currentPlaybackSource.isDynamicallyResolved()
                         && PlaybackRecoveryPolicy.isRecoverable(error.errorCode)) {
                     handleProviderAuthorizationFailure();
+                } else {
+                    hideLoadingState();
                 }
             }
         });
@@ -337,9 +351,11 @@ public final class MainActivity extends Activity {
         }
         loadFailed = false;
         if (!keepCurrentUi) {
-            loadingPanel.setVisibility(View.VISIBLE);
-            loadingProgress.setVisibility(View.VISIBLE);
-            loadingText.setText(R.string.loading_playlist);
+            showLoadingState(
+                    getString(R.string.loading_playlist),
+                    null,
+                    getString(R.string.loading_playlist_http_detail)
+            );
         }
         if (sourceChanged) {
             channels.clear();
@@ -363,12 +379,15 @@ public final class MainActivity extends Activity {
                     if (cached != null) {
                         usablePlaylist = true;
                         Playlist cachedPlaylist = cached;
-                        mainHandler.post(() -> applyPlaylist(
-                                cachedPlaylist,
-                                url,
-                                generation,
-                                false
-                        ));
+                        mainHandler.post(() -> {
+                            if (generation != playlistGeneration || isFinishing()) return;
+                            showLoadingState(
+                                    getString(R.string.loading_playlist_cache),
+                                    null,
+                                    getString(R.string.loading_playlist_cache_detail)
+                            );
+                            applyPlaylist(cachedPlaylist, url, generation, false);
+                        });
                         cachedEpgUrl = epgUrl(cachedPlaylist);
                         URI cachedEpgUri = cachedPlaylist.getEpgUri();
                         if (cachedEpgUri != null) {
@@ -394,7 +413,7 @@ public final class MainActivity extends Activity {
                     mainHandler.post(() -> {
                         if (generation != playlistGeneration || isFinishing()) return;
                         if (hasUsablePlaylist) {
-                            loadingPanel.setVisibility(View.GONE);
+                            hidePlaylistLoadingIfPlaybackPending();
                         } else {
                             showPlaylistError("No hay conexión a Internet.");
                         }
@@ -415,7 +434,7 @@ public final class MainActivity extends Activity {
                 mainHandler.post(() -> {
                     if (generation != playlistGeneration || isFinishing()) return;
                     if (hasUsablePlaylist) {
-                        loadingPanel.setVisibility(View.GONE);
+                        hidePlaylistLoadingIfPlaybackPending();
                     } else {
                         showPlaylistError(shortMessage(error));
                     }
@@ -445,7 +464,7 @@ public final class MainActivity extends Activity {
                                 result.isChanged()
                         );
                     } else {
-                        loadingPanel.setVisibility(View.GONE);
+                        hidePlaylistLoadingIfPlaybackPending();
                     }
                     String resultEpgUrl = epgUrl(result.getPlaylist());
                     loadEpgForPlaylist(
@@ -459,7 +478,7 @@ public final class MainActivity extends Activity {
                 mainHandler.post(() -> {
                     if (generation != playlistGeneration || isFinishing()) return;
                     if (hasUsablePlaylist) {
-                        loadingPanel.setVisibility(View.GONE);
+                        hidePlaylistLoadingIfPlaybackPending();
                     } else {
                         showPlaylistError(shortMessage(error));
                     }
@@ -571,7 +590,6 @@ public final class MainActivity extends Activity {
             mainHandler.removeCallbacks(updateProgramme);
         }
 
-        loadingPanel.setVisibility(View.GONE);
         Channel selectedChannel = channels.get(channelIndex);
         boolean sameChannel = previousChannel != null
                 && previousIdentity.equals(PlaybackPreferences.channelIdentity(selectedChannel));
@@ -594,6 +612,7 @@ public final class MainActivity extends Activity {
             channelName.setText(selectedChannel.getName());
             updateProgrammeInfo();
             loadChannelLogo(selectedChannel, contentChanged);
+            hideLoadingState();
         }
     }
 
@@ -601,11 +620,58 @@ public final class MainActivity extends Activity {
         loadFailed = true;
         loadingPanel.setVisibility(View.VISIBLE);
         loadingProgress.setVisibility(View.GONE);
+        loadingChannel.setVisibility(View.GONE);
+        loadingDetail.setVisibility(View.GONE);
         String message = getString(R.string.playlist_error);
         if (detail != null && !detail.isBlank()) {
             message += "\n\n" + detail;
         }
         loadingText.setText(message);
+    }
+
+    private void showLoadingState(String message, Channel channel, String detail) {
+        if (loadingPanel == null || isFinishing()) return;
+        loadingPanel.setVisibility(View.VISIBLE);
+        loadingProgress.setVisibility(View.VISIBLE);
+        loadingText.setText(message == null ? "" : message);
+
+        String name = channel == null || channel.getName() == null
+                ? ""
+                : channel.getName().trim();
+        if (name.isEmpty()) {
+            loadingChannel.setVisibility(View.GONE);
+        } else {
+            loadingChannel.setText(name);
+            loadingChannel.setVisibility(View.VISIBLE);
+        }
+
+        if (detail == null || detail.isBlank()) {
+            loadingDetail.setVisibility(View.GONE);
+        } else {
+            loadingDetail.setText(detail);
+            loadingDetail.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void hideLoadingState() {
+        if (loadingPanel != null) loadingPanel.setVisibility(View.GONE);
+    }
+
+    private void hidePlaylistLoadingIfPlaybackPending() {
+        if (playbackChannel != null) {
+            boolean playbackPending = playbackResolutionTask != null
+                    || player == null
+                    || player.getPlaybackState() != Player.STATE_READY;
+            if (playbackPending) return;
+        }
+        hideLoadingState();
+    }
+
+    private String resolverDetail(StreamResolver resolver) {
+        if (resolver == null || resolver.getId() == null || resolver.getId().isBlank()) {
+            return "";
+        }
+        return getString(R.string.loading_provider_detail, resolver.getId());
     }
 
     private void playChannel(int requestedIndex) {
@@ -636,7 +702,6 @@ public final class MainActivity extends Activity {
             player.stop();
             player.clearMediaItems();
         }
-        resolveAndPlay(channel, playbackGeneration);
         playbackPreferences.rememberChannel(channel, channelIndex);
 
         channelNumber.setText(String.format(Locale.ROOT, "%03d", channelIndex + 1));
@@ -646,6 +711,12 @@ public final class MainActivity extends Activity {
         codecInfo.setText("Analizando stream…");
         setStatus("CARGANDO", R.color.amber);
         loadChannelLogo(channel, revalidateLogo);
+        showLoadingState(
+                getString(R.string.loading_preparing_channel),
+                channel,
+                getString(R.string.loading_identifying_source)
+        );
+        resolveAndPlay(channel, playbackGeneration);
         showOverlayForChannelStart();
     }
 
@@ -698,6 +769,11 @@ public final class MainActivity extends Activity {
         if (player == null || !isCurrentPlayback(channel, expectedGeneration)) return;
         StreamResolver resolver = streamResolverRegistry.find(channel);
         if (resolver == null) {
+            showLoadingState(
+                    getString(R.string.loading_direct_source),
+                    channel,
+                    getString(R.string.loading_opening_hls)
+            );
             startResolvedPlayback(
                     channel,
                     ResolvedPlaybackSource.direct(channel, PLAYER_USER_AGENT),
@@ -714,8 +790,23 @@ public final class MainActivity extends Activity {
         player.stop();
         player.clearMediaItems();
         long requestId = ++playbackResolutionRequestId;
+        showLoadingState(
+                getString(R.string.loading_resolver_initializing),
+                channel,
+                resolverDetail(resolver)
+        );
         playbackResolutionTask = networkExecutor.submit(() -> {
             try {
+                mainHandler.post(() -> {
+                    if (isCurrentPlayback(channel, expectedGeneration)
+                            && requestId == playbackResolutionRequestId) {
+                        showLoadingState(
+                                getString(R.string.loading_resolver_resolving),
+                                channel,
+                                resolverDetail(resolver)
+                        );
+                    }
+                });
                 ResolvedPlaybackSource source = resolverCoordinator.resolve(
                         channel,
                         resolver,
@@ -725,6 +816,11 @@ public final class MainActivity extends Activity {
                     if (!isCurrentPlayback(channel, expectedGeneration)
                             || requestId != playbackResolutionRequestId) return;
                     playbackResolutionTask = null;
+                    showLoadingState(
+                            getString(R.string.loading_resolver_source_ready),
+                            channel,
+                            getString(R.string.loading_waiting_first_segment)
+                    );
                     startResolvedPlayback(channel, source, expectedGeneration, requestId);
                 });
             } catch (Exception error) {
@@ -751,6 +847,11 @@ public final class MainActivity extends Activity {
         tokenRefreshAttempted = true;
         fallbackAttempted = true;
         codecInfo.setText("Probando respaldo del canal");
+        showLoadingState(
+                getString(R.string.loading_fallback_source),
+                channel,
+                "URL publicada en la M3U"
+        );
         startResolvedPlayback(
                 channel,
                 ResolvedPlaybackSource.fallback(channel, resolver.getId(), PLAYER_USER_AGENT),
@@ -780,6 +881,11 @@ public final class MainActivity extends Activity {
         currentPlaybackSource = source;
         playbackRecoveryPolicy.reset();
         player.setMediaSource(mediaSourceFor(channel, source));
+        showLoadingState(
+                getString(R.string.loading_configuring_media3),
+                channel,
+                getString(R.string.loading_waiting_first_segment)
+        );
         prepareAndPlay();
     }
 
@@ -825,10 +931,15 @@ public final class MainActivity extends Activity {
             tokenRefreshAttempted = true;
             setStatus("RENOVANDO", R.color.amber);
             codecInfo.setText("Renovando fuente");
+            StreamResolver resolver = streamResolverRegistry.find(channel);
+            showLoadingState(
+                    getString(R.string.loading_refreshing_source),
+                    channel,
+                    resolverDetail(resolver)
+            );
             // Drop the rejected URL before requesting the replacement token.
             // It must not be available to a generic retry path.
             discardCurrentPlaybackSource();
-            StreamResolver resolver = streamResolverRegistry.find(channel);
             resolverCoordinator.invalidate(channel, resolver);
             if (player != null) {
                 player.stop();
@@ -842,6 +953,11 @@ public final class MainActivity extends Activity {
             fallbackAttempted = true;
             setStatus("RESPALDO", R.color.amber);
             codecInfo.setText("Probando respaldo del canal");
+            showLoadingState(
+                    getString(R.string.loading_fallback_source),
+                    channel,
+                    "URL publicada en la M3U"
+            );
             startResolvedPlayback(
                     channel,
                     ResolvedPlaybackSource.fallback(
@@ -860,6 +976,7 @@ public final class MainActivity extends Activity {
     private void showPlaybackFailure() {
         setStatus("ERROR", R.color.red);
         codecInfo.setText("Canal no disponible");
+        hideLoadingState();
         overlayAwaitingPlayback = true;
         showOverlay(true);
     }
@@ -873,6 +990,11 @@ public final class MainActivity extends Activity {
         // must keep the current resolved URL. Re-running the provider resolver
         // here would rebuild Media3 for an error that did not invalidate the
         // playlist or its token.
+        showLoadingState(
+                getString(R.string.loading_retrying_source),
+                playbackChannel,
+                "Conservando la fuente actual; esperando el siguiente segmento"
+        );
         player.stop();
         if (playbackChannel != null && currentPlaybackSource != null) {
             player.setMediaSource(mediaSourceFor(playbackChannel, currentPlaybackSource));
@@ -1105,6 +1227,7 @@ public final class MainActivity extends Activity {
     private void updateStreamStatus(int state) {
         if (state == Player.STATE_READY) {
             setStatus("ESTABLE", R.color.green);
+            if (!loadFailed) hideLoadingState();
             if (overlayAwaitingPlayback) {
                 overlayAwaitingPlayback = false;
                 showOverlay(false);
