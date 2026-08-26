@@ -75,7 +75,11 @@ public final class TvnStreamResolver implements StreamResolver {
                 : listener;
         String livePage = config("pageUrl", LIVE_PAGE);
         String pageReferer = config("pageReferer", "https://www.tvn.cl/");
-        progress.onProgress(ResolutionProgress.of(ResolutionStage.PAGE_REQUEST));
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.PAGE_REQUEST,
+                "GET " + SafePlaybackText.url(livePage)
+                        + " · HTML · configuración pública"
+        ));
         String page = httpClient.getText(livePage, pageHeaders(pageReferer));
         ProviderStreamParsers.TvnConfig providerConfig = ProviderStreamParsers.parseTvn(
                 page,
@@ -83,22 +87,37 @@ public final class TvnStreamResolver implements StreamResolver {
                 config("tokenPattern", ""),
                 config("defaultStreamId", "57a498c4d7b86d600e5461cb")
         );
-        progress.onProgress(ResolutionProgress.of(ResolutionStage.PAGE_PARSED));
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.PAGE_PARSED,
+                "HTML válido · buscando id=" + providerConfig.getStreamId()
+                        + " + access_token=[oculto]"
+        ));
         Map<String, String> query = new LinkedHashMap<>();
         query.put("access_token", providerConfig.getAccessToken());
         String template = config("playlistTemplate", PLAYLIST_BASE + "{streamId}.m3u8");
-        progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_BUILDING));
         String playbackUrl = TokenHttpClient.buildUrl(
                 template.replace("{streamId}", providerConfig.getStreamId()),
                 query
         );
         URI playbackUri = URI.create(playbackUrl);
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.SOURCE_BUILDING,
+                "GET " + SafePlaybackText.url(playbackUri)
+                        + " · token solo en memoria"
+        ));
+        String playbackOrigin = config("playbackOrigin", "https://live.tvn.cl");
         Map<String, String> playbackHeaders = playbackHeaders(
                 livePage,
-                config("playbackOrigin", "https://live.tvn.cl")
+                playbackOrigin
         );
         validator.validateForPlayback(playbackUri, playbackHeaders, progress);
-        progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_FOUND));
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.SOURCE_FOUND,
+                "Playlist HLS válida · id=" + providerConfig.getStreamId()
+                        + " · Referer=" + SafePlaybackText.url(livePage)
+                        + " · Origin=" + SafePlaybackText.url(playbackOrigin)
+                        + " · Media3 validará variante/segmento"
+        ));
         return ResolvedPlaybackSource.dynamic(
                 getId(),
                 stableSourceId(channel),

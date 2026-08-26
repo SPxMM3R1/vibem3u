@@ -86,11 +86,17 @@ public final class HighflyStreamResolver implements StreamResolver {
             progress.onProgress(ResolutionProgress.counted(
                     ResolutionStage.SOURCE_CANDIDATE,
                     ++candidateNumber,
-                    candidates.size()
+                    candidates.size(),
+                    "GET " + SafePlaybackText.url(candidate)
+                            + " · playlist HLS · candidato configurado"
             ));
             try {
                 URI accepted = validateCandidate(candidate, progress);
-                progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_FOUND));
+                progress.onProgress(ResolutionProgress.of(
+                        ResolutionStage.SOURCE_FOUND,
+                        "Playlist HLS válida · GET " + SafePlaybackText.url(accepted)
+                                + " · Media3 validará variante/segmento"
+                ));
                 return ResolvedPlaybackSource.dynamic(
                         getId(),
                         stableSourceId(channel),
@@ -108,16 +114,23 @@ public final class HighflyStreamResolver implements StreamResolver {
         if (!manifestUrl.isBlank()) {
             try {
                 URI manifestUri = validManifestUri(manifestUrl);
-                progress.onProgress(ResolutionProgress.of(ResolutionStage.PAGE_REQUEST));
+                progress.onProgress(ResolutionProgress.of(
+                        ResolutionStage.PAGE_REQUEST,
+                        "GET " + SafePlaybackText.url(manifestUri)
+                                + " · JSON · manifiesto de recuperación"
+                ));
                 String manifest = httpClient.getText(
                         manifestUri.toString(),
                         Collections.singletonMap("Accept", "application/json")
                 );
-                progress.onProgress(ResolutionProgress.of(ResolutionStage.PAGE_PARSED));
                 List<String> identifiers = new ArrayList<>();
                 identifiers.add(slug);
                 identifiers.add(channel.getTvgId());
                 identifiers.add(channel.getName());
+                progress.onProgress(ResolutionProgress.of(
+                        ResolutionStage.PAGE_PARSED,
+                        "JSON válido · buscando slug/tvg-id/nombre"
+                ));
                 URI manifestCandidate = ResolverPayloadParsers.parseHighflyManifest(
                         manifest,
                         identifiers
@@ -126,11 +139,17 @@ public final class HighflyStreamResolver implements StreamResolver {
                     progress.onProgress(ResolutionProgress.counted(
                             ResolutionStage.SOURCE_CANDIDATE,
                             ++candidateNumber,
-                            candidateNumber
+                            candidateNumber,
+                            "GET " + SafePlaybackText.url(manifestCandidate)
+                                    + " · playlist HLS · manifiesto"
                     ));
                     try {
                         URI accepted = validateCandidate(manifestCandidate, progress);
-                        progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_FOUND));
+                        progress.onProgress(ResolutionProgress.of(
+                                ResolutionStage.SOURCE_FOUND,
+                                "Playlist HLS válida · GET " + SafePlaybackText.url(accepted)
+                                        + " · Media3 validará variante/segmento"
+                        ));
                         return ResolvedPlaybackSource.dynamic(
                                 getId(),
                                 stableSourceId(channel),
@@ -170,6 +189,10 @@ public final class HighflyStreamResolver implements StreamResolver {
                         || !"leaf.highfly.dev".equalsIgnoreCase(candidate.getHost())
                         || !isCertificateFailure(error)) throw error;
                 URI fallback = URI.create(candidate.toString().replaceFirst("^https://", "http://"));
+                listener.onProgress(ResolutionProgress.of(
+                        ResolutionStage.SOURCE_CANDIDATE,
+                        "TLS rechazado · probando HTTP " + SafePlaybackText.url(fallback)
+                ));
                 validator.validateForPlayback(fallback, Collections.emptyMap(), listener);
                 return fallback;
             }

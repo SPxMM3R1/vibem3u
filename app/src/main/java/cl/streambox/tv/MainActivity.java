@@ -630,7 +630,7 @@ public final class MainActivity extends Activity {
         loadingPanel.setVisibility(View.VISIBLE);
         String message = getString(R.string.playlist_error);
         if (detail != null && !detail.isBlank()) {
-            message += " · " + detail.replace('\n', ' ');
+            message += " · " + SafePlaybackText.detail(detail.replace('\n', ' '));
         }
         loadingText.setText(message);
     }
@@ -638,7 +638,7 @@ public final class MainActivity extends Activity {
     private void showLoadingState(String message) {
         if (loadingPanel == null || isFinishing()) return;
         loadingPanel.setVisibility(View.VISIBLE);
-        String safeMessage = message == null ? "" : message.trim();
+        String safeMessage = SafePlaybackText.detail(message == null ? "" : message.trim());
         boolean animate = safeMessage.endsWith("…") || safeMessage.endsWith("...");
         String base = stripTrailingEllipsis(safeMessage);
         if (base.equals(loadingMessageBase) && animate == loadingMessageAnimating) return;
@@ -704,6 +704,9 @@ public final class MainActivity extends Activity {
             case TOKEN_REQUEST:
                 message = getString(R.string.loading_resolver_token);
                 break;
+            case TOKEN_PARSED:
+                message = getString(R.string.loading_resolver_token_parsed);
+                break;
             case SOURCE_BUILDING:
                 message = getString(R.string.loading_resolver_building);
                 break;
@@ -724,6 +727,12 @@ public final class MainActivity extends Activity {
                 break;
             default:
                 return;
+        }
+        String detail = progress.getDetail();
+        boolean animate = message.endsWith("…") || message.endsWith("...");
+        if (detail != null && !detail.isBlank()) {
+            message = stripTrailingEllipsis(message) + " · " + detail;
+            if (animate) message += "…";
         }
         showLoadingState(message);
     }
@@ -869,7 +878,11 @@ public final class MainActivity extends Activity {
         if (player == null || !isCurrentPlayback(channel, expectedGeneration)) return;
         StreamResolver resolver = streamResolverRegistry.find(channel);
         if (resolver == null) {
-            showLoadingState(getString(R.string.loading_direct_source));
+            showLoadingState(
+                    getString(R.string.loading_direct_source)
+                            + " · GET " + SafePlaybackText.url(channel.getStreamUri())
+                            + " · entregando a Media3…"
+            );
             startResolvedPlayback(
                     channel,
                     ResolvedPlaybackSource.direct(channel, PLAYER_USER_AGENT),
@@ -886,7 +899,10 @@ public final class MainActivity extends Activity {
         player.stop();
         player.clearMediaItems();
         long requestId = ++playbackResolutionRequestId;
-        showLoadingState(getString(R.string.loading_resolver_initializing));
+        showLoadingState(
+                getString(R.string.loading_resolver_initializing)
+                        + " · " + resolver.getId() + " · preparando flujo…"
+        );
         ResolutionProgressListener progressListener = progress -> mainHandler.post(() -> {
             if (isCurrentPlayback(channel, expectedGeneration)
                     && requestId == playbackResolutionRequestId) {
@@ -911,7 +927,10 @@ public final class MainActivity extends Activity {
                     if (!isCurrentPlayback(channel, expectedGeneration)
                             || requestId != playbackResolutionRequestId) return;
                     playbackResolutionTask = null;
-                    showLoadingState(getString(R.string.loading_resolver_source_ready));
+                    showLoadingState(
+                            getString(R.string.loading_resolver_source_ready)
+                                    + " · fuente entregada a Media3…"
+                    );
                     startResolvedPlayback(channel, source, expectedGeneration, requestId);
                 });
             } catch (Exception error) {
@@ -968,7 +987,14 @@ public final class MainActivity extends Activity {
         currentPlaybackSource = source;
         playbackRecoveryPolicy.reset();
         player.setMediaSource(mediaSourceFor(channel, source));
-        showLoadingState(getString(R.string.loading_configuring_media3));
+        showLoadingState(
+                getString(R.string.loading_configuring_media3)
+                        + " · " + (source.isDynamicallyResolved()
+                        ? "fuente resuelta"
+                        : "fuente directa")
+                        + " · GET " + SafePlaybackText.url(source.getPlaybackUri())
+                        + "…"
+        );
         prepareAndPlay();
     }
 
@@ -2002,9 +2028,7 @@ public final class MainActivity extends Activity {
         }
         String message = error == null ? null : error.getMessage();
         if (message == null || message.isBlank()) return "Error desconocido.";
-        return message
-                .replaceAll("(?i)https?://[^\\s]+", "URL")
-                .replaceAll("(?i)(access_token|token|serverKey)=([^&\\s]+)", "$1=[oculto]");
+        return SafePlaybackText.detail(message);
     }
 
     private boolean isProviderRefreshError(PlaybackException error) {

@@ -79,7 +79,11 @@ public final class MeganoticiasStreamResolver implements StreamResolver {
                 ? ResolutionProgressListener.NONE
                 : listener;
         String livePage = config("pageUrl", LIVE_PAGE);
-        progress.onProgress(ResolutionProgress.of(ResolutionStage.PAGE_REQUEST));
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.PAGE_REQUEST,
+                "GET " + SafePlaybackText.url(livePage)
+                        + " · HTML · VideoSenalEnVivo"
+        ));
         String page = httpClient.getText(livePage, pageHeaders(livePage));
         ProviderStreamParsers.MeganoticiasConfig providerConfig =
                 ProviderStreamParsers.parseMeganoticiasConfig(
@@ -87,7 +91,11 @@ public final class MeganoticiasStreamResolver implements StreamResolver {
                         config("idPattern", ""),
                         config("serverKeyPattern", "")
                 );
-        progress.onProgress(ResolutionProgress.of(ResolutionStage.PAGE_PARSED));
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.PAGE_PARSED,
+                "HTML válido · VideoSenalEnVivo · id=" + providerConfig.getStreamId()
+                        + " · serverKey=[oculto]"
+        ));
 
         Map<String, String> query = new LinkedHashMap<>();
         query.put("id", providerConfig.getStreamId());
@@ -95,31 +103,54 @@ public final class MeganoticiasStreamResolver implements StreamResolver {
         query.put("type", "live");
         query.put("process", "access_token");
         query.put("key", providerConfig.getServerKey());
-        progress.onProgress(ResolutionProgress.of(ResolutionStage.TOKEN_REQUEST));
+        String tokenRequestUrl = TokenHttpClient.buildUrl(
+                config("apiUrl", API_URL),
+                query
+        );
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.TOKEN_REQUEST,
+                "GET " + SafePlaybackText.url(tokenRequestUrl)
+                        + " · Accept: application/json · key/ua ocultos"
+        ));
         String tokenJson = httpClient.getText(
-                TokenHttpClient.buildUrl(config("apiUrl", API_URL), query),
+                tokenRequestUrl,
                 apiHeaders(livePage, config("playbackOrigin", "https://www.meganoticias.cl"))
         );
         String accessToken = ProviderStreamParsers.parseMeganoticiasAccessToken(
                 tokenJson,
                 config("accessTokenPath", "access_token")
         );
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.TOKEN_PARSED,
+                "JSON válido · access_token recibido · retenido solo en memoria"
+        ));
 
         Map<String, String> playbackQuery = new LinkedHashMap<>();
         playbackQuery.put("access_token", accessToken);
         String template = config("playlistTemplate", PLAYLIST_BASE + "{streamId}.m3u8");
-        progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_BUILDING));
         String playbackUrl = TokenHttpClient.buildUrl(
                 template.replace("{streamId}", providerConfig.getStreamId()),
                 playbackQuery
         );
         URI playbackUri = URI.create(playbackUrl);
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.SOURCE_BUILDING,
+                "GET " + SafePlaybackText.url(playbackUri)
+                        + " · token solo en memoria"
+        ));
+        String playbackOrigin = config("playbackOrigin", "https://www.meganoticias.cl");
         Map<String, String> playbackHeaders = playbackHeaders(
                 livePage,
-                config("playbackOrigin", "https://www.meganoticias.cl")
+                playbackOrigin
         );
         validator.validateForPlayback(playbackUri, playbackHeaders, progress);
-        progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_FOUND));
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.SOURCE_FOUND,
+                "Playlist HLS válida · id=" + providerConfig.getStreamId()
+                        + " · Referer=" + SafePlaybackText.url(livePage)
+                        + " · Origin=" + SafePlaybackText.url(playbackOrigin)
+                        + " · Media3 validará variante/segmento"
+        ));
         return ResolvedPlaybackSource.dynamic(
                 getId(),
                 stableSourceId(channel),

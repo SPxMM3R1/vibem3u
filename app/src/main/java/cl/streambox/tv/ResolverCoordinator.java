@@ -46,7 +46,11 @@ public final class ResolverCoordinator {
             if (!forceRefresh && allowCache) {
                 ResolvedPlaybackSource cached = memoryCache.get(key);
                 if (cached != null && !cached.isExpired(System.currentTimeMillis())) {
-                    progress.onProgress(ResolutionProgress.of(ResolutionStage.CACHE_REUSED));
+                    progress.onProgress(ResolutionProgress.of(
+                            ResolutionStage.CACHE_REUSED,
+                            "MEMORIA · clave=" + key + " · GET "
+                                    + SafePlaybackText.url(cached.getPlaybackUri())
+                    ));
                     return cached;
                 }
                 if (cached != null) memoryCache.remove(key);
@@ -55,7 +59,10 @@ public final class ResolverCoordinator {
             if (existing == null) inFlight.put(key, owner);
         }
         if (existing != null) {
-            progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_REQUEST));
+            progress.onProgress(ResolutionProgress.of(
+                    ResolutionStage.SOURCE_REQUEST,
+                    "resolución compartida · esperando solicitud en curso"
+            ));
             return await(existing);
         }
 

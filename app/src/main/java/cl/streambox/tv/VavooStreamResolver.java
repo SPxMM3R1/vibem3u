@@ -118,7 +118,11 @@ public final class VavooStreamResolver implements StreamResolver {
                 )
         );
         if (race.getSource() != null) {
-            progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_FOUND));
+            progress.onProgress(ResolutionProgress.of(
+                    ResolutionStage.SOURCE_FOUND,
+                    "HLS válido · GET " + SafePlaybackText.url(race.getSource())
+                            + " · fuente Vavoo aceptada"
+            ));
             return ResolvedPlaybackSource.dynamic(
                     getId(),
                     stableSourceId(channel),

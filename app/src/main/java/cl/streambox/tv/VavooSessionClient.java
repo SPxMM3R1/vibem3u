@@ -76,17 +76,31 @@ final class VavooSessionClient {
                     // one for every channel open and retain it only while this
                     // resolve call is active.
                     progress.onProgress(ResolutionProgress.of(ResolutionStage.SESSION));
-                    String currentSignature = signature(true);
-                    progress.onProgress(ResolutionProgress.of(ResolutionStage.CATALOG_REQUEST));
+                    String currentSignature = signature(true, progress);
+                    progress.onProgress(ResolutionProgress.of(
+                            ResolutionStage.CATALOG_REQUEST,
+                            "Catálogo · preparando búsqueda JSON"
+                    ));
                     List<CatalogEntry> entries = catalog(
                             currentSignature,
                             targets,
                             pass > 0,
                             progress
                     );
-                    progress.onProgress(ResolutionProgress.of(ResolutionStage.CATALOG_PARSED));
-                    progress.onProgress(ResolutionProgress.of(ResolutionStage.CATALOG_MATCHING));
+                    progress.onProgress(ResolutionProgress.of(
+                            ResolutionStage.CATALOG_PARSED,
+                            "JSON válido · entradas=" + entries.size()
+                    ));
+                    progress.onProgress(ResolutionProgress.of(
+                            ResolutionStage.CATALOG_MATCHING,
+                            "comparando nombre exacto/normalizado + país"
+                    ));
                     List<CatalogEntry> matches = rankedMatches(channel, aliases, entries);
+                    progress.onProgress(ResolutionProgress.of(
+                            ResolutionStage.CATALOG_MATCHING,
+                            "coincidencias utilizables=" + matches.size()
+                                    + " de " + entries.size()
+                    ));
                     if (matches.isEmpty()) {
                         throw new IOException("El canal no aparece en el catálogo Vavoo.");
                     }
@@ -98,10 +112,13 @@ final class VavooSessionClient {
                         progress.onProgress(ResolutionProgress.counted(
                                 ResolutionStage.SOURCE_REQUEST,
                                 attempted,
-                                Math.min(matches.size(), maximum)
+                                Math.min(matches.size(), maximum),
+                                "resolución " + attempted + "/"
+                                        + Math.min(matches.size(), maximum)
+                                        + " · source de catálogo"
                         ));
                         try {
-                            URI candidate = resolveEntry(match, currentSignature);
+                            URI candidate = resolveEntry(match, currentSignature, progress);
                             if (candidate != null) resolved.add(candidate);
                         } catch (IOException error) {
                             if (firstError == null) firstError = error;
@@ -127,7 +144,10 @@ final class VavooSessionClient {
         catalogsByTarget.clear();
     }
 
-    private String signature(boolean force) throws IOException {
+    private String signature(
+            boolean force,
+            ResolutionProgressListener listener
+    ) throws IOException {
         long now = System.currentTimeMillis();
         if (!force && signature != null) {
             return signature;
@@ -145,6 +165,11 @@ final class VavooSessionClient {
         IOException failure = null;
         for (String endpoint : new String[]{primary, fallback}) {
             try {
+                listener.onProgress(ResolutionProgress.of(
+                        ResolutionStage.SESSION,
+                        "POST " + SafePlaybackText.url(endpoint)
+                                + " · generando firma en memoria"
+                ));
                 String response = httpClient.postJsonText(
                         endpoint,
                         pingHeaders(),
@@ -158,6 +183,10 @@ final class VavooSessionClient {
                 }
                 signature = value;
                 signatureCreatedAt = now;
+                listener.onProgress(ResolutionProgress.of(
+                        ResolutionStage.SESSION,
+                        "JSON válido · addonSig recibido · firma solo en memoria"
+                ));
                 return value;
             } catch (IOException | JSONException error) {
                 failure = error instanceof IOException
@@ -209,6 +238,11 @@ final class VavooSessionClient {
         long now = System.currentTimeMillis();
         CachedCatalog cached = catalogsByTarget.get(target.key());
         if (!force && cached != null && now - cached.createdAt < CATALOG_REUSE_MS) {
+            listener.onProgress(ResolutionProgress.of(
+                    ResolutionStage.CATALOG_PARSED,
+                    "memoria · reutilizando catálogo para búsqueda="
+                            + target.searchName
+            ));
             return cached.entries;
         }
         List<CatalogEntry> loaded = searchCatalog(currentSignature, target, true, listener);
@@ -226,15 +260,24 @@ final class VavooSessionClient {
             boolean filterCountry,
             ResolutionProgressListener listener
     ) throws IOException {
+        ResolutionProgressListener progress = listener == null
+                ? ResolutionProgressListener.NONE
+                : listener;
         int maxPages = definition.getIntConfig("maxSearchPages", 2, 1, 4);
         int maxItems = definition.getIntConfig("maxSearchItems", 100, 10, 300);
         String cursor = null;
         List<CatalogEntry> loaded = new ArrayList<>();
         for (int page = 0; page < maxPages && loaded.size() < maxItems; page++) {
-            listener.onProgress(ResolutionProgress.counted(
+            String endpoint = catalogEndpoint();
+            progress.onProgress(ResolutionProgress.counted(
                     ResolutionStage.CATALOG_PAGE,
                     page + 1,
-                    maxPages
+                    maxPages,
+                    "POST " + SafePlaybackText.url(endpoint)
+                            + " · search=\"" + target.searchName + "\""
+                            + (filterCountry && !target.country.isBlank()
+                            ? " · filter.group=" + countryGroup(target.country)
+                            : " · sin filtro de país")
             ));
             JSONObject payload = new JSONObject();
             try {
@@ -257,13 +300,19 @@ final class VavooSessionClient {
             }
 
             JSONObject response = postApi(
-                    catalogEndpoint(),
+                    endpoint,
                     payload,
                     currentSignature,
                     MAX_CATALOG_PAGE_BYTES
             );
             JSONArray items = response.optJSONArray("items");
-            if (items == null || items.length() == 0) break;
+            if (items == null || items.length() == 0) {
+                progress.onProgress(ResolutionProgress.of(
+                        ResolutionStage.CATALOG_PARSED,
+                        "JSON válido · items=0 · fin de búsqueda"
+                ));
+                break;
+            }
             for (int index = 0; index < items.length() && loaded.size() < maxItems; index++) {
                 JSONObject item = items.optJSONObject(index);
                 if (item == null || !"iptv".equalsIgnoreCase(item.optString("type"))) continue;
@@ -275,13 +324,22 @@ final class VavooSessionClient {
                 if (id.isBlank() || name.isBlank() || url.isBlank()) continue;
                 loaded.add(new CatalogEntry(id, name, url, baseCountry(group), group));
             }
+            progress.onProgress(ResolutionProgress.of(
+                    ResolutionStage.CATALOG_PARSED,
+                    "JSON válido · items=" + items.length()
+                            + " · acumulados=" + loaded.size()
+            ));
             cursor = response.optString("nextCursor", "").trim();
             if (cursor.isBlank()) break;
         }
         return loaded;
     }
 
-    private URI resolveEntry(CatalogEntry entry, String currentSignature) throws IOException {
+    private URI resolveEntry(
+            CatalogEntry entry,
+            String currentSignature,
+            ResolutionProgressListener listener
+    ) throws IOException {
         JSONObject payload = new JSONObject();
         try {
             payload.put("language", language());
@@ -292,12 +350,22 @@ final class VavooSessionClient {
             throw new IOException("No se pudo preparar la resolución Vavoo.", impossible);
         }
         JSONObject object;
+        String endpoint = resolveEndpoint();
+        listener.onProgress(ResolutionProgress.of(
+                ResolutionStage.SOURCE_REQUEST,
+                "POST " + SafePlaybackText.url(endpoint)
+                        + " · id=" + entry.id + " · solicitando source"
+        ));
         String response = postApiText(
-                resolveEndpoint(),
+                endpoint,
                 payload,
                 currentSignature,
                 MAX_RESOLVE_BYTES
         );
+        listener.onProgress(ResolutionProgress.of(
+                ResolutionStage.SOURCE_REQUEST,
+                "JSON válido · source recibida solo en memoria · id=" + entry.id
+        ));
         try {
             String candidate = "";
             String trimmed = response.trim();

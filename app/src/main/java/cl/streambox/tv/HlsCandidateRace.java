@@ -76,7 +76,9 @@ final class HlsCandidateRace {
                     progress.onProgress(ResolutionProgress.counted(
                             ResolutionStage.SOURCE_CANDIDATE,
                             displayIndex,
-                            displayTotal
+                            displayTotal,
+                            "GET " + SafePlaybackText.url(candidate)
+                                    + " · playlist/variante/segmento"
                     ));
                     submitted.add(completion.submit(new ValidationTask(candidate, validator)));
                     nextIndex++;

@@ -13,6 +13,7 @@ public enum ResolutionStage {
     PAGE_REQUEST,
     PAGE_PARSED,
     TOKEN_REQUEST,
+    TOKEN_PARSED,
     SOURCE_BUILDING,
     HLS_PLAYLIST,
     HLS_VARIANT,

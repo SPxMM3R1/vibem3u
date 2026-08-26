@@ -51,12 +51,21 @@ public final class HlsStreamValidator {
         ResolutionProgressListener progress = listener == null
                 ? ResolutionProgressListener.NONE
                 : listener;
-        progress.onProgress(ResolutionProgress.of(ResolutionStage.HLS_PLAYLIST));
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.HLS_PLAYLIST,
+                "GET " + SafePlaybackText.url(playbackUri) + " · esperando #EXTM3U"
+        ));
         PlaylistResponse response = loadPlaylist(playbackUri, safeHeaders);
         if (firstVariant(response.lines) == null
                 && mediaReferences(response.lines).isEmpty()) {
             throw new IOException("El HLS no publicó una fuente reproducible.");
         }
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.HLS_PLAYLIST,
+                "HTTP " + response.statusCode + " · #EXTM3U válido · referencias "
+                        + mediaReferenceCount(response.lines)
+                        + " · Media3 continúa con variante/segmento"
+        ));
     }
 
     public void validate(
@@ -71,25 +80,46 @@ public final class HlsStreamValidator {
         ResolutionProgressListener progress = listener == null
                 ? ResolutionProgressListener.NONE
                 : listener;
-        progress.onProgress(ResolutionProgress.of(ResolutionStage.HLS_PLAYLIST));
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.HLS_PLAYLIST,
+                "GET " + SafePlaybackText.url(playbackUri) + " · esperando #EXTM3U"
+        ));
         PlaylistResponse current = loadPlaylist(playbackUri, safeHeaders);
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.HLS_PLAYLIST,
+                "HTTP " + current.statusCode + " · #EXTM3U válido · referencias "
+                        + mediaReferenceCount(current.lines)
+        ));
 
         for (int depth = 0; depth < MAX_PLAYLIST_DEPTH; depth++) {
             String variant = firstVariant(current.lines);
             if (variant == null) break;
-            progress.onProgress(ResolutionProgress.of(ResolutionStage.HLS_VARIANT));
-            current = loadPlaylist(resolve(current.finalUri, variant), safeHeaders);
+            URI variantUri = resolve(current.finalUri, variant);
+            progress.onProgress(ResolutionProgress.of(
+                    ResolutionStage.HLS_VARIANT,
+                    "GET " + SafePlaybackText.url(variantUri) + " · playlist secundaria"
+            ));
+            current = loadPlaylist(variantUri, safeHeaders);
+            progress.onProgress(ResolutionProgress.of(
+                    ResolutionStage.HLS_VARIANT,
+                    "HTTP " + current.statusCode + " · variante #EXTM3U válida"
+            ));
         }
 
         List<String> segments = mediaReferences(current.lines);
         if (segments.isEmpty()) throw new IOException("El HLS no publicó segmentos.");
 
-        progress.onProgress(ResolutionProgress.of(ResolutionStage.HLS_SEGMENT));
         IOException lastError = null;
         for (int index : recentProbeOrder(segments.size())) {
             try {
+                URI segmentUri = resolve(current.finalUri, segments.get(index));
+                progress.onProgress(ResolutionProgress.of(
+                        ResolutionStage.HLS_SEGMENT,
+                        "GET " + SafePlaybackText.url(segmentUri)
+                                + " · Range bytes=0-4095"
+                ));
                 TokenHttpClient.Response response = httpClient.getPrefix(
-                        resolve(current.finalUri, segments.get(index)).toString(),
+                        segmentUri.toString(),
                         safeHeaders,
                         MAX_SEGMENT_PROBE_BYTES,
                         "bytes=0-4095"
@@ -98,6 +128,10 @@ public final class HlsStreamValidator {
                         || looksLikeErrorDocument(response.getBody())) {
                     throw new IOException("El segmento HLS no es reproducible.");
                 }
+                progress.onProgress(ResolutionProgress.of(
+                        ResolutionStage.HLS_SEGMENT,
+                        "HTTP " + response.getStatusCode() + " · segmento reproducible"
+                ));
                 return;
             } catch (IOException error) {
                 lastError = error;
@@ -122,6 +156,7 @@ public final class HlsStreamValidator {
         }
         return new PlaylistResponse(
                 response.getFinalUri(),
+                response.getStatusCode(),
                 Arrays.asList(content.split("\\r?\\n"))
         );
     }
@@ -145,6 +180,10 @@ public final class HlsStreamValidator {
             if (!value.isBlank() && !value.startsWith("#")) references.add(value);
         }
         return references;
+    }
+
+    private static int mediaReferenceCount(List<String> lines) {
+        return mediaReferences(lines).size();
     }
 
     static int[] recentProbeOrder(int segmentCount) {
@@ -176,10 +215,12 @@ public final class HlsStreamValidator {
 
     private static final class PlaylistResponse {
         final URI finalUri;
+        final int statusCode;
         final List<String> lines;
 
-        PlaylistResponse(URI finalUri, List<String> lines) {
+        PlaylistResponse(URI finalUri, int statusCode, List<String> lines) {
             this.finalUri = finalUri;
+            this.statusCode = statusCode;
             this.lines = lines;
         }
     }

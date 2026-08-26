@@ -221,7 +221,11 @@ public final class TvVooStreamResolver implements StreamResolver {
                 candidateCount += race.getAttempted();
                 if (race.getLastError() != null) lastError = race.getLastError();
                 if (race.getSource() != null) {
-                    progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_FOUND));
+                    progress.onProgress(ResolutionProgress.of(
+                            ResolutionStage.SOURCE_FOUND,
+                            "HLS válido · GET " + SafePlaybackText.url(race.getSource())
+                                    + " · candidato aceptado"
+                    ));
                     return ResolvedPlaybackSource.dynamic(
                             getId(),
                             stableSourceId(channel),
@@ -416,15 +420,23 @@ public final class TvVooStreamResolver implements StreamResolver {
             progress.onProgress(ResolutionProgress.counted(
                     ResolutionStage.ALIAS_ATTEMPT,
                     absoluteIndex + 1,
-                    aliasTotal
+                    aliasTotal,
+                    "alias=" + alias + " · preparando consulta JSON"
             ));
             submitted.add(completion.submit(() -> {
                 try {
                     deadline.check();
                     String endpoint = endpointBase + "/" + encodedAlias(alias) + ".json";
-                    progress.onProgress(ResolutionProgress.of(ResolutionStage.CATALOG_REQUEST));
+                    progress.onProgress(ResolutionProgress.of(
+                            ResolutionStage.CATALOG_REQUEST,
+                            "GET " + SafePlaybackText.url(endpoint)
+                                    + " · JSON · streams[].url"
+                    ));
                     String response = httpClient.getText(endpoint, jsonHeaders);
-                    progress.onProgress(ResolutionProgress.of(ResolutionStage.CATALOG_PARSED));
+                    progress.onProgress(ResolutionProgress.of(
+                            ResolutionStage.CATALOG_PARSED,
+                            "JSON válido · extrayendo streams[].url · alias=" + alias
+                    ));
                     return new AliasResult(
                             absoluteIndex,
                             ResolverPayloadParsers.parseTvVooCandidates(
@@ -444,10 +456,16 @@ public final class TvVooStreamResolver implements StreamResolver {
         try {
             while (results.size() < batchSize) {
                 deadline.check();
-                Future<AliasResult> future = completion.poll(
-                        deadline.remainingMillis(),
-                        TimeUnit.MILLISECONDS
-                );
+                Future<AliasResult> future;
+                try {
+                    future = completion.poll(
+                            deadline.remainingMillis(),
+                            TimeUnit.MILLISECONDS
+                    );
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Solicitud cancelada.", error);
+                }
                 if (future == null) throw new IOException("Tiempo de resolución agotado.");
                 try {
                     results.add(future.get());

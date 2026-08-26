@@ -1,6 +1,6 @@
 package cl.streambox.tv;
 
-/** Receives safe resolver stages without exposing provider URLs or credentials. */
+/** Receives resolver stages with URLs already sanitized for diagnostics. */
 @FunctionalInterface
 public interface ResolutionProgressListener {
     ResolutionProgressListener NONE = progress -> { };
