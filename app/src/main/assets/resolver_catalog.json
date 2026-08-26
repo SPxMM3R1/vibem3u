@@ -74,8 +74,11 @@
       },
       "config": {
         "endpointBase": "https://tvvoo.hayd.uk/stream/tv",
-        "maxAliases": 8,
-        "maxCandidates": 16,
+        "maxAliases": 6,
+        "maxCandidates": 8,
+        "parallelAliases": 2,
+        "parallelCandidates": 3,
+        "resolutionBudgetMs": 8000,
         "streamsPath": "streams",
         "urlField": "url",
         "allowHttpFallback": true

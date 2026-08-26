@@ -28,6 +28,7 @@ public final class ResolverCoordinator {
                 ? ResolutionProgressListener.NONE
                 : listener;
         String key = key(channel, resolver);
+        boolean allowCache = shouldCache(resolver);
         InFlight owner = new InFlight();
         InFlight existing;
         synchronized (lock) {
@@ -36,7 +37,13 @@ public final class ResolverCoordinator {
                 InFlight stale = inFlight.remove(key);
                 if (stale != null) stale.cancel();
             }
-            if (!forceRefresh && resolver.cacheTtlMillis() > 0L) {
+            if (!allowCache) {
+                // A resolver can be upgraded from a cached implementation to
+                // a token-producing one during the same process. Remove any
+                // legacy entry before it can be observed by playback.
+                memoryCache.remove(key);
+            }
+            if (!forceRefresh && allowCache) {
                 ResolvedPlaybackSource cached = memoryCache.get(key);
                 if (cached != null && !cached.isExpired(System.currentTimeMillis())) {
                     progress.onProgress(ResolutionProgress.of(ResolutionStage.CACHE_REUSED));
@@ -54,7 +61,7 @@ public final class ResolverCoordinator {
 
         try {
             ResolvedPlaybackSource resolved = resolver.resolve(channel, progress);
-            if (resolver.cacheTtlMillis() > 0L && resolved != null) {
+            if (allowCache && resolved != null) {
                 synchronized (lock) {
                     if (inFlight.get(key) == owner) memoryCache.put(key, resolved);
                 }
@@ -105,6 +112,12 @@ public final class ResolverCoordinator {
     private static String key(Channel channel, StreamResolver resolver) {
         String stable = resolver.stableSourceId(channel);
         return resolver.getId() + ":" + (stable == null ? "" : stable);
+    }
+
+    private static boolean shouldCache(StreamResolver resolver) {
+        return resolver != null
+                && resolver.cacheResolvedSource()
+                && resolver.cacheTtlMillis() > 0L;
     }
 
     private static final class InFlight {

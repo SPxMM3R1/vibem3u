@@ -13,6 +13,14 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletionService;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLHandshakeException;
 import javax.net.ssl.SSLPeerUnverifiedException;
@@ -21,6 +29,11 @@ import javax.net.ssl.SSLPeerUnverifiedException;
 public final class TvVooStreamResolver implements StreamResolver {
     private static final String DEFAULT_ENDPOINT = "https://tvvoo.hayd.uk/stream/tv";
     static final String PLAYBACK_USER_AGENT = "VAVOO/2.6";
+    private static final int DEFAULT_PARALLEL_ALIASES = 2;
+    private static final int DEFAULT_PARALLEL_CANDIDATES = 3;
+    private static final int DEFAULT_RESOLUTION_BUDGET_MS = 8_000;
+    private static final int DEFAULT_MAX_ALIASES = 6;
+    private static final int DEFAULT_MAX_CANDIDATES = 8;
 
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
@@ -91,6 +104,8 @@ public final class TvVooStreamResolver implements StreamResolver {
 
     @Override public long cacheTtlMillis() { return definition.getCacheTtlMillis(); }
 
+    @Override public boolean cacheResolvedSource() { return false; }
+
     @Override
     public ResolvedPlaybackSource resolve(Channel channel) throws IOException {
         return resolve(channel, ResolutionProgressListener.NONE);
@@ -104,8 +119,9 @@ public final class TvVooStreamResolver implements StreamResolver {
         ResolutionProgressListener progress = listener == null
                 ? ResolutionProgressListener.NONE
                 : listener;
+        ResolutionDeadline deadline = newResolutionDeadline();
         if (!resolutionMode.usesExternalResolver()) {
-            return resolveDirect(channel, null, progress);
+            return resolveDirect(channel, null, progress, deadline);
         }
 
         String endpointBase = channel.getAttributes().get("x-resolver-endpoint");
@@ -119,68 +135,114 @@ public final class TvVooStreamResolver implements StreamResolver {
         // compatibility fallbacks; querying both delays the direct engine
         // behind unrelated dead candidates.
         if (aliases.isEmpty()) aliases.addAll(generatedAliases(channel));
-        int maxAliases = definition.getIntConfig("maxAliases", 8, 1, 12);
-        int maxCandidates = definition.getIntConfig("maxCandidates", 16, 1, 32);
+        int maxAliases = definition.getIntConfig(
+                "maxAliases",
+                DEFAULT_MAX_ALIASES,
+                1,
+                12
+        );
+        int maxCandidates = definition.getIntConfig(
+                "maxCandidates",
+                DEFAULT_MAX_CANDIDATES,
+                1,
+                32
+        );
         boolean allowHttpFallback = definition.getBooleanConfig("allowHttpFallback", true);
         Map<String, String> jsonHeaders = Collections.singletonMap("Accept", "application/json");
         Map<String, String> playbackHeaders = playbackHeaders();
 
-        int aliasCount = 0;
+        int parallelAliases = definition.getIntConfig(
+                "parallelAliases",
+                DEFAULT_PARALLEL_ALIASES,
+                1,
+                3
+        );
+        int parallelCandidates = definition.getIntConfig(
+                "parallelCandidates",
+                DEFAULT_PARALLEL_CANDIDATES,
+                1,
+                4
+        );
         int candidateCount = 0;
         int aliasTotal = Math.min(aliases.size(), maxAliases);
         IOException lastError = null;
+        List<String> limitedAliases = new ArrayList<>();
+        int aliasIndex = 0;
         for (String alias : aliases) {
-            if (++aliasCount > maxAliases) break;
-            progress.onProgress(ResolutionProgress.counted(
-                    ResolutionStage.ALIAS_ATTEMPT,
-                    aliasCount,
-                    aliasTotal
-            ));
-            try {
-                String endpoint = endpointBase + "/" + encodedAlias(alias) + ".json";
-                progress.onProgress(ResolutionProgress.of(ResolutionStage.CATALOG_REQUEST));
-                String response = httpClient.getText(endpoint, jsonHeaders);
-                progress.onProgress(ResolutionProgress.of(ResolutionStage.CATALOG_PARSED));
-                List<URI> candidates = ResolverPayloadParsers.parseTvVooCandidates(
-                        response,
-                        definition.getConfig("streamsPath", "streams"),
-                        definition.getConfig("urlField", "url")
+            if (aliasIndex++ >= maxAliases) break;
+            limitedAliases.add(alias);
+        }
+        ExecutorService aliasExecutor = Executors.newFixedThreadPool(
+                parallelAliases,
+                new NamedDaemonThreadFactory("vibem3u-tvvoo-alias")
+        );
+        try {
+            for (int offset = 0;
+                 offset < limitedAliases.size() && candidateCount < maxCandidates;
+                 offset += parallelAliases) {
+                deadline.check();
+                List<AliasResult> batch = fetchAliasBatch(
+                        limitedAliases,
+                        offset,
+                        parallelAliases,
+                        aliasTotal,
+                        endpointBase,
+                        jsonHeaders,
+                        definition,
+                        httpClient,
+                        progress,
+                        deadline,
+                        aliasExecutor
                 );
-                for (URI candidate : candidates) {
-                    if (++candidateCount > maxCandidates) break;
-                    progress.onProgress(ResolutionProgress.counted(
-                            ResolutionStage.SOURCE_CANDIDATE,
-                            candidateCount,
-                            maxCandidates
-                    ));
-                    try {
-                        URI accepted = validateCandidate(
+                LinkedHashSet<URI> candidates = new LinkedHashSet<>();
+                for (AliasResult result : batch) {
+                    if (result.error != null) lastError = result.error;
+                    candidates.addAll(result.candidates);
+                }
+                if (candidates.isEmpty()) continue;
+
+                HlsCandidateRace.Result race = HlsCandidateRace.firstValid(
+                        new ArrayList<>(candidates),
+                        maxCandidates - candidateCount,
+                        parallelCandidates,
+                        deadline,
+                        candidateCount,
+                        maxCandidates,
+                        progress,
+                        candidate -> validateCandidate(
                                 validator,
                                 candidate,
                                 allowHttpFallback,
                                 playbackHeaders,
+                                true,
                                 progress
-                        );
-                        progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_FOUND));
-                        return ResolvedPlaybackSource.dynamic(
-                                getId(),
-                                stableSourceId(channel),
-                                accepted,
-                                playbackHeaders,
-                                PLAYBACK_USER_AGENT,
-                                expiresAt()
-                        );
-                    } catch (IOException error) {
-                        lastError = error;
-                    }
+                        )
+                );
+                candidateCount += race.getAttempted();
+                if (race.getLastError() != null) lastError = race.getLastError();
+                if (race.getSource() != null) {
+                    progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_FOUND));
+                    return ResolvedPlaybackSource.dynamic(
+                            getId(),
+                            stableSourceId(channel),
+                            race.getSource(),
+                            playbackHeaders,
+                            PLAYBACK_USER_AGENT,
+                            expiresAt()
+                    );
                 }
-            } catch (IOException error) {
-                lastError = error;
             }
-            if (candidateCount >= maxCandidates) break;
+        } catch (IOException error) {
+            lastError = error;
+        } finally {
+            aliasExecutor.shutdownNow();
         }
         if (resolutionMode.usesDirectResolver()) {
-            return resolveDirect(channel, lastError, progress);
+            // The direct engine is an independent recovery path. Give it a
+            // fresh budget instead of inheriting an exhausted external
+            // catalogue budget; otherwise a slow/empty TvVoo endpoint would
+            // prevent the fallback from ever being attempted.
+            return resolveDirect(channel, lastError, progress, newResolutionDeadline());
         }
         throw new IOException("TvVoo no entregó una fuente reproducible.", lastError);
     }
@@ -189,15 +251,29 @@ public final class TvVooStreamResolver implements StreamResolver {
             Channel channel,
             IOException externalError
     ) throws IOException {
-        return resolveDirect(channel, externalError, ResolutionProgressListener.NONE);
+        return resolveDirect(
+                channel,
+                externalError,
+                ResolutionProgressListener.NONE,
+                newResolutionDeadline()
+        );
     }
 
     private ResolvedPlaybackSource resolveDirect(
             Channel channel,
             IOException externalError,
-            ResolutionProgressListener listener
+            ResolutionProgressListener listener,
+            ResolutionDeadline deadline
     ) throws IOException {
         try {
+            if (directFallback instanceof VavooStreamResolver) {
+                return ((VavooStreamResolver) directFallback).resolve(
+                        channel,
+                        listener,
+                        deadline
+                );
+            }
+            deadline.check();
             return directFallback.resolve(channel, listener);
         } catch (IOException directError) {
             if (externalError != null) directError.addSuppressed(externalError);
@@ -224,6 +300,7 @@ public final class TvVooStreamResolver implements StreamResolver {
                 published,
                 allowHttpFallback,
                 playbackHeaders,
+                true,
                 ResolutionProgressListener.NONE
         );
     }
@@ -235,15 +312,45 @@ public final class TvVooStreamResolver implements StreamResolver {
             Map<String, String> playbackHeaders,
             ResolutionProgressListener listener
     ) throws IOException {
+        return validateCandidate(
+                validator,
+                published,
+                allowHttpFallback,
+                playbackHeaders,
+                true,
+                listener
+        );
+    }
+
+    static URI validateCandidate(
+            HlsStreamValidator validator,
+            URI published,
+            boolean allowHttpFallback,
+            Map<String, String> playbackHeaders,
+            boolean strictValidation,
+            ResolutionProgressListener listener
+    ) throws IOException {
         String scheme = published.getScheme();
         if ("https".equalsIgnoreCase(scheme)) {
             try {
-                validator.validate(published, playbackHeaders, listener);
+                validateHls(
+                        validator,
+                        published,
+                        playbackHeaders,
+                        strictValidation,
+                        listener
+                );
                 return published;
             } catch (IOException error) {
                 if (!allowHttpFallback || !isExpiredCertificateFailure(error)) throw error;
                 URI fallback = withScheme(published, "http");
-                validator.validate(fallback, playbackHeaders, listener);
+                validateHls(
+                        validator,
+                        fallback,
+                        playbackHeaders,
+                        strictValidation,
+                        listener
+                );
                 return fallback;
             }
         }
@@ -252,12 +359,160 @@ public final class TvVooStreamResolver implements StreamResolver {
         }
         URI upgraded = withScheme(published, "https");
         try {
-            validator.validate(upgraded, playbackHeaders, listener);
+            validateHls(
+                    validator,
+                    upgraded,
+                    playbackHeaders,
+                    strictValidation,
+                    listener
+            );
             return upgraded;
         } catch (IOException error) {
             if (!allowHttpFallback || !isExpiredCertificateFailure(error)) throw error;
-            validator.validate(published, playbackHeaders, listener);
+            validateHls(
+                    validator,
+                    published,
+                    playbackHeaders,
+                    strictValidation,
+                    listener
+            );
             return published;
+        }
+    }
+
+    private static void validateHls(
+            HlsStreamValidator validator,
+            URI source,
+            Map<String, String> playbackHeaders,
+            boolean strictValidation,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        if (strictValidation) {
+            validator.validate(source, playbackHeaders, listener);
+        } else {
+            validator.validateForPlayback(source, playbackHeaders, listener);
+        }
+    }
+
+    private static List<AliasResult> fetchAliasBatch(
+            List<String> aliases,
+            int offset,
+            int parallelAliases,
+            int aliasTotal,
+            String endpointBase,
+            Map<String, String> jsonHeaders,
+            ResolverDefinition definition,
+            TokenHttpClient httpClient,
+            ResolutionProgressListener progress,
+            ResolutionDeadline deadline,
+            ExecutorService executor
+    ) throws IOException {
+        CompletionService<AliasResult> completion = new ExecutorCompletionService<>(executor);
+        List<Future<AliasResult>> submitted = new ArrayList<>();
+        int batchSize = Math.min(parallelAliases, aliases.size() - offset);
+        for (int index = 0; index < batchSize; index++) {
+            int absoluteIndex = offset + index;
+            String alias = aliases.get(absoluteIndex);
+            progress.onProgress(ResolutionProgress.counted(
+                    ResolutionStage.ALIAS_ATTEMPT,
+                    absoluteIndex + 1,
+                    aliasTotal
+            ));
+            submitted.add(completion.submit(() -> {
+                try {
+                    deadline.check();
+                    String endpoint = endpointBase + "/" + encodedAlias(alias) + ".json";
+                    progress.onProgress(ResolutionProgress.of(ResolutionStage.CATALOG_REQUEST));
+                    String response = httpClient.getText(endpoint, jsonHeaders);
+                    progress.onProgress(ResolutionProgress.of(ResolutionStage.CATALOG_PARSED));
+                    return new AliasResult(
+                            absoluteIndex,
+                            ResolverPayloadParsers.parseTvVooCandidates(
+                                    response,
+                                    definition.getConfig("streamsPath", "streams"),
+                                    definition.getConfig("urlField", "url")
+                            ),
+                            null
+                    );
+                } catch (IOException error) {
+                    return new AliasResult(absoluteIndex, Collections.emptyList(), error);
+                }
+            }));
+        }
+
+        List<AliasResult> results = new ArrayList<>();
+        try {
+            while (results.size() < batchSize) {
+                deadline.check();
+                Future<AliasResult> future = completion.poll(
+                        deadline.remainingMillis(),
+                        TimeUnit.MILLISECONDS
+                );
+                if (future == null) throw new IOException("Tiempo de resolución agotado.");
+                try {
+                    results.add(future.get());
+                } catch (ExecutionException error) {
+                    Throwable cause = error.getCause();
+                    results.add(new AliasResult(
+                            offset + results.size(),
+                            Collections.emptyList(),
+                            cause instanceof IOException
+                                    ? (IOException) cause
+                                    : new IOException("No se pudo consultar el alias.", cause)
+                    ));
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Solicitud cancelada.", error);
+                }
+            }
+        } finally {
+            for (Future<AliasResult> future : submitted) {
+                if (!future.isDone()) future.cancel(true);
+            }
+        }
+        Collections.sort(results, (left, right) ->
+                Integer.compare(left.index, right.index)
+        );
+        return results;
+    }
+
+    private ResolutionDeadline newResolutionDeadline() {
+        return new ResolutionDeadline(
+                definition.getIntConfig(
+                        "resolutionBudgetMs",
+                        DEFAULT_RESOLUTION_BUDGET_MS,
+                        2_000,
+                        20_000
+                )
+        );
+    }
+
+    private static final class AliasResult {
+        private final int index;
+        private final List<URI> candidates;
+        private final IOException error;
+
+        AliasResult(int index, List<URI> candidates, IOException error) {
+            this.index = index;
+            this.candidates = candidates == null
+                    ? Collections.emptyList()
+                    : candidates;
+            this.error = error;
+        }
+    }
+
+    private static final class NamedDaemonThreadFactory implements ThreadFactory {
+        private final String name;
+
+        NamedDaemonThreadFactory(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, name);
+            thread.setDaemon(true);
+            return thread;
         }
     }
 

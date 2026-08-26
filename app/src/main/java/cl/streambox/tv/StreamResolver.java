@@ -31,6 +31,18 @@ public interface StreamResolver {
         return 0L;
     }
 
+    /**
+     * Whether the resolved playback URL may be reused during this process.
+     *
+     * <p>Implementations that return temporary URLs or tokens should return
+     * {@code false}. They may still expose a TTL for diagnostics or for
+     * stable metadata, but a temporary playback source must be generated
+     * again when the channel is opened.</p>
+     */
+    default boolean cacheResolvedSource() {
+        return true;
+    }
+
     /** Drops provider credentials and other session-only sensitive state. */
     default void clearSensitiveState() {
         // Most resolvers do not hold credentials between requests.

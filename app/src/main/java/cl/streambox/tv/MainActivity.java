@@ -77,6 +77,10 @@ public final class MainActivity extends Activity {
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
+    // Resolver calls can spend several seconds in provider HTTP/TLS
+    // handshakes. Keep them out of the executor that refreshes the playlist,
+    // EPG and logos so maintenance work cannot delay channel startup.
+    private final ExecutorService playbackExecutor = Executors.newFixedThreadPool(2);
     private final ExecutorService logoCacheExecutor = Executors.newFixedThreadPool(2);
     private final ExecutorService resourceCacheExecutor = Executors.newSingleThreadExecutor();
     private PlaylistRepository repository;
@@ -889,7 +893,7 @@ public final class MainActivity extends Activity {
                 showResolutionProgress(progress);
             }
         });
-        playbackResolutionTask = networkExecutor.submit(() -> {
+        playbackResolutionTask = playbackExecutor.submit(() -> {
             try {
                 mainHandler.post(() -> {
                     if (isCurrentPlayback(channel, expectedGeneration)
@@ -1723,6 +1727,7 @@ public final class MainActivity extends Activity {
             appUpdater = null;
         }
         networkExecutor.shutdownNow();
+        playbackExecutor.shutdownNow();
         logoCacheExecutor.shutdownNow();
         resourceCacheExecutor.shutdownNow();
 

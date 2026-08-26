@@ -48,6 +48,10 @@ public final class TwentyFourHoursStreamResolver implements StreamResolver {
         return definition.getCacheTtlMillis();
     }
 
+    @Override public boolean cacheResolvedSource() {
+        return false;
+    }
+
     @Override
     public ResolvedPlaybackSource resolve(Channel channel) throws IOException {
         return resolve(channel, ResolutionProgressListener.NONE);
@@ -78,7 +82,7 @@ public final class TwentyFourHoursStreamResolver implements StreamResolver {
         String playback = definition.getConfig("playlistTemplate", DEFAULT_TEMPLATE)
                 .replace("{streamId}", streamId);
         URI playbackUri = URI.create(playback);
-        validator.validate(playbackUri, Collections.emptyMap(), progress);
+        validator.validateForPlayback(playbackUri, Collections.emptyMap(), progress);
         progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_FOUND));
         return ResolvedPlaybackSource.dynamic(
                 getId(),

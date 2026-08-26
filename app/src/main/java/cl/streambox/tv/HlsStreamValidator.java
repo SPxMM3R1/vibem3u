@@ -29,6 +29,36 @@ public final class HlsStreamValidator {
         validate(playbackUri, headers, ResolutionProgressListener.NONE);
     }
 
+    /**
+     * Performs the cheap validation used immediately before Media3 playback.
+     *
+     * <p>The resolver has already paid the provider/API cost by the time this
+     * method is called. Downloading a variant and a media segment here would
+     * make Media3 download the same HLS chain a second time. The playlist is
+     * still checked for a real HLS response and for at least one playable
+     * reference; Media3 remains responsible for opening the selected variant
+     * and segment.</p>
+     */
+    public void validateForPlayback(
+            URI playbackUri,
+            Map<String, String> headers,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        if (playbackUri == null) throw new IOException("Fuente HLS inválida.");
+        Map<String, String> safeHeaders = headers == null
+                ? Collections.emptyMap()
+                : headers;
+        ResolutionProgressListener progress = listener == null
+                ? ResolutionProgressListener.NONE
+                : listener;
+        progress.onProgress(ResolutionProgress.of(ResolutionStage.HLS_PLAYLIST));
+        PlaylistResponse response = loadPlaylist(playbackUri, safeHeaders);
+        if (firstVariant(response.lines) == null
+                && mediaReferences(response.lines).isEmpty()) {
+            throw new IOException("El HLS no publicó una fuente reproducible.");
+        }
+    }
+
     public void validate(
             URI playbackUri,
             Map<String, String> headers,

@@ -61,6 +61,10 @@ public final class MeganoticiasStreamResolver implements StreamResolver {
         return definition == null ? 0L : definition.getCacheTtlMillis();
     }
 
+    @Override public boolean cacheResolvedSource() {
+        return false;
+    }
+
     @Override
     public ResolvedPlaybackSource resolve(Channel channel) throws IOException {
         return resolve(channel, ResolutionProgressListener.NONE);
@@ -114,7 +118,7 @@ public final class MeganoticiasStreamResolver implements StreamResolver {
                 livePage,
                 config("playbackOrigin", "https://www.meganoticias.cl")
         );
-        validator.validate(playbackUri, playbackHeaders, progress);
+        validator.validateForPlayback(playbackUri, playbackHeaders, progress);
         progress.onProgress(ResolutionProgress.of(ResolutionStage.SOURCE_FOUND));
         return ResolvedPlaybackSource.dynamic(
                 getId(),

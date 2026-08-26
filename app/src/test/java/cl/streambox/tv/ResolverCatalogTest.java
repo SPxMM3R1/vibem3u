@@ -79,7 +79,7 @@ public final class ResolverCatalogTest {
     }
 
     @Test
-    public void m3uAliasesTakePriorityAndNameMapRemainsACompatibilityFallback()
+    public void m3uAliasesAreAuthoritativeOverTheCompatibilityMap()
             throws Exception {
         String json = catalogJson().replace(
                 "\"config\":{\"endpointBase\":\"https://tvvoo.hayd.uk/stream/tv\"}",
@@ -98,7 +98,8 @@ public final class ResolverCatalogTest {
         );
 
         assertEquals("from-m3u", definition.resolverAliases(channel).get(0));
-        assertEquals("from-name", definition.resolverAliases(channel).get(2));
+        assertEquals("second", definition.resolverAliases(channel).get(1));
+        assertEquals(2, definition.resolverAliases(channel).size());
     }
 
     private static String catalogJson() {

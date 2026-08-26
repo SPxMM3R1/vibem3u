@@ -129,9 +129,16 @@ public final class ResolverDefinition {
             for (String value : values.split(";")) {
                 if (!value.isBlank()) result.add(value.trim());
             }
+            // The list project controls this order. Do not append APK-side
+            // compatibility aliases when the M3U already carries an explicit
+            // resolver contract: probing unrelated aliases only delays the
+            // first playable source and can select a different regional feed.
+            return Collections.unmodifiableList(new ArrayList<>(result));
         }
         String single = attribute(channel, "x-resolver-id");
-        if (!single.isBlank()) result.add(single);
+        if (!single.isBlank()) {
+            return Collections.singletonList(single);
+        }
 
         String tvgId = safe(channel == null ? null : channel.getTvgId())
                 .trim()

@@ -102,6 +102,42 @@ public final class ResolverCoordinatorTest {
     }
 
     @Test
+    public void explicitNoCachePolicyWinsEvenWhenResolverReportsATtl() throws Exception {
+        ResolverCoordinator coordinator = new ResolverCoordinator();
+        AtomicInteger calls = new AtomicInteger();
+        Channel channel = new Channel(
+                "Vavoo",
+                URI.create("https://example.org/fallback.m3u8"),
+                null,
+                "Test",
+                Collections.singletonMap("tvg-id", "vavoo-test")
+        );
+        StreamResolver resolver = new StreamResolver() {
+            @Override public String getId() { return "vavoo"; }
+            @Override public boolean supports(Channel value) { return true; }
+            @Override public long cacheTtlMillis() { return 60_000L; }
+            @Override public boolean cacheResolvedSource() { return false; }
+
+            @Override
+            public ResolvedPlaybackSource resolve(Channel value) {
+                int call = calls.incrementAndGet();
+                return source("https://example.org/fresh-" + call + ".m3u8");
+            }
+        };
+
+        assertEquals(
+                "https://example.org/fresh-1.m3u8",
+                coordinator.resolve(channel, resolver, false).getPlaybackUri().toString()
+        );
+        assertEquals(
+                "https://example.org/fresh-2.m3u8",
+                coordinator.resolve(channel, resolver, false).getPlaybackUri().toString()
+        );
+        assertEquals(2, calls.get());
+        assertEquals(0, coordinator.cachedSourceCount());
+    }
+
+    @Test
     public void forceRefreshNeverJoinsOrCachesAnOlderInFlightToken() throws Exception {
         ResolverCoordinator coordinator = new ResolverCoordinator();
         AtomicInteger calls = new AtomicInteger();
