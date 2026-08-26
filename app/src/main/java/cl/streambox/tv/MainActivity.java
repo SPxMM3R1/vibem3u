@@ -15,6 +15,9 @@ import android.os.Bundle;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.Window;
@@ -70,7 +73,7 @@ public final class MainActivity extends Activity {
     private static final long PLAYER_RETRY_DELAY_MS = 2_500;
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
     private static final long NO_RESOLUTION_REQUEST = -1L;
-    private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.41 (Android TV)";
+    private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.42 (Android TV)";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
@@ -182,7 +185,7 @@ public final class MainActivity extends Activity {
                 return;
             }
             loadingDotCount = (loadingDotCount + 1) % 4;
-            loadingText.setText(loadingMessageBase + dots(loadingDotCount));
+            renderAnimatedLoadingText();
             mainHandler.postDelayed(this, 420L);
         }
     };
@@ -641,7 +644,7 @@ public final class MainActivity extends Activity {
         loadingMessageAnimating = animate;
         loadingDotCount = 0;
         if (animate) {
-            loadingText.setText(base);
+            renderAnimatedLoadingText();
             mainHandler.postDelayed(animateLoadingText, 420L);
         } else {
             loadingText.setText(safeMessage);
@@ -728,24 +731,32 @@ public final class MainActivity extends Activity {
         loadingDotCount = 0;
     }
 
+    /**
+     * Keep the three-dot slot in the text at all times. Only the dots change
+     * visibility, so the fixed stage label does not move as the animation
+     * advances while the TextView remains centered.
+     */
+    private void renderAnimatedLoadingText() {
+        if (loadingText == null) return;
+        String dotSlot = "...";
+        SpannableString rendered = new SpannableString(loadingMessageBase + dotSlot);
+        int visibleDots = Math.min(Math.max(loadingDotCount, 0), dotSlot.length());
+        if (visibleDots < dotSlot.length()) {
+            rendered.setSpan(
+                    new ForegroundColorSpan(Color.TRANSPARENT),
+                    loadingMessageBase.length() + visibleDots,
+                    loadingMessageBase.length() + dotSlot.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+        }
+        loadingText.setText(rendered);
+    }
+
     private static String stripTrailingEllipsis(String value) {
         String result = value == null ? "" : value;
         while (result.endsWith("…")) result = result.substring(0, result.length() - 1);
         while (result.endsWith("...")) result = result.substring(0, result.length() - 3);
         return result.trim();
-    }
-
-    private static String dots(int count) {
-        switch (count) {
-            case 1:
-                return ".";
-            case 2:
-                return "..";
-            case 3:
-                return "...";
-            default:
-                return "";
-        }
     }
 
     private void hideLoadingState() {

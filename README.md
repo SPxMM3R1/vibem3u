@@ -76,8 +76,9 @@ cubrir el video.
 Los resolutores ahora emiten subetapas reales, como preparación de sesión,
 descarga y análisis del catálogo, búsqueda de coincidencias, intento de aliases,
 solicitud de candidatos, validación de playlist/variante/segmento y construcción
-de la fuente para Media3. Los puntos suspensivos de las etapas en curso se animan
-sin añadir otro indicador gráfico.
+de la fuente para Media3. La etiqueta de cada etapa queda fija mientras se anima
+únicamente un espacio reservado para los tres puntos suspensivos, sin añadir otro
+indicador gráfico.
 
 ## Compilación automática
 
