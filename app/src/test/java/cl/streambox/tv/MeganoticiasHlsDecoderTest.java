@@ -19,7 +19,7 @@ public final class MeganoticiasHlsDecoderTest {
     public void decodesDecimalAsciiPlaylist() throws Exception {
         byte[] encoded = (
                 "35 69 88 84 77 51 85 10 "
-                        + "35 69 88 45 86 69 82 83 73 79 78 58 51 10"
+                        + "35 69 88 84 45 86 69 82 83 73 79 78 58 51 10"
         ).getBytes(StandardCharsets.UTF_8);
 
         assertArrayEquals(
