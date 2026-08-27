@@ -3,6 +3,7 @@ package cl.streambox.tv;
 import android.net.Uri;
 
 import androidx.media3.common.C;
+import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.DataSpec;
 import androidx.media3.datasource.TransferListener;
@@ -17,6 +18,7 @@ import java.util.Map;
  * Adapts MegaMedia's numeric HLS playlists for Media3 without touching media
  * segments or persisting the short-lived authorization URL.
  */
+@UnstableApi
 final class MeganoticiasPlaylistDataSource implements DataSource {
     private static final int READ_BUFFER_BYTES = 16 * 1024;
 
