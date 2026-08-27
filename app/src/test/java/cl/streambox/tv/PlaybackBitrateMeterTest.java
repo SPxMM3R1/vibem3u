@@ -1,0 +1,65 @@
+package cl.streambox.tv;
+
+import androidx.media3.common.C;
+
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public final class PlaybackBitrateMeterTest {
+    @Test
+    public void computesVideoAndAudioBitrateIndependently() {
+        PlaybackBitrateMeter meter = new PlaybackBitrateMeter(null);
+
+        meter.recordMediaSample(C.TRACK_TYPE_VIDEO, 2_500_000L, 0L, 4_000L);
+        meter.recordMediaSample(C.TRACK_TYPE_AUDIO, 80_000L, 0L, 4_000L);
+
+        assertEquals(5_000_000L, meter.getVideoBitrate());
+        assertEquals(160_000L, meter.getAudioBitrate());
+    }
+
+    @Test
+    public void usesMediaDurationAndNotTransferDuration() {
+        PlaybackBitrateMeter meter = new PlaybackBitrateMeter(null);
+
+        // The segment could have been downloaded in 500 ms, but it represents
+        // four seconds of media and must therefore report 4 Mbps.
+        meter.recordMediaSample(C.TRACK_TYPE_VIDEO, 2_000_000L, 10_000L, 14_000L);
+
+        assertEquals(4_000_000L, meter.getVideoBitrate());
+    }
+
+    @Test
+    public void calculatesWeightedRollingAverage() {
+        PlaybackBitrateMeter meter = new PlaybackBitrateMeter(null);
+
+        meter.recordMediaSample(C.TRACK_TYPE_VIDEO, 2_000_000L, 0L, 4_000L);
+        meter.recordMediaSample(C.TRACK_TYPE_VIDEO, 3_000_000L, 4_000L, 8_000L);
+
+        assertEquals(5_000_000L, meter.getVideoBitrate());
+    }
+
+    @Test
+    public void ignoresUnknownTracksAndInvalidSamples() {
+        PlaybackBitrateMeter meter = new PlaybackBitrateMeter(null);
+
+        meter.recordMediaSample(C.TRACK_TYPE_DEFAULT, 2_000_000L, 0L, 4_000L);
+        meter.recordMediaSample(C.TRACK_TYPE_VIDEO, 0L, 0L, 4_000L);
+        meter.recordMediaSample(C.TRACK_TYPE_VIDEO, 2_000_000L, 4_000L, 4_000L);
+
+        assertEquals(0L, meter.getVideoBitrate());
+        assertEquals(0L, meter.getAudioBitrate());
+    }
+
+    @Test
+    public void resetDropsSamplesFromPreviousPlayback() {
+        PlaybackBitrateMeter meter = new PlaybackBitrateMeter(null);
+        meter.recordMediaSample(C.TRACK_TYPE_VIDEO, 2_000_000L, 0L, 4_000L);
+        meter.recordMediaSample(C.TRACK_TYPE_AUDIO, 80_000L, 0L, 4_000L);
+
+        meter.reset();
+
+        assertEquals(0L, meter.getVideoBitrate());
+        assertEquals(0L, meter.getAudioBitrate());
+    }
+}

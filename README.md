@@ -80,6 +80,12 @@ de la fuente para Media3. La etiqueta de cada etapa queda fija mientras se anima
 únicamente un espacio reservado para los tres puntos suspensivos, sin añadir otro
 indicador gráfico.
 
+El diagnóstico de reproducción muestra por separado el bitrate de video y audio.
+Primero utiliza el bitrate anunciado por el formato si está disponible y, cuando
+Media3 carga segmentos multimedia con tiempos conocidos, lo reemplaza por una
+estimación suavizada del contenido reciente. No confunde esa cifra con la velocidad
+de descarga de la red.
+
 ## Compilación automática
 
 GitHub Actions realiza toda la compilación:

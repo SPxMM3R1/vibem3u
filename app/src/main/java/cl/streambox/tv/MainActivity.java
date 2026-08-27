@@ -95,6 +95,7 @@ public final class MainActivity extends Activity {
     private final List<Channel> channels = new ArrayList<>();
 
     private PlayerView playerView;
+    private PlaybackBitrateMeter playbackBitrateMeter;
     private View channelOverlay;
     private View loadingPanel;
     private TextView loadingText;
@@ -282,6 +283,15 @@ public final class MainActivity extends Activity {
                 )
                 .build();
         playerView.setPlayer(player);
+        final PlaybackBitrateMeter newBitrateMeter = new PlaybackBitrateMeter(
+                () -> mainHandler.post(() -> {
+                    if (!exiting && player != null && playbackBitrateMeter == newBitrateMeter) {
+                        updateDiagnostics();
+                    }
+                })
+        );
+        playbackBitrateMeter = newBitrateMeter;
+        player.addAnalyticsListener(newBitrateMeter);
         player.addListener(new Player.Listener() {
             @Override public void onPlaybackStateChanged(int playbackState) {
                 updateStreamStatus(playbackState);
@@ -793,6 +803,7 @@ public final class MainActivity extends Activity {
         channelIndex = (requestedIndex % channels.size() + channels.size()) % channels.size();
         Channel channel = channels.get(channelIndex);
         playbackGeneration++;
+        resetPlaybackBitrateMeter();
         cancelScheduledPlaybackRetry();
         cancelPlaybackResolution();
         playbackRecoveryPolicy.reset();
@@ -967,6 +978,7 @@ public final class MainActivity extends Activity {
             return;
         }
         cancelScheduledPlaybackRetry();
+        resetPlaybackBitrateMeter();
         activePlaybackSourceRequestId = source.isDynamicallyResolved()
                 ? expectedResolutionRequestId
                 : NO_RESOLUTION_REQUEST;
@@ -980,6 +992,10 @@ public final class MainActivity extends Activity {
     private void discardCurrentPlaybackSource() {
         currentPlaybackSource = null;
         activePlaybackSourceRequestId = NO_RESOLUTION_REQUEST;
+    }
+
+    private void resetPlaybackBitrateMeter() {
+        if (playbackBitrateMeter != null) playbackBitrateMeter.reset();
     }
 
     private MediaSource mediaSourceFor(Channel channel, ResolvedPlaybackSource source) {
@@ -1077,6 +1093,7 @@ public final class MainActivity extends Activity {
         // here would rebuild Media3 for an error that did not invalidate the
         // playlist or its token.
         showLoadingState(getString(R.string.loading_retrying_source));
+        resetPlaybackBitrateMeter();
         player.stop();
         if (playbackChannel != null && currentPlaybackSource != null) {
             player.setMediaSource(mediaSourceFor(playbackChannel, currentPlaybackSource));
@@ -1336,12 +1353,40 @@ public final class MainActivity extends Activity {
 
         String videoCodec = codecName(video == null ? null : video.sampleMimeType);
         String audioCodec = codecName(audio == null ? null : audio.sampleMimeType);
-        int bitrate = video != null && video.averageBitrate > 0 ? video.averageBitrate :
-                (video != null ? video.peakBitrate : Format.NO_VALUE);
-        String bitrateText = bitrate > 0
-                ? String.format(Locale.ROOT, " · %.1f Mbps", bitrate / 1_000_000f)
-                : "";
-        codecInfo.setText(videoCodec + " · " + audioCodec + bitrateText);
+        long measuredVideoBitrate = playbackBitrateMeter == null
+                ? 0L
+                : playbackBitrateMeter.getVideoBitrate();
+        long measuredAudioBitrate = playbackBitrateMeter == null
+                ? 0L
+                : playbackBitrateMeter.getAudioBitrate();
+        codecInfo.setText(
+                videoCodec + " · " + bitrateLabel("Video", measuredVideoBitrate, video)
+                        + " · " + audioCodec + " · "
+                        + bitrateLabel("Audio", measuredAudioBitrate, audio)
+        );
+    }
+
+    private static String bitrateLabel(String label, long measuredBitrate, Format format) {
+        if (measuredBitrate > 0) {
+            return label + " ≈ " + formatBitrate(measuredBitrate);
+        }
+        int declaredBitrate = declaredBitrate(format);
+        return declaredBitrate > 0
+                ? label + " ~ " + formatBitrate(declaredBitrate)
+                : label + " —";
+    }
+
+    private static int declaredBitrate(Format format) {
+        if (format == null) return Format.NO_VALUE;
+        if (format.averageBitrate > 0) return format.averageBitrate;
+        return format.peakBitrate > 0 ? format.peakBitrate : Format.NO_VALUE;
+    }
+
+    private static String formatBitrate(long bitsPerSecond) {
+        if (bitsPerSecond >= 1_000_000L) {
+            return String.format(Locale.ROOT, "%.1f Mbps", bitsPerSecond / 1_000_000d);
+        }
+        return String.format(Locale.ROOT, "%.0f kbps", bitsPerSecond / 1_000d);
     }
 
     private void applySavedQualityPreference(Tracks tracks) {
@@ -1742,6 +1787,11 @@ public final class MainActivity extends Activity {
         logoCacheExecutor.shutdownNow();
         resourceCacheExecutor.shutdownNow();
 
+        if (playbackBitrateMeter != null) {
+            playbackBitrateMeter.reset();
+            playbackBitrateMeter = null;
+        }
+
         playbackChannel = null;
         discardCurrentPlaybackSource();
         channels.clear();
@@ -1928,6 +1978,10 @@ public final class MainActivity extends Activity {
                 resolverCoordinator.clear();
                 reloadResolverRegistry();
                 if (playerUsesVolumeNormalization != isVolumeNormalizationEnabled()) {
+                    if (playbackBitrateMeter != null) {
+                        playbackBitrateMeter.reset();
+                        playbackBitrateMeter = null;
+                    }
                     if (player != null) {
                         player.release();
                         player = null;
