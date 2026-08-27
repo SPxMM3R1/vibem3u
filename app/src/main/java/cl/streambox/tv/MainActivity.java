@@ -283,13 +283,15 @@ public final class MainActivity extends Activity {
                 )
                 .build();
         playerView.setPlayer(player);
-        final PlaybackBitrateMeter newBitrateMeter = new PlaybackBitrateMeter(
+        final PlaybackBitrateMeter[] meterHolder = new PlaybackBitrateMeter[1];
+        PlaybackBitrateMeter newBitrateMeter = new PlaybackBitrateMeter(
                 () -> mainHandler.post(() -> {
-                    if (!exiting && player != null && playbackBitrateMeter == newBitrateMeter) {
+                    if (!exiting && player != null && playbackBitrateMeter == meterHolder[0]) {
                         updateDiagnostics();
                     }
                 })
         );
+        meterHolder[0] = newBitrateMeter;
         playbackBitrateMeter = newBitrateMeter;
         player.addAnalyticsListener(newBitrateMeter);
         player.addListener(new Player.Listener() {
