@@ -57,8 +57,8 @@ Estado revisado:
   - `highfly`: 7 canales.
   - `tvn`: 1 canal.
   - `24horas`: 1 canal.
-  - `meganoticias`: 0 canales de producción actualmente; el catálogo conserva
-    el soporte para el antiguo ID dinámico.
+  - `meganoticias`: 1 canal de producción (`Meganoticias.cl`); el catálogo
+    conserva además el alias histórico `MeganoticiasAhora.cl`.
 
 El repositorio local de Lista M3U también contiene archivos no versionados de
 contexto y adjuntos. No deben agregarse accidentalmente a commits de producción.
@@ -111,7 +111,7 @@ El catálogo actual usa:
 
 ```text
 schemaVersion: 1
-catalogVersion: 2026.08.25.6
+catalogVersion: 2026.08.26.1
 ```
 
 Proveedores declarados actualmente:
@@ -119,7 +119,7 @@ Proveedores declarados actualmente:
 | ID | Motor | Identificación principal | TTL configurado |
 |---|---|---|---:|
 | `tvn` | `tvn` | `tvg-id="0104"` | 0 |
-| `meganoticias` | `meganoticias` | `tvg-id="MeganoticiasAhora.cl"` | 0 |
+| `meganoticias` | `meganoticias` | `tvg-id="Meganoticias.cl"` y `MeganoticiasAhora.cl` | 0 |
 | `24horas` | `24horas` | `tvg-id="0201"` | 0 |
 | `tvvoo` | `tvvoo` | sufijo `@TvVoo` y algunos IDs explícitos | 900 s |
 | `highfly` | `highfly` | host `leaf.highfly.dev` y metadatos explícitos | 300 s |
@@ -187,23 +187,27 @@ la fuente Media3 con sus cabeceras correspondientes.
 
 ### Meganoticias
 
-La producción actual utiliza un canal directo con:
+La producción actual conserva el ID estable:
 
 ```text
 tvg-id="Meganoticias.cl"
 ```
 
-Ese canal no debe recibir automáticamente el resolutor dinámico antiguo solo
-porque el nombre contenga “Mega”.
+La página oficial ahora entrega el reproductor con un `serverKey` y el CDN
+responde el master como bytes decimales ASCII. Por eso el canal debe llevar
+`x-resolver="meganoticias"`: VibeM3U obtiene la autorización en memoria y
+decodifica el master y sus playlists secundarias antes de entregarlas a
+Media3. La URL publicada debajo de `#EXTINF` es solo un respaldo estable y no
+contiene el token.
 
-El catálogo conserva el resolutor para:
+El catálogo conserva compatibilidad con el identificador histórico:
 
 ```text
 tvg-id="MeganoticiasAhora.cl"
 ```
 
-La activación debe depender del ID explícito o de metadatos del resolutor, no de
-una coincidencia amplia por nombre.
+La activación depende del ID explícito o de los metadatos del resolutor, no de
+una coincidencia amplia por nombre. No aplicar esta regla a Mega.
 
 ### 24 Horas
 
@@ -454,8 +458,8 @@ respaldo. VibeM3U debe renovar fuentes dinámicas justo antes de reproducir.
 8. Los tokens y query strings sensibles no deben escribirse en caché, logs,
    analytics, preferencias ni archivos de diagnóstico.
 9. Un resolutor desactivado por el usuario debe afectar solamente a su grupo.
-10. Un canal directo, Pluto o Meganoticias de producción no debe ser alterado
-    por una heurística amplia de nombre.
+10. Un canal directo o Pluto no debe ser alterado por una heurística amplia de
+    nombre. Meganoticias solo se resuelve cuando el ID o `x-resolver` lo indica.
 11. La EPG debe seguir usando el `tvg-id`, nunca la URL temporal.
 12. Si un proveedor desconocido aparece en una futura M3U, la app debe
     conservar el canal como fallback controlado o mostrarlo como no disponible,

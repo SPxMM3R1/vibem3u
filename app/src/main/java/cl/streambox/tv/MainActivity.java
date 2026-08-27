@@ -43,6 +43,7 @@ import androidx.media3.common.VideoSize;
 import androidx.media3.common.text.Cue;
 import androidx.media3.common.text.CueGroup;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -994,7 +995,13 @@ public final class MainActivity extends Activity {
         if (!headers.isEmpty()) {
             dataSourceFactory.setDefaultRequestProperties(headers);
         }
-        return new DefaultMediaSourceFactory(dataSourceFactory)
+        DataSource.Factory playbackDataSourceFactory = dataSourceFactory;
+        if ("meganoticias".equalsIgnoreCase(source.getResolverId())) {
+            playbackDataSourceFactory = new MeganoticiasPlaylistDataSource.Factory(
+                    dataSourceFactory
+            );
+        }
+        return new DefaultMediaSourceFactory(playbackDataSourceFactory)
                 .createMediaSource(mediaItemFor(channel, source.getPlaybackUri()));
     }
 

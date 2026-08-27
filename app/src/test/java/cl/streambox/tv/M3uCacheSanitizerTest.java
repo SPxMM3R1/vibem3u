@@ -14,6 +14,8 @@ public final class M3uCacheSanitizerTest {
                 + "https://mdstrm.example/live.m3u8?access_token=temporary\n"
                 + "#EXTINF:-1 tvg-id=\"MeganoticiasAhora.cl\",Mega\n"
                 + "https://mdstrm.example/mega.m3u8?access_token=temporary\n"
+                + "#EXTINF:-1 tvg-id=\"Meganoticias.cl\",Meganoticias\n"
+                + "https://mdstrm.example/meganoticias.m3u8?access_token=temporary\n"
                 + "#EXTINF:-1 tvg-id=\"other\",Otro\n"
                 + "https://example.org/other.m3u8?token=keep\n";
 
@@ -21,6 +23,7 @@ public final class M3uCacheSanitizerTest {
 
         assertTrue(sanitized.contains("https://mdstrm.example/live.m3u8"));
         assertTrue(sanitized.contains("https://mdstrm.example/mega.m3u8"));
+        assertTrue(sanitized.contains("https://mdstrm.example/meganoticias.m3u8"));
         assertFalse(sanitized.contains("access_token=temporary"));
         assertTrue(sanitized.contains("https://example.org/other.m3u8?token=keep"));
     }

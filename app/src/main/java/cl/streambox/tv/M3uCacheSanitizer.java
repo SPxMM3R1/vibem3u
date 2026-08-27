@@ -75,6 +75,7 @@ final class M3uCacheSanitizer {
 
     private static boolean isRenewableProvider(String tvgId, String resolver) {
         return "0104".equalsIgnoreCase(tvgId)
+                || "Meganoticias.cl".equalsIgnoreCase(tvgId)
                 || "MeganoticiasAhora.cl".equalsIgnoreCase(tvgId)
                 || !resolver.isBlank();
     }

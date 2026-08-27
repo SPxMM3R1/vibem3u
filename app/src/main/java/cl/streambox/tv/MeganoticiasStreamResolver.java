@@ -8,7 +8,8 @@ import java.util.Map;
 /** Resolves Meganoticias Ahora's short-lived MediaStream token. */
 public final class MeganoticiasStreamResolver implements StreamResolver {
     public static final String ID = "meganoticias";
-    private static final String TVG_ID = "MeganoticiasAhora.cl";
+    private static final String TVG_ID = "Meganoticias.cl";
+    private static final String LEGACY_TVG_ID = "MeganoticiasAhora.cl";
     private static final String LIVE_PAGE =
             "https://www.meganoticias.cl/senal-en-vivo/meganoticias/";
     private static final String API_URL = "https://api.mega.cl/api/v1/mdstrm";
@@ -49,7 +50,9 @@ public final class MeganoticiasStreamResolver implements StreamResolver {
         if (definition != null) {
             return definition.matchesExplicit(channel) || definition.matchesTvgId(channel);
         }
-        return channel != null && TVG_ID.equalsIgnoreCase(channel.getTvgId().trim());
+        if (channel == null) return false;
+        String tvgId = channel.getTvgId().trim();
+        return TVG_ID.equalsIgnoreCase(tvgId) || LEGACY_TVG_ID.equalsIgnoreCase(tvgId);
     }
 
     @Override public String stableSourceId(Channel channel) {

@@ -140,10 +140,14 @@ VibeM3U consulta la página oficial y extrae el `data-ms` activo al reproducir.
 
 ## Meganoticias
 
-El canal de producción actual con `tvg-id="Meganoticias.cl"` y URL oficial
-directa debe seguir siendo directo. No agregarle `x-resolver="meganoticias"`.
+El canal de producción actual usa `tvg-id="Meganoticias.cl"` y debe llevar
+`x-resolver="meganoticias"` y `x-resolver-refresh="on_play"`. La página oficial
+ahora exige autorización de corta duración y su CDN entrega las playlists como
+bytes decimales ASCII; VibeM3U obtiene el token en memoria y decodifica esas
+playlists antes de reproducirlas. La URL debajo de `#EXTINF` queda como
+respaldo estable sin token.
 
-El motor dinámico solo corresponde al identificador histórico explícito:
+El motor también conserva compatibilidad con el identificador histórico:
 
 ```m3u
 #EXTINF:-1 tvg-id="MeganoticiasAhora.cl" x-resolver="meganoticias" x-resolver-refresh="on_play",Meganoticias Ahora
@@ -165,7 +169,8 @@ el `tvg-id` para la EPG.
    `x-resolver-refresh`.
 2. Añadir metadatos explícitos para TVN y 24 Horas.
 3. Para Highfly, mantener un mapa `tvg-id -> slug -> manifest final` y emitirlo.
-4. Mantener Meganoticias de producción como fuente directa.
+4. Mantener Meganoticias de producción con el resolutor oficial y sin publicar
+   tokens, `serverKey` ni URLs de sesión.
 5. Generar y validar `resolver-catalog.json` en la automatización.
 6. No copiar respuestas `streams[].url`, tokens o claves al catálogo.
 7. Mantener la URL temporal de la M3U únicamente como compatibilidad externa.

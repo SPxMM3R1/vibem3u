@@ -43,6 +43,26 @@ public final class ResolverCatalogTest {
     }
 
     @Test
+    public void currentMeganoticiasIdMatchesDynamicResolver() throws Exception {
+        String json = catalogJson().replace(
+                "\"providers\":[",
+                "\"providers\":["
+                        + "{\"id\":\"meganoticias\",\"name\":\"Meganoticias\","
+                        + "\"engine\":\"meganoticias\","
+                        + "\"match\":{\"tvgIds\":[\"Meganoticias.cl\","
+                        + "\"MeganoticiasAhora.cl\"]},\"config\":{}} ,"
+        );
+
+        ResolverCatalog parsed = ResolverCatalog.parse(json);
+
+        assertEquals("meganoticias", parsed.find(channel(
+                "Meganoticias.cl",
+                "https://mdstrm.com/live-stream-playlist/current.m3u8",
+                attributes()
+        )).getId());
+    }
+
+    @Test
     public void unknownExplicitResolverDoesNotFallThroughToAnotherProvider() throws Exception {
         ResolverCatalog catalog = ResolverCatalog.parse(catalogJson());
         assertNull(catalog.find(channel(

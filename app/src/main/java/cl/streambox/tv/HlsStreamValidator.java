@@ -148,10 +148,11 @@ public final class HlsStreamValidator {
                 MAX_PLAYLIST_BYTES,
                 null
         );
-        String content = new String(response.getBody(), StandardCharsets.UTF_8)
+        byte[] playlistBody = MeganoticiasHlsDecoder.decodeIfNeeded(response.getBody());
+        String content = new String(playlistBody, StandardCharsets.UTF_8)
                 .replace("\uFEFF", "")
                 .trim();
-        if (!content.startsWith("#EXTM3U") || looksLikeErrorDocument(response.getBody())) {
+        if (!content.startsWith("#EXTM3U") || looksLikeErrorDocument(playlistBody)) {
             throw new IOException("La respuesta no es una playlist HLS.");
         }
         return new PlaylistResponse(
