@@ -668,9 +668,7 @@ public final class MainActivity extends Activity {
                 message = getString(R.string.loading_resolver_catalog);
                 break;
             case CATALOG_PAGE:
-                message = current > 0 && total > 0
-                        ? getString(R.string.loading_resolver_catalog_page, current, total)
-                        : getString(R.string.loading_resolver_catalog);
+                message = getString(R.string.loading_resolver_catalog);
                 break;
             case CATALOG_PARSED:
                 message = getString(R.string.loading_resolver_catalog_parsed);
@@ -679,19 +677,19 @@ public final class MainActivity extends Activity {
                 message = getString(R.string.loading_resolver_matching);
                 break;
             case ALIAS_ATTEMPT:
-                message = current > 0 && total > 0
+                message = current > 0 && total > 1
                         ? getString(R.string.loading_resolver_alias, current, total)
                         : getString(R.string.loading_resolver_alias_unknown);
                 break;
             case SOURCE_REQUEST:
-                message = current > 0 && total > 0
+                message = current > 0 && total > 1
                         ? getString(R.string.loading_resolver_source_request_count,
                         current,
                         total)
                         : getString(R.string.loading_resolver_source_request);
                 break;
             case SOURCE_CANDIDATE:
-                message = current > 0 && total > 0
+                message = current > 0 && total > 1
                         ? getString(R.string.loading_resolver_candidate, current, total)
                         : getString(R.string.loading_resolver_candidate_unknown);
                 break;
@@ -728,12 +726,10 @@ public final class MainActivity extends Activity {
             default:
                 return;
         }
-        String detail = progress.getDetail();
-        boolean animate = message.endsWith("…") || message.endsWith("...");
-        if (detail != null && !detail.isBlank()) {
-            message = stripTrailingEllipsis(message) + " · " + detail;
-            if (animate) message += "…";
-        }
+        // Detailed endpoint information remains sanitized inside the progress
+        // event for diagnostics, but the normal playback UI only shows the
+        // short stage label. This keeps one stable, readable line and never
+        // exposes a complete playback URL while a source is loading.
         showLoadingState(message);
     }
 
@@ -878,11 +874,7 @@ public final class MainActivity extends Activity {
         if (player == null || !isCurrentPlayback(channel, expectedGeneration)) return;
         StreamResolver resolver = streamResolverRegistry.find(channel);
         if (resolver == null) {
-            showLoadingState(
-                    getString(R.string.loading_direct_source)
-                            + " · GET " + SafePlaybackText.url(channel.getStreamUri())
-                            + " · entregando a Media3…"
-            );
+            showLoadingState(getString(R.string.loading_direct_source));
             startResolvedPlayback(
                     channel,
                     ResolvedPlaybackSource.direct(channel, PLAYER_USER_AGENT),
@@ -899,10 +891,7 @@ public final class MainActivity extends Activity {
         player.stop();
         player.clearMediaItems();
         long requestId = ++playbackResolutionRequestId;
-        showLoadingState(
-                getString(R.string.loading_resolver_initializing)
-                        + " · " + resolver.getId() + " · preparando flujo…"
-        );
+        showLoadingState(getString(R.string.loading_resolver_initializing));
         ResolutionProgressListener progressListener = progress -> mainHandler.post(() -> {
             if (isCurrentPlayback(channel, expectedGeneration)
                     && requestId == playbackResolutionRequestId) {
@@ -927,10 +916,6 @@ public final class MainActivity extends Activity {
                     if (!isCurrentPlayback(channel, expectedGeneration)
                             || requestId != playbackResolutionRequestId) return;
                     playbackResolutionTask = null;
-                    showLoadingState(
-                            getString(R.string.loading_resolver_source_ready)
-                                    + " · fuente entregada a Media3…"
-                    );
                     startResolvedPlayback(channel, source, expectedGeneration, requestId);
                 });
             } catch (Exception error) {
@@ -987,14 +972,7 @@ public final class MainActivity extends Activity {
         currentPlaybackSource = source;
         playbackRecoveryPolicy.reset();
         player.setMediaSource(mediaSourceFor(channel, source));
-        showLoadingState(
-                getString(R.string.loading_configuring_media3)
-                        + " · " + (source.isDynamicallyResolved()
-                        ? "fuente resuelta"
-                        : "fuente directa")
-                        + " · GET " + SafePlaybackText.url(source.getPlaybackUri())
-                        + "…"
-        );
+        showLoadingState(getString(R.string.loading_starting_playback));
         prepareAndPlay();
     }
 
