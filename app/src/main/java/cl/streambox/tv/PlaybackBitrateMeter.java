@@ -11,7 +11,7 @@ import java.util.Deque;
 
 /**
  * Estimates the bitrate of recently loaded media content, independently for
- * video and audio tracks.
+ * video and audio tracks or as one aggregate for a multiplexed stream.
  *
  * <p>This deliberately does not use the wall-clock duration of the HTTP
  * transfer. A segment can be downloaded faster than it is played because it
@@ -32,6 +32,8 @@ final class PlaybackBitrateMeter implements AnalyticsListener {
     private final Listener listener;
     private final Deque<Sample> videoSamples = new ArrayDeque<>();
     private final Deque<Sample> audioSamples = new ArrayDeque<>();
+    private final Deque<Sample> streamSamples = new ArrayDeque<>();
+    private boolean muxedStream;
 
     PlaybackBitrateMeter(Listener listener) {
         this.listener = listener;
@@ -82,10 +84,14 @@ final class PlaybackBitrateMeter implements AnalyticsListener {
             samples = videoSamples;
         } else if (trackType == C.TRACK_TYPE_AUDIO) {
             samples = audioSamples;
+        } else if (trackType == C.TRACK_TYPE_DEFAULT && muxedStream) {
+            // A multiplexed HLS chunk contains audio and video in the same
+            // payload. Keep its aggregate bitrate separate from the per-track
+            // figures because this event cannot divide the bytes reliably.
+            samples = streamSamples;
         } else {
-            // A multiplexed HLS chunk cannot be divided into audio/video
-            // bytes from this event alone. Keep it out of the per-track
-            // figures instead of assigning the complete chunk incorrectly.
+            // Text, metadata and other unsupported track types do not belong
+            // in the audio/video/aggregate content bitrate.
             return;
         }
 
@@ -102,9 +108,23 @@ final class PlaybackBitrateMeter implements AnalyticsListener {
         return calculateBitrate(audioSamples);
     }
 
+    synchronized long getStreamBitrate() {
+        return calculateBitrate(streamSamples);
+    }
+
+    synchronized boolean isMuxedStream() {
+        return muxedStream;
+    }
+
+    synchronized void setMuxedStream(boolean muxedStream) {
+        this.muxedStream = muxedStream;
+    }
+
     synchronized void reset() {
         videoSamples.clear();
         audioSamples.clear();
+        streamSamples.clear();
+        muxedStream = false;
     }
 
     private static void trimWindow(Deque<Sample> samples) {

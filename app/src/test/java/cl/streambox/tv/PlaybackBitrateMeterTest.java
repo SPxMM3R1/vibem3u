@@ -5,6 +5,8 @@ import androidx.media3.common.C;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public final class PlaybackBitrateMeterTest {
     @Test
@@ -40,20 +42,38 @@ public final class PlaybackBitrateMeterTest {
     }
 
     @Test
-    public void ignoresUnknownTracksAndInvalidSamples() {
+    public void aggregatesMuxedStreamWithoutAssigningItToATrack() {
         PlaybackBitrateMeter meter = new PlaybackBitrateMeter(null);
+        meter.setMuxedStream(true);
 
-        meter.recordMediaSample(C.TRACK_TYPE_DEFAULT, 2_000_000L, 0L, 4_000L);
-        meter.recordMediaSample(C.TRACK_TYPE_VIDEO, 0L, 0L, 4_000L);
-        meter.recordMediaSample(C.TRACK_TYPE_VIDEO, 2_000_000L, 4_000L, 4_000L);
+        meter.recordMediaSample(C.TRACK_TYPE_DEFAULT, 2_750_000L, 0L, 4_000L);
 
+        assertTrue(meter.isMuxedStream());
+        assertEquals(5_500_000L, meter.getStreamBitrate());
         assertEquals(0L, meter.getVideoBitrate());
         assertEquals(0L, meter.getAudioBitrate());
     }
 
     @Test
+    public void ignoresUnsupportedTracksAndInvalidSamples() {
+        PlaybackBitrateMeter meter = new PlaybackBitrateMeter(null);
+
+        meter.recordMediaSample(C.TRACK_TYPE_DEFAULT, 2_000_000L, 0L, 4_000L);
+        meter.recordMediaSample(C.TRACK_TYPE_TEXT, 2_000_000L, 0L, 4_000L);
+        meter.recordMediaSample(C.TRACK_TYPE_VIDEO, 0L, 0L, 4_000L);
+        meter.recordMediaSample(C.TRACK_TYPE_VIDEO, 2_000_000L, 4_000L, 4_000L);
+
+        assertEquals(0L, meter.getVideoBitrate());
+        assertEquals(0L, meter.getAudioBitrate());
+        assertEquals(0L, meter.getStreamBitrate());
+        assertFalse(meter.isMuxedStream());
+    }
+
+    @Test
     public void resetDropsSamplesFromPreviousPlayback() {
         PlaybackBitrateMeter meter = new PlaybackBitrateMeter(null);
+        meter.setMuxedStream(true);
+        meter.recordMediaSample(C.TRACK_TYPE_DEFAULT, 2_750_000L, 0L, 4_000L);
         meter.recordMediaSample(C.TRACK_TYPE_VIDEO, 2_000_000L, 0L, 4_000L);
         meter.recordMediaSample(C.TRACK_TYPE_AUDIO, 80_000L, 0L, 4_000L);
 
@@ -61,5 +81,7 @@ public final class PlaybackBitrateMeterTest {
 
         assertEquals(0L, meter.getVideoBitrate());
         assertEquals(0L, meter.getAudioBitrate());
+        assertEquals(0L, meter.getStreamBitrate());
+        assertFalse(meter.isMuxedStream());
     }
 }

@@ -84,7 +84,11 @@ El diagnóstico de reproducción muestra por separado el bitrate de video y audi
 Primero utiliza el bitrate anunciado por el formato si está disponible y, cuando
 Media3 carga segmentos multimedia con tiempos conocidos, lo reemplaza por una
 estimación suavizada del contenido reciente. No confunde esa cifra con la velocidad
-de descarga de la red.
+de descarga de la red. Si Media3 identifica que la carga es un segmento
+multiplexado, la app conserva el bitrate agregado y muestra `Stream` en lugar de
+presentar el total como si fuera solamente video o audio. La decisión se toma
+cuando la información de pistas confirma que el audio está embebido en el grupo
+principal; un `TRACK_TYPE_DEFAULT` aislado no se considera suficiente.
 
 ## Compilación automática
 

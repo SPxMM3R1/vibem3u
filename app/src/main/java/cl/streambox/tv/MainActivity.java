@@ -312,6 +312,9 @@ public final class MainActivity extends Activity {
             }
 
             @Override public void onTracksChanged(androidx.media3.common.Tracks tracks) {
+                if (playbackBitrateMeter != null) {
+                    playbackBitrateMeter.setMuxedStream(isMuxedAudioVideo(tracks));
+                }
                 updateDiagnostics();
                 applySavedQualityPreference(tracks);
                 applySavedSubtitlePreference(tracks);
@@ -1355,6 +1358,21 @@ public final class MainActivity extends Activity {
 
         String videoCodec = codecName(video == null ? null : video.sampleMimeType);
         String audioCodec = codecName(audio == null ? null : audio.sampleMimeType);
+        boolean isMuxedStream = playbackBitrateMeter != null
+                && playbackBitrateMeter.isMuxedStream();
+        if (isMuxedStream) {
+            long measuredStreamBitrate = playbackBitrateMeter.getStreamBitrate();
+            codecInfo.setText(
+                    videoCodec + " · " + audioCodec + " · "
+                            + bitrateLabel(
+                            "Stream",
+                            measuredStreamBitrate,
+                            declaredStreamBitrate(video, audio)
+                    )
+            );
+            return;
+        }
+
         long measuredVideoBitrate = playbackBitrateMeter == null
                 ? 0L
                 : playbackBitrateMeter.getVideoBitrate();
@@ -1369,10 +1387,13 @@ public final class MainActivity extends Activity {
     }
 
     private static String bitrateLabel(String label, long measuredBitrate, Format format) {
+        return bitrateLabel(label, measuredBitrate, declaredBitrate(format));
+    }
+
+    private static String bitrateLabel(String label, long measuredBitrate, int declaredBitrate) {
         if (measuredBitrate > 0) {
             return label + " ≈ " + formatBitrate(measuredBitrate);
         }
-        int declaredBitrate = declaredBitrate(format);
         return declaredBitrate > 0
                 ? label + " ~ " + formatBitrate(declaredBitrate)
                 : label + " —";
@@ -1382,6 +1403,34 @@ public final class MainActivity extends Activity {
         if (format == null) return Format.NO_VALUE;
         if (format.averageBitrate > 0) return format.averageBitrate;
         return format.peakBitrate > 0 ? format.peakBitrate : Format.NO_VALUE;
+    }
+
+    private static boolean isMuxedAudioVideo(Tracks tracks) {
+        Set<String> selectedVideoGroupIds = new HashSet<>();
+        for (Tracks.Group group : tracks.getGroups()) {
+            if (group.getType() == C.TRACK_TYPE_VIDEO && group.isSelected()) {
+                selectedVideoGroupIds.add(group.getMediaTrackGroup().id);
+            }
+        }
+        if (selectedVideoGroupIds.isEmpty()) return false;
+
+        for (Tracks.Group group : tracks.getGroups()) {
+            if (group.getType() != C.TRACK_TYPE_AUDIO || !group.isSelected()) continue;
+            for (int trackIndex = 0; trackIndex < group.length; trackIndex++) {
+                if (!group.isTrackSelected(trackIndex)) continue;
+                Format audioFormat = group.getTrackFormat(trackIndex);
+                if (audioFormat.primaryTrackGroupId != null
+                        && selectedVideoGroupIds.contains(audioFormat.primaryTrackGroupId)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static int declaredStreamBitrate(Format video, Format audio) {
+        int videoBitrate = declaredBitrate(video);
+        return videoBitrate > 0 ? videoBitrate : declaredBitrate(audio);
     }
 
     private static String formatBitrate(long bitsPerSecond) {
