@@ -80,15 +80,13 @@ de la fuente para Media3. La etiqueta de cada etapa queda fija mientras se anima
 únicamente un espacio reservado para los tres puntos suspensivos, sin añadir otro
 indicador gráfico.
 
-El diagnóstico de reproducción muestra por separado el bitrate de video y audio.
-Primero utiliza el bitrate anunciado por el formato si está disponible y, cuando
-Media3 carga segmentos multimedia con tiempos conocidos, lo reemplaza por una
-estimación suavizada del contenido reciente. No confunde esa cifra con la velocidad
-de descarga de la red. Si Media3 identifica que la carga es un segmento
-multiplexado, la app conserva el bitrate agregado y muestra `Stream` en lugar de
-presentar el total como si fuera solamente video o audio. La decisión se toma
-cuando la información de pistas confirma que el audio está embebido en el grupo
-principal; un `TRACK_TYPE_DEFAULT` aislado no se considera suficiente.
+El diagnóstico de reproducción mantiene el formato compacto `H.264 · AAC · 5.5 Mbps`.
+Cuando Media3 carga segmentos multimedia con tiempos conocidos, el bitrate mostrado
+usa una estimación suavizada del contenido reciente y no la velocidad de descarga de
+la red. Si la información de pistas confirma que el audio está embebido en el grupo
+principal, el valor mostrado es el total del segmento; la app no lo presenta como
+video o audio por separado. Un `TRACK_TYPE_DEFAULT` aislado no se considera
+suficiente para activar ese modo.
 
 ## Compilación automática
 

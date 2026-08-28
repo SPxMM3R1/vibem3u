@@ -1360,43 +1360,22 @@ public final class MainActivity extends Activity {
         String audioCodec = codecName(audio == null ? null : audio.sampleMimeType);
         boolean isMuxedStream = playbackBitrateMeter != null
                 && playbackBitrateMeter.isMuxedStream();
-        if (isMuxedStream) {
-            long measuredStreamBitrate = playbackBitrateMeter.getStreamBitrate();
-            codecInfo.setText(
-                    videoCodec + " · " + audioCodec + " · "
-                            + bitrateLabel(
-                            "Stream",
-                            measuredStreamBitrate,
-                            declaredStreamBitrate(video, audio)
-                    )
-            );
-            return;
+        long measuredBitrate = 0L;
+        if (playbackBitrateMeter != null) {
+            measuredBitrate = isMuxedStream
+                    ? playbackBitrateMeter.getStreamBitrate()
+                    : playbackBitrateMeter.getVideoBitrate();
         }
-
-        long measuredVideoBitrate = playbackBitrateMeter == null
-                ? 0L
-                : playbackBitrateMeter.getVideoBitrate();
-        long measuredAudioBitrate = playbackBitrateMeter == null
-                ? 0L
-                : playbackBitrateMeter.getAudioBitrate();
-        codecInfo.setText(
-                videoCodec + " · " + bitrateLabel("Video", measuredVideoBitrate, video)
-                        + " · " + audioCodec + " · "
-                        + bitrateLabel("Audio", measuredAudioBitrate, audio)
-        );
+        int declaredBitrate = isMuxedStream
+                ? declaredStreamBitrate(video, audio)
+                : declaredBitrate(video);
+        long displayBitrate = measuredBitrate > 0 ? measuredBitrate : declaredBitrate;
+        codecInfo.setText(videoCodec + " · " + audioCodec + " · "
+                + compactBitrate(displayBitrate));
     }
 
-    private static String bitrateLabel(String label, long measuredBitrate, Format format) {
-        return bitrateLabel(label, measuredBitrate, declaredBitrate(format));
-    }
-
-    private static String bitrateLabel(String label, long measuredBitrate, int declaredBitrate) {
-        if (measuredBitrate > 0) {
-            return label + " ≈ " + formatBitrate(measuredBitrate);
-        }
-        return declaredBitrate > 0
-                ? label + " ~ " + formatBitrate(declaredBitrate)
-                : label + " —";
+    private static String compactBitrate(long bitsPerSecond) {
+        return bitsPerSecond > 0 ? formatBitrate(bitsPerSecond) : "—";
     }
 
     private static int declaredBitrate(Format format) {
