@@ -158,6 +158,7 @@ public final class MainActivity extends Activity {
     private boolean fallbackAttempted;
     private String loadingMessageBase = "";
     private boolean loadingMessageAnimating;
+    private boolean loadingAnimationScheduled;
     private int loadingDotCount;
 
     private final Runnable hideOverlay = () -> {
@@ -190,11 +191,17 @@ public final class MainActivity extends Activity {
             if (!loadingMessageAnimating
                     || loadingPanel == null
                     || loadingPanel.getVisibility() != View.VISIBLE) {
+                loadingAnimationScheduled = false;
                 return;
             }
+            loadingAnimationScheduled = false;
             loadingDotCount = (loadingDotCount + 1) % 4;
             renderAnimatedLoadingText();
-            mainHandler.postDelayed(this, 420L);
+            if (loadingMessageAnimating
+                    && loadingPanel.getVisibility() == View.VISIBLE) {
+                loadingAnimationScheduled = true;
+                mainHandler.postDelayed(this, 420L);
+            }
         }
     };
 
@@ -670,14 +677,29 @@ public final class MainActivity extends Activity {
         String safeMessage = SafePlaybackText.detail(message == null ? "" : message.trim());
         boolean animate = safeMessage.endsWith("…") || safeMessage.endsWith("...");
         String base = stripTrailingEllipsis(safeMessage);
+        boolean sameAnimatedMessage = animate
+                && loadingMessageAnimating
+                && base.equals(loadingMessageBase);
+        if (sameAnimatedMessage) {
+            // Several resolver stages intentionally share one visible label
+            // (for example, both catalogue requests). Keep the current dot
+            // phase instead of restarting it for every progress callback.
+            if (!loadingAnimationScheduled) {
+                loadingAnimationScheduled = true;
+                mainHandler.postDelayed(animateLoadingText, 420L);
+            }
+            return;
+        }
         if (base.equals(loadingMessageBase) && animate == loadingMessageAnimating) return;
 
-        stopLoadingTextAnimation();
+        mainHandler.removeCallbacks(animateLoadingText);
+        loadingAnimationScheduled = false;
         loadingMessageBase = base;
         loadingMessageAnimating = animate;
         loadingDotCount = 0;
         if (animate) {
             renderAnimatedLoadingText();
+            loadingAnimationScheduled = true;
             mainHandler.postDelayed(animateLoadingText, 420L);
         } else {
             loadingText.setText(safeMessage);
@@ -764,6 +786,7 @@ public final class MainActivity extends Activity {
 
     private void stopLoadingTextAnimation() {
         mainHandler.removeCallbacks(animateLoadingText);
+        loadingAnimationScheduled = false;
         loadingMessageAnimating = false;
         loadingMessageBase = "";
         loadingDotCount = 0;
