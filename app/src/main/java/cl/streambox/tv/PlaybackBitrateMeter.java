@@ -166,7 +166,7 @@ final class PlaybackBitrateMeter implements AnalyticsListener, VideoFrameMetadat
      * 30 FPS rather than 31 FPS.
      */
     synchronized void recordRenderedFrame(long realtimeNs) {
-        if (realtimeNs <= 0L) return;
+        if (realtimeNs < 0L) return;
 
         if (renderedFpsWindowStartRealtimeNs == C.TIME_UNSET
                 || realtimeNs < renderedFpsWindowStartRealtimeNs
