@@ -1,9 +1,9 @@
 package cl.streambox.tv;
 
 import androidx.media3.common.C;
-import androidx.media3.common.DecoderReuseEvaluation;
 import androidx.media3.common.Format;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.exoplayer.DecoderReuseEvaluation;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.source.LoadEventInfo;
 import androidx.media3.exoplayer.source.MediaLoadData;
