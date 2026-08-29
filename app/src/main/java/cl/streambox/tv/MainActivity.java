@@ -48,9 +48,9 @@ import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.Renderer;
-import androidx.media3.exoplayer.mediacodec.MediaCodecVideoRenderer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.source.MediaSource;
+import androidx.media3.exoplayer.video.MediaCodecVideoRenderer;
 import androidx.media3.ui.PlayerView;
 
 import java.net.URI;
