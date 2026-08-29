@@ -26,8 +26,8 @@ android {
         applicationId = "cl.streambox.tv"
         minSdk = 23
         targetSdk = 36
-        versionCode = 56
-        versionName = "0.4.51"
+        versionCode = 57
+        versionName = "0.4.52"
         buildConfigField("boolean", "ENABLE_EXPERIMENTAL_VAVOO", "false")
         buildConfigField("boolean", "ENABLE_APP_UPDATES", "true")
     }
