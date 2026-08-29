@@ -165,6 +165,7 @@ public final class MainActivity extends Activity {
     private boolean loadingMessageAnimating;
     private boolean loadingAnimationScheduled;
     private int loadingDotCount;
+    private boolean playbackDiagnosticsActive;
 
     private final Runnable hideOverlay = () -> {
         channelOverlay.setVisibility(View.GONE);
@@ -305,6 +306,7 @@ public final class MainActivity extends Activity {
         PlaybackBitrateMeter newBitrateMeter = new PlaybackBitrateMeter(
                 () -> mainHandler.post(() -> {
                     if (!exiting && player != null && playbackBitrateMeter == meterHolder[0]) {
+                        maybeActivatePlaybackDiagnostics();
                         updateDiagnostics();
                     }
                 })
@@ -321,6 +323,7 @@ public final class MainActivity extends Activity {
         }
         player.addListener(new Player.Listener() {
             @Override public void onPlaybackStateChanged(int playbackState) {
+                maybeActivatePlaybackDiagnostics();
                 updateStreamStatus(playbackState);
                 updateDiagnostics();
                 if (playbackState == Player.STATE_READY && !loadFailed) {
@@ -333,6 +336,7 @@ public final class MainActivity extends Activity {
             }
 
             @Override public void onVideoSizeChanged(VideoSize videoSize) {
+                maybeActivatePlaybackDiagnostics();
                 updateDiagnostics();
             }
 
@@ -340,6 +344,7 @@ public final class MainActivity extends Activity {
                 if (playbackBitrateMeter != null) {
                     playbackBitrateMeter.setMuxedStream(isMuxedAudioVideo(tracks));
                 }
+                maybeActivatePlaybackDiagnostics();
                 updateDiagnostics();
                 applySavedQualityPreference(tracks);
                 applySavedSubtitlePreference(tracks);
@@ -941,8 +946,8 @@ public final class MainActivity extends Activity {
         channelNumber.setText(String.format(Locale.ROOT, "%03d", channelIndex + 1));
         channelName.setText(channel.getName());
         updateProgrammeInfo();
-        videoInfo.setText("— · — FPS");
-        codecInfo.setText("Analizando stream…");
+        videoInfo.setText("— · —");
+        codecInfo.setText("— · — · —");
         setStatus("CARGANDO", R.color.amber);
         loadChannelLogo(channel, revalidateLogo);
         showLoadingState(getString(R.string.loading_preparing_channel));
@@ -1108,6 +1113,7 @@ public final class MainActivity extends Activity {
     }
 
     private void resetPlaybackBitrateMeter() {
+        playbackDiagnosticsActive = false;
         if (playbackBitrateMeter != null) playbackBitrateMeter.reset();
     }
 
@@ -1451,8 +1457,29 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void maybeActivatePlaybackDiagnostics() {
+        if (playbackDiagnosticsActive || player == null || playbackBitrateMeter == null) {
+            return;
+        }
+        if (player.getPlaybackState() == Player.STATE_READY
+                && playbackBitrateMeter.hasRenderedVideoFrame()) {
+            playbackDiagnosticsActive = true;
+        }
+    }
+
     private void updateDiagnostics() {
         if (player == null) return;
+        if (!playbackDiagnosticsActive) {
+            // Track metadata can be available while Media3 is still opening
+            // the stream. Do not expose a partial diagnostic row at that
+            // point; the first rendered frame is the first reliable playback
+            // boundary for showing codec and FPS information.
+            if (player.getPlayerError() == null && !loadFailed) {
+                videoInfo.setText("— · —");
+                codecInfo.setText("— · — · —");
+            }
+            return;
+        }
         Format video = player.getVideoFormat();
         Format audio = player.getAudioFormat();
 

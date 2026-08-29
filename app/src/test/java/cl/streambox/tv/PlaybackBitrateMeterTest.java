@@ -113,6 +113,21 @@ public final class PlaybackBitrateMeterTest {
     }
 
     @Test
+    public void onlyRenderedFramesCrossThePlaybackDiagnosticsBoundary() {
+        PlaybackBitrateMeter meter = new PlaybackBitrateMeter(null);
+
+        assertFalse(meter.hasRenderedVideoFrame());
+        meter.recordFrameSample(0L, 30);
+        assertFalse(meter.hasRenderedVideoFrame());
+
+        meter.recordRenderedFrame(0L);
+        assertTrue(meter.hasRenderedVideoFrame());
+
+        meter.reset();
+        assertFalse(meter.hasRenderedVideoFrame());
+    }
+
+    @Test
     public void estimatesSixtyFramesPerSecondWithoutCountingFirstFrameTwice() {
         PlaybackBitrateMeter meter = new PlaybackBitrateMeter(null);
 
