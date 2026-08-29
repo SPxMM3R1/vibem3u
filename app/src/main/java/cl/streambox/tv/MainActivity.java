@@ -578,39 +578,40 @@ public final class MainActivity extends Activity {
     private void loadEpgForPlaylists(Map<Integer, Playlist> playlists, int generation) {
         for (Map.Entry<Integer, Playlist> entry : orderedPlaylistEntries(playlists)) {
             Playlist playlist = entry.getValue();
-            URI epgUri = playlist == null ? null : playlist.getEpgUri();
-            if (epgUri == null) continue;
-            String url = epgUri.toString();
-            if (!epgRequests.add(url)) continue;
-            resourceCacheExecutor.submit(() -> {
-                EpgData local = null;
-                try {
-                    local = epgRepository.loadCached(epgUri);
-                    if (local != null) {
-                        EpgData cachedData = local;
-                        mainHandler.post(() -> applyEpgData(cachedData, epgUri, generation));
-                    }
-                } catch (Exception ignored) {
-                    // La reproducción continúa usando el grupo del canal como respaldo.
-                }
-                if (!isNetworkAvailable()) return;
-
-                EpgData baseline = local;
-                networkExecutor.submit(() -> {
+            if (playlist == null) continue;
+            for (URI epgUri : playlist.getEpgUris()) {
+                String url = epgUri.toString();
+                if (!epgRequests.add(url)) continue;
+                resourceCacheExecutor.submit(() -> {
+                    EpgData local = null;
                     try {
-                        EpgRepository.LoadResult result = epgRepository.downloadIfChanged(epgUri);
-                        if (result.isChanged() || baseline == null) {
-                            mainHandler.post(() -> applyEpgData(
-                                    result.getData(),
-                                    epgUri,
-                                    generation
-                            ));
+                        local = epgRepository.loadCached(epgUri);
+                        if (local != null) {
+                            EpgData cachedData = local;
+                            mainHandler.post(() -> applyEpgData(cachedData, epgUri, generation));
                         }
                     } catch (Exception ignored) {
-                        // La programación cacheada permanece visible.
+                        // La reproducción continúa usando el grupo del canal como respaldo.
                     }
+                    if (!isNetworkAvailable()) return;
+
+                    EpgData baseline = local;
+                    networkExecutor.submit(() -> {
+                        try {
+                            EpgRepository.LoadResult result = epgRepository.downloadIfChanged(epgUri);
+                            if (result.isChanged() || baseline == null) {
+                                mainHandler.post(() -> applyEpgData(
+                                        result.getData(),
+                                        epgUri,
+                                        generation
+                                ));
+                            }
+                        } catch (Exception ignored) {
+                            // La programación cacheada permanece visible.
+                        }
+                    });
                 });
-            });
+            }
         }
     }
 
@@ -690,8 +691,10 @@ public final class MainActivity extends Activity {
         LinkedHashSet<String> nextEpgUrls = new LinkedHashSet<>();
         for (Map.Entry<Integer, Playlist> entry : orderedPlaylistEntries(playlistsBySource)) {
             Playlist playlist = entry.getValue();
-            if (playlist != null && playlist.getEpgUri() != null) {
-                nextEpgUrls.add(playlist.getEpgUri().toString());
+            if (playlist != null) {
+                for (URI epgUri : playlist.getEpgUris()) {
+                    nextEpgUrls.add(epgUri.toString());
+                }
             }
         }
         boolean epgSourcesChanged = !nextEpgUrls.equals(activeEpgUrls);

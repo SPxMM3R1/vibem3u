@@ -2,6 +2,7 @@ package cl.streambox.tv;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -67,24 +68,31 @@ public final class M3uParser {
             pendingGroup = "";
             pendingAttributes = new LinkedHashMap<>();
         }
-        return new Playlist(channels, parseEpgUri(normalized, playlistUri));
+        return Playlist.withEpgUris(channels, parseEpgUris(normalized, playlistUri));
     }
 
-    private static URI parseEpgUri(String content, URI playlistUri) {
+    private static List<URI> parseEpgUris(String content, URI playlistUri) {
         for (String rawLine : content.split("\\r?\\n")) {
             String line = rawLine.trim();
             if (line.isEmpty()) continue;
-            if (!line.regionMatches(true, 0, "#EXTM3U", 0, 7)) return null;
+            if (!line.regionMatches(true, 0, "#EXTM3U", 0, 7)) {
+                return Collections.emptyList();
+            }
 
             Map<String, String> attributes = parseAttributes(line);
             String value = attributes.get("x-tvg-url");
             if (value == null || value.isBlank()) value = attributes.get("url-tvg");
-            if (value == null || value.isBlank()) return null;
-            int separator = value.indexOf(',');
-            if (separator >= 0) value = value.substring(0, separator);
-            return resolveUri(playlistUri, value);
+            if (value == null || value.isBlank()) return Collections.emptyList();
+            List<URI> epgUris = new ArrayList<>();
+            for (String candidate : value.split(",")) {
+                URI epgUri = resolveUri(playlistUri, candidate);
+                if (epgUri != null && !epgUris.contains(epgUri)) {
+                    epgUris.add(epgUri);
+                }
+            }
+            return epgUris;
         }
-        return null;
+        return Collections.emptyList();
     }
 
     private static Map<String, String> parseAttributes(String extInf) {

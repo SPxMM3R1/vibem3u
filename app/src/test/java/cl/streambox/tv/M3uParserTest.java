@@ -40,6 +40,28 @@ public class M3uParserTest {
     }
 
     @Test
+    public void keepsEveryEpgUrlDeclaredByTheM3uHeader() {
+        String playlist = "#EXTM3U url-tvg=\"guide/first.xml,https://epg.example.org/second.xml\"\n"
+                + "#EXTINF:-1 tvg-id=\"list-two-channel\",Canal de la lista 2\n"
+                + "https://media.example.org/channel.m3u8\n";
+
+        Playlist parsed = M3uParser.parsePlaylist(
+                playlist,
+                URI.create("https://example.org/lists/tv.m3u")
+        );
+
+        assertEquals(2, parsed.getEpgUris().size());
+        assertEquals(
+                "https://example.org/lists/guide/first.xml",
+                parsed.getEpgUris().get(0).toString()
+        );
+        assertEquals(
+                "https://epg.example.org/second.xml",
+                parsed.getEpgUris().get(1).toString()
+        );
+    }
+
+    @Test
     public void preservesDeclarativeResolverAttributes() {
         String playlist = "#EXTM3U\n"
                 + "#EXTINF:-1 tvg-id=\"SkySportsNFL.uk@TvVoo\" "
