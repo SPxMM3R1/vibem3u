@@ -76,12 +76,28 @@ public final class PlaybackBitrateMeterTest {
         meter.recordMediaSample(C.TRACK_TYPE_DEFAULT, 2_750_000L, 0L, 4_000L);
         meter.recordMediaSample(C.TRACK_TYPE_VIDEO, 2_000_000L, 0L, 4_000L);
         meter.recordMediaSample(C.TRACK_TYPE_AUDIO, 80_000L, 0L, 4_000L);
+        meter.recordFrameSample(0L, 30);
+        meter.recordFrameSample(1_000L, 30);
 
         meter.reset();
 
         assertEquals(0L, meter.getVideoBitrate());
         assertEquals(0L, meter.getAudioBitrate());
         assertEquals(0L, meter.getStreamBitrate());
+        assertEquals(0f, meter.getMeasuredFrameRate(), 0.01f);
         assertFalse(meter.isMuxedStream());
+    }
+
+    @Test
+    public void estimatesFrameRateWhenStreamDoesNotDeclareIt() {
+        PlaybackBitrateMeter meter = new PlaybackBitrateMeter(null);
+
+        // The first batch establishes the time origin. Subsequent batches
+        // represent 30 frames every second.
+        meter.recordFrameSample(0L, 30);
+        meter.recordFrameSample(500L, 15);
+        meter.recordFrameSample(1_000L, 15);
+
+        assertEquals(30f, meter.getMeasuredFrameRate(), 0.01f);
     }
 }

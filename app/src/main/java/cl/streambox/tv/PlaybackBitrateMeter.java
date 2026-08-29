@@ -1,6 +1,8 @@
 package cl.streambox.tv;
 
 import androidx.media3.common.C;
+import androidx.media3.common.DecoderReuseEvaluation;
+import androidx.media3.common.Format;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.source.LoadEventInfo;
@@ -24,6 +26,7 @@ import java.util.Deque;
 final class PlaybackBitrateMeter implements AnalyticsListener {
     private static final long WINDOW_MEDIA_DURATION_MS = 10_000L;
     private static final long MAX_SAMPLE_DURATION_MS = 120_000L;
+    private static final long FPS_WINDOW_REALTIME_MS = 1_000L;
 
     interface Listener {
         void onMeasuredBitrateChanged();
@@ -34,6 +37,9 @@ final class PlaybackBitrateMeter implements AnalyticsListener {
     private final Deque<Sample> audioSamples = new ArrayDeque<>();
     private final Deque<Sample> streamSamples = new ArrayDeque<>();
     private boolean muxedStream;
+    private float measuredFrameRate;
+    private long fpsWindowStartRealtimeMs = C.TIME_UNSET;
+    private long fpsWindowFrameCount;
 
     PlaybackBitrateMeter(Listener listener) {
         this.listener = listener;
@@ -60,6 +66,59 @@ final class PlaybackBitrateMeter implements AnalyticsListener {
                 mediaStartMs,
                 mediaEndMs
         );
+    }
+
+    @Override
+    public void onVideoInputFormatChanged(
+            AnalyticsListener.EventTime eventTime,
+            Format format,
+            DecoderReuseEvaluation decoderReuseEvaluation
+    ) {
+        synchronized (this) {
+            resetFpsWindow();
+        }
+        if (listener != null) listener.onMeasuredBitrateChanged();
+    }
+
+    @Override
+    public void onVideoFrameProcessingOffset(
+            AnalyticsListener.EventTime eventTime,
+            long totalProcessingOffsetUs,
+            int frameCount
+    ) {
+        if (eventTime == null) return;
+        recordFrameSample(eventTime.realtimeMs, frameCount);
+    }
+
+    /**
+     * Estimates the rate of video frames processed by Media3. The first
+     * callback establishes a time origin because its batch may have been
+     * accumulated before it was dispatched. The UI uses this measurement as
+     * its only FPS source, so it does not depend on optional manifest metadata.
+     */
+    synchronized void recordFrameSample(long realtimeMs, int frameCount) {
+        if (realtimeMs == C.TIME_UNSET || frameCount <= 0) return;
+
+        if (fpsWindowStartRealtimeMs == C.TIME_UNSET
+                || realtimeMs < fpsWindowStartRealtimeMs) {
+            fpsWindowStartRealtimeMs = realtimeMs;
+            fpsWindowFrameCount = 0L;
+            measuredFrameRate = 0f;
+            return;
+        }
+
+        fpsWindowFrameCount += frameCount;
+        long elapsedMs = realtimeMs - fpsWindowStartRealtimeMs;
+        if (elapsedMs < FPS_WINDOW_REALTIME_MS) return;
+
+        measuredFrameRate = fpsWindowFrameCount * 1_000f / elapsedMs;
+        fpsWindowStartRealtimeMs = realtimeMs;
+        fpsWindowFrameCount = 0L;
+        if (listener != null) listener.onMeasuredBitrateChanged();
+    }
+
+    synchronized float getMeasuredFrameRate() {
+        return measuredFrameRate;
     }
 
     /**
@@ -125,6 +184,13 @@ final class PlaybackBitrateMeter implements AnalyticsListener {
         audioSamples.clear();
         streamSamples.clear();
         muxedStream = false;
+        resetFpsWindow();
+    }
+
+    private void resetFpsWindow() {
+        measuredFrameRate = 0f;
+        fpsWindowStartRealtimeMs = C.TIME_UNSET;
+        fpsWindowFrameCount = 0L;
     }
 
     private static void trimWindow(Deque<Sample> samples) {
