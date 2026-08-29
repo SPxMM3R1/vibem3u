@@ -135,4 +135,20 @@ public final class PlaybackBitrateMeterTest {
 
         assertEquals(60f, meter.getMeasuredFrameRate(), 0.02f);
     }
+
+    @Test
+    public void normalizesTypicalFrameRateGroups() {
+        assertEquals(24f, PlaybackBitrateMeter.normalizeFrameRate(23.9f), 0.01f);
+        assertEquals(30f, PlaybackBitrateMeter.normalizeFrameRate(29.9f), 0.01f);
+        assertEquals(30f, PlaybackBitrateMeter.normalizeFrameRate(31.0f), 0.01f);
+        assertEquals(50f, PlaybackBitrateMeter.normalizeFrameRate(50.8f), 0.01f);
+        assertEquals(60f, PlaybackBitrateMeter.normalizeFrameRate(59.4f), 0.01f);
+    }
+
+    @Test
+    public void preservesFrameRatesOutsideKnownGroups() {
+        assertEquals(15f, PlaybackBitrateMeter.normalizeFrameRate(15f), 0.01f);
+        assertEquals(70f, PlaybackBitrateMeter.normalizeFrameRate(70f), 0.01f);
+        assertEquals(0f, PlaybackBitrateMeter.normalizeFrameRate(0f), 0.01f);
+    }
 }

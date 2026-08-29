@@ -32,6 +32,11 @@ final class PlaybackBitrateMeter implements AnalyticsListener, VideoFrameMetadat
     private static final long MAX_SAMPLE_DURATION_MS = 120_000L;
     private static final long FPS_WINDOW_REALTIME_MS = 1_000L;
     private static final long FPS_WINDOW_REALTIME_NS = 1_000_000_000L;
+    private static final float LOWEST_NORMALIZED_FRAME_RATE = 20f;
+    private static final float FIRST_FRAME_RATE_GROUP_END = 27f;
+    private static final float SECOND_FRAME_RATE_GROUP_END = 40f;
+    private static final float THIRD_FRAME_RATE_GROUP_END = 55f;
+    private static final float HIGHEST_NORMALIZED_FRAME_RATE = 66f;
 
     private enum FrameRateSource {
         NONE,
@@ -190,6 +195,32 @@ final class PlaybackBitrateMeter implements AnalyticsListener, VideoFrameMetadat
 
     synchronized float getMeasuredFrameRate() {
         return measuredFrameRate;
+    }
+
+    /**
+     * Groups small measurement variations into the standard frame-rate families used by video
+     * streams. Values outside the known families remain untouched instead of being presented as a
+     * different frame rate.
+     */
+    static float normalizeFrameRate(float frameRate) {
+        if (!Float.isFinite(frameRate) || frameRate <= 0f) return frameRate;
+        if (frameRate >= LOWEST_NORMALIZED_FRAME_RATE
+                && frameRate < FIRST_FRAME_RATE_GROUP_END) {
+            return 24f;
+        }
+        if (frameRate >= FIRST_FRAME_RATE_GROUP_END
+                && frameRate < SECOND_FRAME_RATE_GROUP_END) {
+            return 30f;
+        }
+        if (frameRate >= SECOND_FRAME_RATE_GROUP_END
+                && frameRate < THIRD_FRAME_RATE_GROUP_END) {
+            return 50f;
+        }
+        if (frameRate >= THIRD_FRAME_RATE_GROUP_END
+                && frameRate <= HIGHEST_NORMALIZED_FRAME_RATE) {
+            return 60f;
+        }
+        return frameRate;
     }
 
     /**

@@ -846,7 +846,7 @@ public final class MainActivity extends Activity {
         channelNumber.setText(String.format(Locale.ROOT, "%03d", channelIndex + 1));
         channelName.setText(channel.getName());
         updateProgrammeInfo();
-        videoInfo.setText("Resolución pendiente · — FPS");
+        videoInfo.setText("— · — FPS");
         codecInfo.setText("Analizando stream…");
         setStatus("CARGANDO", R.color.amber);
         loadChannelLogo(channel, revalidateLogo);
@@ -1363,10 +1363,11 @@ public final class MainActivity extends Activity {
 
         String resolution = video != null && video.width > 0 && video.height > 0
                 ? video.width + " × " + video.height
-                : "Resolución desconocida";
-        float frameRate = playbackBitrateMeter == null
+                : "—";
+        float measuredFrameRate = playbackBitrateMeter == null
                 ? 0f
                 : playbackBitrateMeter.getMeasuredFrameRate();
+        float frameRate = PlaybackBitrateMeter.normalizeFrameRate(measuredFrameRate);
         String fps = frameRate > 0 ? trimDecimal(frameRate) + " FPS" : "— FPS";
         videoInfo.setText(resolution + " · " + fps);
 
