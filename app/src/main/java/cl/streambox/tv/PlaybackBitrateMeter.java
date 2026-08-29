@@ -1,5 +1,8 @@
 package cl.streambox.tv;
 
+import android.media.MediaFormat;
+
+import androidx.annotation.Nullable;
 import androidx.media3.common.C;
 import androidx.media3.common.Format;
 import androidx.media3.common.util.UnstableApi;
@@ -7,6 +10,7 @@ import androidx.media3.exoplayer.DecoderReuseEvaluation;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.source.LoadEventInfo;
 import androidx.media3.exoplayer.source.MediaLoadData;
+import androidx.media3.exoplayer.video.VideoFrameMetadataListener;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -23,10 +27,17 @@ import java.util.Deque;
  * throughput.</p>
  */
 @UnstableApi
-final class PlaybackBitrateMeter implements AnalyticsListener {
+final class PlaybackBitrateMeter implements AnalyticsListener, VideoFrameMetadataListener {
     private static final long WINDOW_MEDIA_DURATION_MS = 10_000L;
     private static final long MAX_SAMPLE_DURATION_MS = 120_000L;
     private static final long FPS_WINDOW_REALTIME_MS = 1_000L;
+    private static final long FPS_WINDOW_REALTIME_NS = 1_000_000_000L;
+
+    private enum FrameRateSource {
+        NONE,
+        PROCESSED,
+        RENDERED
+    }
 
     interface Listener {
         void onMeasuredBitrateChanged();
@@ -40,6 +51,9 @@ final class PlaybackBitrateMeter implements AnalyticsListener {
     private float measuredFrameRate;
     private long fpsWindowStartRealtimeMs = C.TIME_UNSET;
     private long fpsWindowFrameCount;
+    private FrameRateSource frameRateSource = FrameRateSource.NONE;
+    private long renderedFpsWindowStartRealtimeNs = C.TIME_UNSET;
+    private long renderedFpsWindowFrameCount;
 
     PlaybackBitrateMeter(Listener listener) {
         this.listener = listener;
@@ -87,7 +101,36 @@ final class PlaybackBitrateMeter implements AnalyticsListener {
             int frameCount
     ) {
         if (eventTime == null) return;
+        synchronized (this) {
+            if (frameRateSource == FrameRateSource.RENDERED) return;
+            if (frameRateSource == FrameRateSource.NONE) {
+                frameRateSource = FrameRateSource.PROCESSED;
+            }
+        }
         recordFrameSample(eventTime.realtimeMs, frameCount);
+    }
+
+    /**
+     * Receives a callback from the active video renderer immediately before a frame is submitted to
+     * the video output. This is a closer approximation of the playback frame rate than the
+     * aggregated processing-offset analytics event, and works even when the stream has no frame
+     * rate in its manifest.
+     */
+    @Override
+    public void onVideoFrameAboutToBeRendered(
+            long presentationTimeUs,
+            long releaseTimeNs,
+            Format format,
+            @Nullable MediaFormat mediaFormat
+    ) {
+        long realtimeNs = System.nanoTime();
+        synchronized (this) {
+            if (frameRateSource != FrameRateSource.RENDERED) {
+                resetFpsWindow();
+                frameRateSource = FrameRateSource.RENDERED;
+            }
+        }
+        recordRenderedFrame(realtimeNs);
     }
 
     /**
@@ -114,6 +157,34 @@ final class PlaybackBitrateMeter implements AnalyticsListener {
         measuredFrameRate = fpsWindowFrameCount * 1_000f / elapsedMs;
         fpsWindowStartRealtimeMs = realtimeMs;
         fpsWindowFrameCount = 0L;
+        if (listener != null) listener.onMeasuredBitrateChanged();
+    }
+
+    /**
+     * Records one frame submitted by the video renderer. The calculation uses the interval between
+     * the first and last frame in the window, so a sequence of 31 frames over one second reports
+     * 30 FPS rather than 31 FPS.
+     */
+    synchronized void recordRenderedFrame(long realtimeNs) {
+        if (realtimeNs <= 0L) return;
+
+        if (renderedFpsWindowStartRealtimeNs == C.TIME_UNSET
+                || realtimeNs < renderedFpsWindowStartRealtimeNs
+                || realtimeNs - renderedFpsWindowStartRealtimeNs > 4L * FPS_WINDOW_REALTIME_NS) {
+            renderedFpsWindowStartRealtimeNs = realtimeNs;
+            renderedFpsWindowFrameCount = 1L;
+            measuredFrameRate = 0f;
+            return;
+        }
+
+        renderedFpsWindowFrameCount++;
+        long elapsedNs = realtimeNs - renderedFpsWindowStartRealtimeNs;
+        if (elapsedNs < FPS_WINDOW_REALTIME_NS || renderedFpsWindowFrameCount < 2L) return;
+
+        measuredFrameRate = (renderedFpsWindowFrameCount - 1L)
+                * 1_000_000_000f / elapsedNs;
+        renderedFpsWindowStartRealtimeNs = realtimeNs;
+        renderedFpsWindowFrameCount = 1L;
         if (listener != null) listener.onMeasuredBitrateChanged();
     }
 
@@ -185,12 +256,15 @@ final class PlaybackBitrateMeter implements AnalyticsListener {
         streamSamples.clear();
         muxedStream = false;
         resetFpsWindow();
+        frameRateSource = FrameRateSource.NONE;
     }
 
     private void resetFpsWindow() {
         measuredFrameRate = 0f;
         fpsWindowStartRealtimeMs = C.TIME_UNSET;
         fpsWindowFrameCount = 0L;
+        renderedFpsWindowStartRealtimeNs = C.TIME_UNSET;
+        renderedFpsWindowFrameCount = 0L;
     }
 
     private static void trimWindow(Deque<Sample> samples) {

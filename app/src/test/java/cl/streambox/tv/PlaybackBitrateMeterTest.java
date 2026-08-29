@@ -100,4 +100,39 @@ public final class PlaybackBitrateMeterTest {
 
         assertEquals(30f, meter.getMeasuredFrameRate(), 0.01f);
     }
+
+    @Test
+    public void estimatesFrameRateFromFramesSubmittedToRenderer() {
+        PlaybackBitrateMeter meter = new PlaybackBitrateMeter(null);
+
+        for (int frame = 0; frame <= 30; frame++) {
+            meter.recordRenderedFrame(frame * 33_333_334L);
+        }
+
+        assertEquals(30f, meter.getMeasuredFrameRate(), 0.02f);
+    }
+
+    @Test
+    public void estimatesSixtyFramesPerSecondWithoutCountingFirstFrameTwice() {
+        PlaybackBitrateMeter meter = new PlaybackBitrateMeter(null);
+
+        for (int frame = 0; frame <= 60; frame++) {
+            meter.recordRenderedFrame(frame * 16_666_667L);
+        }
+
+        assertEquals(60f, meter.getMeasuredFrameRate(), 0.02f);
+    }
+
+    @Test
+    public void renderedFrameMeasurementTakesPrecedenceOverProcessingBatches() {
+        PlaybackBitrateMeter meter = new PlaybackBitrateMeter(null);
+
+        meter.recordFrameSample(0L, 30);
+        meter.recordFrameSample(1_000L, 30);
+        for (int frame = 0; frame <= 60; frame++) {
+            meter.recordRenderedFrame(frame * 16_666_667L);
+        }
+
+        assertEquals(60f, meter.getMeasuredFrameRate(), 0.02f);
+    }
 }

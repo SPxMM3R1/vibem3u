@@ -47,6 +47,8 @@ import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.Renderer;
+import androidx.media3.exoplayer.mediacodec.MediaCodecVideoRenderer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.ui.PlayerView;
@@ -263,6 +265,10 @@ public final class MainActivity extends Activity {
 
     private void createPlayer() {
         playerUsesVolumeNormalization = isVolumeNormalizationEnabled();
+        VibeRenderersFactory renderersFactory = new VibeRenderersFactory(
+                this,
+                playerUsesVolumeNormalization
+        );
         DefaultHttpDataSource.Factory httpDataSourceFactory =
                 new DefaultHttpDataSource.Factory()
                         .setUserAgent(PLAYER_USER_AGENT)
@@ -271,7 +277,7 @@ public final class MainActivity extends Activity {
                         .setReadTimeoutMs(20_000);
         player = new ExoPlayer.Builder(
                 this,
-                new VibeRenderersFactory(this, playerUsesVolumeNormalization)
+                renderersFactory
         )
                 .setMediaSourceFactory(new DefaultMediaSourceFactory(httpDataSourceFactory))
                 .setAudioAttributes(
@@ -294,6 +300,13 @@ public final class MainActivity extends Activity {
         meterHolder[0] = newBitrateMeter;
         playbackBitrateMeter = newBitrateMeter;
         player.addAnalyticsListener(newBitrateMeter);
+        MediaCodecVideoRenderer videoRenderer = renderersFactory.getVideoRenderer();
+        if (videoRenderer != null) {
+            player.createMessage(videoRenderer)
+                    .setType(Renderer.MSG_SET_VIDEO_FRAME_METADATA_LISTENER)
+                    .setPayload(newBitrateMeter)
+                    .send();
+        }
         player.addListener(new Player.Listener() {
             @Override public void onPlaybackStateChanged(int playbackState) {
                 updateStreamStatus(playbackState);
