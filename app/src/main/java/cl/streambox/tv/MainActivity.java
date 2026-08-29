@@ -60,6 +60,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -95,6 +97,10 @@ public final class MainActivity extends Activity {
     private StreamResolverRegistry streamResolverRegistry;
     private Map<String, Integer> resolverChannelCounts = Collections.emptyMap();
     private final List<Channel> channels = new ArrayList<>();
+    private final Map<Integer, Playlist> playlistsBySource = new LinkedHashMap<>();
+    private final Map<String, EpgData> epgDataByUrl = new LinkedHashMap<>();
+    private final Set<String> activeEpgUrls = new LinkedHashSet<>();
+    private final Set<String> epgRequests = new HashSet<>();
 
     private PlayerView playerView;
     private PlaybackBitrateMeter playbackBitrateMeter;
@@ -129,8 +135,7 @@ public final class MainActivity extends Activity {
     private PlaybackPreferences playbackPreferences;
     private ChannelLogoCache channelLogoCache;
     private EpgData epgData = EpgData.empty();
-    private String loadedPlaylistUrl = "";
-    private String activeEpgUrl = "";
+    private String loadedPlaylistSignature = "";
     private int channelIndex;
     private boolean loadFailed;
     private boolean settingsOpen;
@@ -375,16 +380,22 @@ public final class MainActivity extends Activity {
         });
     }
 
-    private void refreshPlaylist(String url) {
-        boolean sourceChanged = !url.equals(loadedPlaylistUrl);
+    private void refreshPlaylists(List<PlaylistSource> configuredSources) {
+        List<PlaylistSource> sources = configuredSources == null
+                ? Collections.emptyList()
+                : new ArrayList<>(configuredSources);
+        String sourceSignature = PlaylistSource.signature(sources);
+        if (sourceSignature.isBlank()) {
+            if (!settingsOpen) openSettings();
+            return;
+        }
+
+        boolean sourceChanged = !sourceSignature.equals(loadedPlaylistSignature);
         boolean keepCurrentUi = !sourceChanged && !channels.isEmpty();
-        EpgData visibleEpg = keepCurrentUi && epgData.getProgrammeCount() > 0
-                ? epgData
-                : null;
-        String visibleEpgUrl = visibleEpg == null ? "" : activeEpgUrl;
         boolean resetPlayback = sourceChanged || channels.isEmpty();
         int generation = ++playlistGeneration;
         playbackGeneration++;
+        epgRequests.clear();
         cancelScheduledPlaybackRetry();
         cancelPlaybackResolution();
         playbackRecoveryPolicy.reset();
@@ -408,52 +419,44 @@ public final class MainActivity extends Activity {
         if (sourceChanged) {
             channels.clear();
             channelIndex = 0;
+            playlistsBySource.clear();
+            epgDataByUrl.clear();
+            activeEpgUrls.clear();
             epgData = EpgData.empty();
-            activeEpgUrl = "";
             mainHandler.removeCallbacks(updateProgramme);
         }
         if (!keepCurrentUi) {
             hideOverlay.run();
         }
 
-        boolean existingPlaylist = !channels.isEmpty();
+        final boolean existingPlaylist = !channels.isEmpty();
+        final Map<Integer, Playlist> visiblePlaylists = new LinkedHashMap<>(playlistsBySource);
         resourceCacheExecutor.submit(() -> {
-            boolean usablePlaylist = existingPlaylist;
-            EpgData cachedEpg = visibleEpg;
-            String cachedEpgUrl = visibleEpgUrl;
+            Map<Integer, Playlist> cachedPlaylists = new LinkedHashMap<>();
             try {
                 if (!keepCurrentUi) {
-                    Playlist cached = repository.loadCached(url);
-                    if (cached != null) {
-                        usablePlaylist = true;
-                        Playlist cachedPlaylist = cached;
+                    for (PlaylistSource source : sources) {
+                        Playlist cached = repository.loadCached(source.getUrl());
+                        if (cached != null) {
+                            cachedPlaylists.put(source.getPosition(), cached);
+                        }
+                    }
+                    if (!cachedPlaylists.isEmpty()) {
+                        Map<Integer, Playlist> cachedSnapshot = new LinkedHashMap<>(visiblePlaylists);
+                        cachedSnapshot.putAll(cachedPlaylists);
                         mainHandler.post(() -> {
                             if (generation != playlistGeneration || isFinishing()) return;
                             showLoadingState(getString(R.string.loading_playlist_cache));
-                            applyPlaylist(cachedPlaylist, url, generation, false);
+                            applyPlaylists(cachedSnapshot, sourceSignature, generation, false);
+                            loadEpgForPlaylists(cachedSnapshot, generation);
                         });
-                        cachedEpgUrl = epgUrl(cachedPlaylist);
-                        URI cachedEpgUri = cachedPlaylist.getEpgUri();
-                        if (cachedEpgUri != null) {
-                            try {
-                                cachedEpg = epgRepository.loadCached(cachedEpgUri);
-                            } catch (Exception ignored) {
-                                cachedEpg = null;
-                            }
-                            EpgData dataToShow = cachedEpg;
-                            if (dataToShow != null) {
-                                mainHandler.post(() -> applyEpgData(
-                                        dataToShow,
-                                        cachedEpgUri,
-                                        generation
-                                ));
-                            }
-                        }
                     }
                 }
 
+                Map<Integer, Playlist> baseline = new LinkedHashMap<>(visiblePlaylists);
+                baseline.putAll(cachedPlaylists);
                 if (!isNetworkAvailable()) {
-                    boolean hasUsablePlaylist = usablePlaylist;
+                    boolean hasUsablePlaylist = !baseline.isEmpty() || existingPlaylist;
                     mainHandler.post(() -> {
                         if (generation != playlistGeneration || isFinishing()) return;
                         if (hasUsablePlaylist) {
@@ -465,16 +468,66 @@ public final class MainActivity extends Activity {
                     return;
                 }
 
-                refreshPlaylistFromNetwork(
-                        url,
-                        generation,
-                        usablePlaylist,
-                        existingPlaylist,
-                        cachedEpg,
-                        cachedEpgUrl
-                );
+                List<Future<PlaylistNetworkResult>> futures = new ArrayList<>();
+                for (PlaylistSource source : sources) {
+                    futures.add(networkExecutor.submit(() -> {
+                        try {
+                            PlaylistRepository.LoadResult result =
+                                    repository.downloadIfChanged(source.getUrl());
+                            return PlaylistNetworkResult.success(source, result);
+                        } catch (Exception error) {
+                            return PlaylistNetworkResult.failure(source, error);
+                        }
+                    }));
+                }
+
+                Map<Integer, Playlist> latest = new LinkedHashMap<>(baseline);
+                boolean contentChanged = false;
+                Throwable firstError = null;
+                for (Future<PlaylistNetworkResult> future : futures) {
+                    PlaylistNetworkResult result;
+                    try {
+                        result = future.get();
+                    } catch (InterruptedException error) {
+                        Thread.currentThread().interrupt();
+                        firstError = error;
+                        break;
+                    } catch (Exception error) {
+                        if (firstError == null) firstError = error;
+                        continue;
+                    }
+                    if (result.playlist != null) {
+                        latest.put(result.source.getPosition(), result.playlist);
+                        contentChanged |= result.changed;
+                    } else if (firstError == null) {
+                        firstError = result.error;
+                    }
+                }
+
+                Map<Integer, Playlist> finalPlaylists = new LinkedHashMap<>(latest);
+                boolean finalContentChanged = contentChanged || channels.isEmpty();
+                boolean hasUsablePlaylist = !finalPlaylists.isEmpty() || existingPlaylist;
+                Throwable finalError = firstError;
+                mainHandler.post(() -> {
+                    if (generation != playlistGeneration || isFinishing()) return;
+                    if (hasUsablePlaylist) {
+                        if (!finalPlaylists.isEmpty()) {
+                            applyPlaylists(
+                                    finalPlaylists,
+                                    sourceSignature,
+                                    generation,
+                                    finalContentChanged
+                            );
+                            loadEpgForPlaylists(finalPlaylists, generation);
+                        } else {
+                            hidePlaylistLoadingIfPlaybackPending();
+                        }
+                    } else {
+                        showPlaylistError(shortMessage(finalError));
+                    }
+                });
             } catch (Exception error) {
-                boolean hasUsablePlaylist = usablePlaylist || existingPlaylist;
+                boolean hasUsablePlaylist = existingPlaylist || !visiblePlaylists.isEmpty();
                 mainHandler.post(() -> {
                     if (generation != playlistGeneration || isFinishing()) return;
                     if (hasUsablePlaylist) {
@@ -487,62 +540,58 @@ public final class MainActivity extends Activity {
         });
     }
 
-    private void refreshPlaylistFromNetwork(
-            String url,
-            int generation,
-            boolean usablePlaylist,
-            boolean existingPlaylist,
-            EpgData cachedEpg,
-            String cachedEpgUrl
-    ) {
-        networkExecutor.submit(() -> {
-            try {
-                PlaylistRepository.LoadResult result = repository.downloadIfChanged(url);
-                mainHandler.post(() -> {
-                    if (generation != playlistGeneration || isFinishing()) return;
-                    if (result.isChanged() || channels.isEmpty()) {
-                        applyPlaylist(
-                                result.getPlaylist(),
-                                url,
-                                generation,
-                                result.isChanged()
-                        );
-                    } else {
-                        hidePlaylistLoadingIfPlaybackPending();
-                    }
-                    String resultEpgUrl = epgUrl(result.getPlaylist());
-                    loadEpgForPlaylist(
-                            result.getPlaylist(),
-                            generation,
-                            cachedEpgUrl.equals(resultEpgUrl) ? cachedEpg : null
-                    );
-                });
-            } catch (Exception error) {
-                boolean hasUsablePlaylist = usablePlaylist || existingPlaylist;
-                mainHandler.post(() -> {
-                    if (generation != playlistGeneration || isFinishing()) return;
-                    if (hasUsablePlaylist) {
-                        hidePlaylistLoadingIfPlaybackPending();
-                    } else {
-                        showPlaylistError(shortMessage(error));
-                    }
-                });
-            }
-        });
+    private static final class PlaylistNetworkResult {
+        private final PlaylistSource source;
+        private final Playlist playlist;
+        private final boolean changed;
+        private final Throwable error;
+
+        private PlaylistNetworkResult(
+                PlaylistSource source,
+                Playlist playlist,
+                boolean changed,
+                Throwable error
+        ) {
+            this.source = source;
+            this.playlist = playlist;
+            this.changed = changed;
+            this.error = error;
+        }
+
+        private static PlaylistNetworkResult success(
+                PlaylistSource source,
+                PlaylistRepository.LoadResult result
+        ) {
+            return new PlaylistNetworkResult(
+                    source,
+                    result.getPlaylist(),
+                    result.isChanged(),
+                    null
+            );
+        }
+
+        private static PlaylistNetworkResult failure(PlaylistSource source, Throwable error) {
+            return new PlaylistNetworkResult(source, null, false, error);
+        }
     }
 
-    private void loadEpgForPlaylist(Playlist playlist, int generation, EpgData cached) {
-        URI epgUri = playlist.getEpgUri();
-        if (epgUri == null) return;
-        resourceCacheExecutor.submit(() -> {
-            EpgData local = cached;
-            try {
-                if (local == null) {
+    private void loadEpgForPlaylists(Map<Integer, Playlist> playlists, int generation) {
+        for (Map.Entry<Integer, Playlist> entry : orderedPlaylistEntries(playlists)) {
+            Playlist playlist = entry.getValue();
+            URI epgUri = playlist == null ? null : playlist.getEpgUri();
+            if (epgUri == null) continue;
+            String url = epgUri.toString();
+            if (!epgRequests.add(url)) continue;
+            resourceCacheExecutor.submit(() -> {
+                EpgData local = null;
+                try {
                     local = epgRepository.loadCached(epgUri);
                     if (local != null) {
                         EpgData cachedData = local;
                         mainHandler.post(() -> applyEpgData(cachedData, epgUri, generation));
                     }
+                } catch (Exception ignored) {
+                    // La reproducción continúa usando el grupo del canal como respaldo.
                 }
                 if (!isNetworkAvailable()) return;
 
@@ -561,29 +610,36 @@ public final class MainActivity extends Activity {
                         // La programación cacheada permanece visible.
                     }
                 });
-            } catch (Exception ignored) {
-                // La reproducción continúa usando el grupo del canal como respaldo.
-            }
-        });
+            });
+        }
     }
 
-    private static String epgUrl(Playlist playlist) {
-        URI epgUri = playlist == null ? null : playlist.getEpgUri();
-        return epgUri == null ? "" : epgUri.toString();
+    private static List<Map.Entry<Integer, Playlist>> orderedPlaylistEntries(
+            Map<Integer, Playlist> playlists
+    ) {
+        List<Map.Entry<Integer, Playlist>> entries = new ArrayList<>();
+        if (playlists != null) entries.addAll(playlists.entrySet());
+        Collections.sort(entries, (left, right) ->
+                Integer.compare(left.getKey(), right.getKey()));
+        return entries;
     }
 
     private void applyEpgData(EpgData data, URI epgUri, int generation) {
         if (generation != playlistGeneration || isFinishing()) return;
         String expectedUrl = epgUri == null ? "" : epgUri.toString();
-        if (!expectedUrl.equals(activeEpgUrl)) return;
-        epgData = data == null ? EpgData.empty() : data;
+        if (!activeEpgUrls.contains(expectedUrl)) return;
+        epgDataByUrl.put(
+                expectedUrl,
+                data == null ? EpgData.empty() : data
+        );
+        epgData = EpgData.merge(new ArrayList<>(epgDataByUrl.values()));
         mainHandler.removeCallbacks(updateProgramme);
         updateProgramme.run();
     }
 
-    private void applyPlaylist(
-            Playlist playlist,
-            String sourceUrl,
+    private void applyPlaylists(
+            Map<Integer, Playlist> playlists,
+            String sourceSignature,
             int generation,
             boolean contentChanged
     ) {
@@ -600,7 +656,13 @@ public final class MainActivity extends Activity {
                 ? null
                 : previousChannel.getStreamUri();
 
-        List<Channel> sourceChannels = playlist.getChannels();
+        playlistsBySource.clear();
+        if (playlists != null) playlistsBySource.putAll(playlists);
+        List<Channel> sourceChannels = new ArrayList<>();
+        for (Map.Entry<Integer, Playlist> entry : orderedPlaylistEntries(playlistsBySource)) {
+            Playlist playlist = entry.getValue();
+            if (playlist != null) sourceChannels.addAll(playlist.getChannels());
+        }
         resolverChannelCounts = streamResolverRegistry.countChannels(sourceChannels);
         List<Channel> enabledChannels = new ArrayList<>();
         for (Channel candidate : sourceChannels) {
@@ -623,14 +685,21 @@ public final class MainActivity extends Activity {
                         channelIndex
                 )
                 : playbackPreferences.findInitialChannelIndex(channels);
-        loadedPlaylistUrl = sourceUrl;
+        loadedPlaylistSignature = sourceSignature;
 
-        String nextEpgUrl = playlist.getEpgUri() == null
-                ? ""
-                : playlist.getEpgUri().toString();
-        if (!nextEpgUrl.equals(activeEpgUrl)) {
-            activeEpgUrl = nextEpgUrl;
-            epgData = EpgData.empty();
+        LinkedHashSet<String> nextEpgUrls = new LinkedHashSet<>();
+        for (Map.Entry<Integer, Playlist> entry : orderedPlaylistEntries(playlistsBySource)) {
+            Playlist playlist = entry.getValue();
+            if (playlist != null && playlist.getEpgUri() != null) {
+                nextEpgUrls.add(playlist.getEpgUri().toString());
+            }
+        }
+        boolean epgSourcesChanged = !nextEpgUrls.equals(activeEpgUrls);
+        activeEpgUrls.clear();
+        activeEpgUrls.addAll(nextEpgUrls);
+        epgDataByUrl.keySet().retainAll(activeEpgUrls);
+        epgData = EpgData.merge(new ArrayList<>(epgDataByUrl.values()));
+        if (epgSourcesChanged) {
             mainHandler.removeCallbacks(updateProgramme);
         }
 
@@ -1738,7 +1807,7 @@ public final class MainActivity extends Activity {
             if (event.getRepeatCount() == 0) {
                 if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_INFO) {
                     if (loadFailed) {
-                        refreshPlaylist(getPlaylistUrl());
+                        refreshPlaylists(getPlaylistSources());
                     } else {
                         startPlaybackFromInput();
                         showOverlay(false);
@@ -2040,8 +2109,8 @@ public final class MainActivity extends Activity {
         if (appUpdater != null && appUpdater.onActivityResult(requestCode)) return;
         if (requestCode == SETTINGS_REQUEST) {
             settingsOpen = false;
-            String url = getPlaylistUrl();
-            if (resultCode == RESULT_OK && !url.isBlank()) {
+            List<PlaylistSource> sources = getPlaylistSources();
+            if (resultCode == RESULT_OK && !sources.isEmpty()) {
                 applyPlaybackSettingsResult(data);
                 resolverCoordinator.clear();
                 reloadResolverRegistry();
@@ -2056,21 +2125,36 @@ public final class MainActivity extends Activity {
                     }
                     createPlayer();
                     channels.clear();
-                    loadedPlaylistUrl = "";
-                    activeEpgUrl = "";
+                    playlistsBySource.clear();
+                    loadedPlaylistSignature = "";
+                    activeEpgUrls.clear();
+                    epgDataByUrl.clear();
+                    epgRequests.clear();
                     epgData = EpgData.empty();
                 }
                 refreshAfterSettings = true;
-            } else if (url.isBlank()) {
+            } else if (sources.isEmpty()) {
                 openSettings();
             }
         }
     }
 
-    private String getPlaylistUrl() {
+    private List<PlaylistSource> getPlaylistSources() {
         SharedPreferences prefs = getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE);
-        String url = prefs.getString(SettingsActivity.KEY_PLAYLIST_URL, "");
-        return url == null ? "" : url.trim();
+        String url1 = prefs.getString(SettingsActivity.KEY_PLAYLIST_URL, "");
+        String url2 = prefs.getString(SettingsActivity.KEY_PLAYLIST_URL_2, "");
+        boolean enabled1 = prefs.contains(SettingsActivity.KEY_PLAYLIST_ENABLED)
+                ? prefs.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED, true)
+                : url1 != null && !url1.isBlank();
+        boolean enabled2 = prefs.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, false);
+        List<PlaylistSource> sources = new ArrayList<>();
+        if (enabled1 && url1 != null && !url1.trim().isEmpty()) {
+            sources.add(new PlaylistSource(1, url1));
+        }
+        if (enabled2 && url2 != null && !url2.trim().isEmpty()) {
+            sources.add(new PlaylistSource(2, url2));
+        }
+        return sources;
     }
 
     private boolean isChannelNavigationInverted() {
@@ -2204,11 +2288,11 @@ public final class MainActivity extends Activity {
     protected void onStart() {
         super.onStart();
         if (!settingsOpen && !refreshAfterSettings) {
-            String url = getPlaylistUrl();
-            if (url.isBlank()) {
+            List<PlaylistSource> sources = getPlaylistSources();
+            if (sources.isEmpty()) {
                 openSettings();
             } else {
-                refreshPlaylist(url);
+                refreshPlaylists(sources);
             }
         }
     }
@@ -2220,7 +2304,7 @@ public final class MainActivity extends Activity {
         if (appUpdater != null) appUpdater.onHostResume();
         if (refreshAfterSettings) {
             refreshAfterSettings = false;
-            refreshPlaylist(getPlaylistUrl());
+            refreshPlaylists(getPlaylistSources());
         }
         startPlaybackFromInput();
     }

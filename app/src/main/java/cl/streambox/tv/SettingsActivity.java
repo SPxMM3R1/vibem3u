@@ -39,6 +39,9 @@ public final class SettingsActivity extends Activity {
     public static final int TAB_UPDATES = 5;
     public static final String PREFS = "streambox_settings";
     public static final String KEY_PLAYLIST_URL = "playlist_url";
+    public static final String KEY_PLAYLIST_URL_2 = "playlist_url_2";
+    public static final String KEY_PLAYLIST_ENABLED = "playlist_enabled";
+    public static final String KEY_PLAYLIST_ENABLED_2 = "playlist_enabled_2";
     public static final String KEY_INVERT_CHANNEL_KEYS = "invert_channel_keys";
     public static final String KEY_NORMALIZE_VOLUME = "normalize_volume";
     public static final String EXTRA_INITIAL_TAB = "initial_tab";
@@ -64,7 +67,10 @@ public final class SettingsActivity extends Activity {
     private final ExecutorService updateExecutor = Executors.newSingleThreadExecutor();
 
     private EditText urlInput;
+    private EditText urlInput2;
     private TextView errorText;
+    private Switch playlistOneEnabled;
+    private Switch playlistTwoEnabled;
     private Switch invertChannelKeys;
     private Switch normalizeVolume;
     private Button updateButton;
@@ -118,7 +124,9 @@ public final class SettingsActivity extends Activity {
 
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         String existingUrl = prefs.getString(KEY_PLAYLIST_URL, "");
-        hasExistingUrl = existingUrl != null && !existingUrl.isBlank();
+        String existingUrl2 = prefs.getString(KEY_PLAYLIST_URL_2, "");
+        hasExistingUrl = (existingUrl != null && !existingUrl.isBlank())
+                || (existingUrl2 != null && !existingUrl2.isBlank());
         if (Build.VERSION.SDK_INT >= 33) {
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
                     android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,
@@ -128,7 +136,10 @@ public final class SettingsActivity extends Activity {
         }
 
         urlInput = findViewById(R.id.playlist_url);
+        urlInput2 = findViewById(R.id.playlist_url_2);
         errorText = findViewById(R.id.url_error);
+        playlistOneEnabled = findViewById(R.id.playlist_1_enabled);
+        playlistTwoEnabled = findViewById(R.id.playlist_2_enabled);
         invertChannelKeys = findViewById(R.id.invert_channel_keys);
         normalizeVolume = findViewById(R.id.normalize_volume);
         updateButton = findViewById(R.id.check_updates_button);
@@ -171,6 +182,15 @@ public final class SettingsActivity extends Activity {
         initializeTvVooResolutionMode();
         urlInput.setText(existingUrl);
         urlInput.setSelection(urlInput.length());
+        urlInput2.setText(existingUrl2 == null ? "" : existingUrl2);
+        boolean firstPlaylistEnabled = prefs.contains(KEY_PLAYLIST_ENABLED)
+                ? prefs.getBoolean(KEY_PLAYLIST_ENABLED, true)
+                : existingUrl != null && !existingUrl.isBlank();
+        playlistOneEnabled.setChecked(firstPlaylistEnabled);
+        playlistTwoEnabled.setChecked(prefs.getBoolean(
+                KEY_PLAYLIST_ENABLED_2,
+                false
+        ));
         invertChannelKeys.setChecked(prefs.getBoolean(KEY_INVERT_CHANNEL_KEYS, false));
         normalizeVolume.setChecked(prefs.getBoolean(KEY_NORMALIZE_VOLUME, false));
         TextView versionText = findViewById(R.id.current_version);
@@ -194,6 +214,10 @@ public final class SettingsActivity extends Activity {
             tabs[index].setOnClickListener(v -> showTab(tabIndex, true));
         }
         urlInput.setOnEditorActionListener((v, actionId, event) -> {
+            save();
+            return true;
+        });
+        urlInput2.setOnEditorActionListener((v, actionId, event) -> {
             save();
             return true;
         });
@@ -403,7 +427,7 @@ public final class SettingsActivity extends Activity {
             case 1:
                 return playbackFirstFocus == null ? invertChannelKeys : playbackFirstFocus;
             case 2:
-                return urlInput;
+                return playlistOneEnabled;
             case 3:
                 return resolverUpdateButton;
             case 4:
@@ -598,20 +622,34 @@ public final class SettingsActivity extends Activity {
 
     private void save() {
         String value = urlInput.getText().toString().trim();
-        Uri uri = Uri.parse(value);
-        String scheme = uri.getScheme();
-        if (value.isEmpty() || scheme == null ||
-                !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https")) ||
-                uri.getHost() == null) {
+        String value2 = urlInput2.getText().toString().trim();
+        boolean enabled1 = playlistOneEnabled.isChecked();
+        boolean enabled2 = playlistTwoEnabled.isChecked();
+        if (!enabled1 && !enabled2) {
+            errorText.setText(R.string.playlist_source_required);
+            errorText.setVisibility(View.VISIBLE);
+            playlistOneEnabled.requestFocus();
+            return;
+        }
+        if (enabled1 && !isValidPlaylistUrl(value)) {
             errorText.setText(R.string.url_required);
             errorText.setVisibility(View.VISIBLE);
             urlInput.requestFocus();
+            return;
+        }
+        if (enabled2 && !isValidPlaylistUrl(value2)) {
+            errorText.setText(R.string.url_required);
+            errorText.setVisibility(View.VISIBLE);
+            urlInput2.requestFocus();
             return;
         }
 
         getSharedPreferences(PREFS, MODE_PRIVATE)
                 .edit()
                 .putString(KEY_PLAYLIST_URL, value)
+                .putString(KEY_PLAYLIST_URL_2, value2)
+                .putBoolean(KEY_PLAYLIST_ENABLED, enabled1)
+                .putBoolean(KEY_PLAYLIST_ENABLED_2, enabled2)
                 .putBoolean(KEY_INVERT_CHANNEL_KEYS, invertChannelKeys.isChecked())
                 .putBoolean(KEY_NORMALIZE_VOLUME, normalizeVolume.isChecked())
                 .apply();
@@ -624,7 +662,11 @@ public final class SettingsActivity extends Activity {
             }
         }
         resolverPreferences.setTvVooResolutionMode(selectedTvVooResolutionMode());
-        Intent result = new Intent().putExtra(KEY_PLAYLIST_URL, value);
+        Intent result = new Intent()
+                .putExtra(KEY_PLAYLIST_URL, value)
+                .putExtra(KEY_PLAYLIST_URL_2, value2)
+                .putExtra(KEY_PLAYLIST_ENABLED, enabled1)
+                .putExtra(KEY_PLAYLIST_ENABLED_2, enabled2);
         if (hasCurrentChannel) {
             result.putExtra(EXTRA_CHANNEL_INDEX, currentChannelIndex)
                     .putExtra(EXTRA_CHANNEL_TVG_ID, currentChannelTvgId)
@@ -659,6 +701,15 @@ public final class SettingsActivity extends Activity {
         }
         setResult(RESULT_OK, result);
         finish();
+    }
+
+    private static boolean isValidPlaylistUrl(String value) {
+        if (value == null || value.isEmpty()) return false;
+        Uri uri = Uri.parse(value);
+        String scheme = uri.getScheme();
+        return scheme != null
+                && (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))
+                && uri.getHost() != null;
     }
 
     @Override

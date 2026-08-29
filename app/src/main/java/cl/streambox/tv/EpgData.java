@@ -37,6 +37,20 @@ public final class EpgData {
 
     public static EpgData empty() { return EMPTY; }
 
+    /**
+     * Combines the independent XMLTV snapshots used by multiple M3U sources.
+     * The constructor reindexes and sorts the result, so channels from both
+     * lists can use the same lookup path as a single EPG.
+     */
+    public static EpgData merge(List<EpgData> dataSets) {
+        if (dataSets == null || dataSets.isEmpty()) return EMPTY;
+        List<EpgProgramme> merged = new ArrayList<>();
+        for (EpgData data : dataSets) {
+            if (data != null) merged.addAll(data.programmes);
+        }
+        return merged.isEmpty() ? EMPTY : new EpgData(merged);
+    }
+
     public EpgProgramme findCurrent(String channelId, long nowMillis) {
         if (channelId == null || channelId.isBlank()) return null;
         List<EpgProgramme> programmes = programmesByChannel.get(channelId);
