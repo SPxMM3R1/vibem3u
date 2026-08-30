@@ -590,6 +590,11 @@ public final class SettingsActivity extends Activity {
         return getCurrentFocus() instanceof EditText;
     }
 
+    private boolean isFooterButtonFocused() {
+        View focusedView = getCurrentFocus();
+        return focusedView == saveButton || focusedView == cancelButton;
+    }
+
     private void checkForUpdates() {
         if (!BuildConfig.ENABLE_APP_UPDATES) return;
         updateButton.setEnabled(false);
@@ -724,9 +729,10 @@ public final class SettingsActivity extends Activity {
         if (event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
             if ((event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_LEFT
                     || event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
-                    && isTextFieldFocused()) {
-                // Let EditText consume the directional key so the cursor can
-                // move inside the URL instead of changing the settings tab.
+                    && (isTextFieldFocused() || isFooterButtonFocused())) {
+                // Let the focused control consume the directional key. EditText
+                // uses it for the cursor and the footer buttons use their
+                // explicit nextFocusLeft/nextFocusRight links.
                 return super.dispatchKeyEvent(event);
             }
             if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_LEFT) {
