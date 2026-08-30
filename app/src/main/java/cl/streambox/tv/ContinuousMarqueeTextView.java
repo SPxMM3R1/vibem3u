@@ -18,6 +18,10 @@ import android.widget.TextView;
 public final class ContinuousMarqueeTextView extends TextView {
     private static final float GAP_DP = 12f;
     private static final float SPEED_DP_PER_SECOND = 40f;
+    // El texto no necesita sincronizarse con cada frame del video. Limitarlo a
+    // 30 Hz evita que un canal a 60/120 fps comparta cada invalidacion de la
+    // superficie con la animacion del titulo.
+    private static final long MARQUEE_FRAME_INTERVAL_MS = 33L;
 
     private final float gapPx;
     private final float speedPxPerSecond;
@@ -102,7 +106,10 @@ public final class ContinuousMarqueeTextView extends TextView {
         canvas.drawText(text, firstCopyX + cycleWidth, baseline, paint);
         canvas.restoreToCount(saveCount);
 
-        postInvalidateOnAnimation();
+        // No usar la frecuencia del display para el marquee: la reproduccion
+        // conserva su cadencia nativa y el texto se actualiza a una frecuencia
+        // suficiente para verse fluido, con menos trabajo en el hilo de UI.
+        postInvalidateDelayed(MARQUEE_FRAME_INTERVAL_MS);
     }
 
     private String getDisplayText() {
