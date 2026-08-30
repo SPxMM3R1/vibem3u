@@ -2344,18 +2344,20 @@ public final class MainActivity extends Activity {
         if (appUpdater != null) appUpdater.onHostPause();
         mainHandler.removeCallbacks(hideLightEpg);
         hideLightEpg.run();
-        cancelScheduledPlaybackRetry();
-        if (playbackChannel != null && streamResolverRegistry.find(playbackChannel) != null) {
-            // Leaving the activity ends this resolver session. Resuming it
-            // will obtain a new token instead of reviving a stale MediaItem.
-            cancelPlaybackResolution();
-            discardCurrentPlaybackSource();
-            if (player != null) {
-                player.stop();
-                player.clearMediaItems();
+        if (!settingsOpen) {
+            cancelScheduledPlaybackRetry();
+            if (playbackChannel != null && streamResolverRegistry.find(playbackChannel) != null) {
+                // Leaving the activity ends this resolver session. Resuming it
+                // will obtain a new token instead of reviving a stale MediaItem.
+                cancelPlaybackResolution();
+                discardCurrentPlaybackSource();
+                if (player != null) {
+                    player.stop();
+                    player.clearMediaItems();
+                }
+            } else if (player != null) {
+                player.pause();
             }
-        } else if (player != null) {
-            player.pause();
         }
         super.onPause();
     }
