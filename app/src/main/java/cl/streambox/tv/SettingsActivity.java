@@ -586,6 +586,10 @@ public final class SettingsActivity extends Activity {
         tabs[nextIndex].requestFocus();
     }
 
+    private boolean isTextFieldFocused() {
+        return getCurrentFocus() instanceof EditText;
+    }
+
     private void checkForUpdates() {
         if (!BuildConfig.ENABLE_APP_UPDATES) return;
         updateButton.setEnabled(false);
@@ -718,6 +722,13 @@ public final class SettingsActivity extends Activity {
             return true;
         }
         if (event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
+            if ((event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_LEFT
+                    || event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
+                    && isTextFieldFocused()) {
+                // Let EditText consume the directional key so the cursor can
+                // move inside the URL instead of changing the settings tab.
+                return super.dispatchKeyEvent(event);
+            }
             if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_LEFT) {
                 moveTabFromRemote(-1);
                 return true;
