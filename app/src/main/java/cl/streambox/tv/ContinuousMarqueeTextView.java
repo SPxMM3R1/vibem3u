@@ -1,164 +1,221 @@
 package cl.streambox.tv;
 
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.content.Context;
-import android.graphics.Canvas;
-import android.graphics.Paint;
+import android.os.Build;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.animation.LinearInterpolator;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /**
- * A single-line text view that continuously wraps an overflowing title.
+ * A clipped viewport for two cached copies of a single-line programme title.
  *
- * <p>Android's built-in marquee can leave a long blank interval between
- * repetitions. This view draws two adjacent copies instead, so the next copy
- * starts entering as the current one leaves the available area.</p>
+ * <p>Only the strip's translation changes during a cycle. Text measurement and
+ * layout happen when content or bounds change, never in an animation callback.
+ * Each copy has its own small hardware layer; the video and the rest of the
+ * overlay are not captured in that layer.</p>
  */
-public final class ContinuousMarqueeTextView extends TextView {
+public final class ContinuousMarqueeTextView extends ViewGroup {
     private static final float GAP_DP = 12f;
     private static final float SPEED_DP_PER_SECOND = 40f;
-    // El texto no necesita sincronizarse con cada frame del video. Limitarlo a
-    // 30 Hz evita que un canal a 60/120 fps comparta cada invalidacion de la
-    // superficie con la animacion del titulo.
-    private static final long MARQUEE_FRAME_INTERVAL_MS = 33L;
+    // Avoid oversized textures on older TVs. Wider titles can still use the
+    // normal hardware display list, without a forced off-screen texture.
+    private static final int MAX_LAYER_DIMENSION_PX = 2048;
 
-    private final float gapPx;
+    private final LinearLayout textStrip;
+    private final TextView firstCopy;
+    private final TextView secondCopy;
+    private final int gapPx;
     private final float speedPxPerSecond;
+    private final Runnable updateAnimation = this::updateAnimationState;
+    private final LinearInterpolator linearInterpolator = new LinearInterpolator();
 
-    private String renderedText = "";
-    private float textWidth;
-    private float cycleWidth;
-    private float scrollOffset;
-    private long lastFrameNanos;
-    private boolean overflowing;
+    private String text = "";
+    private ObjectAnimator scrollAnimator;
+    private int animatedCycleWidth;
 
     public ContinuousMarqueeTextView(Context context) {
-        super(context);
-        gapPx = dp(GAP_DP);
-        speedPxPerSecond = dp(SPEED_DP_PER_SECOND);
-        configure();
+        this(context, null);
     }
 
     public ContinuousMarqueeTextView(Context context, AttributeSet attrs) {
-        super(context, attrs);
-        gapPx = dp(GAP_DP);
-        speedPxPerSecond = dp(SPEED_DP_PER_SECOND);
-        configure();
+        this(context, attrs, android.R.attr.textViewStyle);
     }
 
     public ContinuousMarqueeTextView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        gapPx = dp(GAP_DP);
-        speedPxPerSecond = dp(SPEED_DP_PER_SECOND);
-        configure();
+        float density = getResources().getDisplayMetrics().density;
+        gapPx = Math.round(GAP_DP * density);
+        speedPxPerSecond = SPEED_DP_PER_SECOND * density;
+        setClipChildren(true);
+        setClipToPadding(true);
+        setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
+
+        textStrip = new LinearLayout(context);
+        textStrip.setOrientation(LinearLayout.HORIZONTAL);
+        textStrip.setLayoutDirection(LAYOUT_DIRECTION_LTR);
+        textStrip.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        firstCopy = createCopy(context, attrs, defStyleAttr);
+        secondCopy = createCopy(context, attrs, defStyleAttr);
+        secondCopy.setVisibility(INVISIBLE);
+        textStrip.addView(firstCopy, new LinearLayout.LayoutParams(
+                LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams repeatedParams = new LinearLayout.LayoutParams(
+                LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
+        repeatedParams.leftMargin = gapPx;
+        textStrip.addView(secondCopy, repeatedParams);
+        addView(textStrip, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
+        setText(firstCopy.getText());
     }
 
-    private void configure() {
-        setMaxLines(1);
-        setEllipsize(null);
+    private TextView createCopy(Context context, AttributeSet attrs, int defStyleAttr) {
+        TextView copy = new TextView(context, attrs, defStyleAttr);
+        // The XML id and outer padding belong to the viewport, not both copies.
+        copy.setId(NO_ID);
+        copy.setPadding(0, 0, 0, 0);
+        copy.setSingleLine(true);
+        copy.setEllipsize(null);
+        copy.setFocusable(false);
+        copy.setClickable(false);
+        return copy;
     }
 
-    private float dp(float value) {
-        return value * getResources().getDisplayMetrics().density;
+    public void setText(CharSequence value) {
+        String normalized = value == null ? ""
+                : value.toString().replace('\n', ' ').replace('\r', ' ');
+        if (TextUtils.equals(text, normalized)) return;
+        stopAnimation();
+        text = normalized;
+        firstCopy.setText(text);
+        secondCopy.setText(text);
+        setContentDescription(text);
+        requestLayout();
     }
 
     @Override
-    protected void onDraw(Canvas canvas) {
-        String text = getDisplayText();
-        if (TextUtils.isEmpty(text)
-                || getLayoutDirection() == View.LAYOUT_DIRECTION_RTL
-                || !updateMetrics(text)) {
-            stopAnimation();
-            super.onDraw(canvas);
-            return;
-        }
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        int horizontalPadding = getPaddingLeft() + getPaddingRight();
+        int verticalPadding = getPaddingTop() + getPaddingBottom();
+        int stripHeightSpec = getChildMeasureSpec(heightMeasureSpec, verticalPadding,
+                LayoutParams.WRAP_CONTENT);
+        // Give each native TextView its full width. The viewport, rather than
+        // a truncated TextView, clips the moving title to the programme area.
+        textStrip.measure(MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED), stripHeightSpec);
+        int desiredWidth = Math.max(getSuggestedMinimumWidth(),
+                firstCopy.getMeasuredWidth() + horizontalPadding);
+        int desiredHeight = Math.max(getSuggestedMinimumHeight(),
+                textStrip.getMeasuredHeight() + verticalPadding);
+        setMeasuredDimension(resolveSize(desiredWidth, widthMeasureSpec),
+                resolveSize(desiredHeight, heightMeasureSpec));
+    }
 
-        long now = System.nanoTime();
-        if (lastFrameNanos == 0L) {
-            lastFrameNanos = now;
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        int stripLeft = getPaddingLeft();
+        if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) {
+            stripLeft = getWidth() - getPaddingRight() - firstCopy.getMeasuredWidth();
+        }
+        textStrip.layout(stripLeft, getPaddingTop(),
+                stripLeft + textStrip.getMeasuredWidth(),
+                getPaddingTop() + textStrip.getMeasuredHeight());
+        scheduleAnimationUpdate();
+    }
+
+    private void scheduleAnimationUpdate() {
+        if (textStrip == null) return; // View callbacks can run during construction.
+        removeCallbacks(updateAnimation);
+        if (!isAttachedToWindow() || !isShown() || getWindowVisibility() != VISIBLE
+                || !hasWindowFocus()) {
+            stopAnimation();
         } else {
-            float elapsedSeconds = (now - lastFrameNanos) / 1_000_000_000f;
-            if (elapsedSeconds > 0f && elapsedSeconds < 0.5f) {
-                scrollOffset = (scrollOffset + elapsedSeconds * speedPxPerSecond) % cycleWidth;
-            }
-            lastFrameNanos = now;
+            // Run after layout. This is a state-change callback, not a frame loop.
+            post(updateAnimation);
         }
+    }
 
-        int contentLeft = getCompoundPaddingLeft();
-        int contentRight = getWidth() - getCompoundPaddingRight();
-        if (contentRight <= contentLeft || cycleWidth <= 0f) {
+    private void updateAnimationState() {
+        // A visibility/focus callback can arrive before a requested relayout.
+        // onLayout will schedule us again with the new text dimensions.
+        if (isLayoutRequested() || textStrip.isLayoutRequested()) return;
+        int availableWidth = getWidth() - getPaddingLeft() - getPaddingRight();
+        int titleWidth = firstCopy.getWidth();
+        boolean animationsEnabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.O
+                || ValueAnimator.areAnimatorsEnabled();
+        if (!isAttachedToWindow() || !isShown() || getWindowVisibility() != VISIBLE
+                || !hasWindowFocus() || !isHardwareAccelerated() || !animationsEnabled
+                || getLayoutDirection() == LAYOUT_DIRECTION_RTL || text.isEmpty()
+                || availableWidth <= 0 || titleWidth <= availableWidth || firstCopy.getHeight() <= 0) {
             stopAnimation();
-            super.onDraw(canvas);
             return;
         }
 
-        float baseline = getBaseline();
-        if (baseline < 0f) {
-            baseline = getPaddingTop() - getPaint().ascent();
+        int cycleWidth = titleWidth + gapPx;
+        if (scrollAnimator != null && scrollAnimator.isStarted()
+                && animatedCycleWidth == cycleWidth) return;
+        stopAnimation();
+        animatedCycleWidth = cycleWidth;
+        secondCopy.setVisibility(VISIBLE);
+        prepareLayer(firstCopy);
+        prepareLayer(secondCopy);
+
+        // One property animator keeps both copies exactly in phase. The repeat
+        // starts with the same image as the end, so no blank interval is needed.
+        scrollAnimator = ObjectAnimator.ofFloat(textStrip, View.TRANSLATION_X, 0f, -cycleWidth);
+        scrollAnimator.setDuration(Math.max(1L, Math.round(cycleWidth * 1000d / speedPxPerSecond)));
+        scrollAnimator.setInterpolator(linearInterpolator);
+        scrollAnimator.setRepeatCount(ValueAnimator.INFINITE);
+        scrollAnimator.setRepeatMode(ValueAnimator.RESTART);
+        scrollAnimator.start();
+    }
+
+    private void prepareLayer(TextView copy) {
+        if (copy.getWidth() <= MAX_LAYER_DIMENSION_PX && copy.getHeight() <= MAX_LAYER_DIMENSION_PX) {
+            copy.setLayerType(LAYER_TYPE_HARDWARE, null);
+            copy.buildLayer();
         }
-
-        int saveCount = canvas.save();
-        canvas.clipRect(contentLeft, 0, contentRight, getHeight());
-        float firstCopyX = contentLeft - scrollOffset;
-        Paint paint = getPaint();
-        canvas.drawText(text, firstCopyX, baseline, paint);
-        canvas.drawText(text, firstCopyX + cycleWidth, baseline, paint);
-        canvas.restoreToCount(saveCount);
-
-        // No usar la frecuencia del display para el marquee: la reproduccion
-        // conserva su cadencia nativa y el texto se actualiza a una frecuencia
-        // suficiente para verse fluido, con menos trabajo en el hilo de UI.
-        postInvalidateDelayed(MARQUEE_FRAME_INTERVAL_MS);
-    }
-
-    private String getDisplayText() {
-        return normalizeText(getText());
-    }
-
-    private String normalizeText(CharSequence text) {
-        if (text == null) return "";
-        return text.toString().replace('\n', ' ').replace('\r', ' ');
-    }
-
-    private boolean updateMetrics(String text) {
-        float availableWidth = getWidth() - getCompoundPaddingLeft() - getCompoundPaddingRight();
-        float measuredWidth = getPaint().measureText(text);
-        boolean newOverflowing = availableWidth > 0f && measuredWidth > availableWidth;
-        boolean changed = !text.equals(renderedText)
-                || Math.abs(measuredWidth - textWidth) > 0.5f
-                || newOverflowing != overflowing;
-
-        renderedText = text;
-        textWidth = measuredWidth;
-        cycleWidth = textWidth + gapPx;
-        overflowing = newOverflowing;
-        if (changed) resetAnimation();
-        return overflowing;
     }
 
     private void stopAnimation() {
-        overflowing = false;
-        scrollOffset = 0f;
-        lastFrameNanos = 0L;
-    }
-
-    private void resetAnimation() {
-        scrollOffset = 0f;
-        lastFrameNanos = 0L;
-        invalidate();
-    }
-
-    @Override
-    protected void onTextChanged(CharSequence text, int start, int before, int count) {
-        super.onTextChanged(text, start, before, count);
-        if (!normalizeText(text).equals(renderedText)) resetAnimation();
+        removeCallbacks(updateAnimation);
+        if (scrollAnimator != null) {
+            scrollAnimator.cancel();
+            scrollAnimator = null;
+        }
+        animatedCycleWidth = 0;
+        if (textStrip == null) return;
+        textStrip.setTranslationX(0f);
+        firstCopy.setLayerType(LAYER_TYPE_NONE, null);
+        secondCopy.setLayerType(LAYER_TYPE_NONE, null);
+        secondCopy.setVisibility(INVISIBLE);
     }
 
     @Override
-    protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
-        super.onSizeChanged(width, height, oldWidth, oldHeight);
-        resetAnimation();
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        scheduleAnimationUpdate();
+    }
+
+    @Override
+    protected void onVisibilityChanged(View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        scheduleAnimationUpdate();
+    }
+
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        scheduleAnimationUpdate();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        super.onWindowFocusChanged(hasWindowFocus);
+        scheduleAnimationUpdate();
     }
 
     @Override

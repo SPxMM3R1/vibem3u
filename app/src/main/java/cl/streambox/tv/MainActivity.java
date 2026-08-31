@@ -122,7 +122,7 @@ public final class MainActivity extends Activity {
     private TextView channelLogoFallback;
     private TextView channelNumber;
     private TextView channelName;
-    private TextView contentTitle;
+    private ContinuousMarqueeTextView contentTitle;
     private TextView programmeTime;
     private ProgressBar liveProgress;
     private TextView videoInfo;
