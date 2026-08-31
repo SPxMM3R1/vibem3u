@@ -1,43 +1,42 @@
 package cl.streambox.tv;
 
-import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.graphics.PixelFormat;
 import android.os.Build;
+import android.text.Layout;
+import android.text.TextPaint;
 import android.text.TextUtils;
 import android.util.AttributeSet;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.View;
-import android.view.ViewGroup;
-import android.view.animation.LinearInterpolator;
-import android.widget.LinearLayout;
+import android.widget.FrameLayout;
 import android.widget.TextView;
 
 /**
- * A clipped viewport for two cached copies of a single-line programme title.
+ * A native, static title plus a small independent surface used only while scrolling.
  *
- * <p>Only the strip's translation changes during a cycle. Text measurement and
- * layout happen when content or bounds change, never in an animation callback.
- * Each copy has its own small hardware layer; the video and the rest of the
- * overlay are not captured in that layer.</p>
+ * <p>All View access stays on the UI thread. The renderer receives a copy of the text/style and
+ * owns its frame loop, text cache and Canvas on a separate Looper. No per-frame invalidate,
+ * translation, layout or callback is posted to the Activity's UI thread.</p>
  */
-public final class ContinuousMarqueeTextView extends ViewGroup {
+public final class ContinuousMarqueeTextView extends FrameLayout implements SurfaceHolder.Callback {
     private static final float GAP_DP = 12f;
     private static final float SPEED_DP_PER_SECOND = 40f;
-    // Avoid oversized textures on older TVs. Wider titles can still use the
-    // normal hardware display list, without a forced off-screen texture.
-    private static final int MAX_LAYER_DIMENSION_PX = 2048;
+    private static final int MAX_TITLE_WIDTH_PX = 32_768;
 
-    private final LinearLayout textStrip;
-    private final TextView firstCopy;
-    private final TextView secondCopy;
+    private final TextView staticTitle;
+    private final SurfaceView scrollingSurface;
     private final int gapPx;
     private final float speedPxPerSecond;
     private final Runnable updateAnimation = this::updateAnimationState;
-    private final LinearInterpolator linearInterpolator = new LinearInterpolator();
 
     private String text = "";
-    private ObjectAnimator scrollAnimator;
-    private int animatedCycleWidth;
+    private MarqueeSurfaceRenderer.Spec activeSpec;
+    private MarqueeSurfaceRenderer renderer;
+    private boolean surfaceFailed;
+    private boolean released;
 
     public ContinuousMarqueeTextView(Context context) {
         this(context, null);
@@ -56,43 +55,38 @@ public final class ContinuousMarqueeTextView extends ViewGroup {
         setClipToPadding(true);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
 
-        textStrip = new LinearLayout(context);
-        textStrip.setOrientation(LinearLayout.HORIZONTAL);
-        textStrip.setLayoutDirection(LAYOUT_DIRECTION_LTR);
-        textStrip.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
-        firstCopy = createCopy(context, attrs, defStyleAttr);
-        secondCopy = createCopy(context, attrs, defStyleAttr);
-        secondCopy.setVisibility(INVISIBLE);
-        textStrip.addView(firstCopy, new LinearLayout.LayoutParams(
-                LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
-        LinearLayout.LayoutParams repeatedParams = new LinearLayout.LayoutParams(
-                LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
-        repeatedParams.leftMargin = gapPx;
-        textStrip.addView(secondCopy, repeatedParams);
-        addView(textStrip, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
-        setText(firstCopy.getText());
-    }
+        staticTitle = new TextView(context, attrs, defStyleAttr);
+        staticTitle.setId(NO_ID);
+        staticTitle.setPadding(0, 0, 0, 0);
+        staticTitle.setSingleLine(true);
+        staticTitle.setEllipsize(TextUtils.TruncateAt.END);
+        staticTitle.setFocusable(false);
+        staticTitle.setClickable(false);
+        staticTitle.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        addView(staticTitle, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
 
-    private TextView createCopy(Context context, AttributeSet attrs, int defStyleAttr) {
-        TextView copy = new TextView(context, attrs, defStyleAttr);
-        // The XML id and outer padding belong to the viewport, not both copies.
-        copy.setId(NO_ID);
-        copy.setPadding(0, 0, 0, 0);
-        copy.setSingleLine(true);
-        copy.setEllipsize(null);
-        copy.setFocusable(false);
-        copy.setClickable(false);
-        return copy;
+        scrollingSurface = new SurfaceView(context);
+        // Only this title-sized transparent surface is above the Activity's window. The video
+        // surface and the rest of the OSD are neither captured nor moved into a bitmap/texture.
+        scrollingSurface.setZOrderOnTop(true);
+        scrollingSurface.getHolder().setFormat(PixelFormat.TRANSLUCENT);
+        scrollingSurface.getHolder().addCallback(this);
+        scrollingSurface.setFocusable(false);
+        scrollingSurface.setClickable(false);
+        scrollingSurface.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        scrollingSurface.setVisibility(INVISIBLE);
+        addView(scrollingSurface, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        setText(staticTitle.getText());
     }
 
     public void setText(CharSequence value) {
         String normalized = value == null ? ""
                 : value.toString().replace('\n', ' ').replace('\r', ' ');
         if (TextUtils.equals(text, normalized)) return;
-        stopAnimation();
+        stopScroll();
+        surfaceFailed = false;
         text = normalized;
-        firstCopy.setText(text);
-        secondCopy.setText(text);
+        staticTitle.setText(text);
         setContentDescription(text);
         requestLayout();
     }
@@ -101,126 +95,149 @@ public final class ContinuousMarqueeTextView extends ViewGroup {
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         int horizontalPadding = getPaddingLeft() + getPaddingRight();
         int verticalPadding = getPaddingTop() + getPaddingBottom();
-        int stripHeightSpec = getChildMeasureSpec(heightMeasureSpec, verticalPadding,
-                LayoutParams.WRAP_CONTENT);
-        // Give each native TextView its full width. The viewport, rather than
-        // a truncated TextView, clips the moving title to the programme area.
-        textStrip.measure(MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED), stripHeightSpec);
-        int desiredWidth = Math.max(getSuggestedMinimumWidth(),
-                firstCopy.getMeasuredWidth() + horizontalPadding);
-        int desiredHeight = Math.max(getSuggestedMinimumHeight(),
-                textStrip.getMeasuredHeight() + verticalPadding);
-        setMeasuredDimension(resolveSize(desiredWidth, widthMeasureSpec),
-                resolveSize(desiredHeight, heightMeasureSpec));
+        staticTitle.measure(getChildMeasureSpec(widthMeasureSpec, horizontalPadding, LayoutParams.MATCH_PARENT),
+                getChildMeasureSpec(heightMeasureSpec, verticalPadding, LayoutParams.WRAP_CONTENT));
+        // A MATCH_PARENT SurfaceView must not enlarge this WRAP_CONTENT title to the OSD's height.
+        setMeasuredDimension(resolveSize(staticTitle.getMeasuredWidth() + horizontalPadding, widthMeasureSpec),
+                resolveSize(staticTitle.getMeasuredHeight() + verticalPadding, heightMeasureSpec));
+        int childWidth = MeasureSpec.makeMeasureSpec(
+                Math.max(0, getMeasuredWidth() - horizontalPadding), MeasureSpec.EXACTLY);
+        int childHeight = MeasureSpec.makeMeasureSpec(
+                Math.max(0, getMeasuredHeight() - verticalPadding), MeasureSpec.EXACTLY);
+        staticTitle.measure(childWidth, childHeight);
+        scrollingSurface.measure(childWidth, childHeight);
     }
 
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
-        int stripLeft = getPaddingLeft();
-        if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) {
-            stripLeft = getWidth() - getPaddingRight() - firstCopy.getMeasuredWidth();
-        }
-        textStrip.layout(stripLeft, getPaddingTop(),
-                stripLeft + textStrip.getMeasuredWidth(),
-                getPaddingTop() + textStrip.getMeasuredHeight());
+        super.onLayout(changed, left, top, right, bottom);
         scheduleAnimationUpdate();
     }
 
+    private boolean canScroll() {
+        return !released && !surfaceFailed && isAttachedToWindow() && isShown()
+                && getWindowVisibility() == VISIBLE && hasWindowFocus() && isHardwareAccelerated()
+                && getLayoutDirection() != LAYOUT_DIRECTION_RTL && !text.isEmpty()
+                && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || ValueAnimator.areAnimatorsEnabled());
+    }
+
     private void scheduleAnimationUpdate() {
-        if (textStrip == null) return; // View callbacks can run during construction.
+        if (staticTitle == null) return; // View callbacks can occur during construction.
         removeCallbacks(updateAnimation);
-        if (!isAttachedToWindow() || !isShown() || getWindowVisibility() != VISIBLE
-                || !hasWindowFocus()) {
-            stopAnimation();
+        if (!canScroll()) {
+            stopScroll();
         } else {
-            // Run after layout. This is a state-change callback, not a frame loop.
-            post(updateAnimation);
+            post(updateAnimation); // A layout/state change, never a per-frame callback.
         }
     }
 
     private void updateAnimationState() {
-        // A visibility/focus callback can arrive before a requested relayout.
-        // onLayout will schedule us again with the new text dimensions.
-        if (isLayoutRequested() || textStrip.isLayoutRequested()) return;
-        int availableWidth = getWidth() - getPaddingLeft() - getPaddingRight();
-        int titleWidth = firstCopy.getWidth();
-        boolean animationsEnabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.O
-                || ValueAnimator.areAnimatorsEnabled();
-        if (!isAttachedToWindow() || !isShown() || getWindowVisibility() != VISIBLE
-                || !hasWindowFocus() || !isHardwareAccelerated() || !animationsEnabled
-                || getLayoutDirection() == LAYOUT_DIRECTION_RTL || text.isEmpty()
-                || availableWidth <= 0 || titleWidth <= availableWidth || firstCopy.getHeight() <= 0) {
-            stopAnimation();
+        if (isLayoutRequested() || staticTitle.isLayoutRequested()) return;
+        int width = staticTitle.getWidth();
+        int height = staticTitle.getHeight();
+        if (!canScroll() || width <= 0 || height <= 0) {
+            stopScroll();
+            return;
+        }
+        // Diagnostic TextView updates may relayout the OSD, but must not restart or remeasure
+        // the animation when the title's content and geometry are unchanged.
+        if (activeSpec != null && activeSpec.width == width && activeSpec.height == height) return;
+        float desiredWidth = Layout.getDesiredWidth(text, staticTitle.getPaint());
+        if (!Float.isFinite(desiredWidth) || desiredWidth <= width || desiredWidth > MAX_TITLE_WIDTH_PX) {
+            stopScroll();
             return;
         }
 
-        int cycleWidth = titleWidth + gapPx;
-        if (scrollAnimator != null && scrollAnimator.isStarted()
-                && animatedCycleWidth == cycleWidth) return;
-        stopAnimation();
-        animatedCycleWidth = cycleWidth;
-        secondCopy.setVisibility(VISIBLE);
-        prepareLayer(firstCopy);
-        prepareLayer(secondCopy);
-
-        // One property animator keeps both copies exactly in phase. The repeat
-        // starts with the same image as the end, so no blank interval is needed.
-        scrollAnimator = ObjectAnimator.ofFloat(textStrip, View.TRANSLATION_X, 0f, -cycleWidth);
-        scrollAnimator.setDuration(Math.max(1L, Math.round(cycleWidth * 1000d / speedPxPerSecond)));
-        scrollAnimator.setInterpolator(linearInterpolator);
-        scrollAnimator.setRepeatCount(ValueAnimator.INFINITE);
-        scrollAnimator.setRepeatMode(ValueAnimator.RESTART);
-        scrollAnimator.start();
+        stopScroll();
+        TextPaint paint = new TextPaint(staticTitle.getPaint());
+        paint.setColor(staticTitle.getCurrentTextColor());
+        activeSpec = new MarqueeSurfaceRenderer.Spec(text, paint, width, height,
+                (int) Math.ceil(desiredWidth), staticTitle.getBaseline(),
+                staticTitle.getIncludeFontPadding(), gapPx, speedPxPerSecond);
+        scrollingSurface.setVisibility(VISIBLE);
+        // The static TextView remains visible until the surface has actually submitted a frame.
+        if (scrollingSurface.getHolder().getSurface().isValid()) startRenderer();
     }
 
-    private void prepareLayer(TextView copy) {
-        if (copy.getWidth() <= MAX_LAYER_DIMENSION_PX && copy.getHeight() <= MAX_LAYER_DIMENSION_PX) {
-            copy.setLayerType(LAYER_TYPE_HARDWARE, null);
-            copy.buildLayer();
+    private void startRenderer() {
+        if (activeSpec == null || !canScroll() || renderer != null) return;
+        renderer = new MarqueeSurfaceRenderer(scrollingSurface.getHolder().getSurface(), activeSpec,
+                new MarqueeSurfaceRenderer.Listener() {
+                    @Override public void onFirstFrame(MarqueeSurfaceRenderer source) {
+                        post(() -> {
+                            if (renderer == source && activeSpec != null && canScroll()) {
+                                staticTitle.setVisibility(INVISIBLE);
+                            }
+                        });
+                    }
+
+                    @Override public void onFailure(MarqueeSurfaceRenderer source) {
+                        post(() -> {
+                            if (renderer != source) return;
+                            surfaceFailed = true;
+                            stopScroll(); // Safe native text instead of a black/invalid surface.
+                        });
+                    }
+                });
+    }
+
+    private void stopRenderer() {
+        if (renderer != null) {
+            renderer.close();
+            renderer = null;
         }
+        if (staticTitle != null) staticTitle.setVisibility(VISIBLE);
     }
 
-    private void stopAnimation() {
+    private void stopScroll() {
         removeCallbacks(updateAnimation);
-        if (scrollAnimator != null) {
-            scrollAnimator.cancel();
-            scrollAnimator = null;
-        }
-        animatedCycleWidth = 0;
-        if (textStrip == null) return;
-        textStrip.setTranslationX(0f);
-        firstCopy.setLayerType(LAYER_TYPE_NONE, null);
-        secondCopy.setLayerType(LAYER_TYPE_NONE, null);
-        secondCopy.setVisibility(INVISIBLE);
+        activeSpec = null;
+        stopRenderer();
+        if (scrollingSurface != null) scrollingSurface.setVisibility(INVISIBLE);
     }
 
-    @Override
-    protected void onAttachedToWindow() {
+    /** Stops the worker when the Activity explicitly releases its resources. */
+    void release() {
+        released = true;
+        stopScroll();
+    }
+
+    @Override public void surfaceCreated(SurfaceHolder holder) {
+        startRenderer();
+    }
+
+    @Override public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+        scheduleAnimationUpdate();
+    }
+
+    @Override public void surfaceDestroyed(SurfaceHolder holder) {
+        // close() excludes any in-flight Canvas operation before this callback returns.
+        stopRenderer();
+    }
+
+    @Override protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         scheduleAnimationUpdate();
     }
 
-    @Override
-    protected void onVisibilityChanged(View changedView, int visibility) {
+    @Override protected void onVisibilityChanged(View changedView, int visibility) {
         super.onVisibilityChanged(changedView, visibility);
         scheduleAnimationUpdate();
     }
 
-    @Override
-    protected void onWindowVisibilityChanged(int visibility) {
+    @Override protected void onWindowVisibilityChanged(int visibility) {
         super.onWindowVisibilityChanged(visibility);
         scheduleAnimationUpdate();
     }
 
-    @Override
-    public void onWindowFocusChanged(boolean hasWindowFocus) {
+    @Override public void onWindowFocusChanged(boolean hasWindowFocus) {
         super.onWindowFocusChanged(hasWindowFocus);
+        if (hasWindowFocus) surfaceFailed = false;
         scheduleAnimationUpdate();
     }
 
-    @Override
-    protected void onDetachedFromWindow() {
-        stopAnimation();
+    @Override protected void onDetachedFromWindow() {
+        stopScroll();
         super.onDetachedFromWindow();
     }
 }
