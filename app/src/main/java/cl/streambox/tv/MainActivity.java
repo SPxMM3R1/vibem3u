@@ -17,6 +17,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.SpannableString;
 import android.text.Spanned;
+import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
 import android.view.KeyEvent;
 import android.view.View;
@@ -69,6 +70,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @UnstableApi
 public final class MainActivity extends Activity {
@@ -103,7 +105,7 @@ public final class MainActivity extends Activity {
     private final Set<String> epgRequests = new HashSet<>();
 
     private PlayerView playerView;
-    private PlaybackBitrateMeter playbackBitrateMeter;
+    private PlaybackDiagnosticsWorker playbackBitrateMeter;
     private View channelOverlay;
     private View loadingPanel;
     private TextView loadingText;
@@ -166,10 +168,18 @@ public final class MainActivity extends Activity {
     private boolean loadingAnimationScheduled;
     private int loadingDotCount;
     private boolean playbackDiagnosticsActive;
+    private final AtomicBoolean diagnosticsUpdateQueued = new AtomicBoolean();
+    private final Runnable applyMeasuredDiagnostics = () -> {
+        diagnosticsUpdateQueued.set(false);
+        if (exiting || resourcesReleased || player == null) return;
+        maybeActivatePlaybackDiagnostics();
+        updateDiagnostics();
+    };
 
     private final Runnable hideOverlay = () -> {
         channelOverlay.setVisibility(View.GONE);
         clock.setVisibility(View.GONE);
+        updateDiagnosticsVisibility();
     };
     private final Runnable hideLightEpg = () -> {
         if (lightEpgOverlay != null) {
@@ -302,17 +312,10 @@ public final class MainActivity extends Activity {
                 )
                 .build();
         playerView.setPlayer(player);
-        final PlaybackBitrateMeter[] meterHolder = new PlaybackBitrateMeter[1];
-        PlaybackBitrateMeter newBitrateMeter = new PlaybackBitrateMeter(
-                () -> mainHandler.post(() -> {
-                    if (!exiting && player != null && playbackBitrateMeter == meterHolder[0]) {
-                        maybeActivatePlaybackDiagnostics();
-                        updateDiagnostics();
-                    }
-                })
-        );
-        meterHolder[0] = newBitrateMeter;
+        PlaybackDiagnosticsWorker newBitrateMeter = new PlaybackDiagnosticsWorker(
+                this::requestDiagnosticsUpdate);
         playbackBitrateMeter = newBitrateMeter;
+        updateDiagnosticsVisibility();
         player.addAnalyticsListener(newBitrateMeter);
         MediaCodecVideoRenderer videoRenderer = renderersFactory.getVideoRenderer();
         if (videoRenderer != null) {
@@ -1462,53 +1465,64 @@ public final class MainActivity extends Activity {
             return;
         }
         if (player.getPlaybackState() == Player.STATE_READY
-                && playbackBitrateMeter.hasRenderedVideoFrame()) {
+                && playbackBitrateMeter.snapshot().hasRenderedVideoFrame) {
             playbackDiagnosticsActive = true;
         }
     }
 
+    /** Called by the diagnostics worker; never touches Player or View objects on that thread. */
+    private void requestDiagnosticsUpdate() {
+        if (!diagnosticsUpdateQueued.compareAndSet(false, true)) return;
+        if (!mainHandler.post(applyMeasuredDiagnostics)) diagnosticsUpdateQueued.set(false);
+    }
+
+    private void updateDiagnosticsVisibility() {
+        if (playbackBitrateMeter != null) {
+            playbackBitrateMeter.setNotificationsEnabled(!resourcesReleased && !settingsOpen
+                    && hasWindowFocus() && channelOverlay != null && channelOverlay.isShown());
+        }
+    }
+
     private void updateDiagnostics() {
-        if (player == null) return;
+        if (player == null || settingsOpen || !hasWindowFocus()
+                || channelOverlay == null || !channelOverlay.isShown()) return;
+        // Showing the OSD must not replace a playback error with the last successful samples.
+        if (player.getPlayerError() != null || loadFailed) return;
         if (!playbackDiagnosticsActive) {
             // Track metadata can be available while Media3 is still opening
             // the stream. Do not expose a partial diagnostic row at that
             // point; the first rendered frame is the first reliable playback
             // boundary for showing codec and FPS information.
-            if (player.getPlayerError() == null && !loadFailed) {
-                videoInfo.setText("— · —");
-                codecInfo.setText("— · — · —");
-            }
+            setTextIfChanged(videoInfo, "— · —");
+            setTextIfChanged(codecInfo, "— · — · —");
             return;
         }
         Format video = player.getVideoFormat();
         Format audio = player.getAudioFormat();
+        PlaybackDiagnosticsWorker.Snapshot measurements = playbackBitrateMeter == null
+                ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
 
         String resolution = video != null && video.width > 0 && video.height > 0
                 ? video.width + " × " + video.height
                 : "—";
-        float measuredFrameRate = playbackBitrateMeter == null
-                ? 0f
-                : playbackBitrateMeter.getMeasuredFrameRate();
-        float frameRate = PlaybackBitrateMeter.normalizeFrameRate(measuredFrameRate);
+        float frameRate = measurements.displayFrameRate;
         String fps = frameRate > 0 ? trimDecimal(frameRate) + " FPS" : "— FPS";
-        videoInfo.setText(resolution + " · " + fps);
+        setTextIfChanged(videoInfo, resolution + " · " + fps);
 
         String videoCodec = codecName(video == null ? null : video.sampleMimeType);
         String audioCodec = codecName(audio == null ? null : audio.sampleMimeType);
-        boolean isMuxedStream = playbackBitrateMeter != null
-                && playbackBitrateMeter.isMuxedStream();
-        long measuredBitrate = 0L;
-        if (playbackBitrateMeter != null) {
-            measuredBitrate = isMuxedStream
-                    ? playbackBitrateMeter.getStreamBitrate()
-                    : playbackBitrateMeter.getVideoBitrate();
-        }
+        boolean isMuxedStream = measurements.muxedStream;
+        long measuredBitrate = isMuxedStream ? measurements.streamBitrate : measurements.videoBitrate;
         int declaredBitrate = isMuxedStream
                 ? declaredStreamBitrate(video, audio)
                 : declaredBitrate(video);
         long displayBitrate = measuredBitrate > 0 ? measuredBitrate : declaredBitrate;
-        codecInfo.setText(videoCodec + " · " + audioCodec + " · "
+        setTextIfChanged(codecInfo, videoCodec + " · " + audioCodec + " · "
                 + compactBitrate(displayBitrate));
+    }
+
+    private static void setTextIfChanged(TextView view, String text) {
+        if (!TextUtils.equals(view.getText(), text)) view.setText(text);
     }
 
     private static String compactBitrate(long bitsPerSecond) {
@@ -1768,6 +1782,9 @@ public final class MainActivity extends Activity {
         mainHandler.removeCallbacks(hideLightEpg);
         channelOverlay.setVisibility(View.VISIBLE);
         clock.setVisibility(View.VISIBLE);
+        updateDiagnosticsVisibility();
+        maybeActivatePlaybackDiagnostics();
+        updateDiagnostics();
         mainHandler.removeCallbacks(hideOverlay);
         if (!keepVisible) {
             mainHandler.postDelayed(hideOverlay, OVERLAY_TIMEOUT_MS);
@@ -1783,8 +1800,7 @@ public final class MainActivity extends Activity {
         if (channels.isEmpty() || channelIndex < 0 || channelIndex >= channels.size()) return;
         mainHandler.removeCallbacks(hideOverlay);
         mainHandler.removeCallbacks(hideLightEpg);
-        channelOverlay.setVisibility(View.GONE);
-        clock.setVisibility(View.GONE);
+        hideOverlay.run();
         updateLightEpgInfo();
         lightEpgOverlay.setVisibility(View.VISIBLE);
         updateLightEpgInfo();
@@ -1956,7 +1972,7 @@ public final class MainActivity extends Activity {
         resourceCacheExecutor.shutdownNow();
 
         if (playbackBitrateMeter != null) {
-            playbackBitrateMeter.reset();
+            playbackBitrateMeter.close();
             playbackBitrateMeter = null;
         }
 
@@ -2147,7 +2163,7 @@ public final class MainActivity extends Activity {
                 reloadResolverRegistry();
                 if (playerUsesVolumeNormalization != isVolumeNormalizationEnabled()) {
                     if (playbackBitrateMeter != null) {
-                        playbackBitrateMeter.reset();
+                        playbackBitrateMeter.close();
                         playbackBitrateMeter = null;
                     }
                     if (player != null) {
@@ -2338,11 +2354,23 @@ public final class MainActivity extends Activity {
             refreshPlaylists(getPlaylistSources());
         }
         startPlaybackFromInput();
+        updateDiagnosticsVisibility();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        updateDiagnosticsVisibility();
+        if (hasFocus && !resourcesReleased) {
+            maybeActivatePlaybackDiagnostics();
+            updateDiagnostics();
+        }
     }
 
     @Override
     protected void onPause() {
         if (appUpdater != null) appUpdater.onHostPause();
+        if (playbackBitrateMeter != null) playbackBitrateMeter.setNotificationsEnabled(false);
         mainHandler.removeCallbacks(hideLightEpg);
         hideLightEpg.run();
         if (!settingsOpen) {

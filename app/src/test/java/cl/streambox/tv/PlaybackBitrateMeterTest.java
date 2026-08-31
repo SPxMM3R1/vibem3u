@@ -161,6 +161,30 @@ public final class PlaybackBitrateMeterTest {
     }
 
     @Test
+    public void processingBatchesCannotOverwriteRenderedFrameMeasurement() {
+        PlaybackBitrateMeter meter = new PlaybackBitrateMeter(null);
+        for (int frame = 0; frame <= 60; frame++) {
+            meter.recordRenderedFrame(frame * 16_666_667L);
+        }
+        meter.recordFrameSample(0L, 20);
+        meter.recordFrameSample(1_000L, 20);
+        assertEquals(60f, meter.getMeasuredFrameRate(), 0.02f);
+    }
+
+    @Test
+    public void formatChangeResetsWindowWithoutLosingFirstFrameBoundary() {
+        PlaybackBitrateMeter meter = new PlaybackBitrateMeter(null);
+        meter.recordRenderedFrame(0L);
+        meter.resetFrameRate();
+        assertTrue(meter.hasRenderedVideoFrame());
+        assertEquals(0f, meter.getMeasuredFrameRate(), 0f);
+        for (int frame = 0; frame <= 30; frame++) {
+            meter.recordRenderedFrame(2_000_000_000L + frame * 33_333_334L);
+        }
+        assertEquals(30f, meter.getMeasuredFrameRate(), 0.02f);
+    }
+
+    @Test
     public void preservesFrameRatesOutsideKnownGroups() {
         assertEquals(15f, PlaybackBitrateMeter.normalizeFrameRate(15f), 0.01f);
         assertEquals(70f, PlaybackBitrateMeter.normalizeFrameRate(70f), 0.01f);

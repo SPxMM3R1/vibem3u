@@ -94,9 +94,7 @@ final class PlaybackBitrateMeter implements AnalyticsListener, VideoFrameMetadat
             Format format,
             DecoderReuseEvaluation decoderReuseEvaluation
     ) {
-        synchronized (this) {
-            resetFpsWindow();
-        }
+        resetFrameRate();
         if (listener != null) listener.onMeasuredBitrateChanged();
     }
 
@@ -107,12 +105,6 @@ final class PlaybackBitrateMeter implements AnalyticsListener, VideoFrameMetadat
             int frameCount
     ) {
         if (eventTime == null) return;
-        synchronized (this) {
-            if (frameRateSource == FrameRateSource.RENDERED) return;
-            if (frameRateSource == FrameRateSource.NONE) {
-                frameRateSource = FrameRateSource.PROCESSED;
-            }
-        }
         recordFrameSample(eventTime.realtimeMs, frameCount);
     }
 
@@ -129,14 +121,7 @@ final class PlaybackBitrateMeter implements AnalyticsListener, VideoFrameMetadat
             Format format,
             @Nullable MediaFormat mediaFormat
     ) {
-        long realtimeNs = System.nanoTime();
-        synchronized (this) {
-            if (frameRateSource != FrameRateSource.RENDERED) {
-                resetFpsWindow();
-                frameRateSource = FrameRateSource.RENDERED;
-            }
-        }
-        recordRenderedFrame(realtimeNs);
+        recordRenderedFrame(System.nanoTime());
     }
 
     /**
@@ -147,6 +132,8 @@ final class PlaybackBitrateMeter implements AnalyticsListener, VideoFrameMetadat
      */
     synchronized void recordFrameSample(long realtimeMs, int frameCount) {
         if (realtimeMs == C.TIME_UNSET || frameCount <= 0) return;
+        if (frameRateSource == FrameRateSource.RENDERED) return;
+        if (frameRateSource == FrameRateSource.NONE) frameRateSource = FrameRateSource.PROCESSED;
 
         if (fpsWindowStartRealtimeMs == C.TIME_UNSET
                 || realtimeMs < fpsWindowStartRealtimeMs) {
@@ -173,6 +160,10 @@ final class PlaybackBitrateMeter implements AnalyticsListener, VideoFrameMetadat
      */
     synchronized void recordRenderedFrame(long realtimeNs) {
         if (realtimeNs < 0L) return;
+        if (frameRateSource != FrameRateSource.RENDERED) {
+            resetFpsWindow();
+            frameRateSource = FrameRateSource.RENDERED;
+        }
 
         boolean firstRenderedFrame = !renderedVideoFrameObserved;
         renderedVideoFrameObserved = true;
@@ -303,6 +294,10 @@ final class PlaybackBitrateMeter implements AnalyticsListener, VideoFrameMetadat
         resetFpsWindow();
         frameRateSource = FrameRateSource.NONE;
         renderedVideoFrameObserved = false;
+    }
+
+    synchronized void resetFrameRate() {
+        resetFpsWindow();
     }
 
     private void resetFpsWindow() {
