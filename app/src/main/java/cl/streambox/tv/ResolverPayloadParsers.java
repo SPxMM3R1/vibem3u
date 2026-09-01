@@ -143,6 +143,10 @@ final class ResolverPayloadParsers {
         while (matcher.find() && result.size() < maximumCandidates) {
             String raw = matcher.group(1).replace("\\/", "/")
                     .replaceAll("[),;\\]}]+$", "");
+            // A percent-encoded query delimiter means this is still an
+            // envelope value, not the final HLS URL. The bounded queue will
+            // URL-decode it and add only the usable canonical candidate.
+            if (raw.toLowerCase(Locale.ROOT).contains("%3f")) continue;
             try {
                 URI candidate = baseUri.resolve(raw);
                 URI accepted = httpUri(candidate.toString());
