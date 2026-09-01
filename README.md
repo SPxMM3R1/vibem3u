@@ -65,6 +65,13 @@ servicio TvVoo externo. El motor propio prueba HTTPS primero y solo usa el HTTP
 equivalente cuando la cadena TLS confirma que el certificado del nodo expiró;
 otros errores TLS siguen bloqueados.
 
+TvVoo admite además la receta declarativa segura `bounded-payload-v1`. Esta
+recupera URLs HLS desde respuestas públicas anidadas o codificadas, pero solo
+cuando la M3U la solicita y el catálogo validado la autoriza con el mismo ID.
+La APK no ejecuta código remoto y valida cada salto HTTP, playlist, variante y
+firma multimedia antes de entregar la fuente a Media3. El contrato, sus límites
+y la guía para continuarlo están en [RESOLVER_RECIPE_V1.md](RESOLVER_RECIPE_V1.md).
+
 Al abrir una lista o cambiar de canal, la aplicación muestra una única línea de
 texto centrada directamente sobre el fondo negro. El mensaje se reemplaza en cada
 etapa técnica: caché, resolución de la fuente, validación de la playlist HLS,

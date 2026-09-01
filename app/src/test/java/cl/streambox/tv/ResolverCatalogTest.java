@@ -8,8 +8,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 public final class ResolverCatalogTest {
     @Test
@@ -146,6 +148,50 @@ public final class ResolverCatalogTest {
         assertEquals("from-m3u", definition.resolverAliases(channel).get(0));
         assertEquals("second", definition.resolverAliases(channel).get(1));
         assertEquals(2, definition.resolverAliases(channel).size());
+    }
+
+    @Test
+    public void recipeMustBeAuthorisedByBothM3uAndTrustedCatalog() throws Exception {
+        String json = catalogJson().replace(
+                "\"endpointBase\":\"https://tvvoo.hayd.uk/stream/tv\"",
+                "\"endpointBase\":\"https://tvvoo.hayd.uk/stream/tv\","
+                        + "\"recipeId\":\"bounded-payload-v1\","
+                        + "\"validationMode\":\"media-signature-v1\""
+        );
+        ResolverDefinition definition = ResolverCatalog.parse(json).getById("tvvoo");
+        Channel authorised = channel(
+                "Test@TvVoo",
+                "https://example.org/fallback.m3u8",
+                attributes("x-resolver-recipe", "bounded-payload-v1")
+        );
+        Channel unknown = channel(
+                "Test@TvVoo",
+                "https://example.org/fallback.m3u8",
+                attributes("x-resolver-recipe", "download-code-v1")
+        );
+
+        assertTrue(definition.usesRecipe(authorised, "bounded-payload-v1"));
+        assertFalse(definition.usesRecipe(unknown, "bounded-payload-v1"));
+    }
+
+    @Test
+    public void rejectsUnknownDeclarativeRecipe() {
+        String invalid = catalogJson().replace(
+                "\"endpointBase\":\"https://tvvoo.hayd.uk/stream/tv\"",
+                "\"endpointBase\":\"https://tvvoo.hayd.uk/stream/tv\","
+                        + "\"recipeId\":\"download-code-v1\""
+        );
+        assertThrows(IOException.class, () -> ResolverCatalog.parse(invalid));
+    }
+
+    @Test
+    public void rejectsRecipeWithoutAnExplicitValidationMode() {
+        String invalid = catalogJson().replace(
+                "\"endpointBase\":\"https://tvvoo.hayd.uk/stream/tv\"",
+                "\"endpointBase\":\"https://tvvoo.hayd.uk/stream/tv\","
+                        + "\"recipeId\":\"bounded-payload-v1\""
+        );
+        assertThrows(IOException.class, () -> ResolverCatalog.parse(invalid));
     }
 
     private static String catalogJson() {

@@ -38,6 +38,8 @@ public final class ResolverCatalog {
      */
     private static final Set<String> RETIRED_ENGINES = setOf("24horas");
     private static final Set<String> RETIRED_PROVIDER_IDS = setOf("24horas");
+    private static final Set<String> SAFE_RECIPE_IDS = setOf("bounded-payload-v1");
+    private static final Set<String> SAFE_VALIDATION_MODES = setOf("media-signature-v1");
     private static final Map<String, Set<String>> ALLOWED_CONFIG_HOSTS = allowedHosts();
 
     private final String version;
@@ -231,6 +233,19 @@ public final class ResolverCatalog {
 
     private static void validateConfig(String engine, Map<String, String> config)
             throws IOException {
+        String recipeId = config.get("recipeId");
+        String validationMode = config.get("validationMode");
+        if (recipeId != null && (!"tvvoo".equals(engine)
+                || !SAFE_RECIPE_IDS.contains(recipeId))) {
+            throw new IOException("Receta declarativa no permitida.");
+        }
+        if (validationMode != null && (!"tvvoo".equals(engine)
+                || !SAFE_VALIDATION_MODES.contains(validationMode))) {
+            throw new IOException("Modo de validación no permitido.");
+        }
+        if (recipeId != null && validationMode == null) {
+            throw new IOException("La receta declarativa no define su validación.");
+        }
         Set<String> allowedHosts = ALLOWED_CONFIG_HOSTS.get(engine);
         if (allowedHosts == null) allowedHosts = Collections.emptySet();
         for (Map.Entry<String, String> entry : config.entrySet()) {

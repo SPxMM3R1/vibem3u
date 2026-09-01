@@ -22,6 +22,7 @@ public final class TokenHttpClient {
     private static final int DEFAULT_CONNECT_TIMEOUT_MS = 12_000;
     private static final int DEFAULT_READ_TIMEOUT_MS = 20_000;
     private static final int MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
+    private static final int MAX_PUBLIC_REDIRECTS = 4;
 
     private final int connectTimeoutMs;
     private final int readTimeoutMs;
@@ -51,6 +52,16 @@ public final class TokenHttpClient {
         return getInternal(url, headers, maxResponseBytes, range, false);
     }
 
+    /** GET whose initial URL and every redirect must remain on the public Internet. */
+    public Response getPublic(
+            String url,
+            Map<String, String> headers,
+            int maxResponseBytes,
+            String range
+    ) throws IOException {
+        return getPublicInternal(url, headers, maxResponseBytes, range, false);
+    }
+
     /**
      * Reads at most {@code maxResponseBytes} and then closes the response.
      *
@@ -65,6 +76,16 @@ public final class TokenHttpClient {
             String range
     ) throws IOException {
         return getInternal(url, headers, maxResponseBytes, range, true);
+    }
+
+    /** Prefix GET with the same public-network policy applied to every redirect. */
+    public Response getPublicPrefix(
+            String url,
+            Map<String, String> headers,
+            int maxResponseBytes,
+            String range
+    ) throws IOException {
+        return getPublicInternal(url, headers, maxResponseBytes, range, true);
     }
 
     private Response getInternal(
@@ -152,6 +173,114 @@ public final class TokenHttpClient {
                 connection.disconnect();
             }
         }
+    }
+
+    private Response getPublicInternal(
+            String url,
+            Map<String, String> headers,
+            int maxResponseBytes,
+            String range,
+            boolean prefixOnly
+    ) throws IOException {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new IOException("Solicitud cancelada.");
+        }
+        URI currentUri;
+        try {
+            currentUri = URI.create(url);
+        } catch (IllegalArgumentException error) {
+            throw new IOException("URL no válida.", error);
+        }
+
+        for (int redirects = 0; redirects <= MAX_PUBLIC_REDIRECTS; redirects++) {
+            PublicStreamPolicy.requirePublicHttp(currentUri);
+            HttpURLConnection connection = null;
+            try {
+                connection = (HttpURLConnection) currentUri.toURL().openConnection();
+                connection.setRequestMethod("GET");
+                connection.setConnectTimeout(connectTimeoutMs);
+                connection.setReadTimeout(readTimeoutMs);
+                // Validate every redirect before opening it. Automatic
+                // redirects could otherwise move a resolver candidate from a
+                // public CDN to localhost, a LAN host or metadata service.
+                connection.setInstanceFollowRedirects(false);
+                connection.setUseCaches(false);
+                connection.setDoInput(true);
+                connection.setRequestProperty("Cache-Control", "no-store, no-cache, max-age=0");
+                connection.setRequestProperty("Pragma", "no-cache");
+                connection.setRequestProperty("Expires", "0");
+                if (headers != null) {
+                    for (Map.Entry<String, String> header : headers.entrySet()) {
+                        if (header.getKey() != null && header.getValue() != null) {
+                            connection.setRequestProperty(header.getKey(), header.getValue());
+                        }
+                    }
+                }
+                if (range != null && !range.isBlank()) {
+                    connection.setRequestProperty("Range", range);
+                }
+                if (connection.getRequestProperty("User-Agent") == null) {
+                    connection.setRequestProperty("User-Agent", BROWSER_USER_AGENT);
+                }
+
+                int responseCode = connection.getResponseCode();
+                if (isRedirect(responseCode)) {
+                    if (redirects >= MAX_PUBLIC_REDIRECTS) {
+                        throw new IOException("Demasiadas redirecciones del stream.");
+                    }
+                    String location = connection.getHeaderField("Location");
+                    if (location == null || location.isBlank()) {
+                        throw new IOException("Redirección del stream sin destino.");
+                    }
+                    try {
+                        currentUri = currentUri.resolve(location);
+                    } catch (IllegalArgumentException error) {
+                        throw new IOException("Redirección del stream no válida.", error);
+                    }
+                    continue;
+                }
+                if (responseCode < 200 || responseCode >= 300) {
+                    throw new HttpStatusException(responseCode);
+                }
+                try (InputStream input = connection.getInputStream()) {
+                    URI finalUri;
+                    try {
+                        finalUri = connection.getURL().toURI();
+                    } catch (URISyntaxException error) {
+                        throw new IOException("El servidor devolvió una URL inválida.", error);
+                    }
+                    PublicStreamPolicy.requirePublicHttp(finalUri);
+                    Map<String, String> responseHeaders = new LinkedHashMap<>();
+                    for (Map.Entry<String, java.util.List<String>> entry
+                            : connection.getHeaderFields().entrySet()) {
+                        if (entry.getKey() != null && entry.getValue() != null
+                                && !entry.getValue().isEmpty()) {
+                            responseHeaders.put(entry.getKey(), entry.getValue().get(0));
+                        }
+                    }
+                    return new Response(
+                            responseCode,
+                            finalUri,
+                            connection.getContentType(),
+                            responseHeaders,
+                            prefixOnly
+                                    ? readPrefix(input, Math.max(1, maxResponseBytes))
+                                    : readLimited(input, Math.max(1, maxResponseBytes))
+                    );
+                }
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }
+        throw new IOException("Demasiadas redirecciones del stream.");
+    }
+
+    private static boolean isRedirect(int statusCode) {
+        return statusCode == HttpURLConnection.HTTP_MOVED_PERM
+                || statusCode == HttpURLConnection.HTTP_MOVED_TEMP
+                || statusCode == HttpURLConnection.HTTP_SEE_OTHER
+                || statusCode == 307
+                || statusCode == 308;
     }
 
     public static String buildUrl(String baseUrl, Map<String, String> parameters)

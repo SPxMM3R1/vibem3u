@@ -108,24 +108,31 @@ public final class HlsStreamValidator {
 
         List<String> segments = mediaReferences(current.lines);
         if (segments.isEmpty()) throw new IOException("El HLS no publicó segmentos.");
+        boolean encryptedSegments = hasEncryptedSegments(current.lines);
 
         IOException lastError = null;
         for (int index : recentProbeOrder(segments.size())) {
             try {
                 URI segmentUri = resolve(current.finalUri, segments.get(index));
+                PublicStreamPolicy.requirePublicHttp(segmentUri);
                 progress.onProgress(ResolutionProgress.of(
                         ResolutionStage.HLS_SEGMENT,
                         "GET " + SafePlaybackText.url(segmentUri)
                                 + " · Range bytes=0-4095"
                 ));
-                TokenHttpClient.Response response = httpClient.getPrefix(
+                TokenHttpClient.Response response = httpClient.getPublicPrefix(
                         segmentUri.toString(),
                         safeHeaders,
                         MAX_SEGMENT_PROBE_BYTES,
                         "bytes=0-4095"
                 );
+                PublicStreamPolicy.requirePublicHttp(response.getFinalUri());
                 if (response.getBody().length == 0
-                        || looksLikeErrorDocument(response.getBody())) {
+                        || looksLikeErrorDocument(response.getBody())
+                        || (!encryptedSegments && !isRecognizedMediaSample(
+                                response.getBody(),
+                                response.getContentType()
+                        ))) {
                     throw new IOException("El segmento HLS no es reproducible.");
                 }
                 progress.onProgress(ResolutionProgress.of(
@@ -142,12 +149,14 @@ public final class HlsStreamValidator {
 
     private PlaylistResponse loadPlaylist(URI uri, Map<String, String> headers)
             throws IOException {
-        TokenHttpClient.Response response = httpClient.get(
+        PublicStreamPolicy.requirePublicHttp(uri);
+        TokenHttpClient.Response response = httpClient.getPublic(
                 uri.toString(),
                 headers,
                 MAX_PLAYLIST_BYTES,
                 null
         );
+        PublicStreamPolicy.requirePublicHttp(response.getFinalUri());
         byte[] playlistBody = MeganoticiasHlsDecoder.decodeIfNeeded(response.getBody());
         String content = new String(playlistBody, StandardCharsets.UTF_8)
                 .replace("\uFEFF", "")
@@ -192,6 +201,48 @@ public final class HlsStreamValidator {
         if (segmentCount == 1) return new int[]{0};
         if (segmentCount == 2) return new int[]{0, 1};
         return new int[]{segmentCount - 2, segmentCount - 1, segmentCount - 3};
+    }
+
+    /** Recognises common HLS media containers without decoding the programme. */
+    static boolean isRecognizedMediaSample(byte[] body, String contentType) {
+        if (body == null || body.length == 0 || looksLikeErrorDocument(body)) return false;
+        String type = contentType == null ? "" : contentType.toLowerCase(Locale.ROOT);
+        if (type.startsWith("text/") || type.contains("json") || type.contains("xml")) {
+            return false;
+        }
+
+        // MPEG-TS: require two packets with the same 188-byte sync offset.
+        for (int offset = 0; offset < Math.min(188, body.length); offset++) {
+            if (body[offset] == 0x47 && offset + 188 < body.length
+                    && body[offset + 188] == 0x47) {
+                return true;
+            }
+        }
+
+        // ISO BMFF/fMP4 boxes used by CMAF HLS.
+        if (body.length >= 8) {
+            String box = new String(body, 4, 4, StandardCharsets.US_ASCII);
+            if ("ftyp".equals(box) || "styp".equals(box)
+                    || "moof".equals(box) || "sidx".equals(box)) {
+                return true;
+            }
+        }
+
+        // ADTS AAC, MP3 frame sync and ID3-prefixed audio segments.
+        if (body.length >= 2 && (body[0] & 0xFF) == 0xFF
+                && (((body[1] & 0xF6) == 0xF0) || ((body[1] & 0xE0) == 0xE0))) {
+            return true;
+        }
+        return body.length >= 10 && body[0] == 'I' && body[1] == 'D' && body[2] == '3';
+    }
+
+    private static boolean hasEncryptedSegments(List<String> lines) {
+        for (String line : lines) {
+            String value = line.trim().toUpperCase(Locale.ROOT);
+            if (value.startsWith("#EXT-X-KEY:")
+                    && !value.contains("METHOD=NONE")) return true;
+        }
+        return false;
     }
 
     private static URI resolve(URI base, String value) throws IOException {

@@ -68,6 +68,7 @@ public class M3uParserTest {
                 + "x-resolver=\"tvvoo\" "
                 + "x-resolver-endpoint=\"https://tvvoo.hayd.uk/stream/tv\" "
                 + "x-resolver-ids=\"first;second\" "
+                + "x-resolver-recipe=\"bounded-payload-v1\" "
                 + "x-resolver-refresh=\"on_play\",Sky Sports NFL\n"
                 + "https://example.org/fallback.m3u8\n";
 
@@ -82,6 +83,10 @@ public class M3uParserTest {
                 channel.getAttributes().get("x-resolver-endpoint")
         );
         assertEquals("first;second", channel.getAttributes().get("x-resolver-ids"));
+        assertEquals(
+                "bounded-payload-v1",
+                channel.getAttributes().get("x-resolver-recipe")
+        );
         assertEquals("on_play", channel.getAttributes().get("x-resolver-refresh"));
     }
 }

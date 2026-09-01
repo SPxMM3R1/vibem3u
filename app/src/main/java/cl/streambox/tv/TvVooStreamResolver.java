@@ -34,6 +34,8 @@ public final class TvVooStreamResolver implements StreamResolver {
     private static final int DEFAULT_RESOLUTION_BUDGET_MS = 8_000;
     private static final int DEFAULT_MAX_ALIASES = 6;
     private static final int DEFAULT_MAX_CANDIDATES = 8;
+    static final String BOUNDED_PAYLOAD_RECIPE = "bounded-payload-v1";
+    static final String MEDIA_SIGNATURE_VALIDATION = "media-signature-v1";
 
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
@@ -129,6 +131,16 @@ public final class TvVooStreamResolver implements StreamResolver {
             endpointBase = definition.getConfig("endpointBase", DEFAULT_ENDPOINT);
         }
         endpointBase = validEndpoint(endpointBase);
+        String requestedRecipe = definition.requestedRecipe(channel);
+        boolean boundedPayloadRecipe = definition.usesRecipe(
+                channel,
+                BOUNDED_PAYLOAD_RECIPE
+        ) && MEDIA_SIGNATURE_VALIDATION.equals(
+                definition.getConfig("validationMode", "")
+        );
+        if (!requestedRecipe.isBlank() && !boundedPayloadRecipe) {
+            throw new IOException("La receta declarativa del canal no está autorizada.");
+        }
 
         LinkedHashSet<String> aliases = new LinkedHashSet<>(definition.resolverAliases(channel));
         // Explicit M3U aliases are authoritative. Generated aliases are only
@@ -189,6 +201,7 @@ public final class TvVooStreamResolver implements StreamResolver {
                         endpointBase,
                         jsonHeaders,
                         definition,
+                        boundedPayloadRecipe,
                         httpClient,
                         progress,
                         deadline,
@@ -406,6 +419,7 @@ public final class TvVooStreamResolver implements StreamResolver {
             String endpointBase,
             Map<String, String> jsonHeaders,
             ResolverDefinition definition,
+            boolean boundedPayloadRecipe,
             TokenHttpClient httpClient,
             ResolutionProgressListener progress,
             ResolutionDeadline deadline,
@@ -437,13 +451,25 @@ public final class TvVooStreamResolver implements StreamResolver {
                             ResolutionStage.CATALOG_PARSED,
                             "JSON válido · extrayendo streams[].url · alias=" + alias
                     ));
-                    return new AliasResult(
-                            absoluteIndex,
+                    LinkedHashSet<URI> candidates = new LinkedHashSet<>(
                             ResolverPayloadParsers.parseTvVooCandidates(
                                     response,
                                     definition.getConfig("streamsPath", "streams"),
                                     definition.getConfig("urlField", "url")
-                            ),
+                            )
+                    );
+                    if (boundedPayloadRecipe) {
+                        candidates.addAll(ResolverPayloadParsers.parseBoundedHlsCandidates(
+                                response,
+                                URI.create(endpoint),
+                                definition.getIntConfig("maxPayloadDepth", 6, 1, 8),
+                                definition.getIntConfig("maxExtractedStrings", 256, 8, 512),
+                                definition.getIntConfig("maxCandidates", 8, 1, 32)
+                        ));
+                    }
+                    return new AliasResult(
+                            absoluteIndex,
+                            Collections.unmodifiableList(new ArrayList<>(candidates)),
                             null
                     );
                 } catch (IOException error) {

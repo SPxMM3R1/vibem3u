@@ -158,6 +158,27 @@ public final class ResolverDefinition {
         return manifest.isBlank() ? getConfig("manifestUrl", "") : manifest;
     }
 
+    /**
+     * Returns whether the channel explicitly requests the data-only recipe
+     * authorised by this provider definition.
+     *
+     * <p>The M3U cannot invent or enable a recipe on its own: the requested
+     * identifier must exactly match both the APK capability and the trusted
+     * resolver catalogue. Unknown or mismatched values therefore fail
+     * closed and the resolver keeps its fixed parser/fallback path.</p>
+     */
+    public boolean usesRecipe(Channel channel, String supportedRecipe) {
+        String requested = attribute(channel, "x-resolver-recipe");
+        if (requested.isBlank() || supportedRecipe == null) return false;
+        String authorised = getConfig("recipeId", "");
+        return requested.equalsIgnoreCase(supportedRecipe)
+                && requested.equalsIgnoreCase(authorised);
+    }
+
+    public String requestedRecipe(Channel channel) {
+        return attribute(channel, "x-resolver-recipe");
+    }
+
     private static String attribute(Channel channel, String key) {
         if (channel == null || channel.getAttributes() == null) return "";
         return safe(channel.getAttributes().get(key)).trim();

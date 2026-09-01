@@ -24,8 +24,8 @@ El archivo inicial puede copiar la estructura de
 
 - `schemaVersion: 1`;
 - una `catalogVersion` ascendente, por ejemplo `2026.08.24.2`;
-- solamente los motores que VibeM3U reconoce: `tvn`, `meganoticias`,
-  `24horas`, `tvvoo` y `highfly`;
+- solamente los motores que VibeM3U reconoce: `tvn`, `meganoticias`, `tvvoo`
+  y `highfly`;
 - endpoints HTTPS de los hosts permitidos por la app;
 - IDs, coincidencias, aliases y reglas estables, nunca respuestas temporales.
 
@@ -52,13 +52,15 @@ emitir los aliases de ese mapa dentro de `x-resolver-ids`, en el mismo orden y
 separados por `;`:
 
 ```m3u
-#EXTINF:-1 tvg-id="SkySportsNFL.uk@TvVoo" tvg-name="Sky Sports NFL" tvg-country="GB" x-resolver="tvvoo" x-resolver-endpoint="https://tvvoo.hayd.uk/stream/tv" x-resolver-ids="vavoo_SKY%20SPORTS%20NFL%7Cgroup%3Auk;vavoo_SKY%20SPORTS%20NFL%20HD%7Cgroup%3Auk" x-resolver-refresh="on_play" group-title="PRUEBA - Deportes - Sky",Sky Sports NFL
+#EXTINF:-1 tvg-id="SkySportsNFL.uk@TvVoo" tvg-name="Sky Sports NFL" tvg-country="GB" x-resolver="tvvoo" x-resolver-endpoint="https://tvvoo.hayd.uk/stream/tv" x-resolver-ids="vavoo_SKY%20SPORTS%20NFL%7Cgroup%3Auk;vavoo_SKY%20SPORTS%20NFL%20HD%7Cgroup%3Auk" x-resolver-refresh="on_play" x-resolver-recipe="bounded-payload-v1" group-title="PRUEBA - Deportes - Sky",Sky Sports NFL
 https://URL_TEMPORAL_DE_RESPALDO/hls/index.m3u8
 ```
 
 Reglas:
 
 - `x-resolver="tvvoo"` es obligatorio para las nuevas entradas.
+- `x-resolver-recipe="bounded-payload-v1"` solicita el parser acotado incluido
+  en la APK; el catálogo debe autorizar el mismo ID.
 - `x-resolver-ids` contiene aliases estables, no URLs ni tokens.
 - Cuando existen `x-resolver-ids`, su orden es autoritativo: VibeM3U no genera
   aliases adicionales que puedan retrasar o desviar la selección del canal.
@@ -99,6 +101,11 @@ Configuración mínima recomendada para ese proveedor:
 }
 ```
 
+La configuración vigente agrega `recipeId: bounded-payload-v1`,
+`validationMode: media-signature-v1`, `maxPayloadDepth: 6` y
+`maxExtractedStrings: 256`. El detalle de la autorización de dos llaves y de
+las comprobaciones de red/HLS está en `RESOLVER_RECIPE_V1.md`.
+
 ## Highfly
 
 Cada canal debe transportar un slug estable y la URL final del `manifest.json`
@@ -131,12 +138,12 @@ mantiene únicamente en RAM durante esa reproducción.
 ## 24 Horas
 
 ```m3u
-#EXTINF:-1 tvg-id="0201" x-resolver="24horas" x-resolver-refresh="on_play",24 Horas
+#EXTINF:-1 tvg-id="0201",24 Horas
 https://mdstrm.com/live-stream-playlist/57d1a22064f5d85712b20dab.m3u8
 ```
 
-El ID de la URL puede seguir siendo un respaldo para reproductores externos.
-VibeM3U consulta la página oficial y extrae el `data-ms` activo al reproducir.
+24 Horas es actualmente una fuente directa. Conserva su `tvg-id` para la EPG,
+pero no debe recibir `x-resolver` ni depender del antiguo motor retirado.
 
 ## Meganoticias
 
@@ -165,9 +172,9 @@ el `tvg-id` para la EPG.
 ## Cambios concretos en `update_m3u.py`
 
 1. Al construir cada `#EXTINF`, consultar `TVVOO_STREAM_RESOLVER_IDS` y emitir
-   `x-resolver`, `x-resolver-endpoint`, `x-resolver-ids` y
-   `x-resolver-refresh`.
-2. Añadir metadatos explícitos para TVN y 24 Horas.
+   `x-resolver`, `x-resolver-endpoint`, `x-resolver-ids`,
+   `x-resolver-refresh` y `x-resolver-recipe`.
+2. Añadir metadatos explícitos para TVN y mantener 24 Horas directo.
 3. Para Highfly, mantener un mapa `tvg-id -> slug -> manifest final` y emitirlo.
 4. Mantener Meganoticias de producción con el resolutor oficial y sin publicar
    tokens, `serverKey` ni URLs de sesión.

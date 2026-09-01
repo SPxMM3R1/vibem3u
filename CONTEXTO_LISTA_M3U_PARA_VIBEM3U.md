@@ -4,7 +4,21 @@ Documento de transferencia entre los dos proyectos locales. Resume los cambios
 realizados en el repositorio de Lista M3U que afectan directamente a VibeM3U y
 define el contrato que la aplicación debe respetar.
 
-Última revisión del estado local: 2026-08-25.
+Última revisión del estado local: 2026-09-01.
+
+## Actualización 2026-09-01: receta segura TvVoo
+
+La implementación vigente incorpora `bounded-payload-v1`, una receta de datos
+acotada para recuperar candidatos HLS desde respuestas TvVoo anidadas o
+codificadas. Requiere coincidencia entre `x-resolver-recipe` en la M3U, el
+`recipeId` del catálogo y la capacidad compilada en la APK. No ejecuta código
+remoto. El contrato autoritativo, los límites, la política de red, la validación
+multimedia y los archivos afectados están en `RESOLVER_RECIPE_V1.md`.
+
+El catálogo seguro integrado se sincroniza desde Lista M3U. A esta fecha el
+inventario declarativo tiene 153 canales: 42 en la lista principal manual y
+111 en la lista externa; 102 entradas usan TvVoo. Estas cifras son una
+instantánea de publicación, no una regla codificada en la app.
 
 ## Regla principal
 
