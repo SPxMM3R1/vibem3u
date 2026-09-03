@@ -622,21 +622,45 @@
                             android:textSize="@dimen/settings_control_text_size"
                             android:thumbTint="@color/cyan" />
 
-                        <EditText
-                            android:id="@+id/highfly_premium_token"
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="@dimen/settings_control_height"
                             android:layout_marginTop="6dp"
-                            android:background="@drawable/settings_input"
-                            android:hint="@string/highfly_premium_token_hint"
-                            android:imeOptions="actionDone"
-                            android:inputType="textPassword|textNoSuggestions"
-                            android:nextFocusUp="@id/highfly_premium_enabled"
-                            android:nextFocusDown="@id/highfly_premium_verify_button"
-                            android:singleLine="true"
-                            android:textColor="@color/white"
-                            android:textColorHint="#78909C"
-                            android:textSize="@dimen/settings_control_text_size" />
+                            android:baselineAligned="false"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <EditText
+                                android:id="@+id/highfly_premium_token"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/settings_input"
+                                android:hint="@string/highfly_premium_token_hint"
+                                android:imeOptions="actionDone"
+                                android:inputType="textPassword|textNoSuggestions"
+                                android:nextFocusUp="@id/highfly_premium_enabled"
+                                android:nextFocusDown="@id/highfly_premium_verify_button"
+                                android:singleLine="true"
+                                android:textColor="@color/white"
+                                android:textColorHint="#78909C"
+                                android:textSize="@dimen/settings_control_text_size" />
+
+                            <TextView
+                                android:id="@+id/highfly_premium_token_feedback"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:focusable="false"
+                                android:gravity="center"
+                                android:importantForAccessibility="no"
+                                android:includeFontPadding="false"
+                                android:maxLines="1"
+                                android:textColor="@color/green"
+                                android:textSize="@dimen/settings_body_text_size"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
+                        </LinearLayout>
 
                         <LinearLayout
                             android:layout_width="match_parent"

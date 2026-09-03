@@ -8,6 +8,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -125,6 +127,7 @@ public final class SettingsActivity extends Activity {
     private HighflyPremiumCatalogRepository highflyPremiumCatalogRepository;
     private Switch highflyPremiumEnabled;
     private EditText highflyPremiumToken;
+    private TextView highflyPremiumTokenFeedback;
     private Button highflyPremiumVerifyButton;
     private Button highflyPremiumQueryButton;
     private Button highflyPremiumRemoveButton;
@@ -188,6 +191,7 @@ public final class SettingsActivity extends Activity {
         tvVooModeExternal = findViewById(R.id.tvvoo_mode_external);
         highflyPremiumEnabled = findViewById(R.id.highfly_premium_enabled);
         highflyPremiumToken = findViewById(R.id.highfly_premium_token);
+        highflyPremiumTokenFeedback = findViewById(R.id.highfly_premium_token_feedback);
         highflyPremiumVerifyButton = findViewById(R.id.highfly_premium_verify_button);
         highflyPremiumQueryButton = findViewById(R.id.highfly_premium_query_button);
         highflyPremiumRemoveButton = findViewById(R.id.highfly_premium_remove_button);
@@ -267,6 +271,24 @@ public final class SettingsActivity extends Activity {
         highflyPremiumToken.setOnEditorActionListener((v, actionId, event) -> {
             verifyHighflyPremiumToken();
             return true;
+        });
+        highflyPremiumToken.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence text, int start, int count, int after) {
+                // No-op.
+            }
+
+            @Override
+            public void onTextChanged(CharSequence text, int start, int before, int count) {
+                if (text != null && text.length() > 0) {
+                    clearPremiumTokenFeedback();
+                }
+            }
+
+            @Override
+            public void afterTextChanged(Editable editable) {
+                // No-op.
+            }
         });
 
         int defaultTab = hasExistingUrl ? TAB_GENERAL : TAB_SOURCE;
@@ -500,11 +522,19 @@ public final class SettingsActivity extends Activity {
         String candidate = highflyPremiumToken.getText().toString().trim();
         if (!HighflyPremiumTokenRules.isValid(candidate)) {
             highflyPremiumStatus.setText(R.string.highfly_premium_status_invalid);
+            setPremiumTokenFeedback(
+                    R.string.highfly_premium_token_feedback_invalid,
+                    R.color.red
+            );
             return;
         }
 
         setPremiumOperationEnabled(false);
         highflyPremiumStatus.setText(R.string.highfly_premium_status_verifying);
+        setPremiumTokenFeedback(
+                R.string.highfly_premium_token_feedback_verifying,
+                R.color.amber
+        );
         HighflyPremiumPreferences.Region region = selectedHighflyPremiumRegion();
         HighflyPremiumCredentialStore.StorageMode storageMode = selectedPremiumStorageMode();
         updateExecutor.submit(() -> {
@@ -517,16 +547,28 @@ public final class SettingsActivity extends Activity {
                     highflyPremiumToken.setText("");
                     highflyPremiumEnabled.setChecked(true);
                     renderHighflyPremiumStatus();
+                    setPremiumTokenFeedback(
+                            R.string.highfly_premium_token_feedback_verified,
+                            R.color.green
+                    );
                     setPremiumOperationEnabled(true);
                 });
             } catch (HighflyPremiumCatalogRepository.CredentialRejectedException error) {
                 mainHandler.post(() -> {
                     highflyPremiumStatus.setText(R.string.highfly_premium_status_invalid);
+                    setPremiumTokenFeedback(
+                            R.string.highfly_premium_token_feedback_invalid,
+                            R.color.red
+                    );
                     setPremiumOperationEnabled(true);
                 });
             } catch (Exception error) {
                 mainHandler.post(() -> {
                     highflyPremiumStatus.setText(R.string.highfly_premium_status_error);
+                    setPremiumTokenFeedback(
+                            R.string.highfly_premium_token_feedback_error,
+                            R.color.red
+                    );
                     setPremiumOperationEnabled(true);
                 });
             }
@@ -536,6 +578,7 @@ public final class SettingsActivity extends Activity {
     private void queryHighflyPremiumCatalog() {
         if (!highflyPremiumCredentialStore.hasCredential()) {
             highflyPremiumStatus.setText(R.string.highfly_premium_token_required);
+            clearPremiumTokenFeedback();
             return;
         }
 
@@ -559,6 +602,10 @@ public final class SettingsActivity extends Activity {
                 highflyPremiumCredentialStore.recordInvalid();
                 mainHandler.post(() -> {
                     highflyPremiumStatus.setText(R.string.highfly_premium_status_invalid);
+                    setPremiumTokenFeedback(
+                            R.string.highfly_premium_token_feedback_invalid,
+                            R.color.red
+                    );
                     setPremiumOperationEnabled(true);
                 });
             } catch (Exception error) {
@@ -579,16 +626,29 @@ public final class SettingsActivity extends Activity {
                         R.string.highfly_premium_status_valid,
                         premiumAccountLabel(tokenStatus)
                 ));
+                setPremiumTokenFeedback(
+                        R.string.highfly_premium_token_feedback_verified,
+                        R.color.green
+                );
                 break;
             case INVALID:
             case EXPIRED:
                 highflyPremiumStatus.setText(R.string.highfly_premium_status_invalid);
+                setPremiumTokenFeedback(
+                        R.string.highfly_premium_token_feedback_invalid,
+                        R.color.red
+                );
                 break;
             case UNKNOWN:
                 highflyPremiumStatus.setText(R.string.highfly_premium_status_verifying);
+                setPremiumTokenFeedback(
+                        R.string.highfly_premium_token_feedback_unverified,
+                        R.color.amber
+                );
                 break;
             default:
                 highflyPremiumStatus.setText(R.string.highfly_premium_status_not_configured);
+                clearPremiumTokenFeedback();
                 break;
         }
     }
@@ -715,6 +775,19 @@ public final class SettingsActivity extends Activity {
 
     private String safeString(String value) {
         return value == null ? "" : value;
+    }
+
+    private void setPremiumTokenFeedback(int textResId, int colorResId) {
+        if (highflyPremiumTokenFeedback == null) return;
+        highflyPremiumTokenFeedback.setText(textResId);
+        highflyPremiumTokenFeedback.setTextColor(getColor(colorResId));
+        highflyPremiumTokenFeedback.setVisibility(View.VISIBLE);
+    }
+
+    private void clearPremiumTokenFeedback() {
+        if (highflyPremiumTokenFeedback == null) return;
+        highflyPremiumTokenFeedback.setText("");
+        highflyPremiumTokenFeedback.setVisibility(View.GONE);
     }
 
     private int dp(int value) {
