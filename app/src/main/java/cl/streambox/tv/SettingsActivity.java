@@ -137,7 +137,6 @@ public final class SettingsActivity extends Activity {
     private Button highflyPremiumQueryButton;
     private Button highflyPremiumRemoveButton;
     private TextView highflyPremiumStatus;
-    private RadioGroup highflyPremiumStorageGroup;
     private RadioGroup highflyPremiumRegionGroup;
     private RadioGroup highflyPremiumSortGroup;
     private Switch highflyPremiumIncludeEvents;
@@ -202,7 +201,6 @@ public final class SettingsActivity extends Activity {
         highflyPremiumQueryButton = findViewById(R.id.highfly_premium_query_button);
         highflyPremiumRemoveButton = findViewById(R.id.highfly_premium_remove_button);
         highflyPremiumStatus = findViewById(R.id.highfly_premium_status);
-        highflyPremiumStorageGroup = findViewById(R.id.highfly_premium_storage_group);
         highflyPremiumRegionGroup = findViewById(R.id.highfly_premium_region_group);
         highflyPremiumSortGroup = findViewById(R.id.highfly_premium_sort_group);
         highflyPremiumIncludeEvents = findViewById(R.id.highfly_premium_include_events);
@@ -459,12 +457,6 @@ public final class SettingsActivity extends Activity {
                 HighflyPremiumPreferences.includeEvents(this)
         );
 
-        highflyPremiumStorageGroup.check(
-                highflyPremiumCredentialStore.getStorageMode()
-                        == HighflyPremiumCredentialStore.StorageMode.ENCRYPTED
-                        ? R.id.highfly_premium_storage_encrypted
-                        : R.id.highfly_premium_storage_memory
-        );
         highflyPremiumRegionGroup.check(regionRadioId(
                 HighflyPremiumPreferences.region(this)
         ));
@@ -514,13 +506,6 @@ public final class SettingsActivity extends Activity {
         return HighflyPremiumPreferences.Region.MAIN;
     }
 
-    private HighflyPremiumCredentialStore.StorageMode selectedPremiumStorageMode() {
-        return highflyPremiumStorageGroup.getCheckedRadioButtonId()
-                == R.id.highfly_premium_storage_encrypted
-                ? HighflyPremiumCredentialStore.StorageMode.ENCRYPTED
-                : HighflyPremiumCredentialStore.StorageMode.MEMORY;
-    }
-
     private HighflyPremiumPreferences.StreamSort selectedPremiumStreamSort() {
         int checkedId = highflyPremiumSortGroup.getCheckedRadioButtonId();
         if (checkedId == R.id.highfly_premium_sort_default) {
@@ -563,12 +548,11 @@ public final class SettingsActivity extends Activity {
                 R.string.highfly_premium_token_feedback_verifying,
                 R.color.amber
         );
-        HighflyPremiumCredentialStore.StorageMode storageMode = selectedPremiumStorageMode();
         updateExecutor.submit(() -> {
             try {
                 HighflyPremiumCatalogRepository.AccountInfo account =
                         highflyPremiumCatalogRepository.verifyToken(token, region);
-                highflyPremiumCredentialStore.saveToken(token, storageMode);
+                highflyPremiumCredentialStore.saveToken(token);
                 highflyPremiumCredentialStore.recordVerification(account);
                 mainHandler.post(() -> {
                     highflyPremiumToken.setText("");
@@ -1189,17 +1173,6 @@ public final class SettingsActivity extends Activity {
                 )
                 .apply();
         saveSelectedHighflyPremiumEvents();
-        if (premiumConfigured
-                && highflyPremiumCredentialStore.getStorageMode()
-                != selectedPremiumStorageMode()) {
-            try {
-                highflyPremiumCredentialStore.changeStorageMode(selectedPremiumStorageMode());
-            } catch (IOException error) {
-                errorText.setText(R.string.highfly_premium_status_error);
-                errorText.setVisibility(View.VISIBLE);
-                return;
-            }
-        }
         for (Map.Entry<String, Switch> entry : resolverGroupSwitches.entrySet()) {
             ResolverDefinition definition = resolverCatalog == null
                     ? null

@@ -699,7 +699,7 @@
                                 android:minWidth="0dp"
                                 android:nextFocusLeft="@id/highfly_premium_verify_button"
                                 android:nextFocusUp="@id/highfly_premium_verify_button"
-                                android:nextFocusDown="@id/highfly_premium_remove_button"
+                                android:nextFocusDown="@id/highfly_premium_region_main"
                                 android:text="@string/highfly_premium_query_catalog"
                                 android:textColor="@color/white"
                                 android:textSize="@dimen/settings_action_text_size" />
@@ -715,42 +715,15 @@
                             android:textSize="@dimen/settings_body_text_size" />
 
                         <TextView
+                            android:id="@+id/highfly_premium_storage_info"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
-                            android:text="@string/highfly_premium_storage_title"
-                            android:textColor="@color/cyan"
-                            android:textSize="@dimen/settings_card_title_text_size"
-                            android:textStyle="bold" />
-
-                        <RadioGroup
-                            android:id="@+id/highfly_premium_storage_group"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical">
-
-                            <RadioButton
-                                android:id="@+id/highfly_premium_storage_memory"
-                                android:layout_width="match_parent"
-                                android:layout_height="@dimen/settings_control_height"
-                                android:buttonTint="@color/cyan"
-                                android:nextFocusUp="@id/highfly_premium_status"
-                                android:nextFocusDown="@id/highfly_premium_storage_encrypted"
-                                android:text="@string/highfly_premium_storage_memory"
-                                android:textColor="@color/white"
-                                android:textSize="@dimen/settings_control_text_size" />
-
-                            <RadioButton
-                                android:id="@+id/highfly_premium_storage_encrypted"
-                                android:layout_width="match_parent"
-                                android:layout_height="@dimen/settings_control_height"
-                                android:buttonTint="@color/cyan"
-                                android:nextFocusUp="@id/highfly_premium_storage_memory"
-                                android:nextFocusDown="@id/highfly_premium_region_main"
-                                android:text="@string/highfly_premium_storage_encrypted"
-                                android:textColor="@color/white"
-                                android:textSize="@dimen/settings_control_text_size" />
-                        </RadioGroup>
+                            android:focusable="false"
+                            android:importantForAccessibility="yes"
+                            android:text="@string/highfly_premium_storage_info"
+                            android:textColor="@color/muted"
+                            android:textSize="@dimen/settings_body_text_size" />
 
                         <TextView
                             android:layout_width="match_parent"
@@ -773,6 +746,9 @@
                                 android:layout_height="@dimen/settings_control_height"
                                 android:layout_weight="1"
                                 android:buttonTint="@color/cyan"
+                                android:nextFocusRight="@id/highfly_premium_region_us1"
+                                android:nextFocusUp="@id/highfly_premium_query_button"
+                                android:nextFocusDown="@id/highfly_premium_include_events"
                                 android:text="@string/highfly_premium_region_main"
                                 android:textColor="@color/white"
                                 android:textSize="@dimen/settings_control_text_size" />
@@ -783,6 +759,10 @@
                                 android:layout_height="@dimen/settings_control_height"
                                 android:layout_weight="1"
                                 android:buttonTint="@color/cyan"
+                                android:nextFocusLeft="@id/highfly_premium_region_main"
+                                android:nextFocusRight="@id/highfly_premium_region_us2"
+                                android:nextFocusUp="@id/highfly_premium_query_button"
+                                android:nextFocusDown="@id/highfly_premium_include_events"
                                 android:text="@string/highfly_premium_region_us1"
                                 android:textColor="@color/white"
                                 android:textSize="@dimen/settings_control_text_size" />
@@ -793,6 +773,10 @@
                                 android:layout_height="@dimen/settings_control_height"
                                 android:layout_weight="1"
                                 android:buttonTint="@color/cyan"
+                                android:nextFocusLeft="@id/highfly_premium_region_us1"
+                                android:nextFocusRight="@id/highfly_premium_region_eu1"
+                                android:nextFocusUp="@id/highfly_premium_query_button"
+                                android:nextFocusDown="@id/highfly_premium_include_events"
                                 android:text="@string/highfly_premium_region_us2"
                                 android:textColor="@color/white"
                                 android:textSize="@dimen/settings_control_text_size" />
@@ -803,6 +787,9 @@
                                 android:layout_height="@dimen/settings_control_height"
                                 android:layout_weight="1"
                                 android:buttonTint="@color/cyan"
+                                android:nextFocusLeft="@id/highfly_premium_region_us2"
+                                android:nextFocusUp="@id/highfly_premium_query_button"
+                                android:nextFocusDown="@id/highfly_premium_include_events"
                                 android:text="@string/highfly_premium_region_eu1"
                                 android:textColor="@color/white"
                                 android:textSize="@dimen/settings_control_text_size" />
@@ -853,6 +840,8 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="@dimen/settings_control_height"
                                 android:buttonTint="@color/cyan"
+                                android:nextFocusUp="@id/highfly_premium_include_events"
+                                android:nextFocusDown="@id/highfly_premium_sort_high"
                                 android:text="@string/highfly_premium_sort_default"
                                 android:textColor="@color/white"
                                 android:textSize="@dimen/settings_control_text_size" />
@@ -862,6 +851,8 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="@dimen/settings_control_height"
                                 android:buttonTint="@color/cyan"
+                                android:nextFocusUp="@id/highfly_premium_sort_default"
+                                android:nextFocusDown="@id/highfly_premium_sort_low"
                                 android:text="@string/highfly_premium_sort_high"
                                 android:textColor="@color/white"
                                 android:textSize="@dimen/settings_control_text_size" />
@@ -872,6 +863,7 @@
                                 android:layout_height="@dimen/settings_control_height"
                                 android:buttonTint="@color/cyan"
                                 android:text="@string/highfly_premium_sort_low"
+                                android:nextFocusUp="@id/highfly_premium_sort_high"
                                 android:nextFocusDown="@id/highfly_premium_remove_button"
                                 android:textColor="@color/white"
                                 android:textSize="@dimen/settings_control_text_size" />
@@ -911,7 +903,7 @@
                             android:includeFontPadding="false"
                             android:minHeight="0dp"
                             android:minWidth="0dp"
-                            android:nextFocusUp="@id/highfly_premium_query_button"
+                            android:nextFocusUp="@id/highfly_premium_sort_low"
                             android:nextFocusDown="@id/save_button"
                             android:text="@string/highfly_premium_remove"
                             android:textColor="@color/white"

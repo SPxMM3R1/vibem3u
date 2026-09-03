@@ -22,21 +22,22 @@ import javax.crypto.spec.GCMParameterSpec;
  * Stores the user supplied Highfly Premium credential without exposing it to
  * the settings UI or to the rest of the application configuration.
  *
- * <p>The default mode is RAM-only. The optional encrypted mode stores only an
- * AES-GCM ciphertext and IV in the app's private preferences; the key remains
- * in Android Keystore. Backups are disabled in the manifest because even an
- * encrypted credential should not be copied to another device.</p>
+ * <p>The credential is always stored as an AES-GCM ciphertext and IV in the
+ * app's private preferences; the key remains in Android Keystore. A decrypted
+ * copy may exist briefly in RAM while the app is running and is cleared when
+ * the app releases its session. Backups are disabled in the manifest because
+ * even an encrypted credential should not be copied to another device.</p>
  */
 public final class HighflyPremiumCredentialStore {
     private static final String KEY_ALIAS = "vibem3u_highfly_premium";
-    private static final String KEY_STORAGE_MODE = "highfly_premium_storage_mode";
+    // Kept only to remove the obsolete setting left by versions that exposed
+    // a RAM-only mode. It is never read as a source of truth anymore.
+    private static final String LEGACY_KEY_STORAGE_MODE = "highfly_premium_storage_mode";
     private static final String KEY_CIPHERTEXT = "highfly_premium_token_ciphertext";
     private static final String KEY_IV = "highfly_premium_token_iv";
     private static final String KEY_STATUS = "highfly_premium_status";
     private static final String KEY_PLAN = "highfly_premium_plan";
     private static final String KEY_EXPIRES_AT = "highfly_premium_expires_at";
-    private static final String MODE_MEMORY = "memory";
-    private static final String MODE_ENCRYPTED = "encrypted";
     private static final int GCM_TAG_BITS = 128;
     private static final int IV_BYTES = 12;
 
@@ -67,25 +68,6 @@ public final class HighflyPremiumCredentialStore {
             }
         }
         return instance;
-    }
-
-    public enum StorageMode {
-        MEMORY(MODE_MEMORY),
-        ENCRYPTED(MODE_ENCRYPTED);
-
-        private final String preferenceValue;
-
-        StorageMode(String preferenceValue) {
-            this.preferenceValue = preferenceValue;
-        }
-
-        String getPreferenceValue() {
-            return preferenceValue;
-        }
-
-        static StorageMode fromPreference(String value) {
-            return MODE_ENCRYPTED.equalsIgnoreCase(value) ? ENCRYPTED : MEMORY;
-        }
     }
 
     public enum Status {
@@ -127,11 +109,7 @@ public final class HighflyPremiumCredentialStore {
     public boolean hasCredential() {
         synchronized (lock) {
             if (memoryToken != null && memoryToken.length > 0) return true;
-            return StorageMode.fromPreference(preferences.getString(
-                    KEY_STORAGE_MODE,
-                    MODE_MEMORY
-            )) == StorageMode.ENCRYPTED
-                    && !preferences.getString(KEY_CIPHERTEXT, "").isBlank()
+            return !preferences.getString(KEY_CIPHERTEXT, "").isBlank()
                     && !preferences.getString(KEY_IV, "").isBlank();
         }
     }
@@ -141,12 +119,6 @@ public final class HighflyPremiumCredentialStore {
         synchronized (lock) {
             if (memoryToken != null && memoryToken.length > 0) {
                 return new String(memoryToken);
-            }
-            if (StorageMode.fromPreference(preferences.getString(
-                    KEY_STORAGE_MODE,
-                    MODE_MEMORY
-            )) != StorageMode.ENCRYPTED) {
-                return null;
             }
             String ciphertext = preferences.getString(KEY_CIPHERTEXT, "");
             String iv = preferences.getString(KEY_IV, "");
@@ -163,35 +135,23 @@ public final class HighflyPremiumCredentialStore {
         }
     }
 
-    public boolean saveToken(String value, StorageMode mode) throws IOException {
+    /** Saves the credential encrypted; there is intentionally no RAM-only mode. */
+    public boolean saveToken(String value) throws IOException {
         String token = HighflyPremiumTokenRules.normalize(value);
-        StorageMode safeMode = mode == null ? StorageMode.MEMORY : mode;
         synchronized (lock) {
             try {
-                if (safeMode == StorageMode.ENCRYPTED) {
-                    byte[][] encrypted = encrypt(token);
-                    String ciphertext = Base64.encodeToString(encrypted[0], Base64.NO_WRAP);
-                    String iv = Base64.encodeToString(encrypted[1], Base64.NO_WRAP);
-                    boolean committed = preferences.edit()
-                            .putString(KEY_STORAGE_MODE, MODE_ENCRYPTED)
-                            .putString(KEY_CIPHERTEXT, ciphertext)
-                            .putString(KEY_IV, iv)
-                            .remove(KEY_STATUS)
-                            .remove(KEY_PLAN)
-                            .remove(KEY_EXPIRES_AT)
-                            .commit();
-                    if (!committed) throw new IOException("No se pudo guardar la credencial.");
-                } else {
-                    boolean committed = preferences.edit()
-                            .putString(KEY_STORAGE_MODE, MODE_MEMORY)
-                            .remove(KEY_CIPHERTEXT)
-                            .remove(KEY_IV)
-                            .remove(KEY_STATUS)
-                            .remove(KEY_PLAN)
-                            .remove(KEY_EXPIRES_AT)
-                            .commit();
-                    if (!committed) throw new IOException("No se pudo guardar la credencial.");
-                }
+                byte[][] encrypted = encrypt(token);
+                String ciphertext = Base64.encodeToString(encrypted[0], Base64.NO_WRAP);
+                String iv = Base64.encodeToString(encrypted[1], Base64.NO_WRAP);
+                boolean committed = preferences.edit()
+                        .remove(LEGACY_KEY_STORAGE_MODE)
+                        .putString(KEY_CIPHERTEXT, ciphertext)
+                        .putString(KEY_IV, iv)
+                        .remove(KEY_STATUS)
+                        .remove(KEY_PLAN)
+                        .remove(KEY_EXPIRES_AT)
+                        .commit();
+                if (!committed) throw new IOException("No se pudo guardar la credencial.");
             } catch (GeneralSecurityException error) {
                 throw new IOException("No se pudo proteger la credencial.");
             }
@@ -202,27 +162,15 @@ public final class HighflyPremiumCredentialStore {
         }
     }
 
-    /** Migrates an already stored token without returning it to the caller. */
-    public boolean changeStorageMode(StorageMode mode) throws IOException {
-        StorageMode safeMode = mode == null ? StorageMode.MEMORY : mode;
+    /**
+     * Compatibility entry point for callers from the old storage setting. It
+     * now always preserves the current credential encrypted.
+     */
+    public boolean migrateToEncrypted() throws IOException {
         synchronized (lock) {
-            StorageMode current = StorageMode.fromPreference(preferences.getString(
-                    KEY_STORAGE_MODE,
-                    MODE_MEMORY
-            ));
-            if (current == safeMode) return hasCredential();
             String token = readTokenForRequest();
             if (token == null) return false;
-            return saveToken(token, safeMode);
-        }
-    }
-
-    public StorageMode getStorageMode() {
-        synchronized (lock) {
-            return StorageMode.fromPreference(preferences.getString(
-                    KEY_STORAGE_MODE,
-                    MODE_MEMORY
-            ));
+            return saveToken(token);
         }
     }
 
@@ -276,18 +224,6 @@ public final class HighflyPremiumCredentialStore {
     public void clearSession() {
         synchronized (lock) {
             clearMemoryTokenLocked();
-            if (StorageMode.fromPreference(preferences.getString(
-                    KEY_STORAGE_MODE,
-                    MODE_MEMORY
-            )) == StorageMode.MEMORY) {
-                preferences.edit()
-                        .remove(KEY_STATUS)
-                        .remove(KEY_PLAN)
-                        .remove(KEY_EXPIRES_AT)
-                        .apply();
-                status = new TokenStatus(Status.NOT_CONFIGURED, "", 0L);
-                generation++;
-            }
         }
     }
 
@@ -296,7 +232,7 @@ public final class HighflyPremiumCredentialStore {
             clearMemoryTokenLocked();
             clearEncryptedDataLocked();
             preferences.edit()
-                    .remove(KEY_STORAGE_MODE)
+                    .remove(LEGACY_KEY_STORAGE_MODE)
                     .remove(KEY_STATUS)
                     .remove(KEY_PLAN)
                     .remove(KEY_EXPIRES_AT)

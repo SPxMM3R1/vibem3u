@@ -53,7 +53,7 @@
     <string name="url_required">Ingresa una URL http:// o https:// válida.</string>
     <string name="playlist_source_required">Activa al menos una lista M3U o la Lista 3 Premium.</string>
     <string name="highfly_premium_title">Lista 3 · Highfly Premium</string>
-    <string name="highfly_premium_description">Activa la Lista 3 estable generada por el runner de GitHub. La app muestra su copia cacheada de inmediato y la actualiza en segundo plano; el token solo se usa en memoria al abrir cada canal. Los eventos seleccionados se agregan aparte en la Lista 4 temporal.</string>
+    <string name="highfly_premium_description">Activa la Lista 3 estable generada por el runner de GitHub. La app muestra su copia cacheada de inmediato y la actualiza en segundo plano; la credencial se conserva cifrada y el token de reproducción se renueva al abrir cada canal. Los eventos seleccionados se agregan aparte en la Lista 4 temporal.</string>
     <string name="highfly_premium_enabled">Lista 3 · canales estables Premium</string>
     <string name="highfly_premium_token_hint">Token Premium · se oculta después de guardarlo</string>
     <string name="highfly_premium_token_feedback_verified">✓ Verificado</string>
@@ -67,9 +67,7 @@
     <string name="highfly_premium_status_valid">Acceso válido · %1$s</string>
     <string name="highfly_premium_status_invalid">Token Premium inválido o expirado.</string>
     <string name="highfly_premium_status_error">No se pudo verificar el acceso Premium.</string>
-    <string name="highfly_premium_storage_title">Almacenamiento del token</string>
-    <string name="highfly_premium_storage_memory">Solo en memoria · se elimina al cerrar la app</string>
-    <string name="highfly_premium_storage_encrypted">Guardar cifrado en este dispositivo</string>
+    <string name="highfly_premium_storage_info">La credencial se conserva cifrada en este dispositivo y se elimina solo al quitar el acceso.</string>
     <string name="highfly_premium_region_title">Región del catálogo</string>
     <string name="highfly_premium_region_main">Principal</string>
     <string name="highfly_premium_region_us1">US-1</string>
