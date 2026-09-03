@@ -3,6 +3,7 @@ package cl.streambox.tv;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -15,12 +16,14 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
+import android.view.ViewTreeObserver;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
+import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
 
@@ -90,6 +93,8 @@ public final class SettingsActivity extends Activity {
     private View[] tabPages;
     private Button saveButton;
     private Button cancelButton;
+    private ScrollView settingsContent;
+    private ViewTreeObserver.OnGlobalFocusChangeListener focusVisibilityListener;
     private int selectedTabIndex;
     private TextView currentChannelName;
     private LinearLayout qualityOptionsContainer;
@@ -176,6 +181,7 @@ public final class SettingsActivity extends Activity {
         updateStatus = findViewById(R.id.update_status);
         cancelButton = findViewById(R.id.cancel_button);
         saveButton = findViewById(R.id.save_button);
+        settingsContent = findViewById(R.id.settings_content);
         currentChannelName = findViewById(R.id.settings_current_channel_name);
         qualityOptionsContainer = findViewById(R.id.settings_quality_options);
         qualityStatus = findViewById(R.id.settings_quality_status);
@@ -290,6 +296,14 @@ public final class SettingsActivity extends Activity {
                 // No-op.
             }
         });
+        focusVisibilityListener = (oldFocus, newFocus) -> {
+            if (newFocus != null && settingsContent != null
+                    && isDescendantOf(newFocus, settingsContent)) {
+                ensureSettingsControlVisible(newFocus);
+            }
+        };
+        getWindow().getDecorView().getViewTreeObserver()
+                .addOnGlobalFocusChangeListener(focusVisibilityListener);
 
         int defaultTab = hasExistingUrl ? TAB_GENERAL : TAB_SOURCE;
         int initialTab = getIntent().getIntExtra(EXTRA_INITIAL_TAB, defaultTab);
@@ -1027,6 +1041,31 @@ public final class SettingsActivity extends Activity {
         return false;
     }
 
+    private void ensureSettingsControlVisible(View focusedView) {
+        if (settingsContent == null || focusedView == null) return;
+        focusedView.post(() -> {
+            if (isFinishing() || settingsContent.getHeight() <= 0) return;
+            Rect visibleRect = new Rect();
+            focusedView.getDrawingRect(visibleRect);
+            settingsContent.offsetDescendantRectToMyCoords(focusedView, visibleRect);
+
+            int topEdge = settingsContent.getScrollY();
+            int bottomEdge = topEdge + settingsContent.getHeight();
+            int margin = dp(12);
+            if (visibleRect.top < topEdge) {
+                settingsContent.smoothScrollTo(
+                        0,
+                        Math.max(0, visibleRect.top - margin)
+                );
+            } else if (visibleRect.bottom > bottomEdge) {
+                settingsContent.smoothScrollTo(
+                        0,
+                        Math.max(0, visibleRect.bottom - settingsContent.getHeight() + margin)
+                );
+            }
+        });
+    }
+
     private boolean hasHorizontalTargetInCurrentPage(int keyCode) {
         View focusedView = getCurrentFocus();
         if (focusedView == null || tabPages == null
@@ -1266,6 +1305,12 @@ public final class SettingsActivity extends Activity {
     @Override
     protected void onDestroy() {
         if (appUpdater != null) appUpdater.destroy();
+        if (focusVisibilityListener != null) {
+            ViewTreeObserver observer = getWindow().getDecorView().getViewTreeObserver();
+            if (observer.isAlive()) {
+                observer.removeOnGlobalFocusChangeListener(focusVisibilityListener);
+            }
+        }
         updateExecutor.shutdownNow();
         super.onDestroy();
     }
