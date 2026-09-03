@@ -102,6 +102,92 @@ public final class ResolverCoordinatorTest {
     }
 
     @Test
+    public void expiredSessionSourceIsResolvedAgainBeforeReuse() throws Exception {
+        ResolverCoordinator coordinator = new ResolverCoordinator();
+        AtomicInteger calls = new AtomicInteger();
+        Channel channel = new Channel(
+                "Expired",
+                URI.create("https://example.org/fallback.m3u8"),
+                null,
+                "Test",
+                Collections.singletonMap("tvg-id", "expired")
+        );
+        StreamResolver resolver = new StreamResolver() {
+            @Override public String getId() { return "expired"; }
+            @Override public boolean supports(Channel value) { return true; }
+            @Override public long cacheTtlMillis() { return 60_000L; }
+            @Override public ResolvedPlaybackSource resolve(Channel value) {
+                int call = calls.incrementAndGet();
+                return ResolvedPlaybackSource.dynamic(
+                        "expired",
+                        "expired",
+                        URI.create("https://example.org/session-" + call + ".m3u8"),
+                        Collections.emptyMap(),
+                        "test-agent",
+                        System.currentTimeMillis() - 1L
+                );
+            }
+        };
+
+        coordinator.resolve(channel, resolver, false);
+        coordinator.resolve(channel, resolver, false);
+
+        assertEquals(2, calls.get());
+        assertEquals(0, coordinator.cachedSourceCount());
+    }
+
+    @Test
+    public void officialTokenResolversUseBoundedSessionCacheByDefault() {
+        TvnStreamResolver tvn = new TvnStreamResolver();
+        MeganoticiasStreamResolver mega = new MeganoticiasStreamResolver();
+
+        assertTrue(tvn.cacheResolvedSource());
+        assertEquals(5L * 60L * 1000L, tvn.cacheTtlMillis());
+        assertTrue(mega.cacheResolvedSource());
+        assertEquals(5L * 60L * 1000L, mega.cacheTtlMillis());
+    }
+
+    @Test
+    public void invalidationRemovesTheCachedTokenBeforeTheNextOpen() throws Exception {
+        ResolverCoordinator coordinator = new ResolverCoordinator();
+        AtomicInteger calls = new AtomicInteger();
+        Channel channel = new Channel(
+                "TVN",
+                URI.create("https://example.org/fallback.m3u8"),
+                null,
+                "Chile",
+                Collections.singletonMap("tvg-id", "0104")
+        );
+        StreamResolver resolver = new StreamResolver() {
+            @Override public String getId() { return "tvn"; }
+            @Override public boolean supports(Channel value) { return true; }
+            @Override public long cacheTtlMillis() { return 60_000L; }
+            @Override public ResolvedPlaybackSource resolve(Channel value) {
+                int call = calls.incrementAndGet();
+                return ResolvedPlaybackSource.dynamic(
+                        "tvn",
+                        "0104",
+                        URI.create("https://example.org/token-" + call + ".m3u8"),
+                        Collections.singletonMap("Referer", "https://live.tvn.cl/"),
+                        "test-agent",
+                        System.currentTimeMillis() + 60_000L
+                );
+            }
+        };
+
+        assertEquals(
+                "https://example.org/token-1.m3u8",
+                coordinator.resolve(channel, resolver, false).getPlaybackUri().toString()
+        );
+        coordinator.invalidate(channel, resolver);
+        assertEquals(
+                "https://example.org/token-2.m3u8",
+                coordinator.resolve(channel, resolver, false).getPlaybackUri().toString()
+        );
+        assertEquals(2, calls.get());
+    }
+
+    @Test
     public void explicitNoCachePolicyWinsEvenWhenResolverReportsATtl() throws Exception {
         ResolverCoordinator coordinator = new ResolverCoordinator();
         AtomicInteger calls = new AtomicInteger();

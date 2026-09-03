@@ -715,17 +715,6 @@
                             android:textSize="@dimen/settings_body_text_size" />
 
                         <TextView
-                            android:id="@+id/highfly_premium_storage_info"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
-                            android:focusable="false"
-                            android:importantForAccessibility="yes"
-                            android:text="@string/highfly_premium_storage_info"
-                            android:textColor="@color/muted"
-                            android:textSize="@dimen/settings_body_text_size" />
-
-                        <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"

@@ -11,6 +11,7 @@ public final class TvnStreamResolver implements StreamResolver {
     private static final String TVG_ID = "0104";
     private static final String LIVE_PAGE = "https://live.tvn.cl/";
     private static final String PLAYLIST_BASE = "https://mdstrm.com/live-stream-playlist/";
+    private static final long DEFAULT_TOKEN_CACHE_TTL_MILLIS = 5L * 60L * 1000L;
 
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
@@ -53,11 +54,17 @@ public final class TvnStreamResolver implements StreamResolver {
     }
 
     @Override public long cacheTtlMillis() {
-        return definition == null ? 0L : definition.getCacheTtlMillis();
+        if (definition == null) return DEFAULT_TOKEN_CACHE_TTL_MILLIS;
+        long configured = definition.getCacheTtlMillis();
+        if (configured <= 0L) return 0L;
+        // Token lifetime is provider-controlled. Keep the externally
+        // configurable value bounded so a stale token cannot remain reusable
+        // for an unexpectedly long period.
+        return Math.min(configured, DEFAULT_TOKEN_CACHE_TTL_MILLIS);
     }
 
     @Override public boolean cacheResolvedSource() {
-        return false;
+        return cacheTtlMillis() > 0L;
     }
 
     @Override

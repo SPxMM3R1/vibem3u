@@ -34,10 +34,11 @@ public interface StreamResolver {
     /**
      * Whether the resolved playback URL may be reused during this process.
      *
-     * <p>Implementations that return temporary URLs or tokens should return
-     * {@code false}. They may still expose a TTL for diagnostics or for
-     * stable metadata, but a temporary playback source must be generated
-     * again when the channel is opened.</p>
+     * <p>Resolvers that return temporary URLs or tokens should opt in only
+     * when the provider permits bounded reuse during the current process. A
+     * positive TTL is mandatory so the coordinator can discard the source
+     * before its session window ends; resolvers that require a fresh token for
+     * every opening must return {@code false}.</p>
      */
     default boolean cacheResolvedSource() {
         return true;

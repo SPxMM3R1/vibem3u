@@ -67,7 +67,6 @@
     <string name="highfly_premium_status_valid">Acceso válido · %1$s</string>
     <string name="highfly_premium_status_invalid">Token Premium inválido o expirado.</string>
     <string name="highfly_premium_status_error">No se pudo verificar el acceso Premium.</string>
-    <string name="highfly_premium_storage_info">La credencial se conserva cifrada en este dispositivo y se elimina solo al quitar el acceso.</string>
     <string name="highfly_premium_region_title">Región del catálogo</string>
     <string name="highfly_premium_region_main">Principal</string>
     <string name="highfly_premium_region_us1">US-1</string>

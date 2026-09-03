@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026.09.01.2",
+  "catalogVersion": "2026.09.03.1",
   "providers": [
     {
       "id": "tvn",
       "name": "TVN",
       "engine": "tvn",
       "enabledByDefault": true,
-      "cacheTtlSeconds": 0,
+      "cacheTtlSeconds": 300,
       "match": {
         "tvgIds": [
           "0104"
@@ -26,7 +26,7 @@
       "name": "Meganoticias dinamico",
       "engine": "meganoticias",
       "enabledByDefault": true,
-      "cacheTtlSeconds": 0,
+      "cacheTtlSeconds": 300,
       "match": {
         "tvgIds": [
           "Meganoticias.cl",
