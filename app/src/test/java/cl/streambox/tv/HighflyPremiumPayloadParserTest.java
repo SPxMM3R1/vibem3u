@@ -25,6 +25,78 @@ public final class HighflyPremiumPayloadParserTest {
     }
 
     @Test
+    public void tokenInputAcceptsRawTokenAndOfficialManifestUrls() throws Exception {
+        HighflyPremiumTokenRules.ParsedInput raw =
+                HighflyPremiumTokenRules.parseInput("  premium-token_2026  ");
+        assertEquals("premium-token_2026", raw.getToken());
+        assertEquals(null, raw.getRegion());
+
+        HighflyPremiumTokenRules.ParsedInput manifest =
+                HighflyPremiumTokenRules.parseInput(
+                        "https://premium-us1.highfly.dev/premium-token_2026/"
+                                + "eyJ0em9uZSI6IlVUQyJifQ/manifest.json"
+                );
+        assertEquals("premium-token_2026", manifest.getToken());
+        assertEquals(HighflyPremiumPreferences.Region.US1, manifest.getRegion());
+
+        HighflyPremiumTokenRules.ParsedInput stremio =
+                HighflyPremiumTokenRules.parseInput(
+                        "stremio://premium-eu1.highfly.dev/premium-token_2026/manifest.json"
+                );
+        assertEquals(HighflyPremiumPreferences.Region.EU1, stremio.getRegion());
+    }
+
+    @Test
+    public void tokenInputRejectsExternalOrUnsafeManifestUrls() {
+        try {
+            HighflyPremiumTokenRules.parseInput(
+                    "https://example.com/premium-token_2026/manifest.json"
+            );
+            throw new AssertionError("Expected an external host to be rejected");
+        } catch (java.io.IOException expected) {
+            // Expected: only Highfly Premium hosts are accepted.
+        }
+
+        try {
+            HighflyPremiumTokenRules.parseInput(
+                    "https://premium.highfly.dev/premium%2Ftoken/manifest.json"
+            );
+            throw new AssertionError("Expected an encoded token to be rejected");
+        } catch (java.io.IOException expected) {
+            // Expected: the token must remain one safe path segment.
+        }
+    }
+
+    @Test
+    public void accountParserMatchesProviderMetadataVariants() throws Exception {
+        HighflyPremiumCatalogRepository.AccountInfo booleanAccount =
+                HighflyPremiumCatalogRepository.parseAccount(
+                        "{\"active\":true,\"expires_at\":4102444800,\"plan\":1}"
+                );
+        assertTrue(booleanAccount.isUsable());
+        assertTrue(booleanAccount.isActive());
+
+        HighflyPremiumCatalogRepository.AccountInfo stringAccount =
+                HighflyPremiumCatalogRepository.parseAccount(
+                        "{\"active\":\"true\",\"expires_at\":\"4102444800\","
+                                + "\"plan\":\"2\"}"
+                );
+        assertTrue(stringAccount.isUsable());
+        assertEquals("Standard", stringAccount.getPlanName());
+
+        HighflyPremiumCatalogRepository.AccountInfo noFlagAccount =
+                HighflyPremiumCatalogRepository.parseAccount("{\"plan\":3}");
+        assertTrue(noFlagAccount.isUsable());
+        assertEquals("Pro", noFlagAccount.getPlanName());
+
+        HighflyPremiumCatalogRepository.AccountInfo revokedAccount =
+                HighflyPremiumCatalogRepository.parseAccount(
+                        "{\"active\":false,\"plan\":1}"
+                );
+        assertFalse(revokedAccount.isUsable());
+    }
+
+    @Test
     public void parsesManifestCatalogsAndRejectsRecapCatalogs() throws Exception {
         HighflyPremiumPayloadParser.ManifestInfo manifest =
                 HighflyPremiumPayloadParser.parseManifest(

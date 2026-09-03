@@ -534,7 +534,10 @@ public final class SettingsActivity extends Activity {
 
     private void verifyHighflyPremiumToken() {
         String candidate = highflyPremiumToken.getText().toString().trim();
-        if (!HighflyPremiumTokenRules.isValid(candidate)) {
+        HighflyPremiumTokenRules.ParsedInput parsedInput;
+        try {
+            parsedInput = HighflyPremiumTokenRules.parseInput(candidate);
+        } catch (IOException error) {
             highflyPremiumStatus.setText(R.string.highfly_premium_status_invalid);
             setPremiumTokenFeedback(
                     R.string.highfly_premium_token_feedback_invalid,
@@ -543,19 +546,29 @@ public final class SettingsActivity extends Activity {
             return;
         }
 
+        final String token = parsedInput.getToken();
+        final HighflyPremiumPreferences.Region region = parsedInput.getRegion() == null
+                ? selectedHighflyPremiumRegion()
+                : parsedInput.getRegion();
+        // A manifest copied from Highfly/Stremio carries the selected server
+        // in its host. Keep the UI and the later playback preference aligned
+        // with that host instead of silently verifying against Main.
+        if (parsedInput.getRegion() != null) {
+            highflyPremiumRegionGroup.check(regionRadioId(region));
+        }
+
         setPremiumOperationEnabled(false);
         highflyPremiumStatus.setText(R.string.highfly_premium_status_verifying);
         setPremiumTokenFeedback(
                 R.string.highfly_premium_token_feedback_verifying,
                 R.color.amber
         );
-        HighflyPremiumPreferences.Region region = selectedHighflyPremiumRegion();
         HighflyPremiumCredentialStore.StorageMode storageMode = selectedPremiumStorageMode();
         updateExecutor.submit(() -> {
             try {
                 HighflyPremiumCatalogRepository.AccountInfo account =
-                        highflyPremiumCatalogRepository.verifyToken(candidate, region);
-                highflyPremiumCredentialStore.saveToken(candidate, storageMode);
+                        highflyPremiumCatalogRepository.verifyToken(token, region);
+                highflyPremiumCredentialStore.saveToken(token, storageMode);
                 highflyPremiumCredentialStore.recordVerification(account);
                 mainHandler.post(() -> {
                     highflyPremiumToken.setText("");

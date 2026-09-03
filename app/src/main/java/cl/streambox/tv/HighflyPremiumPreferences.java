@@ -53,6 +53,22 @@ public final class HighflyPremiumPreferences {
             return baseUrl;
         }
 
+        static Region fromHost(String host) {
+            if (host == null) return null;
+            String normalized = host.trim();
+            for (Region region : values()) {
+                try {
+                    if (java.net.URI.create(region.baseUrl).getHost().equalsIgnoreCase(normalized)) {
+                        return region;
+                    }
+                } catch (IllegalArgumentException ignored) {
+                    // The enum constants are compile-time URLs; keep this
+                    // defensive in case a future value is edited incorrectly.
+                }
+            }
+            return null;
+        }
+
         public static Region fromPreference(String value) {
             if (value != null) {
                 for (Region region : values()) {

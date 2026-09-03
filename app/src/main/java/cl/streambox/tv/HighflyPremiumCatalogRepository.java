@@ -399,27 +399,67 @@ public final class HighflyPremiumCatalogRepository {
         }
     }
 
-    private static AccountInfo parseAccount(String json) throws IOException {
+    static AccountInfo parseAccount(String json) throws IOException {
         if (json == null || json.isBlank()) throw new IOException("Respuesta Premium vacía.");
         try {
             JSONObject object = new JSONObject(json);
-            boolean active = object.optBoolean("active", false);
-            long expiresAtSeconds = object.optLong("expires_at", 0L);
+            /*
+             * Highfly's public Stremio configurator treats a successful
+             * verify.json HTTP response as the primary verification result.
+             * The metadata is displayed when present, but should not make a
+             * valid response fail merely because a deployment serializes a
+             * boolean or number differently. An explicit inactive/revoked
+             * value is still rejected below through AccountInfo.isUsable().
+             */
+            Boolean activeValue = readBoolean(object.opt("active"));
+            boolean activeKnown = activeValue != null;
+            boolean active = activeValue == null || activeValue;
+            long expiresAtSeconds = readLong(object.opt("expires_at"));
             long expiresAtMillis = expiresAtSeconds > 0L
                     && expiresAtSeconds <= Long.MAX_VALUE / 1000L
                     ? expiresAtSeconds * 1000L
                     : 0L;
-            int plan = object.optInt("plan", 0);
+            int plan = (int) readLong(object.opt("plan"));
             String planName = switch (plan) {
                 case 1 -> "Premium";
                 case 2 -> "Standard";
                 case 3 -> "Pro";
                 default -> "Premium";
             };
-            return new AccountInfo(active, expiresAtMillis, planName);
+            return new AccountInfo(active, activeKnown, expiresAtMillis, planName);
         } catch (Exception error) {
             throw new IOException("Respuesta de credencial Premium inválida.");
         }
+    }
+
+    private static Boolean readBoolean(Object value) {
+        if (value == null || value == JSONObject.NULL) return null;
+        if (value instanceof Boolean) return (Boolean) value;
+        if (value instanceof Number) return ((Number) value).doubleValue() != 0d;
+        if (value instanceof String) {
+            String normalized = ((String) value).trim().toLowerCase(Locale.ROOT);
+            if (normalized.isEmpty()) return null;
+            if (normalized.equals("true") || normalized.equals("1")
+                    || normalized.equals("yes") || normalized.equals("active")
+                    || normalized.equals("ok")) return true;
+            if (normalized.equals("false") || normalized.equals("0")
+                    || normalized.equals("no") || normalized.equals("inactive")
+                    || normalized.equals("revoked")) return false;
+        }
+        return null;
+    }
+
+    private static long readLong(Object value) {
+        if (value == null || value == JSONObject.NULL) return 0L;
+        if (value instanceof Number) return ((Number) value).longValue();
+        if (value instanceof String) {
+            try {
+                return Long.parseLong(((String) value).trim());
+            } catch (NumberFormatException ignored) {
+                return 0L;
+            }
+        }
+        return 0L;
     }
 
     private static List<String> selectCatalogIds(
@@ -542,11 +582,18 @@ public final class HighflyPremiumCatalogRepository {
 
     public static final class AccountInfo {
         private final boolean active;
+        private final boolean activeKnown;
         private final long expiresAtMillis;
         private final String planName;
 
-        AccountInfo(boolean active, long expiresAtMillis, String planName) {
+        AccountInfo(
+                boolean active,
+                boolean activeKnown,
+                long expiresAtMillis,
+                String planName
+        ) {
             this.active = active;
+            this.activeKnown = activeKnown;
             this.expiresAtMillis = Math.max(0L, expiresAtMillis);
             this.planName = planName == null || planName.isBlank() ? "Premium" : planName;
         }
@@ -568,7 +615,7 @@ public final class HighflyPremiumCatalogRepository {
         }
 
         public boolean isUsable() {
-            return active && !isExpired();
+            return (!activeKnown || active) && !isExpired();
         }
     }
 
