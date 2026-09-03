@@ -377,7 +377,11 @@ public final class HighflyPremiumCredentialStore {
 
     private SecretKey getOrCreateKey() throws GeneralSecurityException {
         KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
-        keyStore.load(null);
+        try {
+            keyStore.load(null);
+        } catch (IOException error) {
+            throw new GeneralSecurityException("No se pudo abrir el almacén seguro.", error);
+        }
         if (keyStore.containsAlias(KEY_ALIAS)) {
             return ((SecretKey) keyStore.getKey(KEY_ALIAS, null));
         }
