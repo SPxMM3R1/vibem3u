@@ -80,6 +80,8 @@ public final class MainActivity extends Activity {
     private static final long PLAYER_RETRY_DELAY_MS = 2_500;
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
     private static final long NO_RESOLUTION_REQUEST = -1L;
+    private static final int PREMIUM_STABLE_SOURCE_POSITION = 3;
+    private static final int PREMIUM_EVENT_SOURCE_POSITION = 4;
     private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.42 (Android TV)";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -97,6 +99,8 @@ public final class MainActivity extends Activity {
     private ResolverCatalogRepository resolverCatalogRepository;
     private ResolverPreferences resolverPreferences;
     private StreamResolverRegistry streamResolverRegistry;
+    private HighflyPremiumCredentialStore highflyPremiumCredentialStore;
+    private HighflyPremiumCatalogRepository highflyPremiumCatalogRepository;
     private Map<String, Integer> resolverChannelCounts = Collections.emptyMap();
     private final List<Channel> channels = new ArrayList<>();
     private final Map<Integer, Playlist> playlistsBySource = new LinkedHashMap<>();
@@ -231,6 +235,8 @@ public final class MainActivity extends Activity {
         playbackPreferences = new PlaybackPreferences(this);
         resolverCatalogRepository = new ResolverCatalogRepository(this);
         resolverPreferences = new ResolverPreferences(this);
+        highflyPremiumCredentialStore = HighflyPremiumCredentialStore.getInstance(this);
+        highflyPremiumCatalogRepository = new HighflyPremiumCatalogRepository(this);
         reloadResolverRegistry();
         bindViews();
         registerBackCallback();
@@ -248,12 +254,15 @@ public final class MainActivity extends Activity {
         try {
             streamResolverRegistry = new StreamResolverRegistry(
                     resolverCatalogRepository.load(),
-                    resolverPreferences
+                    resolverPreferences,
+                    highflyPremiumCatalogRepository
             );
         } catch (Exception ignored) {
             // The two original exact-ID resolvers remain available even if a
             // local catalogue update was interrupted or became incompatible.
-            streamResolverRegistry = new StreamResolverRegistry();
+            streamResolverRegistry = new StreamResolverRegistry(
+                    highflyPremiumCatalogRepository
+            );
         }
     }
 
@@ -392,8 +401,9 @@ public final class MainActivity extends Activity {
         List<PlaylistSource> sources = configuredSources == null
                 ? Collections.emptyList()
                 : new ArrayList<>(configuredSources);
-        String sourceSignature = PlaylistSource.signature(sources);
-        if (sourceSignature.isBlank()) {
+        boolean premiumConfigured = isHighflyPremiumConfigured();
+        String sourceSignature = playlistSourceSignature(sources);
+        if (sources.isEmpty() && !premiumConfigured) {
             if (!settingsOpen) openSettings();
             return;
         }
@@ -422,7 +432,11 @@ public final class MainActivity extends Activity {
         }
         loadFailed = false;
         if (!keepCurrentUi) {
-            showLoadingState(getString(R.string.loading_playlist));
+            showLoadingState(getString(
+                    premiumConfigured && sources.isEmpty()
+                            ? R.string.loading_premium_catalog
+                            : R.string.loading_playlist
+            ));
         }
         if (sourceChanged) {
             channels.clear();
@@ -489,6 +503,33 @@ public final class MainActivity extends Activity {
                     }));
                 }
 
+                final boolean premiumIncludeEvents = premiumConfigured
+                        && HighflyPremiumPreferences.includeEvents(MainActivity.this);
+                final Set<String> selectedPremiumEventIds = premiumConfigured
+                        ? HighflyPremiumPreferences.selectedEventIds(MainActivity.this)
+                        : Collections.emptySet();
+                Future<PremiumNetworkResult> premiumFuture = null;
+                // Stable Premium channels arrive through the cached/public
+                // Lista 3 source. The protected catalog is needed only when
+                // the user opted into temporary events; do not query it on
+                // every app start just to rebuild stable metadata.
+                if (premiumIncludeEvents && highflyPremiumCatalogRepository != null) {
+                    premiumFuture = networkExecutor.submit(() -> {
+                        try {
+                            HighflyPremiumCatalogRepository.PremiumPlaylists result =
+                                    highflyPremiumCatalogRepository.loadPlaylistsForDisplay(
+                                            HighflyPremiumPreferences.region(MainActivity.this),
+                                            premiumIncludeEvents,
+                                            selectedPremiumEventIds,
+                                            sourceChanged
+                                    );
+                            return PremiumNetworkResult.success(result);
+                        } catch (Exception error) {
+                            return PremiumNetworkResult.failure(error);
+                        }
+                    });
+                }
+
                 Map<Integer, Playlist> latest = new LinkedHashMap<>(baseline);
                 boolean contentChanged = false;
                 Throwable firstError = null;
@@ -512,8 +553,42 @@ public final class MainActivity extends Activity {
                     }
                 }
 
+                boolean premiumChanged = false;
+                if (premiumFuture != null) {
+                    PremiumNetworkResult result;
+                    try {
+                        result = premiumFuture.get();
+                    } catch (InterruptedException error) {
+                        Thread.currentThread().interrupt();
+                        result = PremiumNetworkResult.failure(error);
+                    } catch (Exception error) {
+                        result = PremiumNetworkResult.failure(error);
+                    }
+                    if (result.playlists != null) {
+                        // Lista 3 is the remote GitHub playlist already loaded
+                        // above. Only Lista 4 is reconstructed from the
+                        // protected catalog and kept in memory.
+                        latest.remove(PREMIUM_EVENT_SOURCE_POSITION);
+                        Playlist events = result.playlists.getEventPlaylist();
+                        if (events != null && !events.getChannels().isEmpty()) {
+                            latest.put(PREMIUM_EVENT_SOURCE_POSITION, events);
+                        }
+                        premiumChanged = true;
+                    } else if (firstError == null) {
+                        firstError = result.error;
+                    }
+                } else if (!premiumConfigured || !premiumIncludeEvents) {
+                    // A disabled Premium account must not leave an old
+                    // in-memory event list visible. Stable List 3 is removed
+                    // by the source signature/source set when Premium is off.
+                    latest.remove(PREMIUM_EVENT_SOURCE_POSITION);
+                    if (!premiumConfigured) {
+                        latest.remove(PREMIUM_STABLE_SOURCE_POSITION);
+                    }
+                }
+
                 Map<Integer, Playlist> finalPlaylists = new LinkedHashMap<>(latest);
-                boolean finalContentChanged = contentChanged || channels.isEmpty();
+                boolean finalContentChanged = contentChanged || premiumChanged || channels.isEmpty();
                 boolean hasUsablePlaylist = !finalPlaylists.isEmpty() || existingPlaylist;
                 Throwable finalError = firstError;
                 mainHandler.post(() -> {
@@ -580,6 +655,29 @@ public final class MainActivity extends Activity {
 
         private static PlaylistNetworkResult failure(PlaylistSource source, Throwable error) {
             return new PlaylistNetworkResult(source, null, false, error);
+        }
+    }
+
+    private static final class PremiumNetworkResult {
+        private final HighflyPremiumCatalogRepository.PremiumPlaylists playlists;
+        private final Throwable error;
+
+        private PremiumNetworkResult(
+                HighflyPremiumCatalogRepository.PremiumPlaylists playlists,
+                Throwable error
+        ) {
+            this.playlists = playlists;
+            this.error = error;
+        }
+
+        private static PremiumNetworkResult success(
+                HighflyPremiumCatalogRepository.PremiumPlaylists playlists
+        ) {
+            return new PremiumNetworkResult(playlists, null);
+        }
+
+        private static PremiumNetworkResult failure(Throwable error) {
+            return new PremiumNetworkResult(null, error);
         }
     }
 
@@ -667,11 +765,7 @@ public final class MainActivity extends Activity {
 
         playlistsBySource.clear();
         if (playlists != null) playlistsBySource.putAll(playlists);
-        List<Channel> sourceChannels = new ArrayList<>();
-        for (Map.Entry<Integer, Playlist> entry : orderedPlaylistEntries(playlistsBySource)) {
-            Playlist playlist = entry.getValue();
-            if (playlist != null) sourceChannels.addAll(playlist.getChannels());
-        }
+        List<Channel> sourceChannels = buildOrderedChannelList(playlistsBySource);
         resolverChannelCounts = streamResolverRegistry.countChannels(sourceChannels);
         List<Channel> enabledChannels = new ArrayList<>();
         for (Channel candidate : sourceChannels) {
@@ -738,6 +832,21 @@ public final class MainActivity extends Activity {
             loadChannelLogo(selectedChannel, contentChanged);
             hideLoadingState();
         }
+    }
+
+    /**
+     * Flattens the configured sources and keeps the virtual Premium lists in
+     * their user-facing positions. Stable Premium entries replace an exact
+     * Highfly slot when the M3U exposes the same resolver ID; newly discovered
+     * stable entries are appended as Lista 3. Selected events are always
+     * appended after every other source as Lista 4.
+     */
+    private List<Channel> buildOrderedChannelList(Map<Integer, Playlist> playlists) {
+        return HighflyPremiumPlaylistMerger.merge(
+                playlists,
+                PREMIUM_STABLE_SOURCE_POSITION,
+                PREMIUM_EVENT_SOURCE_POSITION
+        );
     }
 
     private void showPlaylistError(String detail) {
@@ -1955,6 +2064,12 @@ public final class MainActivity extends Activity {
         cancelPlaybackResolution();
         resolverCoordinator.clear();
         if (streamResolverRegistry != null) streamResolverRegistry.clearSensitiveState();
+        if (highflyPremiumCatalogRepository != null) {
+            highflyPremiumCatalogRepository.clearSession();
+        }
+        if (highflyPremiumCredentialStore != null) {
+            highflyPremiumCredentialStore.clearSession();
+        }
         mainHandler.removeCallbacksAndMessages(null);
         if (contentTitle != null) contentTitle.release();
 
@@ -2157,7 +2272,8 @@ public final class MainActivity extends Activity {
         if (requestCode == SETTINGS_REQUEST) {
             settingsOpen = false;
             List<PlaylistSource> sources = getPlaylistSources();
-            if (resultCode == RESULT_OK && !sources.isEmpty()) {
+            if (resultCode == RESULT_OK
+                    && (!sources.isEmpty() || isHighflyPremiumConfigured())) {
                 applyPlaybackSettingsResult(data);
                 resolverCoordinator.clear();
                 reloadResolverRegistry();
@@ -2180,7 +2296,7 @@ public final class MainActivity extends Activity {
                     epgData = EpgData.empty();
                 }
                 refreshAfterSettings = true;
-            } else if (sources.isEmpty()) {
+            } else if (sources.isEmpty() && !isHighflyPremiumConfigured()) {
                 openSettings();
             }
         }
@@ -2201,7 +2317,31 @@ public final class MainActivity extends Activity {
         if (enabled2 && url2 != null && !url2.trim().isEmpty()) {
             sources.add(new PlaylistSource(2, url2));
         }
+        if (isHighflyPremiumConfigured()) {
+            sources.add(new PlaylistSource(
+                    PREMIUM_STABLE_SOURCE_POSITION,
+                    HighflyPremiumPreferences.STABLE_PLAYLIST_URL
+            ));
+        }
         return sources;
+    }
+
+    private boolean isHighflyPremiumConfigured() {
+        return highflyPremiumCredentialStore != null
+                && highflyPremiumCredentialStore.hasCredential()
+                && HighflyPremiumPreferences.isEnabled(this);
+    }
+
+    private String playlistSourceSignature(List<PlaylistSource> sources) {
+        String m3uSignature = PlaylistSource.signature(sources);
+        String premiumSignature = highflyPremiumCredentialStore == null
+                ? "premium=unavailable"
+                : HighflyPremiumPreferences.sourceSignature(
+                        this,
+                        highflyPremiumCredentialStore
+                );
+        return (m3uSignature.isBlank() ? "sources=none" : m3uSignature)
+                + "|premium=" + premiumSignature;
     }
 
     private boolean isChannelNavigationInverted() {
@@ -2339,7 +2479,7 @@ public final class MainActivity extends Activity {
         super.onStart();
         if (!settingsOpen && !refreshAfterSettings) {
             List<PlaylistSource> sources = getPlaylistSources();
-            if (sources.isEmpty()) {
+            if (sources.isEmpty() && !isHighflyPremiumConfigured()) {
                 openSettings();
             } else {
                 refreshPlaylists(sources);

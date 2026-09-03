@@ -23,11 +23,18 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.io.IOException;
 
 public final class SettingsActivity extends Activity {
     private static final float SETTINGS_PANEL_ASPECT_RATIO = 16f / 10f;
@@ -114,6 +121,22 @@ public final class SettingsActivity extends Activity {
     private Button automaticQualityButton;
     private final List<Button> qualityOptionButtons = new ArrayList<>();
     private final List<Button> qualityFocusButtons = new ArrayList<>();
+    private HighflyPremiumCredentialStore highflyPremiumCredentialStore;
+    private HighflyPremiumCatalogRepository highflyPremiumCatalogRepository;
+    private Switch highflyPremiumEnabled;
+    private EditText highflyPremiumToken;
+    private Button highflyPremiumVerifyButton;
+    private Button highflyPremiumQueryButton;
+    private Button highflyPremiumRemoveButton;
+    private TextView highflyPremiumStatus;
+    private RadioGroup highflyPremiumStorageGroup;
+    private RadioGroup highflyPremiumRegionGroup;
+    private RadioGroup highflyPremiumSortGroup;
+    private Switch highflyPremiumIncludeEvents;
+    private LinearLayout highflyPremiumEventsContainer;
+    private TextView highflyPremiumCatalogSummary;
+    private final Map<String, Switch> highflyPremiumEventSwitches = new LinkedHashMap<>();
+    private HighflyPremiumCatalog loadedHighflyPremiumCatalog;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -123,10 +146,14 @@ public final class SettingsActivity extends Activity {
         fitSettingsPanelToAspectRatio();
 
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        highflyPremiumCredentialStore = HighflyPremiumCredentialStore.getInstance(this);
+        highflyPremiumCatalogRepository = new HighflyPremiumCatalogRepository(this);
         String existingUrl = prefs.getString(KEY_PLAYLIST_URL, "");
         String existingUrl2 = prefs.getString(KEY_PLAYLIST_URL_2, "");
         hasExistingUrl = (existingUrl != null && !existingUrl.isBlank())
-                || (existingUrl2 != null && !existingUrl2.isBlank());
+                || (existingUrl2 != null && !existingUrl2.isBlank())
+                || (prefs.getBoolean(HighflyPremiumPreferences.KEY_ENABLED, false)
+                && highflyPremiumCredentialStore.hasCredential());
         if (Build.VERSION.SDK_INT >= 33) {
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
                     android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,
@@ -159,6 +186,18 @@ public final class SettingsActivity extends Activity {
         tvVooModeBoth = findViewById(R.id.tvvoo_mode_both);
         tvVooModeDirect = findViewById(R.id.tvvoo_mode_direct);
         tvVooModeExternal = findViewById(R.id.tvvoo_mode_external);
+        highflyPremiumEnabled = findViewById(R.id.highfly_premium_enabled);
+        highflyPremiumToken = findViewById(R.id.highfly_premium_token);
+        highflyPremiumVerifyButton = findViewById(R.id.highfly_premium_verify_button);
+        highflyPremiumQueryButton = findViewById(R.id.highfly_premium_query_button);
+        highflyPremiumRemoveButton = findViewById(R.id.highfly_premium_remove_button);
+        highflyPremiumStatus = findViewById(R.id.highfly_premium_status);
+        highflyPremiumStorageGroup = findViewById(R.id.highfly_premium_storage_group);
+        highflyPremiumRegionGroup = findViewById(R.id.highfly_premium_region_group);
+        highflyPremiumSortGroup = findViewById(R.id.highfly_premium_sort_group);
+        highflyPremiumIncludeEvents = findViewById(R.id.highfly_premium_include_events);
+        highflyPremiumEventsContainer = findViewById(R.id.highfly_premium_events_container);
+        highflyPremiumCatalogSummary = findViewById(R.id.highfly_premium_catalog_summary);
         tabs = new TextView[]{
                 findViewById(R.id.tab_general),
                 findViewById(R.id.tab_playback),
@@ -180,6 +219,7 @@ public final class SettingsActivity extends Activity {
         resolverCatalogRepository = new ResolverCatalogRepository(this);
         resolverPreferences = new ResolverPreferences(this);
         initializeTvVooResolutionMode();
+        initializeHighflyPremiumOptions();
         urlInput.setText(existingUrl);
         urlInput.setSelection(urlInput.length());
         urlInput2.setText(existingUrl2 == null ? "" : existingUrl2);
@@ -209,6 +249,9 @@ public final class SettingsActivity extends Activity {
             updateStatus.setVisibility(View.VISIBLE);
         }
         resolverUpdateButton.setOnClickListener(v -> checkResolverUpdates());
+        highflyPremiumVerifyButton.setOnClickListener(v -> verifyHighflyPremiumToken());
+        highflyPremiumQueryButton.setOnClickListener(v -> queryHighflyPremiumCatalog());
+        highflyPremiumRemoveButton.setOnClickListener(v -> removeHighflyPremiumAccess());
         for (int index = 0; index < tabs.length; index++) {
             final int tabIndex = index;
             tabs[index].setOnClickListener(v -> showTab(tabIndex, true));
@@ -219,6 +262,10 @@ public final class SettingsActivity extends Activity {
         });
         urlInput2.setOnEditorActionListener((v, actionId, event) -> {
             save();
+            return true;
+        });
+        highflyPremiumToken.setOnEditorActionListener((v, actionId, event) -> {
+            verifyHighflyPremiumToken();
             return true;
         });
 
@@ -366,6 +413,304 @@ public final class SettingsActivity extends Activity {
         if (tabs != null && tabs.length > TAB_PLAYBACK) {
             tabs[TAB_PLAYBACK].setNextFocusDownId(playbackFirstFocus.getId());
         }
+    }
+
+    private void initializeHighflyPremiumOptions() {
+        highflyPremiumEnabled.setChecked(
+                HighflyPremiumPreferences.isEnabled(this)
+        );
+        highflyPremiumIncludeEvents.setChecked(
+                HighflyPremiumPreferences.includeEvents(this)
+        );
+
+        highflyPremiumStorageGroup.check(
+                highflyPremiumCredentialStore.getStorageMode()
+                        == HighflyPremiumCredentialStore.StorageMode.ENCRYPTED
+                        ? R.id.highfly_premium_storage_encrypted
+                        : R.id.highfly_premium_storage_memory
+        );
+        highflyPremiumRegionGroup.check(regionRadioId(
+                HighflyPremiumPreferences.region(this)
+        ));
+        highflyPremiumSortGroup.check(sortRadioId(
+                HighflyPremiumPreferences.streamSort(this)
+        ));
+        renderHighflyPremiumStatus();
+        highflyPremiumCatalogSummary.setText(R.string.highfly_premium_catalog_empty);
+        highflyPremiumEventsContainer.removeAllViews();
+        highflyPremiumEventsContainer.setVisibility(View.GONE);
+    }
+
+    private int regionRadioId(HighflyPremiumPreferences.Region region) {
+        if (region == HighflyPremiumPreferences.Region.US1) {
+            return R.id.highfly_premium_region_us1;
+        }
+        if (region == HighflyPremiumPreferences.Region.US2) {
+            return R.id.highfly_premium_region_us2;
+        }
+        if (region == HighflyPremiumPreferences.Region.EU1) {
+            return R.id.highfly_premium_region_eu1;
+        }
+        return R.id.highfly_premium_region_main;
+    }
+
+    private int sortRadioId(HighflyPremiumPreferences.StreamSort sort) {
+        if (sort == HighflyPremiumPreferences.StreamSort.DEFAULT) {
+            return R.id.highfly_premium_sort_default;
+        }
+        if (sort == HighflyPremiumPreferences.StreamSort.LOWEST_FIRST) {
+            return R.id.highfly_premium_sort_low;
+        }
+        return R.id.highfly_premium_sort_high;
+    }
+
+    private HighflyPremiumPreferences.Region selectedHighflyPremiumRegion() {
+        int checkedId = highflyPremiumRegionGroup.getCheckedRadioButtonId();
+        if (checkedId == R.id.highfly_premium_region_us1) {
+            return HighflyPremiumPreferences.Region.US1;
+        }
+        if (checkedId == R.id.highfly_premium_region_us2) {
+            return HighflyPremiumPreferences.Region.US2;
+        }
+        if (checkedId == R.id.highfly_premium_region_eu1) {
+            return HighflyPremiumPreferences.Region.EU1;
+        }
+        return HighflyPremiumPreferences.Region.MAIN;
+    }
+
+    private HighflyPremiumCredentialStore.StorageMode selectedPremiumStorageMode() {
+        return highflyPremiumStorageGroup.getCheckedRadioButtonId()
+                == R.id.highfly_premium_storage_encrypted
+                ? HighflyPremiumCredentialStore.StorageMode.ENCRYPTED
+                : HighflyPremiumCredentialStore.StorageMode.MEMORY;
+    }
+
+    private HighflyPremiumPreferences.StreamSort selectedPremiumStreamSort() {
+        int checkedId = highflyPremiumSortGroup.getCheckedRadioButtonId();
+        if (checkedId == R.id.highfly_premium_sort_default) {
+            return HighflyPremiumPreferences.StreamSort.DEFAULT;
+        }
+        if (checkedId == R.id.highfly_premium_sort_low) {
+            return HighflyPremiumPreferences.StreamSort.LOWEST_FIRST;
+        }
+        return HighflyPremiumPreferences.StreamSort.HIGHEST_FIRST;
+    }
+
+    private void verifyHighflyPremiumToken() {
+        String candidate = highflyPremiumToken.getText().toString().trim();
+        if (!HighflyPremiumTokenRules.isValid(candidate)) {
+            highflyPremiumStatus.setText(R.string.highfly_premium_status_invalid);
+            return;
+        }
+
+        setPremiumOperationEnabled(false);
+        highflyPremiumStatus.setText(R.string.highfly_premium_status_verifying);
+        HighflyPremiumPreferences.Region region = selectedHighflyPremiumRegion();
+        HighflyPremiumCredentialStore.StorageMode storageMode = selectedPremiumStorageMode();
+        updateExecutor.submit(() -> {
+            try {
+                HighflyPremiumCatalogRepository.AccountInfo account =
+                        highflyPremiumCatalogRepository.verifyToken(candidate, region);
+                highflyPremiumCredentialStore.saveToken(candidate, storageMode);
+                highflyPremiumCredentialStore.recordVerification(account);
+                mainHandler.post(() -> {
+                    highflyPremiumToken.setText("");
+                    highflyPremiumEnabled.setChecked(true);
+                    renderHighflyPremiumStatus();
+                    setPremiumOperationEnabled(true);
+                });
+            } catch (HighflyPremiumCatalogRepository.CredentialRejectedException error) {
+                mainHandler.post(() -> {
+                    highflyPremiumStatus.setText(R.string.highfly_premium_status_invalid);
+                    setPremiumOperationEnabled(true);
+                });
+            } catch (Exception error) {
+                mainHandler.post(() -> {
+                    highflyPremiumStatus.setText(R.string.highfly_premium_status_error);
+                    setPremiumOperationEnabled(true);
+                });
+            }
+        });
+    }
+
+    private void queryHighflyPremiumCatalog() {
+        if (!highflyPremiumCredentialStore.hasCredential()) {
+            highflyPremiumStatus.setText(R.string.highfly_premium_token_required);
+            return;
+        }
+
+        setPremiumOperationEnabled(false);
+        highflyPremiumStatus.setText(R.string.highfly_premium_catalog_querying);
+        HighflyPremiumPreferences.Region region = selectedHighflyPremiumRegion();
+        updateExecutor.submit(() -> {
+            try {
+                HighflyPremiumCatalog catalog = highflyPremiumCatalogRepository.queryCatalog(
+                        region,
+                        true,
+                        true
+                );
+                mainHandler.post(() -> {
+                    loadedHighflyPremiumCatalog = catalog;
+                    renderHighflyPremiumCatalog(catalog);
+                    renderHighflyPremiumStatus();
+                    setPremiumOperationEnabled(true);
+                });
+            } catch (HighflyPremiumCatalogRepository.CredentialRejectedException error) {
+                highflyPremiumCredentialStore.recordInvalid();
+                mainHandler.post(() -> {
+                    highflyPremiumStatus.setText(R.string.highfly_premium_status_invalid);
+                    setPremiumOperationEnabled(true);
+                });
+            } catch (Exception error) {
+                mainHandler.post(() -> {
+                    highflyPremiumStatus.setText(R.string.highfly_premium_status_error);
+                    setPremiumOperationEnabled(true);
+                });
+            }
+        });
+    }
+
+    private void renderHighflyPremiumStatus() {
+        HighflyPremiumCredentialStore.TokenStatus tokenStatus =
+                highflyPremiumCredentialStore.tokenStatus();
+        switch (tokenStatus.getStatus()) {
+            case VALID:
+                highflyPremiumStatus.setText(getString(
+                        R.string.highfly_premium_status_valid,
+                        premiumAccountLabel(tokenStatus)
+                ));
+                break;
+            case INVALID:
+            case EXPIRED:
+                highflyPremiumStatus.setText(R.string.highfly_premium_status_invalid);
+                break;
+            case UNKNOWN:
+                highflyPremiumStatus.setText(R.string.highfly_premium_status_verifying);
+                break;
+            default:
+                highflyPremiumStatus.setText(R.string.highfly_premium_status_not_configured);
+                break;
+        }
+    }
+
+    private String premiumAccountLabel(HighflyPremiumCredentialStore.TokenStatus status) {
+        String plan = safeString(status.getPlanName());
+        long expiresAt = status.getExpiresAtMillis();
+        if (expiresAt <= 0L) return plan.isBlank() ? "Premium" : plan;
+        String date = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                .format(new Date(expiresAt));
+        return (plan.isBlank() ? "Premium" : plan) + " · vence " + date;
+    }
+
+    private void renderHighflyPremiumCatalog(HighflyPremiumCatalog catalog) {
+        highflyPremiumEventSwitches.clear();
+        highflyPremiumEventsContainer.removeAllViews();
+        if (catalog == null) {
+            highflyPremiumCatalogSummary.setText(R.string.highfly_premium_catalog_empty);
+            highflyPremiumEventsContainer.setVisibility(View.GONE);
+            return;
+        }
+
+        Set<String> selected = HighflyPremiumPreferences.selectedEventIds(this);
+        View previous = findViewById(R.id.highfly_premium_sort_low);
+        int eventCount = 0;
+        for (HighflyPremiumCatalog.Entry entry : catalog.getEntries()) {
+            if (entry.getType() != HighflyPremiumCatalog.EntryType.TEMPORARY_EVENT) {
+                continue;
+            }
+            Switch eventSwitch = createPremiumEventSwitch(entry, selected.contains(entry.getId()));
+            highflyPremiumEventsContainer.addView(eventSwitch);
+            highflyPremiumEventSwitches.put(entry.getId(), eventSwitch);
+            previous.setNextFocusDownId(eventSwitch.getId());
+            eventSwitch.setNextFocusUpId(previous.getId());
+            previous = eventSwitch;
+            eventCount++;
+        }
+        if (eventCount == 0) {
+            highflyPremiumEventsContainer.setVisibility(View.GONE);
+            highflyPremiumCatalogSummary.setText(getString(
+                    R.string.highfly_premium_catalog_summary,
+                    catalog.count(HighflyPremiumCatalog.EntryType.STABLE_CHANNEL),
+                    0,
+                    catalog.count(HighflyPremiumCatalog.EntryType.UNSUPPORTED)
+            ));
+            previous.setNextFocusDownId(highflyPremiumRemoveButton.getId());
+            highflyPremiumRemoveButton.setNextFocusUpId(previous.getId());
+        } else {
+            highflyPremiumEventsContainer.setVisibility(View.VISIBLE);
+            previous.setNextFocusDownId(highflyPremiumRemoveButton.getId());
+            highflyPremiumRemoveButton.setNextFocusUpId(previous.getId());
+            highflyPremiumCatalogSummary.setText(getString(
+                    R.string.highfly_premium_catalog_summary,
+                    catalog.count(HighflyPremiumCatalog.EntryType.STABLE_CHANNEL),
+                    catalog.count(HighflyPremiumCatalog.EntryType.TEMPORARY_EVENT),
+                    catalog.count(HighflyPremiumCatalog.EntryType.UNSUPPORTED)
+            ));
+        }
+    }
+
+    private Switch createPremiumEventSwitch(
+            HighflyPremiumCatalog.Entry entry,
+            boolean selected
+    ) {
+        Switch eventSwitch = new Switch(this);
+        eventSwitch.setId(View.generateViewId());
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                getResources().getDimensionPixelSize(R.dimen.settings_control_height)
+        );
+        params.topMargin = dp(5);
+        eventSwitch.setLayoutParams(params);
+        eventSwitch.setBackgroundResource(R.drawable.settings_section_card);
+        eventSwitch.setFocusable(true);
+        eventSwitch.setGravity(Gravity.CENTER_VERTICAL);
+        eventSwitch.setPadding(dp(12), 0, dp(12), 0);
+        eventSwitch.setShowText(false);
+        eventSwitch.setText(entry.getName());
+        eventSwitch.setTextColor(getColor(R.color.white));
+        eventSwitch.setTextSize(
+                TypedValue.COMPLEX_UNIT_PX,
+                getResources().getDimension(R.dimen.settings_control_text_size)
+        );
+        eventSwitch.setChecked(selected);
+        if (Build.VERSION.SDK_INT >= 21) {
+            eventSwitch.setThumbTintList(getColorStateList(R.color.cyan));
+        }
+        return eventSwitch;
+    }
+
+    private void setPremiumOperationEnabled(boolean enabled) {
+        if (isFinishing()) return;
+        highflyPremiumVerifyButton.setEnabled(enabled);
+        highflyPremiumQueryButton.setEnabled(enabled);
+        highflyPremiumRemoveButton.setEnabled(enabled);
+    }
+
+    private void removeHighflyPremiumAccess() {
+        highflyPremiumCredentialStore.clearToken();
+        HighflyPremiumPreferences.saveSelectedEventIds(this, Collections.emptySet());
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean(HighflyPremiumPreferences.KEY_ENABLED, false)
+                .putBoolean(HighflyPremiumPreferences.KEY_INCLUDE_EVENTS, false)
+                .apply();
+        highflyPremiumEnabled.setChecked(false);
+        highflyPremiumIncludeEvents.setChecked(false);
+        highflyPremiumToken.setText("");
+        loadedHighflyPremiumCatalog = null;
+        highflyPremiumEventSwitches.clear();
+        highflyPremiumEventsContainer.removeAllViews();
+        highflyPremiumEventsContainer.setVisibility(View.GONE);
+        highflyPremiumCatalogSummary.setText(R.string.highfly_premium_catalog_empty);
+        renderHighflyPremiumStatus();
+    }
+
+    private void saveSelectedHighflyPremiumEvents() {
+        if (loadedHighflyPremiumCatalog == null) return;
+        LinkedHashSet<String> selected = new LinkedHashSet<>();
+        for (Map.Entry<String, Switch> entry : highflyPremiumEventSwitches.entrySet()) {
+            if (entry.getValue().isChecked()) selected.add(entry.getKey());
+        }
+        HighflyPremiumPreferences.saveSelectedEventIds(this, selected);
     }
 
     private String safeString(String value) {
@@ -634,10 +979,21 @@ public final class SettingsActivity extends Activity {
         String value2 = urlInput2.getText().toString().trim();
         boolean enabled1 = playlistOneEnabled.isChecked();
         boolean enabled2 = playlistTwoEnabled.isChecked();
-        if (!enabled1 && !enabled2) {
+        boolean premiumEnabled = highflyPremiumEnabled.isChecked();
+        boolean premiumConfigured = highflyPremiumCredentialStore.hasCredential();
+        if (!enabled1 && !enabled2 && !(premiumEnabled && premiumConfigured)) {
             errorText.setText(R.string.playlist_source_required);
             errorText.setVisibility(View.VISIBLE);
-            playlistOneEnabled.requestFocus();
+            (premiumEnabled ? highflyPremiumEnabled : playlistOneEnabled).requestFocus();
+            return;
+        }
+        if (premiumEnabled && !premiumConfigured) {
+            boolean tokenWasEntered = !highflyPremiumToken.getText().toString().trim().isEmpty();
+            errorText.setText(tokenWasEntered
+                    ? R.string.highfly_premium_token_verify_required
+                    : R.string.highfly_premium_token_required);
+            errorText.setVisibility(View.VISIBLE);
+            highflyPremiumToken.requestFocus();
             return;
         }
         if (enabled1 && !isValidPlaylistUrl(value)) {
@@ -661,7 +1017,32 @@ public final class SettingsActivity extends Activity {
                 .putBoolean(KEY_PLAYLIST_ENABLED_2, enabled2)
                 .putBoolean(KEY_INVERT_CHANNEL_KEYS, invertChannelKeys.isChecked())
                 .putBoolean(KEY_NORMALIZE_VOLUME, normalizeVolume.isChecked())
+                .putBoolean(HighflyPremiumPreferences.KEY_ENABLED, premiumEnabled)
+                .putBoolean(
+                        HighflyPremiumPreferences.KEY_INCLUDE_EVENTS,
+                        highflyPremiumIncludeEvents.isChecked()
+                )
+                .putString(
+                        HighflyPremiumPreferences.KEY_REGION,
+                        selectedHighflyPremiumRegion().getPreferenceValue()
+                )
+                .putString(
+                        HighflyPremiumPreferences.KEY_STREAM_SORT,
+                        selectedPremiumStreamSort().getPreferenceValue()
+                )
                 .apply();
+        saveSelectedHighflyPremiumEvents();
+        if (premiumConfigured
+                && highflyPremiumCredentialStore.getStorageMode()
+                != selectedPremiumStorageMode()) {
+            try {
+                highflyPremiumCredentialStore.changeStorageMode(selectedPremiumStorageMode());
+            } catch (IOException error) {
+                errorText.setText(R.string.highfly_premium_status_error);
+                errorText.setVisibility(View.VISIBLE);
+                return;
+            }
+        }
         for (Map.Entry<String, Switch> entry : resolverGroupSwitches.entrySet()) {
             ResolverDefinition definition = resolverCatalog == null
                     ? null

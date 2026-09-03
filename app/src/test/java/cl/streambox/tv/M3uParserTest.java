@@ -89,4 +89,28 @@ public class M3uParserTest {
         );
         assertEquals("on_play", channel.getAttributes().get("x-resolver-refresh"));
     }
+
+    @Test
+    public void preservesStableHighflySlugContractWithoutAPlaybackToken() {
+        String playlist = "#EXTM3U x-tvg-url=\"https://example.org/epg.xml\"\n"
+                + "#EXTINF:-1 tvg-id=\"SkySportsF1.uk\" "
+                + "x-resolver=\"highfly\" "
+                + "x-resolver-id=\"now-sky-sports-f1-free\" "
+                + "x-highfly-premium-stable=\"true\" "
+                + "x-highfly-premium-id=\"leaf:now-sky-sports-f1-free\" "
+                + "x-highfly-premium-kind=\"estable\" "
+                + "x-highfly-premium-list=\"3\",Sky Sports F1\n"
+                + "https://leaf.highfly.dev/m3u/now-sky-sports-f1-free/live.m3u8\n";
+
+        Channel channel = M3uParser.parse(
+                playlist,
+                URI.create("https://example.org/3.m3u")
+        ).get(0);
+
+        assertEquals("now-sky-sports-f1-free", channel.getAttributes().get("x-resolver-id"));
+        assertEquals("leaf:now-sky-sports-f1-free", channel.getAttributes()
+                .get("x-highfly-premium-id"));
+        assertEquals("true", channel.getAttributes().get("x-highfly-premium-stable"));
+        assertFalse(channel.getStreamUri().toString().contains("token"));
+    }
 }

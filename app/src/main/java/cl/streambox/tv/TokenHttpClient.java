@@ -12,6 +12,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.Locale;
 
 /** Small cancellable HTTP client for provider pages and token APIs. */
 public final class TokenHttpClient {
@@ -59,7 +61,22 @@ public final class TokenHttpClient {
             int maxResponseBytes,
             String range
     ) throws IOException {
-        return getPublicInternal(url, headers, maxResponseBytes, range, false);
+        return getPublicInternal(url, headers, maxResponseBytes, range, false, null);
+    }
+
+    /**
+     * GET whose initial URL and every redirect must remain on a known host.
+     * This is used for credential-bearing provider endpoints. The allowlist is
+     * deliberately checked before every connection, including the final URL.
+     */
+    public Response getPublicOnHosts(
+            String url,
+            Map<String, String> headers,
+            int maxResponseBytes,
+            String range,
+            Set<String> allowedHosts
+    ) throws IOException {
+        return getPublicInternal(url, headers, maxResponseBytes, range, false, allowedHosts);
     }
 
     /**
@@ -85,7 +102,7 @@ public final class TokenHttpClient {
             int maxResponseBytes,
             String range
     ) throws IOException {
-        return getPublicInternal(url, headers, maxResponseBytes, range, true);
+        return getPublicInternal(url, headers, maxResponseBytes, range, true, null);
     }
 
     private Response getInternal(
@@ -180,7 +197,8 @@ public final class TokenHttpClient {
             Map<String, String> headers,
             int maxResponseBytes,
             String range,
-            boolean prefixOnly
+            boolean prefixOnly,
+            Set<String> allowedHosts
     ) throws IOException {
         if (Thread.currentThread().isInterrupted()) {
             throw new IOException("Solicitud cancelada.");
@@ -194,6 +212,7 @@ public final class TokenHttpClient {
 
         for (int redirects = 0; redirects <= MAX_PUBLIC_REDIRECTS; redirects++) {
             PublicStreamPolicy.requirePublicHttp(currentUri);
+            requireAllowedHost(currentUri, allowedHosts);
             HttpURLConnection connection = null;
             try {
                 connection = (HttpURLConnection) currentUri.toURL().openConnection();
@@ -250,6 +269,7 @@ public final class TokenHttpClient {
                         throw new IOException("El servidor devolvió una URL inválida.", error);
                     }
                     PublicStreamPolicy.requirePublicHttp(finalUri);
+                    requireAllowedHost(finalUri, allowedHosts);
                     Map<String, String> responseHeaders = new LinkedHashMap<>();
                     for (Map.Entry<String, java.util.List<String>> entry
                             : connection.getHeaderFields().entrySet()) {
@@ -273,6 +293,22 @@ public final class TokenHttpClient {
             }
         }
         throw new IOException("Demasiadas redirecciones del stream.");
+    }
+
+    private static void requireAllowedHost(URI uri, Set<String> allowedHosts)
+            throws IOException {
+        if (allowedHosts == null) return;
+        String host = uri == null || uri.getHost() == null
+                ? ""
+                : uri.getHost().toLowerCase(Locale.ROOT);
+        boolean allowed = false;
+        for (String candidate : allowedHosts) {
+            if (candidate != null && candidate.trim().equalsIgnoreCase(host)) {
+                allowed = true;
+                break;
+            }
+        }
+        if (!allowed) throw new IOException("El host del endpoint no está permitido.");
     }
 
     private static boolean isRedirect(int statusCode) {

@@ -564,7 +564,7 @@
                             android:imeOptions="actionDone"
                             android:inputType="textUri"
                             android:nextFocusUp="@id/playlist_2_enabled"
-                            android:nextFocusDown="@id/save_button"
+                            android:nextFocusDown="@id/highfly_premium_enabled"
                             android:singleLine="true"
                             android:textColor="@color/white"
                             android:textColorHint="#78909C"
@@ -578,6 +578,318 @@
                             android:textColor="@color/red"
                             android:textSize="@dimen/settings_body_text_size"
                             android:visibility="gone" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/highfly_premium_card"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/settings_section_margin_top"
+                        android:background="@drawable/settings_section_card"
+                        android:orientation="vertical"
+                        android:padding="@dimen/settings_card_padding">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/highfly_premium_title"
+                            android:textColor="@color/cyan"
+                            android:textSize="@dimen/settings_card_title_text_size"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="5dp"
+                            android:text="@string/highfly_premium_description"
+                            android:textColor="@color/muted"
+                            android:textSize="@dimen/settings_body_text_size" />
+
+                        <Switch
+                            android:id="@+id/highfly_premium_enabled"
+                            android:layout_width="match_parent"
+                            android:layout_height="@dimen/settings_control_height"
+                            android:layout_marginTop="12dp"
+                            android:background="@drawable/settings_section_card"
+                            android:focusable="true"
+                            android:nextFocusUp="@id/playlist_url_2"
+                            android:nextFocusDown="@id/highfly_premium_token"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:showText="false"
+                            android:text="@string/highfly_premium_enabled"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/settings_control_text_size"
+                            android:thumbTint="@color/cyan" />
+
+                        <EditText
+                            android:id="@+id/highfly_premium_token"
+                            android:layout_width="match_parent"
+                            android:layout_height="@dimen/settings_control_height"
+                            android:layout_marginTop="6dp"
+                            android:background="@drawable/settings_input"
+                            android:hint="@string/highfly_premium_token_hint"
+                            android:imeOptions="actionDone"
+                            android:inputType="textPassword|textNoSuggestions"
+                            android:nextFocusUp="@id/highfly_premium_enabled"
+                            android:nextFocusDown="@id/highfly_premium_verify_button"
+                            android:singleLine="true"
+                            android:textColor="@color/white"
+                            android:textColorHint="#78909C"
+                            android:textSize="@dimen/settings_control_text_size" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:orientation="horizontal">
+
+                            <Button
+                                android:id="@+id/highfly_premium_verify_button"
+                                android:layout_width="0dp"
+                                android:layout_height="@dimen/settings_action_height"
+                                android:layout_marginEnd="6dp"
+                                android:layout_weight="1"
+                                android:background="@drawable/focus_button"
+                                android:focusable="true"
+                                android:includeFontPadding="false"
+                                android:minHeight="0dp"
+                                android:minWidth="0dp"
+                                android:nextFocusUp="@id/highfly_premium_token"
+                                android:nextFocusDown="@id/highfly_premium_query_button"
+                                android:text="@string/highfly_premium_verify"
+                                android:textColor="@color/white"
+                                android:textSize="@dimen/settings_action_text_size" />
+
+                            <Button
+                                android:id="@+id/highfly_premium_query_button"
+                                android:layout_width="0dp"
+                                android:layout_height="@dimen/settings_action_height"
+                                android:layout_marginStart="6dp"
+                                android:layout_weight="1"
+                                android:background="@drawable/focus_button"
+                                android:focusable="true"
+                                android:includeFontPadding="false"
+                                android:minHeight="0dp"
+                                android:minWidth="0dp"
+                                android:nextFocusUp="@id/highfly_premium_verify_button"
+                                android:nextFocusDown="@id/highfly_premium_remove_button"
+                                android:text="@string/highfly_premium_query_catalog"
+                                android:textColor="@color/white"
+                                android:textSize="@dimen/settings_action_text_size" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/highfly_premium_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="@string/highfly_premium_status_not_configured"
+                            android:textColor="@color/muted"
+                            android:textSize="@dimen/settings_body_text_size" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:text="@string/highfly_premium_storage_title"
+                            android:textColor="@color/cyan"
+                            android:textSize="@dimen/settings_card_title_text_size"
+                            android:textStyle="bold" />
+
+                        <RadioGroup
+                            android:id="@+id/highfly_premium_storage_group"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <RadioButton
+                                android:id="@+id/highfly_premium_storage_memory"
+                                android:layout_width="match_parent"
+                                android:layout_height="@dimen/settings_control_height"
+                                android:buttonTint="@color/cyan"
+                                android:nextFocusUp="@id/highfly_premium_status"
+                                android:nextFocusDown="@id/highfly_premium_storage_encrypted"
+                                android:text="@string/highfly_premium_storage_memory"
+                                android:textColor="@color/white"
+                                android:textSize="@dimen/settings_control_text_size" />
+
+                            <RadioButton
+                                android:id="@+id/highfly_premium_storage_encrypted"
+                                android:layout_width="match_parent"
+                                android:layout_height="@dimen/settings_control_height"
+                                android:buttonTint="@color/cyan"
+                                android:nextFocusUp="@id/highfly_premium_storage_memory"
+                                android:nextFocusDown="@id/highfly_premium_region_main"
+                                android:text="@string/highfly_premium_storage_encrypted"
+                                android:textColor="@color/white"
+                                android:textSize="@dimen/settings_control_text_size" />
+                        </RadioGroup>
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="@string/highfly_premium_region_title"
+                            android:textColor="@color/cyan"
+                            android:textSize="@dimen/settings_card_title_text_size"
+                            android:textStyle="bold" />
+
+                        <RadioGroup
+                            android:id="@+id/highfly_premium_region_group"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <RadioButton
+                                android:id="@+id/highfly_premium_region_main"
+                                android:layout_width="0dp"
+                                android:layout_height="@dimen/settings_control_height"
+                                android:layout_weight="1"
+                                android:buttonTint="@color/cyan"
+                                android:text="@string/highfly_premium_region_main"
+                                android:textColor="@color/white"
+                                android:textSize="@dimen/settings_control_text_size" />
+
+                            <RadioButton
+                                android:id="@+id/highfly_premium_region_us1"
+                                android:layout_width="0dp"
+                                android:layout_height="@dimen/settings_control_height"
+                                android:layout_weight="1"
+                                android:buttonTint="@color/cyan"
+                                android:text="@string/highfly_premium_region_us1"
+                                android:textColor="@color/white"
+                                android:textSize="@dimen/settings_control_text_size" />
+
+                            <RadioButton
+                                android:id="@+id/highfly_premium_region_us2"
+                                android:layout_width="0dp"
+                                android:layout_height="@dimen/settings_control_height"
+                                android:layout_weight="1"
+                                android:buttonTint="@color/cyan"
+                                android:text="@string/highfly_premium_region_us2"
+                                android:textColor="@color/white"
+                                android:textSize="@dimen/settings_control_text_size" />
+
+                            <RadioButton
+                                android:id="@+id/highfly_premium_region_eu1"
+                                android:layout_width="0dp"
+                                android:layout_height="@dimen/settings_control_height"
+                                android:layout_weight="1"
+                                android:buttonTint="@color/cyan"
+                                android:text="@string/highfly_premium_region_eu1"
+                                android:textColor="@color/white"
+                                android:textSize="@dimen/settings_control_text_size" />
+                        </RadioGroup>
+
+                        <Switch
+                            android:id="@+id/highfly_premium_include_events"
+                            android:layout_width="match_parent"
+                            android:layout_height="@dimen/settings_control_height"
+                            android:layout_marginTop="8dp"
+                            android:background="@drawable/settings_section_card"
+                            android:focusable="true"
+                            android:nextFocusUp="@id/highfly_premium_region_main"
+                            android:nextFocusDown="@id/highfly_premium_sort_default"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:showText="false"
+                            android:text="@string/highfly_premium_include_events"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/settings_control_text_size"
+                            android:thumbTint="@color/cyan" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="5dp"
+                            android:text="@string/highfly_premium_events_description"
+                            android:textColor="@color/muted"
+                            android:textSize="@dimen/settings_body_text_size" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:text="@string/highfly_premium_sort_title"
+                            android:textColor="@color/cyan"
+                            android:textSize="@dimen/settings_card_title_text_size"
+                            android:textStyle="bold" />
+
+                        <RadioGroup
+                            android:id="@+id/highfly_premium_sort_group"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <RadioButton
+                                android:id="@+id/highfly_premium_sort_default"
+                                android:layout_width="match_parent"
+                                android:layout_height="@dimen/settings_control_height"
+                                android:buttonTint="@color/cyan"
+                                android:text="@string/highfly_premium_sort_default"
+                                android:textColor="@color/white"
+                                android:textSize="@dimen/settings_control_text_size" />
+
+                            <RadioButton
+                                android:id="@+id/highfly_premium_sort_high"
+                                android:layout_width="match_parent"
+                                android:layout_height="@dimen/settings_control_height"
+                                android:buttonTint="@color/cyan"
+                                android:text="@string/highfly_premium_sort_high"
+                                android:textColor="@color/white"
+                                android:textSize="@dimen/settings_control_text_size" />
+
+                            <RadioButton
+                                android:id="@+id/highfly_premium_sort_low"
+                                android:layout_width="match_parent"
+                                android:layout_height="@dimen/settings_control_height"
+                                android:buttonTint="@color/cyan"
+                                android:text="@string/highfly_premium_sort_low"
+                                android:nextFocusDown="@id/highfly_premium_remove_button"
+                                android:textColor="@color/white"
+                                android:textSize="@dimen/settings_control_text_size" />
+                        </RadioGroup>
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="9dp"
+                            android:text="@string/highfly_premium_event_selection_title"
+                            android:textColor="@color/cyan"
+                            android:textSize="@dimen/settings_card_title_text_size"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:id="@+id/highfly_premium_events_container"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical" />
+
+                        <TextView
+                            android:id="@+id/highfly_premium_catalog_summary"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="7dp"
+                            android:text="@string/highfly_premium_catalog_empty"
+                            android:textColor="@color/muted"
+                            android:textSize="@dimen/settings_body_text_size" />
+
+                        <Button
+                            android:id="@+id/highfly_premium_remove_button"
+                            android:layout_width="match_parent"
+                            android:layout_height="@dimen/settings_action_height"
+                            android:layout_marginTop="9dp"
+                            android:background="@drawable/focus_button"
+                            android:focusable="true"
+                            android:includeFontPadding="false"
+                            android:minHeight="0dp"
+                            android:minWidth="0dp"
+                            android:nextFocusUp="@id/highfly_premium_query_button"
+                            android:nextFocusDown="@id/save_button"
+                            android:text="@string/highfly_premium_remove"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/settings_action_text_size" />
                     </LinearLayout>
                 </LinearLayout>
 

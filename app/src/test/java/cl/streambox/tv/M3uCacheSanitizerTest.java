@@ -67,4 +67,22 @@ public final class M3uCacheSanitizerTest {
         assertTrue(sanitized.contains("?quality=high"));
         assertFalse(sanitized.contains("access_token"));
     }
+
+    @Test
+    public void canonicalizesStableHighflyFallbackAndNeverPersistsSignedPath() {
+        String playlist = "#EXTM3U\n"
+                + "#EXTINF:-1 tvg-id=\"SkySportsF1.uk\" "
+                + "x-resolver=\"highfly\" "
+                + "x-resolver-id=\"now-sky-sports-f1-free\" "
+                + "x-highfly-premium-stable=\"true\"\n"
+                + "https://leaf.highfly.dev/signed/SECRET/live.m3u8?access_token=old\n";
+
+        String sanitized = M3uCacheSanitizer.forDisk(playlist);
+
+        assertTrue(sanitized.contains(
+                "https://leaf.highfly.dev/m3u/now-sky-sports-f1-free/live.m3u8"
+        ));
+        assertFalse(sanitized.contains("SECRET"));
+        assertFalse(sanitized.contains("access_token"));
+    }
 }

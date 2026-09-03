@@ -14,8 +14,19 @@ final class M3uCacheSanitizer {
             Pattern.CASE_INSENSITIVE
     );
     private static final Pattern RESOLVER_PATTERN = Pattern.compile(
-            "\\bx-resolver\\s*=\\s*\\\"([^\\\"]*)\\\"",
+        "\\bx-resolver\\s*=\\s*\\\"([^\\\"]*)\\\"",
+        Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern RESOLVER_ID_PATTERN = Pattern.compile(
+            "\\bx-resolver-id\\s*=\\s*\\\"([^\\\"]*)\\\"",
             Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern PREMIUM_STABLE_PATTERN = Pattern.compile(
+            "\\bx-highfly-premium-stable\\s*=\\s*\\\"true\\\"",
+            Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern SAFE_HIGHFLY_SLUG = Pattern.compile(
+            "(?i)^[a-z0-9][a-z0-9_-]{1,127}$"
     );
     private static final Set<String> LEGACY_TVVOO_IDS = setOf(
             "premiersports1.ie", "premiersports2.ie", "skysportsracing.uk"
@@ -35,12 +46,27 @@ final class M3uCacheSanitizer {
         StringBuilder result = new StringBuilder(content.length());
         String pendingTvgId = "";
         String pendingResolver = "";
+        String pendingResolverId = "";
+        boolean pendingPremiumStable = false;
         for (String rawLine : content.split("\\r?\\n", -1)) {
             String line = rawLine.trim();
             if (line.regionMatches(true, 0, "#EXTINF:", 0, 8)) {
                 pendingTvgId = extractTvgId(line);
                 pendingResolver = extractResolver(line);
+                pendingResolverId = extractResolverId(line);
+                pendingPremiumStable = isPremiumStable(line, pendingResolver);
                 result.append(rawLine);
+            } else if (!line.isEmpty() && !line.startsWith("#")
+                    && pendingPremiumStable) {
+                // A stable Premium list is allowed to carry only the public
+                // leaf fallback. Canonicalizing it here also protects older
+                // or compromised List 3 responses from leaving a signed path
+                // in the persistent HTTP cache.
+                result.append(canonicalHighflyStableUrl(pendingResolverId));
+                pendingTvgId = "";
+                pendingResolver = "";
+                pendingResolverId = "";
+                pendingPremiumStable = false;
             } else if (!line.isEmpty() && !line.startsWith("#")
                     && isTvVoo(pendingTvgId, pendingResolver)) {
                 // TvVoo credentials are embedded in the path. Keeping only
@@ -49,11 +75,15 @@ final class M3uCacheSanitizer {
                 result.append(TVVOO_PLACEHOLDER);
                 pendingTvgId = "";
                 pendingResolver = "";
+                pendingResolverId = "";
+                pendingPremiumStable = false;
             } else if (!line.isEmpty() && !line.startsWith("#")
                     && isRenewableProvider(pendingTvgId, pendingResolver)) {
                 result.append(stripSensitiveCredentials(rawLine));
                 pendingTvgId = "";
                 pendingResolver = "";
+                pendingResolverId = "";
+                pendingPremiumStable = false;
             } else {
                 result.append(rawLine);
             }
@@ -71,6 +101,24 @@ final class M3uCacheSanitizer {
     private static String extractResolver(String line) {
         Matcher matcher = RESOLVER_PATTERN.matcher(line);
         return matcher.find() ? matcher.group(1).trim() : "";
+    }
+
+    private static String extractResolverId(String line) {
+        Matcher matcher = RESOLVER_ID_PATTERN.matcher(line);
+        return matcher.find() ? matcher.group(1).trim() : "";
+    }
+
+    private static boolean isPremiumStable(String line, String resolver) {
+        return "highfly".equalsIgnoreCase(resolver)
+                && PREMIUM_STABLE_PATTERN.matcher(line).find();
+    }
+
+    private static String canonicalHighflyStableUrl(String resolverId) {
+        String slug = resolverId == null ? "" : resolverId.trim().toLowerCase(Locale.ROOT);
+        if (!SAFE_HIGHFLY_SLUG.matcher(slug).matches()) {
+            return "https://resolver.invalid/highfly-premium.m3u8";
+        }
+        return "https://leaf.highfly.dev/m3u/" + slug + "/live.m3u8";
     }
 
     private static boolean isRenewableProvider(String tvgId, String resolver) {

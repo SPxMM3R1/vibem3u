@@ -65,6 +65,26 @@ public final class ResolverDefinition {
         this.compatibilityAliases = Collections.unmodifiableMap(aliases);
     }
 
+    /** Minimal safe definition used only if the remote resolver catalogue is unavailable. */
+    static ResolverDefinition fallbackHighfly() {
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("directTemplate", "https://leaf.highfly.dev/m3u/{id}/live.m3u8");
+        LinkedHashSet<String> hosts = new LinkedHashSet<>();
+        hosts.add("leaf.highfly.dev");
+        return new ResolverDefinition(
+                "highfly",
+                "Highfly",
+                "highfly",
+                true,
+                0L,
+                Collections.emptySet(),
+                Collections.emptyList(),
+                hosts,
+                config,
+                Collections.emptyMap()
+        );
+    }
+
     public String getId() { return id; }
     public String getDisplayName() { return displayName; }
     public String getEngine() { return engine; }
