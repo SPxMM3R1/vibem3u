@@ -935,6 +935,38 @@ public final class SettingsActivity extends Activity {
         return getCurrentFocus() instanceof EditText;
     }
 
+    private boolean isTabFocused() {
+        View focusedView = getCurrentFocus();
+        if (focusedView == null || tabs == null) return false;
+        for (TextView tab : tabs) {
+            if (focusedView == tab) return true;
+        }
+        return false;
+    }
+
+    private boolean isDescendantOf(View view, View ancestor) {
+        View current = view;
+        while (current != null) {
+            if (current == ancestor) return true;
+            if (!(current.getParent() instanceof View)) return false;
+            current = (View) current.getParent();
+        }
+        return false;
+    }
+
+    private boolean hasHorizontalTargetInCurrentPage(int keyCode) {
+        View focusedView = getCurrentFocus();
+        if (focusedView == null || tabPages == null
+                || selectedTabIndex < 0 || selectedTabIndex >= tabPages.length) {
+            return false;
+        }
+        int direction = keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
+                ? View.FOCUS_LEFT
+                : View.FOCUS_RIGHT;
+        View target = focusedView.focusSearch(direction);
+        return target != null && isDescendantOf(target, tabPages[selectedTabIndex]);
+    }
+
     private boolean isFooterButtonFocused() {
         View focusedView = getCurrentFocus();
         return focusedView == saveButton || focusedView == cancelButton;
@@ -1108,20 +1140,26 @@ public final class SettingsActivity extends Activity {
             return true;
         }
         if (event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
-            if ((event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_LEFT
-                    || event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
-                    && (isTextFieldFocused() || isFooterButtonFocused())) {
-                // Let the focused control consume the directional key. EditText
-                // uses it for the cursor and the footer buttons use their
-                // explicit nextFocusLeft/nextFocusRight links.
-                return super.dispatchKeyEvent(event);
-            }
-            if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_LEFT) {
-                moveTabFromRemote(-1);
-                return true;
-            }
-            if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_RIGHT) {
-                moveTabFromRemote(1);
+            boolean horizontalKey = event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_LEFT
+                    || event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_RIGHT;
+            if (horizontalKey) {
+                // Left/right changes tabs only while the tab bar itself has focus.
+                // Content controls, especially Premium's horizontal radio groups,
+                // must receive the key and must never escape to the tab bar.
+                if (isTabFocused()) {
+                    moveTabFromRemote(
+                            event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_LEFT
+                                    ? -1
+                                    : 1
+                    );
+                    return true;
+                }
+                if (isTextFieldFocused() || isFooterButtonFocused()
+                        || hasHorizontalTargetInCurrentPage(event.getKeyCode())) {
+                    return super.dispatchKeyEvent(event);
+                }
+                // There is no horizontal control in this page. Keep focus where it
+                // is instead of allowing Android's fallback search to reach a tab.
                 return true;
             }
             if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_UP
