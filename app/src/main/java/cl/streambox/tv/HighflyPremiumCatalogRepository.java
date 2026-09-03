@@ -446,15 +446,24 @@ public final class HighflyPremiumCatalogRepository {
 
     private static void sortCandidates(
             List<HighflyPremiumPayloadParser.StreamCandidate> candidates,
-            HighflyPremiumPreferences.StreamSort sort
+        HighflyPremiumPreferences.StreamSort sort
     ) {
         if (sort == null || sort == HighflyPremiumPreferences.StreamSort.DEFAULT) return;
-        Comparator<HighflyPremiumPayloadParser.StreamCandidate> comparator =
-                Comparator.comparingInt(HighflyPremiumPayloadParser.StreamCandidate::getQualityScore);
-        if (sort == HighflyPremiumPreferences.StreamSort.HIGHEST_FIRST) {
-            comparator = comparator.reversed();
-        }
-        candidates.sort(comparator);
+        final boolean highestFirst = sort == HighflyPremiumPreferences.StreamSort.HIGHEST_FIRST;
+        Collections.sort(candidates, new Comparator<HighflyPremiumPayloadParser.StreamCandidate>() {
+            @Override
+            public int compare(
+                    HighflyPremiumPayloadParser.StreamCandidate left,
+                    HighflyPremiumPayloadParser.StreamCandidate right
+            ) {
+                int leftScore = left.getQualityScore();
+                int rightScore = right.getQualityScore();
+                if (leftScore == rightScore) return 0;
+                boolean leftBeforeRight = leftScore < rightScore;
+                if (highestFirst) leftBeforeRight = !leftBeforeRight;
+                return leftBeforeRight ? -1 : 1;
+            }
+        });
     }
 
     private static ResolutionProgressListener progressWithoutUrls(
