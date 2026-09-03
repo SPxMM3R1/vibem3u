@@ -26,7 +26,11 @@ public final class ResolverCatalog {
     public static final int MAX_CATALOG_BYTES = 256 * 1024;
     private static final int MAX_PROVIDERS = 16;
     private static final int MAX_MATCH_VALUES = 128;
+    private static final int MAX_ALIAS_CHANNELS = 512;
     private static final int MAX_ALIASES_PER_CHANNEL = 12;
+    private static final int MAX_TOTAL_ALIAS_VALUES = 4096;
+    private static final int MAX_ALIAS_KEY_LENGTH = 160;
+    private static final int MAX_ALIAS_LENGTH = 240;
     private static final Pattern SAFE_ID = Pattern.compile("[a-z0-9][a-z0-9_-]{0,31}");
     private static final Set<String> ENGINES = setOf(
             "tvn", "meganoticias", "24horas", "tvvoo", "highfly", "vavoo"
@@ -212,21 +216,37 @@ public final class ResolverCatalog {
     private static Map<String, List<String>> aliasesObject(JSONObject object)
             throws JSONException, IOException {
         if (object == null) return Collections.emptyMap();
-        if (object.length() > MAX_MATCH_VALUES) throw new IOException("Demasiados aliases.");
+        if (object.length() > MAX_ALIAS_CHANNELS) {
+            throw new IOException("Demasiados canales con aliases.");
+        }
         Map<String, List<String>> result = new LinkedHashMap<>();
+        int totalAliasValues = 0;
         for (Iterator<String> keys = object.keys(); keys.hasNext();) {
-            String key = keys.next();
-            JSONArray array = object.getJSONArray(key);
+            String rawKey = keys.next();
+            String key = rawKey.trim();
+            if (key.isBlank() || key.length() > MAX_ALIAS_KEY_LENGTH) {
+                throw new IOException("Clave de alias inválida.");
+            }
+            if (result.containsKey(key)) {
+                throw new IOException("Clave de alias duplicada.");
+            }
+            JSONArray array = object.getJSONArray(rawKey);
             if (array.length() > MAX_ALIASES_PER_CHANNEL) {
                 throw new IOException("Demasiados aliases para un canal.");
             }
-            List<String> aliases = new ArrayList<>();
+            if (array.length() > MAX_TOTAL_ALIAS_VALUES - totalAliasValues) {
+                throw new IOException("Demasiados aliases en el catálogo.");
+            }
+            totalAliasValues += array.length();
+            LinkedHashSet<String> aliases = new LinkedHashSet<>();
             for (int index = 0; index < array.length(); index++) {
                 String alias = array.getString(index).trim();
-                if (alias.length() > 240) throw new IOException("Alias demasiado largo.");
+                if (alias.length() > MAX_ALIAS_LENGTH) {
+                    throw new IOException("Alias demasiado largo.");
+                }
                 if (!alias.isBlank()) aliases.add(alias);
             }
-            result.put(key, aliases);
+            result.put(key, new ArrayList<>(aliases));
         }
         return result;
     }

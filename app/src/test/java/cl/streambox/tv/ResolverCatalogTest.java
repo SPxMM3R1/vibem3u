@@ -194,6 +194,54 @@ public final class ResolverCatalogTest {
         assertThrows(IOException.class, () -> ResolverCatalog.parse(invalid));
     }
 
+    @Test
+    public void acceptsMoreThanTheLegacy128AliasChannelLimit() throws Exception {
+        ResolverDefinition definition = ResolverCatalog.parse(
+                catalogWithAliases(246, 1)
+        ).getById("tvvoo");
+        Map<String, String> attributes = attributes();
+        attributes.put("tvg-id", "Channel 245@TvVoo");
+        Channel channel = new Channel(
+                "Channel 245",
+                URI.create("https://example.org/fallback.m3u8"),
+                null,
+                "Sports",
+                attributes
+        );
+
+        assertEquals("alias-245-0", definition.resolverAliases(channel).get(0));
+    }
+
+    @Test
+    public void rejectsAliasCatalogThatExceedsTheAggregateValueBudget() {
+        assertThrows(IOException.class, () -> ResolverCatalog.parse(
+                catalogWithAliases(500, 9)
+        ));
+    }
+
+    @Test
+    public void deduplicatesCompatibilityAliasesWithoutChangingTheirOrder()
+            throws Exception {
+        String json = catalogWithAliases(1, 1).replace(
+                "[\"alias-0-0\"]",
+                "[\"first\",\"first\",\"second\"]"
+        );
+        ResolverDefinition definition = ResolverCatalog.parse(json).getById("tvvoo");
+        Map<String, String> attributes = attributes();
+        attributes.put("tvg-id", "Channel 0@TvVoo");
+        Channel channel = new Channel(
+                "Channel 0",
+                URI.create("https://example.org/fallback.m3u8"),
+                null,
+                "Sports",
+                attributes
+        );
+
+        assertEquals(2, definition.resolverAliases(channel).size());
+        assertEquals("first", definition.resolverAliases(channel).get(0));
+        assertEquals("second", definition.resolverAliases(channel).get(1));
+    }
+
     private static String catalogJson() {
         return "{\"schemaVersion\":1,\"catalogVersion\":\"1\",\"providers\":["
                 + "{\"id\":\"tvn\",\"name\":\"TVN\",\"engine\":\"tvn\","
@@ -205,6 +253,26 @@ public final class ResolverCatalogTest {
                 + "\"match\":{\"hosts\":[\"leaf.highfly.dev\"]},"
                 + "\"config\":{\"directTemplate\":"
                 + "\"https://leaf.highfly.dev/m3u/{id}/live.m3u8\"}}]}";
+    }
+
+    private static String catalogWithAliases(int channelCount, int aliasesPerChannel) {
+        StringBuilder aliases = new StringBuilder("\"compatibilityAliases\":{");
+        for (int channel = 0; channel < channelCount; channel++) {
+            if (channel > 0) aliases.append(',');
+            aliases.append("\"Channel ").append(channel).append("\":[");
+            for (int alias = 0; alias < aliasesPerChannel; alias++) {
+                if (alias > 0) aliases.append(',');
+                aliases.append("\"alias-").append(channel).append('-')
+                        .append(alias).append("\"");
+            }
+            aliases.append(']');
+        }
+        aliases.append('}');
+        return "{\"schemaVersion\":1,\"catalogVersion\":\"test\",\"providers\":[{"
+                + "\"id\":\"tvvoo\",\"name\":\"TvVoo\",\"engine\":\"tvvoo\","
+                + "\"match\":{\"tvgIdSuffixes\":[\"@TvVoo\"]},"
+                + "\"config\":{\"endpointBase\":\"https://tvvoo.hayd.uk/stream/tv\"},"
+                + aliases + "}]}";
     }
 
     private static Channel channel(String tvgId, String stream, Map<String, String> extra) {

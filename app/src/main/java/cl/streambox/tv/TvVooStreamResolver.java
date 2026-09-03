@@ -129,20 +129,29 @@ public final class TvVooStreamResolver implements StreamResolver {
             return resolveDirect(channel, null, progress, deadline);
         }
 
-        String endpointBase = channel.getAttributes().get("x-resolver-endpoint");
-        if (endpointBase == null || endpointBase.isBlank()) {
-            endpointBase = definition.getConfig("endpointBase", DEFAULT_ENDPOINT);
-        }
-        endpointBase = validEndpoint(endpointBase);
-        String requestedRecipe = definition.requestedRecipe(channel);
-        boolean boundedPayloadRecipe = definition.usesRecipe(
-                channel,
-                BOUNDED_PAYLOAD_RECIPE
-        ) && MEDIA_SIGNATURE_VALIDATION.equals(
-                definition.getConfig("validationMode", "")
-        );
-        if (!requestedRecipe.isBlank() && !boundedPayloadRecipe) {
-            throw new IOException("La receta declarativa del canal no está autorizada.");
+        String endpointBase;
+        boolean boundedPayloadRecipe;
+        try {
+            endpointBase = channel.getAttributes().get("x-resolver-endpoint");
+            if (endpointBase == null || endpointBase.isBlank()) {
+                endpointBase = definition.getConfig("endpointBase", DEFAULT_ENDPOINT);
+            }
+            endpointBase = validEndpoint(endpointBase);
+            String requestedRecipe = definition.requestedRecipe(channel);
+            boundedPayloadRecipe = definition.usesRecipe(
+                    channel,
+                    BOUNDED_PAYLOAD_RECIPE
+            ) && MEDIA_SIGNATURE_VALIDATION.equals(
+                    definition.getConfig("validationMode", "")
+            );
+            if (!requestedRecipe.isBlank() && !boundedPayloadRecipe) {
+                throw new IOException("La receta declarativa del canal no está autorizada.");
+            }
+        } catch (IOException setupError) {
+            if (resolutionMode.usesDirectResolver()) {
+                return resolveDirect(channel, setupError, progress, newResolutionDeadline());
+            }
+            throw setupError;
         }
 
         LinkedHashSet<String> aliases = new LinkedHashSet<>(definition.resolverAliases(channel));

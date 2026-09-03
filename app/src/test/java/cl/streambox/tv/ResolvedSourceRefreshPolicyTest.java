@@ -1,5 +1,7 @@
 package cl.streambox.tv;
 
+import androidx.media3.common.PlaybackException;
+
 import org.junit.Test;
 
 import java.net.URI;
@@ -62,5 +64,29 @@ public final class ResolvedSourceRefreshPolicyTest {
     @Test
     public void unknown404IsConservativeAndDoesNotDiscardAToken() {
         assertFalse(ResolvedSourceRefreshPolicy.shouldRefresh(404, null));
+    }
+
+    @Test
+    public void hlsIntegrityFailuresRefreshWithoutTreatingTimeoutsAsExpiry() {
+        assertTrue(ResolvedSourceRefreshPolicy.shouldRefresh(
+                -1,
+                URI.create("https://cdn.example/live/master.m3u8"),
+                PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE
+        ));
+        assertTrue(ResolvedSourceRefreshPolicy.shouldRefresh(
+                -1,
+                URI.create("https://cdn.example/live/master.m3u8"),
+                PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED
+        ));
+        assertTrue(ResolvedSourceRefreshPolicy.shouldRefresh(
+                -1,
+                URI.create("https://cdn.example/live/segment-42.ts"),
+                PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED
+        ));
+        assertFalse(ResolvedSourceRefreshPolicy.shouldRefresh(
+                -1,
+                URI.create("https://cdn.example/live/master.m3u8"),
+                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+        ));
     }
 }

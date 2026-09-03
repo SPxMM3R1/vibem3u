@@ -62,6 +62,17 @@ public final class TvVooResolutionModeTest {
     }
 
     @Test
+    public void automaticModeUsesDirectEngineOnlyAfterExternalSetupFails() throws Exception {
+        FakeDirectResolver direct = new FakeDirectResolver();
+        TvVooStreamResolver resolver = resolver(TvVooResolutionMode.BOTH, direct);
+
+        ResolvedPlaybackSource source = resolver.resolve(channel());
+
+        assertEquals(1, direct.resolveCalls);
+        assertEquals(URI.create("https://example.com/direct.m3u8"), source.getPlaybackUri());
+    }
+
+    @Test
     public void httpFallbackAcceptsOnlyAnExpiredCertificate() {
         IOException expired = new IOException(
                 "TLS",

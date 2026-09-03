@@ -2270,7 +2270,9 @@ public final class MainActivity extends Activity {
     }
 
     private boolean isProviderRefreshError(PlaybackException error) {
-        if (currentPlaybackSource == null || !currentPlaybackSource.hasResolver()) {
+        if (currentPlaybackSource == null
+                || !currentPlaybackSource.hasResolver()
+                || !currentPlaybackSource.isDynamicallyResolved()) {
             return false;
         }
         if (currentPlaybackSource.isDynamicallyResolved()
@@ -2282,7 +2284,8 @@ public final class MainActivity extends Activity {
         int responseCode = httpResponseCode(error);
         return ResolvedSourceRefreshPolicy.shouldRefresh(
                 responseCode,
-                failedRequestUri(error)
+                failedRequestUri(error),
+                error.errorCode
         );
     }
 

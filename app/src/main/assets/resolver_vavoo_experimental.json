@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "experimental",
+  "providers": [
+    {
+      "id": "tvvoo",
+      "name": "Vavoo directo experimental",
+      "engine": "vavoo",
+      "enabledByDefault": false,
+      "cacheTtlSeconds": 0,
+      "match": {
+        "tvgIdSuffixes": [
+          "@TvVoo"
+        ]
+      },
+      "config": {
+        "pingUrl": "https://www.vavoo.tv/api/app/ping",
+        "fallbackPingUrl": "https://www.vypn.net/api/app/ping",
+        "catalogBase": "https://vavoo.to",
+        "fallbackCatalogBase": "https://kool.to",
+        "catalogPath": "mediahubmx-catalog.json",
+        "resolvePath": "mediahubmx-resolve.json",
+        "maxSearchTargets": 4,
+        "maxSearchPages": 2,
+        "maxSearchItems": 100,
+        "maxResolveCandidates": 8
+      }
+    }
+  ]
+}
