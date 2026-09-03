@@ -139,6 +139,14 @@ public final class HighflyPremiumPreferences {
                 .apply();
     }
 
+    /** Removes one unavailable event without changing the other selections. */
+    public static void removeSelectedEventId(Context context, String eventId) {
+        String safeId = eventId == null ? "" : eventId.trim();
+        if (!SAFE_EVENT_ID.matcher(safeId).matches()) return;
+        LinkedHashSet<String> selected = new LinkedHashSet<>(selectedEventIds(context));
+        if (selected.remove(safeId)) saveSelectedEventIds(context, selected);
+    }
+
     public static Region region(Context context) {
         return Region.fromPreference(preferences(context).getString(
                 KEY_REGION,

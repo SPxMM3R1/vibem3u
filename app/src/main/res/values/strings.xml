@@ -86,6 +86,8 @@
     <string name="highfly_premium_token_required">La Lista 3 requiere un token Premium verificado.</string>
     <string name="highfly_premium_token_verify_required">Verifica el token Premium antes de guardar.</string>
     <string name="loading_premium_catalog">Consultando catálogo Premium…</string>
+    <string name="loading_premium_event_reconnecting">Reconectando fuente Premium · intento %1$d/%2$d…</string>
+    <string name="highfly_premium_event_removed">Evento retirado de Lista 4 · fuente no disponible</string>
     <string name="channel_controls_title">Cambio de canales</string>
     <string name="invert_channel_keys">Invertir botones arriba y abajo</string>
     <string name="invert_channel_keys_description">Activado: ↑ avanza al canal siguiente y ↓ vuelve al anterior.</string>

@@ -95,6 +95,8 @@ public final class MainActivity extends Activity {
     private PlaylistRepository repository;
     private EpgRepository epgRepository;
     private final PlaybackRecoveryPolicy playbackRecoveryPolicy = new PlaybackRecoveryPolicy();
+    private final HighflyPremiumEventRecoveryPolicy temporaryEventRecoveryPolicy =
+            new HighflyPremiumEventRecoveryPolicy();
     private final ResolverCoordinator resolverCoordinator = new ResolverCoordinator();
     private ResolverCatalogRepository resolverCatalogRepository;
     private ResolverPreferences resolverPreferences;
@@ -372,6 +374,14 @@ public final class MainActivity extends Activity {
                 overlayAwaitingPlayback = true;
                 showOverlay(true);
                 cancelScheduledPlaybackRetry();
+                if (isTemporaryEventChannel(playbackChannel)
+                        && currentPlaybackSource != null
+                        && currentPlaybackSource.isDynamicallyResolved()
+                        && (isProviderRefreshError(error)
+                        || PlaybackRecoveryPolicy.isRecoverable(error.errorCode))) {
+                    handleTemporaryEventFailure(playbackChannel, playbackGeneration);
+                    return;
+                }
                 if (isProviderRefreshError(error)) {
                     handleProviderAuthorizationFailure();
                     return;
@@ -1177,6 +1187,10 @@ public final class MainActivity extends Activity {
             StreamResolver resolver,
             long expectedGeneration
     ) {
+        if (isTemporaryEventChannel(channel)) {
+            handleTemporaryEventFailure(channel, expectedGeneration);
+            return;
+        }
         if (fallbackAttempted) {
             showPlaybackFailure();
             return;
@@ -1214,6 +1228,9 @@ public final class MainActivity extends Activity {
                 : NO_RESOLUTION_REQUEST;
         currentPlaybackSource = source;
         playbackRecoveryPolicy.reset();
+        if (isTemporaryEventChannel(channel)) {
+            temporaryEventRecoveryPolicy.markAvailable(temporaryEventId(channel));
+        }
         player.setMediaSource(mediaSourceFor(channel, source));
         showLoadingState(getString(R.string.loading_starting_playback));
         prepareAndPlay();
@@ -1259,7 +1276,119 @@ public final class MainActivity extends Activity {
                 && playbackChannel == channel;
     }
 
+    private boolean isTemporaryEventChannel(Channel channel) {
+        return highflyPremiumCatalogRepository != null
+                && highflyPremiumCatalogRepository.isTemporaryEvent(channel);
+    }
+
+    private static String temporaryEventId(Channel channel) {
+        if (channel == null || channel.getAttributes() == null) return "";
+        String eventId = channel.getAttributes().get("x-highfly-premium-id");
+        return eventId == null ? "" : eventId.trim();
+    }
+
+    /**
+     * Temporary events never use a stale M3U fallback. Each failed resolution
+     * or playback refresh gets a new Premium source, and the selected event
+     * is retired after the bounded reconnection budget is exhausted.
+     */
+    private void handleTemporaryEventFailure(Channel channel, long expectedGeneration) {
+        if (!isCurrentPlayback(channel, expectedGeneration)) return;
+        String eventId = temporaryEventId(channel);
+        if (eventId.isBlank()) {
+            showPlaybackFailure();
+            return;
+        }
+
+        if (temporaryEventRecoveryPolicy.tryConsume(eventId)) {
+            int attempt = temporaryEventRecoveryPolicy.attemptsFor(eventId);
+            setStatus("RECONECTANDO", R.color.amber);
+            codecInfo.setText(getString(
+                    R.string.loading_premium_event_reconnecting,
+                    attempt,
+                    HighflyPremiumEventRecoveryPolicy.MAX_RECONNECTION_ATTEMPTS
+            ));
+            showLoadingState(getString(
+                    R.string.loading_premium_event_reconnecting,
+                    attempt,
+                    HighflyPremiumEventRecoveryPolicy.MAX_RECONNECTION_ATTEMPTS
+            ));
+            cancelScheduledPlaybackRetry();
+            cancelPlaybackResolution();
+            discardCurrentPlaybackSource();
+            StreamResolver resolver = streamResolverRegistry.find(channel);
+            if (resolver != null) resolverCoordinator.invalidate(channel, resolver);
+            if (player != null) {
+                player.stop();
+                player.clearMediaItems();
+            }
+            resolveAndPlay(channel, expectedGeneration, true);
+            return;
+        }
+
+        removeUnavailableTemporaryEvent(channel, eventId, expectedGeneration);
+    }
+
+    private void removeUnavailableTemporaryEvent(
+            Channel channel,
+            String eventId,
+            long expectedGeneration
+    ) {
+        if (!isCurrentPlayback(channel, expectedGeneration)) return;
+
+        HighflyPremiumPreferences.removeSelectedEventId(this, eventId);
+        temporaryEventRecoveryPolicy.clear(eventId);
+
+        Map<Integer, Playlist> updatedPlaylists = new LinkedHashMap<>(playlistsBySource);
+        Playlist eventPlaylist = updatedPlaylists.get(PREMIUM_EVENT_SOURCE_POSITION);
+        if (eventPlaylist != null) {
+            List<Channel> remainingEvents = new ArrayList<>();
+            for (Channel event : eventPlaylist.getChannels()) {
+                if (!eventId.equals(temporaryEventId(event))) remainingEvents.add(event);
+            }
+            if (remainingEvents.isEmpty()) {
+                updatedPlaylists.remove(PREMIUM_EVENT_SOURCE_POSITION);
+            } else {
+                updatedPlaylists.put(
+                        PREMIUM_EVENT_SOURCE_POSITION,
+                        Playlist.withEpgUris(remainingEvents, eventPlaylist.getEpgUris())
+                );
+            }
+        }
+
+        // Invalidate a playlist refresh that may still hold the old selected
+        // event set, otherwise a late callback could resurrect the channel.
+        int nextPlaylistGeneration = ++playlistGeneration;
+        playbackGeneration++;
+        cancelScheduledPlaybackRetry();
+        cancelPlaybackResolution();
+        StreamResolver resolver = streamResolverRegistry.find(channel);
+        if (resolver != null) resolverCoordinator.invalidate(channel, resolver);
+        playbackChannel = null;
+        discardCurrentPlaybackSource();
+        if (player != null) {
+            player.stop();
+            player.clearMediaItems();
+        }
+        codecInfo.setText(R.string.highfly_premium_event_removed);
+
+        if (updatedPlaylists.isEmpty()) {
+            showPlaybackFailure();
+            return;
+        }
+        applyPlaylists(
+                updatedPlaylists,
+                playlistSourceSignature(getPlaylistSources()),
+                nextPlaylistGeneration,
+                true
+        );
+    }
+
     private void handleProviderAuthorizationFailure() {
+        if (isTemporaryEventChannel(playbackChannel)) {
+            handleTemporaryEventFailure(playbackChannel, playbackGeneration);
+            return;
+        }
         if (playbackChannel == null || currentPlaybackSource == null
                 || !currentPlaybackSource.hasResolver()) {
             showPlaybackFailure();
@@ -2277,6 +2406,7 @@ public final class MainActivity extends Activity {
                 applyPlaybackSettingsResult(data);
                 resolverCoordinator.clear();
                 reloadResolverRegistry();
+                temporaryEventRecoveryPolicy.clearAll();
                 if (playerUsesVolumeNormalization != isVolumeNormalizationEnabled()) {
                     if (playbackBitrateMeter != null) {
                         playbackBitrateMeter.close();
