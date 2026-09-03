@@ -36,6 +36,9 @@ public final class TvVooStreamResolver implements StreamResolver {
     private static final int DEFAULT_MAX_CANDIDATES = 8;
     static final String BOUNDED_PAYLOAD_RECIPE = "bounded-payload-v1";
     static final String MEDIA_SIGNATURE_VALIDATION = "media-signature-v1";
+    private static final String TVVOO_CDN_HOST_SUFFIX =
+            ".ngolpdkyoctjcddxshli469r.org";
+    private static final String TVVOO_CDN_PATH_PREFIX = "/sunshine/";
 
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
@@ -347,11 +350,43 @@ public final class TvVooStreamResolver implements StreamResolver {
             boolean strictValidation,
             ResolutionProgressListener listener
     ) throws IOException {
+        return validateCandidate(
+                (source, headers, strict, progress) -> validateHls(
+                        validator,
+                        source,
+                        headers,
+                        strict,
+                        progress
+                ),
+                published,
+                allowHttpFallback,
+                playbackHeaders,
+                strictValidation,
+                listener
+        );
+    }
+
+    static URI validateCandidate(
+            HlsCandidateValidator validator,
+            URI published,
+            boolean allowHttpFallback,
+            Map<String, String> playbackHeaders,
+            boolean strictValidation,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        if (allowHttpFallback && isScopedTvVooHttpFallback(published)) {
+            return validateScopedTvVooCandidate(
+                    validator,
+                    published,
+                    playbackHeaders,
+                    strictValidation,
+                    listener
+            );
+        }
         String scheme = published.getScheme();
         if ("https".equalsIgnoreCase(scheme)) {
             try {
-                validateHls(
-                        validator,
+                validator.validate(
                         published,
                         playbackHeaders,
                         strictValidation,
@@ -361,8 +396,7 @@ public final class TvVooStreamResolver implements StreamResolver {
             } catch (IOException error) {
                 if (!allowHttpFallback || !isExpiredCertificateFailure(error)) throw error;
                 URI fallback = withScheme(published, "http");
-                validateHls(
-                        validator,
+                validator.validate(
                         fallback,
                         playbackHeaders,
                         strictValidation,
@@ -376,8 +410,7 @@ public final class TvVooStreamResolver implements StreamResolver {
         }
         URI upgraded = withScheme(published, "https");
         try {
-            validateHls(
-                    validator,
+            validator.validate(
                     upgraded,
                     playbackHeaders,
                     strictValidation,
@@ -386,8 +419,7 @@ public final class TvVooStreamResolver implements StreamResolver {
             return upgraded;
         } catch (IOException error) {
             if (!allowHttpFallback || !isExpiredCertificateFailure(error)) throw error;
-            validateHls(
-                    validator,
+            validator.validate(
                     published,
                     playbackHeaders,
                     strictValidation,
@@ -395,6 +427,72 @@ public final class TvVooStreamResolver implements StreamResolver {
             );
             return published;
         }
+    }
+
+    /**
+     * TvVoo currently publishes short-lived /sunshine/ candidates on CDN
+     * hosts whose HTTPS certificate is expired while the same HLS remains
+     * available over HTTP. Keep this compatibility path narrow: it is not a
+     * general TLS bypass and still requires full HLS validation.
+     */
+    private static URI validateScopedTvVooCandidate(
+            HlsCandidateValidator validator,
+            URI published,
+            Map<String, String> playbackHeaders,
+            boolean strictValidation,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        URI httpCandidate = "http".equalsIgnoreCase(published.getScheme())
+                ? published
+                : withScheme(published, "http");
+        IOException httpError;
+        try {
+            validator.validate(
+                    httpCandidate,
+                    playbackHeaders,
+                    strictValidation,
+                    listener
+            );
+            return httpCandidate;
+        } catch (IOException error) {
+            httpError = error;
+        }
+
+        URI httpsCandidate = "https".equalsIgnoreCase(published.getScheme())
+                ? published
+                : withScheme(published, "https");
+        try {
+            validator.validate(
+                    httpsCandidate,
+                    playbackHeaders,
+                    strictValidation,
+                    listener
+            );
+            return httpsCandidate;
+        } catch (IOException httpsError) {
+            httpsError.addSuppressed(httpError);
+            throw httpsError;
+        }
+    }
+
+    static boolean isScopedTvVooHttpFallback(URI candidate) {
+        if (candidate == null || candidate.getHost() == null) return false;
+        String host = candidate.getHost().toLowerCase(Locale.ROOT);
+        String path = candidate.getPath() == null
+                ? ""
+                : candidate.getPath().toLowerCase(Locale.ROOT);
+        return host.length() > TVVOO_CDN_HOST_SUFFIX.length()
+                && host.endsWith(TVVOO_CDN_HOST_SUFFIX)
+                && path.startsWith(TVVOO_CDN_PATH_PREFIX);
+    }
+
+    interface HlsCandidateValidator {
+        void validate(
+                URI source,
+                Map<String, String> headers,
+                boolean strictValidation,
+                ResolutionProgressListener listener
+        ) throws IOException;
     }
 
     private static void validateHls(

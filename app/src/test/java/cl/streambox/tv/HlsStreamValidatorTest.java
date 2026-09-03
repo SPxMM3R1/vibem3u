@@ -2,9 +2,14 @@ package cl.streambox.tv;
 
 import org.junit.Test;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -49,5 +54,48 @@ public final class HlsStreamValidatorTest {
                 new byte[]{1, 2, 3, 4, 5, 6, 7, 8},
                 "application/octet-stream"
         ));
+    }
+
+    @Test
+    public void scopesTvVooHttpFallbackToKnownEphemeralCdnPath() {
+        assertTrue(TvVooStreamResolver.isScopedTvVooHttpFallback(URI.create(
+                "https://node.ngolpdkyoctjcddxshli469r.org/sunshine/live/index.m3u8"
+        )));
+        assertFalse(TvVooStreamResolver.isScopedTvVooHttpFallback(URI.create(
+                "https://node.ngolpdkyoctjcddxshli469r.org/other/live.m3u8"
+        )));
+        assertFalse(TvVooStreamResolver.isScopedTvVooHttpFallback(URI.create(
+                "https://node.example.org/sunshine/live/index.m3u8"
+        )));
+        assertFalse(TvVooStreamResolver.isScopedTvVooHttpFallback(URI.create(
+                "https://ngolpdkyoctjcddxshli469r.org/sunshine/live/index.m3u8"
+        )));
+    }
+
+    @Test
+    public void usesValidatedHttpCandidateBeforeExpiredCdnHttps() throws Exception {
+        List<URI> attempts = new ArrayList<>();
+        TvVooStreamResolver.HlsCandidateValidator validator = (
+                playbackUri,
+                headers,
+                strictValidation,
+                listener
+        ) -> attempts.add(playbackUri);
+        URI https = URI.create(
+                "https://node.ngolpdkyoctjcddxshli469r.org/sunshine/live/index.m3u8"
+        );
+
+        URI accepted = TvVooStreamResolver.validateCandidate(
+                validator,
+                https,
+                true,
+                Collections.emptyMap(),
+                true,
+                ResolutionProgressListener.NONE
+        );
+
+        assertEquals("http", accepted.getScheme());
+        assertEquals(1, attempts.size());
+        assertEquals("http", attempts.get(0).getScheme());
     }
 }
