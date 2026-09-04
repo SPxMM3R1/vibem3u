@@ -68,7 +68,9 @@ public final class ResolverCoordinator {
 
         try {
             ResolvedPlaybackSource resolved = resolver.resolve(channel, progress);
-            if (allowCache && resolved != null) {
+            if (allowCache
+                    && resolved != null
+                    && !resolved.isExpired(System.currentTimeMillis())) {
                 synchronized (lock) {
                     if (inFlight.get(key) == owner) memoryCache.put(key, resolved);
                 }
