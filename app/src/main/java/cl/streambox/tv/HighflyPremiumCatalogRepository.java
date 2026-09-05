@@ -5,9 +5,12 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -24,6 +27,7 @@ import java.util.regex.Pattern;
  */
 public final class HighflyPremiumCatalogRepository {
     private static final long CATALOG_MEMORY_TTL_MS = 45_000L;
+    private static final long DEFAULT_CREDENTIAL_COOLDOWN_MS = 15_000L;
     private static final int MAX_JSON_BYTES = 2 * 1024 * 1024;
     private static final int MAX_CATALOG_REQUESTS = 2;
     private static final Pattern SAFE_STABLE_SLUG = Pattern.compile(
@@ -41,6 +45,8 @@ public final class HighflyPremiumCatalogRepository {
     private final TokenHttpClient httpClient;
     private final HlsStreamValidator validator;
     private final Object sessionLock = new Object();
+    private final long credentialCooldownMillis;
+    private final Map<String, Long> credentialCooldowns = new HashMap<>();
     private Session session;
 
     public HighflyPremiumCatalogRepository(android.content.Context context) {
@@ -48,7 +54,8 @@ public final class HighflyPremiumCatalogRepository {
                 context,
                 HighflyPremiumCredentialStore.getInstance(context),
                 new TokenHttpClient(),
-                new HlsStreamValidator()
+                new HlsStreamValidator(),
+                DEFAULT_CREDENTIAL_COOLDOWN_MS
         );
     }
 
@@ -58,14 +65,60 @@ public final class HighflyPremiumCatalogRepository {
             TokenHttpClient httpClient,
             HlsStreamValidator validator
     ) {
+        this(context, credentialStore, httpClient, validator,
+                DEFAULT_CREDENTIAL_COOLDOWN_MS);
+    }
+
+    HighflyPremiumCatalogRepository(
+            android.content.Context context,
+            HighflyPremiumCredentialStore credentialStore,
+            TokenHttpClient httpClient,
+            HlsStreamValidator validator,
+            long credentialCooldownMillis
+    ) {
         this.context = context == null ? null : context.getApplicationContext();
         this.credentialStore = credentialStore;
         this.httpClient = httpClient;
         this.validator = validator;
+        this.credentialCooldownMillis = Math.max(0L, credentialCooldownMillis);
     }
 
     public boolean hasCredential() {
         return credentialStore != null && credentialStore.hasCredential();
+    }
+
+    /** Returns whether account/API rejection backoff is active for this region. */
+    public boolean isCredentialOnCooldown(HighflyPremiumPreferences.Region region) {
+        String token = credentialStore == null ? null : credentialStore.readTokenForRequest();
+        return token != null && !token.isBlank()
+                && cooldownRemainingMillis(token, safeRegion(region)) > 0L;
+    }
+
+    /** Alias used by settings/recovery code. */
+    public boolean isOnCooldown(HighflyPremiumPreferences.Region region) {
+        return isCredentialOnCooldown(region);
+    }
+
+    public long cooldownRemainingMillis(HighflyPremiumPreferences.Region region) {
+        String token = credentialStore == null ? null : credentialStore.readTokenForRequest();
+        return token == null || token.isBlank()
+                ? 0L
+                : cooldownRemainingMillis(token, safeRegion(region));
+    }
+
+    /** Clears only the in-memory rejection backoff; encrypted credentials remain intact. */
+    public void clearCredentialCooldown() {
+        synchronized (sessionLock) {
+            credentialCooldowns.clear();
+        }
+    }
+
+    public void clearCredentialCooldown(HighflyPremiumPreferences.Region region) {
+        String token = credentialStore == null ? null : credentialStore.readTokenForRequest();
+        if (token == null || token.isBlank()) return;
+        synchronized (sessionLock) {
+            credentialCooldowns.remove(cooldownKey(token, safeRegion(region)));
+        }
     }
 
     public AccountInfo verifyToken(
@@ -74,8 +127,9 @@ public final class HighflyPremiumCatalogRepository {
     ) throws IOException {
         String token = HighflyPremiumTokenRules.normalize(rawToken);
         HighflyPremiumPreferences.Region safeRegion = safeRegion(region);
+        checkCooldown(token, safeRegion);
         String endpoint = endpoint(safeRegion, token, "verify.json");
-        String json = getJson(endpoint, 64 * 1024);
+        String json = getJson(endpoint, 64 * 1024, token, safeRegion);
         AccountInfo account = parseAccount(json);
         if (!account.isUsable()) throw new CredentialRejectedException(0);
         return account;
@@ -88,9 +142,14 @@ public final class HighflyPremiumCatalogRepository {
         if (token == null || token.isBlank()) {
             throw new CredentialRejectedException(0);
         }
-        AccountInfo account = verifyToken(token, region);
-        credentialStore.recordVerification(account);
-        return account;
+        try {
+            AccountInfo account = verifyToken(token, region);
+            credentialStore.recordVerification(account);
+            return account;
+        } catch (CredentialRejectedException error) {
+            credentialStore.recordInvalid();
+            throw error;
+        }
     }
 
     public HighflyPremiumCatalog queryCatalog(
@@ -102,6 +161,7 @@ public final class HighflyPremiumCatalogRepository {
         String token = credentialStore.readTokenForRequest();
         if (token == null || token.isBlank()) throw new CredentialRejectedException(0);
         HighflyPremiumPreferences.Region safeRegion = safeRegion(region);
+        checkCooldown(token, safeRegion);
         long generation = credentialStore.getGeneration();
         long now = System.currentTimeMillis();
         synchronized (sessionLock) {
@@ -119,7 +179,9 @@ public final class HighflyPremiumCatalogRepository {
             credentialStore.recordVerification(account);
             String manifestJson = getJson(
                     endpoint(safeRegion, token, "manifest.json"),
-                    HighflyPremiumPayloadParser.MAX_MANIFEST_BYTES
+                    HighflyPremiumPayloadParser.MAX_MANIFEST_BYTES,
+                    token,
+                    safeRegion
             );
             HighflyPremiumPayloadParser.ManifestInfo manifest =
                     HighflyPremiumPayloadParser.parseManifest(manifestJson);
@@ -133,7 +195,9 @@ public final class HighflyPremiumCatalogRepository {
             for (String catalogId : catalogIds) {
                 String catalogJson = getJson(
                         endpoint(safeRegion, token, "catalog/sport/" + catalogId + ".json"),
-                        MAX_JSON_BYTES
+                        MAX_JSON_BYTES,
+                        token,
+                        safeRegion
                 );
                 for (HighflyPremiumCatalog.Entry entry
                         : HighflyPremiumPayloadParser.parseCatalog(catalogJson)) {
@@ -231,7 +295,9 @@ public final class HighflyPremiumCatalogRepository {
         ));
         String streamJson = getJson(
                 endpoint(region, token, "stream/sport/" + streamId + ".json"),
-                MAX_JSON_BYTES
+                MAX_JSON_BYTES,
+                token,
+                safeRegion(region)
         );
         List<HighflyPremiumPayloadParser.StreamCandidate> candidates =
                 new ArrayList<>(HighflyPremiumPayloadParser.parseStreams(streamJson));
@@ -346,6 +412,16 @@ public final class HighflyPremiumCatalogRepository {
     }
 
     private String getJson(String endpoint, int maximumBytes) throws IOException {
+        return getJson(endpoint, maximumBytes, null, null);
+    }
+
+    private String getJson(
+            String endpoint,
+            int maximumBytes,
+            String token,
+            HighflyPremiumPreferences.Region region
+    ) throws IOException {
+        if (token != null && region != null) checkCooldown(token, region);
         try {
             TokenHttpClient.Response response = httpClient.getPublicOnHosts(
                     endpoint,
@@ -358,6 +434,12 @@ public final class HighflyPremiumCatalogRepository {
         } catch (TokenHttpClient.HttpStatusException error) {
             int status = error.getStatusCode();
             if (status == 401 || status == 403) {
+                // This method is used only for credential-bearing Premium API
+                // JSON endpoints. Segment 403s are made by Media3/HLS and do
+                // not pass through here, so they never poison this backoff.
+                if (token != null && region != null) {
+                    recordCredentialRejection(token, region);
+                }
                 throw new CredentialRejectedException(status);
             }
             throw new IOException("Highfly Premium no respondió a la solicitud.");
@@ -366,6 +448,82 @@ public final class HighflyPremiumCatalogRepository {
             // token-bearing request URI. The UI only needs a safe diagnosis.
             throw new IOException("No se pudo consultar Highfly Premium.");
         }
+    }
+
+    private void checkCooldown(
+            String token,
+            HighflyPremiumPreferences.Region region
+    ) throws IOException {
+        if (token == null || token.isBlank() || credentialCooldownMillis <= 0L) return;
+        long remaining = cooldownRemainingMillis(token, safeRegion(region));
+        if (remaining > 0L) {
+            throw new CredentialCooldownException(remaining);
+        }
+    }
+
+    private void recordCredentialRejection(
+            String token,
+            HighflyPremiumPreferences.Region region
+    ) {
+        if (token == null || token.isBlank() || credentialCooldownMillis <= 0L) return;
+        long until;
+        long now = System.currentTimeMillis();
+        if (Long.MAX_VALUE - now < credentialCooldownMillis) {
+            until = Long.MAX_VALUE;
+        } else {
+            until = now + credentialCooldownMillis;
+        }
+        synchronized (sessionLock) {
+            credentialCooldowns.put(cooldownKey(token, safeRegion(region)), until);
+            // Do not retain a catalogue whose credential was rejected. The
+            // encrypted token itself remains untouched for explicit recovery.
+            session = null;
+        }
+    }
+
+    private long cooldownRemainingMillis(
+            String token,
+            HighflyPremiumPreferences.Region region
+    ) {
+        if (token == null || token.isBlank()) return 0L;
+        long until;
+        synchronized (sessionLock) {
+            until = credentialCooldowns.getOrDefault(
+                    cooldownKey(token, safeRegion(region)),
+                    0L
+            );
+            if (until <= 0L) return 0L;
+        }
+        long remaining = until - System.currentTimeMillis();
+        if (remaining <= 0L) {
+            synchronized (sessionLock) {
+                credentialCooldowns.remove(cooldownKey(token, safeRegion(region)));
+            }
+            return 0L;
+        }
+        return remaining;
+    }
+
+    private static String cooldownKey(
+            String token,
+            HighflyPremiumPreferences.Region region
+    ) {
+        String normalized = token == null ? "" : token.trim();
+        byte[] bytes = normalized.getBytes(StandardCharsets.UTF_8);
+        byte[] digest;
+        try {
+            digest = MessageDigest.getInstance("SHA-256").digest(bytes);
+        } catch (NoSuchAlgorithmException impossible) {
+            // Every Android/Java runtime provides SHA-256. Keep a safe,
+            // non-token fallback should a provider ever violate that promise.
+            return safeRegion(region).name() + ":" + Integer.toHexString(normalized.hashCode());
+        } finally {
+            java.util.Arrays.fill(bytes, (byte) 0);
+        }
+        StringBuilder result = new StringBuilder(80).append(safeRegion(region).name()).append(':');
+        for (byte value : digest) result.append(String.format(Locale.ROOT, "%02x", value));
+        java.util.Arrays.fill(digest, (byte) 0);
+        return result.toString();
     }
 
     private static Map<String, String> requestHeaders() {
@@ -629,6 +787,20 @@ public final class HighflyPremiumCatalogRepository {
 
         public int getStatusCode() {
             return statusCode;
+        }
+    }
+
+    /** Short-lived local backoff after an account endpoint rejects a credential. */
+    public static final class CredentialCooldownException extends IOException {
+        private final long remainingMillis;
+
+        CredentialCooldownException(long remainingMillis) {
+            super("Credencial Premium temporalmente bloqueada; reintente más tarde.");
+            this.remainingMillis = Math.max(0L, remainingMillis);
+        }
+
+        public long getRemainingMillis() {
+            return remainingMillis;
         }
     }
 

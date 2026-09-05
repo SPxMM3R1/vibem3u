@@ -3,9 +3,22 @@ package cl.streambox.tv;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -82,5 +95,153 @@ public class HttpResourceCacheTest {
 
         assertNotNull(cached);
         assertArrayEquals(rendered, cached.getBytes());
+    }
+
+    @Test(timeout = 5_000L)
+    public void cachedReadDoesNotWaitForARevalidationHeldByTheServer() throws Exception {
+        File directory = temporaryFolder.newFolder("held-server-cache");
+        HttpResourceCache cache = new HttpResourceCache(directory, 3, 1024);
+        byte[] cachedBody = "cached".getBytes(StandardCharsets.UTF_8);
+
+        try (BlockingHttpServer server = new BlockingHttpServer()) {
+            String url = server.url("/cached");
+            // Move the fixture to the URL served by the local test server.
+            cache.commit(
+                    url,
+                    new HttpResourceCache.FetchResult(
+                            new HttpResourceCache.CachedResource(cachedBody, "etag", "last"),
+                            true,
+                            true
+                    ),
+                    cachedBody
+            );
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            try {
+                Future<HttpResourceCache.FetchResult> fetch = executor.submit(
+                        () -> cache.fetch(url, 1024, "test", "*/*")
+                );
+                assertTrue(server.requestSeen.await(2, TimeUnit.SECONDS));
+
+                // A second caller joins the same request instead of opening
+                // another retained socket or racing a second cache commit.
+                Future<HttpResourceCache.FetchResult> joinedFetch = executor.submit(
+                        () -> cache.fetch(url, 1024, "test", "*/*")
+                );
+
+                // This is the fast-start path: it must remain available while
+                // the revalidation socket is deliberately held open.
+                HttpResourceCache.CachedResource local = cache.readCached(url, 1024);
+                assertNotNull(local);
+                assertArrayEquals(cachedBody, local.getBytes());
+
+                server.release();
+                assertNotNull(fetch.get(2, TimeUnit.SECONDS));
+                assertNotNull(joinedFetch.get(2, TimeUnit.SECONDS));
+                assertEquals(1, server.requestCount.get());
+            } finally {
+                executor.shutdownNow();
+            }
+        }
+    }
+
+    @Test(timeout = 5_000L)
+    public void differentUrlsCanRevalidateInParallel() throws Exception {
+        File directory = temporaryFolder.newFolder("parallel-cache");
+        HttpResourceCache cache = new HttpResourceCache(directory, 4, 2048);
+        try (BlockingHttpServer server = new BlockingHttpServer()) {
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            try {
+                Future<HttpResourceCache.FetchResult> first = executor.submit(
+                        () -> cache.fetch(server.url("/one"), 1024, "test", "*/*")
+                );
+                Future<HttpResourceCache.FetchResult> second = executor.submit(
+                        () -> cache.fetch(server.url("/two"), 1024, "test", "*/*")
+                );
+
+                assertTrue(server.requestsSeen.await(2, TimeUnit.SECONDS));
+                server.release();
+                assertNotNull(first.get(2, TimeUnit.SECONDS));
+                assertNotNull(second.get(2, TimeUnit.SECONDS));
+                assertEquals(2, server.requestCount.get());
+            } finally {
+                executor.shutdownNow();
+            }
+        }
+    }
+
+    private static final class BlockingHttpServer implements AutoCloseable {
+        private final ServerSocket serverSocket;
+        private final ExecutorService clients = Executors.newCachedThreadPool();
+        private final CountDownLatch release = new CountDownLatch(1);
+        private final CountDownLatch requestsSeen = new CountDownLatch(2);
+        private final CountDownLatch requestSeen = new CountDownLatch(1);
+        private final AtomicInteger requestCount = new AtomicInteger();
+        private final Thread acceptThread;
+
+        private BlockingHttpServer() throws Exception {
+            serverSocket = new ServerSocket(0);
+            acceptThread = new Thread(this::acceptClients, "cache-test-server");
+            acceptThread.setDaemon(true);
+            acceptThread.start();
+        }
+
+        private String url(String path) {
+            return URI.create("http://127.0.0.1:" + serverSocket.getLocalPort() + path).toString();
+        }
+
+        private void acceptClients() {
+            try {
+                while (!serverSocket.isClosed()) {
+                    Socket socket = serverSocket.accept();
+                    clients.submit(() -> serve(socket));
+                }
+            } catch (Exception ignored) {
+                // Closing the server ends the accept loop.
+            }
+        }
+
+        private void serve(Socket socket) {
+            try (Socket connection = socket;
+                 BufferedReader reader = new BufferedReader(
+                         new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8));
+                OutputStream output = connection.getOutputStream()) {
+                String requestLine = reader.readLine();
+                String header;
+                while ((header = reader.readLine()) != null && !header.isEmpty()) {
+                    // Consume the request headers before releasing the response.
+                }
+                int count = requestCount.incrementAndGet();
+                requestSeen.countDown();
+                requestsSeen.countDown();
+                release.await(2, TimeUnit.SECONDS);
+
+                if (requestLine != null && requestLine.contains("/cached")) {
+                    output.write(("HTTP/1.1 304 Not Modified\r\n"
+                            + "ETag: etag\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                            .getBytes(StandardCharsets.UTF_8));
+                } else {
+                    byte[] body = ("body-" + count).getBytes(StandardCharsets.UTF_8);
+                    output.write(("HTTP/1.1 200 OK\r\n"
+                            + "Content-Length: " + body.length + "\r\n"
+                            + "Connection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+                    output.write(body);
+                }
+                output.flush();
+            } catch (Exception ignored) {
+                // The test reports the client-side timeout or failed future.
+            }
+        }
+
+        private void release() {
+            release.countDown();
+        }
+
+        @Override
+        public void close() throws Exception {
+            release();
+            serverSocket.close();
+            clients.shutdownNow();
+            acceptThread.join(1_000L);
+        }
     }
 }

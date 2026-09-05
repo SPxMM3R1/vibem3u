@@ -44,8 +44,8 @@ public final class ResolvedPlaybackSource {
         Objects.requireNonNull(channel, "channel");
         return new ResolvedPlaybackSource(
                 channel.getStreamUri(),
-                Collections.emptyMap(),
-                userAgent,
+                ChannelRequestHeaders.from(channel),
+                ChannelRequestHeaders.userAgent(channel, userAgent),
                 null,
                 null,
                 0L,
@@ -97,8 +97,8 @@ public final class ResolvedPlaybackSource {
         Objects.requireNonNull(channel, "channel");
         return new ResolvedPlaybackSource(
                 channel.getStreamUri(),
-                Collections.emptyMap(),
-                userAgent,
+                ChannelRequestHeaders.from(channel),
+                ChannelRequestHeaders.userAgent(channel, userAgent),
                 resolverId,
                 null,
                 0L,

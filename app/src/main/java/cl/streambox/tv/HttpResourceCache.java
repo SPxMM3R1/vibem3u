@@ -19,6 +19,11 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Locale;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Small disk cache for remote resources that supports HTTP revalidation.
@@ -35,16 +40,28 @@ final class HttpResourceCache {
         private final String etag;
         private final String lastModified;
         private final long checkedAtMillis;
+        private final long fetchSequence;
 
         CachedResource(byte[] bytes, String etag, String lastModified) {
             this(bytes, etag, lastModified, 0L);
         }
 
         CachedResource(byte[] bytes, String etag, String lastModified, long checkedAtMillis) {
+            this(bytes, etag, lastModified, checkedAtMillis, 0L);
+        }
+
+        CachedResource(
+                byte[] bytes,
+                String etag,
+                String lastModified,
+                long checkedAtMillis,
+                long fetchSequence
+        ) {
             this.bytes = bytes;
             this.etag = etag == null ? "" : etag;
             this.lastModified = lastModified == null ? "" : lastModified;
             this.checkedAtMillis = checkedAtMillis;
+            this.fetchSequence = fetchSequence;
         }
 
         byte[] getBytes() {
@@ -61,6 +78,15 @@ final class HttpResourceCache {
 
         long getCheckedAtMillis() {
             return checkedAtMillis;
+        }
+
+        /**
+         * Monotonic sequence assigned to a network response by this cache.
+         * Test and migration entries use zero and are always accepted by
+         * {@link HttpResourceCache#commit(String, FetchResult, byte[])}.
+         */
+        long getFetchSequence() {
+            return fetchSequence;
         }
 
         boolean isFresh(long nowMillis, long maxAgeMillis) {
@@ -102,6 +128,12 @@ final class HttpResourceCache {
     private final File legacyDirectory;
     private final int maxFiles;
     private final long maxBytes;
+    private final ConcurrentMap<String, Object> urlLocks = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, FutureTask<FetchResult>> inFlight =
+            new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Long> committedSequences = new ConcurrentHashMap<>();
+    private final AtomicLong fetchSequence = new AtomicLong();
+    private final Object trimLock = new Object();
 
     HttpResourceCache(Context context, String directoryName, int maxFiles, long maxBytes) {
         this(context, directoryName, maxFiles, maxBytes, true);
@@ -142,7 +174,13 @@ final class HttpResourceCache {
         }
     }
 
-    synchronized CachedResource readCached(String url, int maxResourceBytes) throws IOException {
+    CachedResource readCached(String url, int maxResourceBytes) throws IOException {
+        synchronized (lockFor(url)) {
+            return readCachedLocked(url, maxResourceBytes);
+        }
+    }
+
+    private CachedResource readCachedLocked(String url, int maxResourceBytes) throws IOException {
         File sourceDirectory = directory;
         File bodyFile = bodyFile(directory, url);
         if (!bodyFile.isFile() && legacyDirectory != null) {
@@ -177,7 +215,34 @@ final class HttpResourceCache {
         }
     }
 
-    synchronized FetchResult fetch(
+    FetchResult fetch(
+            String url,
+            int maxResourceBytes,
+            String userAgent,
+            String accept
+    ) throws IOException {
+        FutureTask<FetchResult> task = new FutureTask<>(
+                () -> fetchNetwork(url, maxResourceBytes, userAgent, accept)
+        );
+        FutureTask<FetchResult> active = inFlight.putIfAbsent(url, task);
+        if (active != null) {
+            return awaitFetch(active);
+        }
+
+        try {
+            task.run();
+            return awaitFetch(task);
+        } finally {
+            removeInFlight(url, task);
+        }
+    }
+
+    /**
+     * Performs one request after taking a short cache snapshot. The network is
+     * intentionally outside every cache lock: a retained server must not stop
+     * a cached read for this URL (or any other local cache operation).
+     */
+    private FetchResult fetchNetwork(
             String url,
             int maxResourceBytes,
             String userAgent,
@@ -213,7 +278,9 @@ final class HttpResourceCache {
                         System.currentTimeMillis()
                 );
                 try {
-                    writeMetadata(url, metadataFor(validated));
+                    synchronized (lockFor(url)) {
+                        writeMetadata(url, metadataFor(validated));
+                    }
                 } catch (IOException ignored) {
                     // The validated body remains usable even if only the
                     // freshness marker could not be persisted.
@@ -231,7 +298,8 @@ final class HttpResourceCache {
                     bytes,
                     etag,
                     lastModified,
-                    System.currentTimeMillis()
+                    System.currentTimeMillis(),
+                    fetchSequence.incrementAndGet()
             );
             boolean changed = cached == null || !Arrays.equals(cached.getBytes(), bytes);
             return new FetchResult(fresh, changed, true);
@@ -247,14 +315,44 @@ final class HttpResourceCache {
         }
     }
 
-    synchronized void commit(String url, FetchResult result, byte[] bytes) throws IOException {
+    private static FetchResult awaitFetch(FutureTask<FetchResult> task) throws IOException {
+        try {
+            return task.get();
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new IOException("La solicitud de caché fue interrumpida.", error);
+        } catch (ExecutionException error) {
+            Throwable cause = error.getCause();
+            if (cause instanceof IOException) throw (IOException) cause;
+            if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+            if (cause instanceof Error) throw (Error) cause;
+            throw new IOException("No se pudo consultar el recurso.", cause);
+        }
+    }
+
+    void commit(String url, FetchResult result, byte[] bytes) throws IOException {
+        synchronized (lockFor(url)) {
+            commitLocked(url, result, bytes);
+        }
+    }
+
+    private void commitLocked(String url, FetchResult result, byte[] bytes) throws IOException {
         if (result == null || !result.hasNetworkResponse()) return;
         CachedResource resource = result.getResource();
         if (resource == null || bytes == null || bytes.length == 0) return;
 
+        long sequence = resource.getFetchSequence();
+        Long committed = committedSequences.get(url);
+        if (sequence > 0L && committed != null && sequence < committed) {
+            // A slower parser/decoder must not publish an older response after
+            // a newer response has already reached disk.
+            return;
+        }
+
         writeBody(url, bytes);
 
         writeMetadata(url, metadataFor(resource));
+        if (sequence > 0L) committedSequences.put(url, sequence);
         trim();
     }
 
@@ -266,16 +364,28 @@ final class HttpResourceCache {
      * create a network result, so it cannot manufacture or persist resolver
      * credentials as if they were a fresh response.</p>
      */
-    synchronized void rewriteCached(String url, byte[] bytes) throws IOException {
+    void rewriteCached(String url, byte[] bytes) throws IOException {
+        synchronized (lockFor(url)) {
+            rewriteCachedLocked(url, bytes);
+        }
+    }
+
+    private void rewriteCachedLocked(String url, byte[] bytes) throws IOException {
         if (bytes == null || bytes.length == 0) {
-            remove(url);
+            removeLocked(url);
             return;
         }
         writeBody(url, bytes);
         trim();
     }
 
-    synchronized void remove(String url) {
+    void remove(String url) {
+        synchronized (lockFor(url)) {
+            removeLocked(url);
+        }
+    }
+
+    private void removeLocked(String url) {
         //noinspection ResultOfMethodCallIgnored
         bodyFile(directory, url).delete();
         //noinspection ResultOfMethodCallIgnored
@@ -297,8 +407,9 @@ final class HttpResourceCache {
     }
 
     private void writeBody(String url, byte[] bytes) throws IOException {
+        ensureDirectory();
         File target = bodyFile(directory, url);
-        File temporary = new File(directory, target.getName() + ".tmp");
+        File temporary = temporaryFile(target);
         try (FileOutputStream output = new FileOutputStream(temporary)) {
             output.write(bytes);
             output.getFD().sync();
@@ -308,15 +419,33 @@ final class HttpResourceCache {
     }
 
     private void writeMetadata(String url, Properties metadata) throws IOException {
+        ensureDirectory();
         File metadataTarget = metadataFile(directory, url);
-        File metadataTemporary = new File(directory, metadataTarget.getName() + ".tmp");
-        try (OutputStreamWriter writer = new OutputStreamWriter(
-                new FileOutputStream(metadataTemporary),
-                StandardCharsets.UTF_8
-        )) {
+        File metadataTemporary = temporaryFile(metadataTarget);
+        try (FileOutputStream output = new FileOutputStream(metadataTemporary);
+             OutputStreamWriter writer = new OutputStreamWriter(output, StandardCharsets.UTF_8)) {
             metadata.store(writer, "VibeM3U resource cache");
+            writer.flush();
+            output.getFD().sync();
         }
         replaceFile(metadataTemporary, metadataTarget);
+    }
+
+    private void ensureDirectory() throws IOException {
+        if (directory.isDirectory()) return;
+        if (!directory.exists() && directory.mkdirs()) return;
+        throw new IOException("No se pudo crear la caché local.");
+    }
+
+    private static File temporaryFile(File target) {
+        return new File(
+                target.getParentFile(),
+                target.getName()
+                        + ".tmp-"
+                        + Long.toHexString(System.nanoTime())
+                        + "-"
+                        + Long.toHexString(Thread.currentThread().getId())
+        );
     }
 
     private static Properties metadataFor(CachedResource resource) {
@@ -356,6 +485,12 @@ final class HttpResourceCache {
     }
 
     private void trim() {
+        synchronized (trimLock) {
+            trimLocked();
+        }
+    }
+
+    private void trimLocked() {
         File[] files = directory.listFiles((dir, name) -> name.endsWith(".body"));
         if (files == null || files.length == 0) return;
         Arrays.sort(files, new Comparator<>() {
@@ -381,6 +516,10 @@ final class HttpResourceCache {
     }
 
     private static void replaceFile(File temporary, File target) throws IOException {
+        // renameTo is an atomic replacement on the Android/Linux filesystem
+        // used by the app. The delete-and-retry path is kept for JVM tests and
+        // filesystems that refuse to replace an existing file in place.
+        if (temporary.renameTo(target)) return;
         if (target.exists() && !target.delete()) {
             //noinspection ResultOfMethodCallIgnored
             temporary.delete();
@@ -391,6 +530,19 @@ final class HttpResourceCache {
             temporary.delete();
             throw new IOException("No se pudo guardar una entrada de caché.");
         }
+    }
+
+    private Object lockFor(String url) {
+        String key = url == null ? "" : url;
+        Object existing = urlLocks.get(key);
+        if (existing != null) return existing;
+        Object created = new Object();
+        Object raced = urlLocks.putIfAbsent(key, created);
+        return raced == null ? created : raced;
+    }
+
+    private void removeInFlight(String url, FutureTask<FetchResult> task) {
+        if (inFlight.get(url) == task) inFlight.remove(url);
     }
 
     private static byte[] readLimited(InputStream input, int maxBytes) throws IOException {

@@ -13,6 +13,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
@@ -32,6 +33,7 @@ public final class TvVooStreamResolver implements StreamResolver {
     private static final int DEFAULT_PARALLEL_ALIASES = 2;
     private static final int DEFAULT_PARALLEL_CANDIDATES = 3;
     private static final int DEFAULT_RESOLUTION_BUDGET_MS = 8_000;
+    private static final int DEFAULT_BOTH_START_DELAY_MS = 600;
     private static final int DEFAULT_MAX_ALIASES = 6;
     private static final int DEFAULT_MAX_CANDIDATES = 8;
     static final String BOUNDED_PAYLOAD_RECIPE = "bounded-payload-v1";
@@ -125,9 +127,192 @@ public final class TvVooStreamResolver implements StreamResolver {
                 ? ResolutionProgressListener.NONE
                 : listener;
         ResolutionDeadline deadline = newResolutionDeadline();
+        ResolutionContext ambient = ResolutionContext.current();
+        if (ambient == null) {
+            ResolutionContext root = new ResolutionContext(deadline.remainingMillis());
+            try (ResolutionContext.Scope ignored = root.activate()) {
+                return resolveWithDeadline(channel, progress, deadline);
+            }
+        }
+        return resolveWithDeadline(channel, progress, deadline);
+    }
+
+    private ResolvedPlaybackSource resolveWithDeadline(
+            Channel channel,
+            ResolutionProgressListener progress,
+            ResolutionDeadline deadline
+    ) throws IOException {
         if (!resolutionMode.usesExternalResolver()) {
             return resolveDirect(channel, null, progress, deadline);
         }
+        if (!resolutionMode.usesDirectResolver()) {
+            return resolveExternal(channel, progress, deadline);
+        }
+        return resolveBoth(channel, progress, deadline);
+    }
+
+    /**
+     * Runs both engines inside one total resolution window. TvVoo starts first
+     * and the direct engine is started after a short configurable grace period
+     * when the first path is still pending. Each path owns a child context, so
+     * cancelling a losing path cannot cancel its sibling.
+     */
+    private ResolvedPlaybackSource resolveBoth(
+            Channel channel,
+            ResolutionProgressListener progress,
+            ResolutionDeadline deadline
+    ) throws IOException {
+        int delayMs = definition.getIntConfig(
+                "bothStartDelayMs",
+                definition.getIntConfig(
+                        "directFallbackDelayMs",
+                        DEFAULT_BOTH_START_DELAY_MS,
+                        0,
+                        3_000
+                ),
+                0,
+                3_000
+        );
+        ExecutorService executor = Executors.newFixedThreadPool(
+                2,
+                new NamedDaemonThreadFactory("vibem3u-tvvoo-path")
+        );
+        CompletionService<PathResult> completion = new ExecutorCompletionService<>(executor);
+        ResolutionContext parent = ResolutionContext.current();
+        if (parent == null) parent = new ResolutionContext(deadline.remainingMillis());
+        PathState external = submitPath(
+                completion,
+                parent,
+                deadline,
+                () -> resolveExternal(channel, progress, deadline)
+        );
+        PathState direct = null;
+        IOException externalError = null;
+        IOException directError = null;
+        long directStartNanos = System.nanoTime()
+                + TimeUnit.MILLISECONDS.toNanos(delayMs);
+        try {
+            while (true) {
+                deadline.check();
+                if (direct == null
+                        && !external.future.isDone()
+                        && System.nanoTime() >= directStartNanos) {
+                    direct = submitPath(
+                            completion,
+                            parent,
+                            deadline,
+                            () -> resolveDirect(channel, null, progress, deadline)
+                    );
+                }
+                if (external.future.isDone() && direct != null && direct.future.isDone()
+                        && directError != null && externalError != null) {
+                    throw combinedPathError(externalError, directError);
+                }
+
+                long waitMs = deadline.remainingMillis();
+                if (direct == null) {
+                    long untilDirect = Math.max(
+                            1L,
+                            TimeUnit.NANOSECONDS.toMillis(
+                                    directStartNanos - System.nanoTime()
+                            )
+                    );
+                    waitMs = Math.min(waitMs, untilDirect);
+                }
+                Future<PathResult> finished;
+                try {
+                    finished = completion.poll(waitMs, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Solicitud cancelada.", error);
+                }
+                if (finished == null) {
+                    deadline.check();
+                    continue;
+                }
+                PathResult result;
+                try {
+                    result = finished.get();
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Solicitud cancelada.", error);
+                } catch (ExecutionException error) {
+                    Throwable cause = error.getCause();
+                    result = new PathResult(
+                            null,
+                            cause instanceof IOException
+                                    ? (IOException) cause
+                                    : new IOException("No se pudo resolver la fuente.", cause)
+                    );
+                }
+                if (result.source != null) return result.source;
+                if (finished == external.future) externalError = result.error;
+                if (direct != null && finished == direct.future) directError = result.error;
+                if (direct == null && externalError != null) {
+                    direct = submitPath(
+                            completion,
+                            parent,
+                            deadline,
+                            () -> resolveDirect(channel, null, progress, deadline)
+                    );
+                }
+                if (externalError != null
+                        && direct != null
+                        && directError != null) {
+                    throw combinedPathError(externalError, directError);
+                }
+            }
+        } finally {
+            external.cancel();
+            if (direct != null) direct.cancel();
+            executor.shutdownNow();
+        }
+    }
+
+    private static PathState submitPath(
+            CompletionService<PathResult> completion,
+            ResolutionContext parent,
+            ResolutionDeadline deadline,
+            Callable<ResolvedPlaybackSource> operation
+    ) {
+        ResolutionContext pathContext = parent.child(deadline.remainingMillis());
+        Callable<PathResult> task = () -> {
+            try (ResolutionContext.Scope ignored = pathContext.activate()) {
+                deadline.check();
+                ResolutionContext.current().check();
+                ResolvedPlaybackSource source = operation.call();
+                deadline.check();
+                return new PathResult(source, null);
+            } catch (IOException error) {
+                return new PathResult(null, error);
+            } catch (Throwable error) {
+                return new PathResult(
+                        null,
+                        new IOException("No se pudo resolver la fuente.", error)
+                );
+            }
+        };
+        Future<PathResult> future = completion.submit(ResolutionContext.wrapCurrent(task));
+        return new PathState(pathContext, future);
+    }
+
+    private static IOException combinedPathError(
+            IOException externalError,
+            IOException directError
+    ) {
+        IOException result = new IOException(
+                "TvVoo y Vavoo directo no entregaron una fuente reproducible.",
+                directError
+        );
+        if (externalError != null) result.addSuppressed(externalError);
+        return result;
+    }
+
+    private ResolvedPlaybackSource resolveExternal(
+            Channel channel,
+            ResolutionProgressListener progress,
+            ResolutionDeadline deadline
+    ) throws IOException {
 
         String endpointBase;
         boolean boundedPayloadRecipe;
@@ -148,9 +333,6 @@ public final class TvVooStreamResolver implements StreamResolver {
                 throw new IOException("La receta declarativa del canal no está autorizada.");
             }
         } catch (IOException setupError) {
-            if (resolutionMode.usesDirectResolver()) {
-                return resolveDirect(channel, setupError, progress, newResolutionDeadline());
-            }
             throw setupError;
         }
 
@@ -187,7 +369,6 @@ public final class TvVooStreamResolver implements StreamResolver {
                 1,
                 4
         );
-        int candidateCount = 0;
         int aliasTotal = Math.min(aliases.size(), maxAliases);
         IOException lastError = null;
         List<String> limitedAliases = new ArrayList<>();
@@ -200,15 +381,36 @@ public final class TvVooStreamResolver implements StreamResolver {
                 parallelAliases,
                 new NamedDaemonThreadFactory("vibem3u-tvvoo-alias")
         );
+        CompletionService<AliasResult> aliasCompletion =
+                new ExecutorCompletionService<>(aliasExecutor);
+        List<AliasState> aliasStates = new ArrayList<>();
+        HlsCandidateRace.Streaming candidateRace = new HlsCandidateRace.Streaming(
+                maxCandidates,
+                parallelCandidates,
+                deadline,
+                0,
+                maxCandidates,
+                progress,
+                candidate -> validateCandidate(
+                        validator,
+                        candidate,
+                        allowHttpFallback,
+                        playbackHeaders,
+                        true,
+                        progress
+                )
+        );
+        LinkedHashSet<URI> globallySeenCandidates = new LinkedHashSet<>();
+        int nextAlias = 0;
+        int inFlightAliases = 0;
+        int completedAliases = 0;
         try {
-            for (int offset = 0;
-                 offset < limitedAliases.size() && candidateCount < maxCandidates;
-                 offset += parallelAliases) {
-                deadline.check();
-                List<AliasResult> batch = fetchAliasBatch(
-                        limitedAliases,
-                        offset,
-                        parallelAliases,
+            while (nextAlias < limitedAliases.size()
+                    && inFlightAliases < parallelAliases
+                    && candidateRace.hasCapacity()) {
+                aliasStates.add(submitAlias(
+                        limitedAliases.get(nextAlias),
+                        nextAlias++,
                         aliasTotal,
                         endpointBase,
                         jsonHeaders,
@@ -217,61 +419,121 @@ public final class TvVooStreamResolver implements StreamResolver {
                         httpClient,
                         progress,
                         deadline,
-                        aliasExecutor
-                );
-                LinkedHashSet<URI> candidates = new LinkedHashSet<>();
-                for (AliasResult result : batch) {
-                    if (result.error != null) lastError = result.error;
-                    candidates.addAll(result.candidates);
+                        aliasCompletion
+                ));
+                inFlightAliases++;
+            }
+            while (inFlightAliases > 0 || candidateRace.hasInFlight()) {
+                deadline.check();
+                if (!candidateRace.hasCapacity() && !candidateRace.hasInFlight()) {
+                    break;
                 }
-                if (candidates.isEmpty()) continue;
-
-                HlsCandidateRace.Result race = HlsCandidateRace.firstValid(
-                        new ArrayList<>(candidates),
-                        maxCandidates - candidateCount,
-                        parallelCandidates,
-                        deadline,
-                        candidateCount,
-                        maxCandidates,
-                        progress,
-                        candidate -> validateCandidate(
-                                validator,
-                                candidate,
-                                allowHttpFallback,
+                HlsCandidateRace.Attempt candidateAttempt = candidateRace.poll(1L);
+                if (candidateAttempt != null) {
+                    if (candidateAttempt.getAccepted() != null) {
+                        URI source = candidateAttempt.getAccepted();
+                        progress.onProgress(ResolutionProgress.of(
+                                ResolutionStage.SOURCE_FOUND,
+                                "HLS válido · GET " + SafePlaybackText.url(source)
+                                        + " · candidato aceptado"
+                        ));
+                        return ResolvedPlaybackSource.dynamic(
+                                getId(),
+                                stableSourceId(channel),
+                                source,
                                 playbackHeaders,
-                                true,
-                                progress
-                        )
-                );
-                candidateCount += race.getAttempted();
-                if (race.getLastError() != null) lastError = race.getLastError();
-                if (race.getSource() != null) {
-                    progress.onProgress(ResolutionProgress.of(
-                            ResolutionStage.SOURCE_FOUND,
-                            "HLS válido · GET " + SafePlaybackText.url(race.getSource())
-                                    + " · candidato aceptado"
-                    ));
-                    return ResolvedPlaybackSource.dynamic(
-                            getId(),
-                            stableSourceId(channel),
-                            race.getSource(),
-                            playbackHeaders,
-                            PLAYBACK_USER_AGENT,
-                            expiresAt()
-                    );
+                                PLAYBACK_USER_AGENT,
+                                expiresAt()
+                        );
+                    }
+                    if (candidateAttempt.getError() != null) {
+                        lastError = candidateAttempt.getError();
+                    }
+                    continue;
+                }
+
+                Future<AliasResult> finished = aliasCompletion.poll();
+                if (finished != null) {
+                    inFlightAliases--;
+                    completedAliases++;
+                    AliasResult result;
+                    try {
+                        result = finished.get();
+                    } catch (InterruptedException error) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("Solicitud cancelada.", error);
+                    } catch (ExecutionException error) {
+                        Throwable cause = error.getCause();
+                        result = new AliasResult(
+                                completedAliases - 1,
+                                Collections.emptyList(),
+                                cause instanceof IOException
+                                        ? (IOException) cause
+                                        : new IOException("No se pudo consultar el alias.", cause)
+                        );
+                    }
+                    if (result.error != null) lastError = result.error;
+                    for (URI candidate : result.candidates) {
+                        if (globallySeenCandidates.add(candidate)) {
+                            candidateRace.submit(candidate);
+                            if (!candidateRace.hasCapacity()) break;
+                        }
+                    }
+                    while (nextAlias < limitedAliases.size()
+                            && inFlightAliases < parallelAliases
+                            && candidateRace.hasCapacity()) {
+                        aliasStates.add(submitAlias(
+                                limitedAliases.get(nextAlias),
+                                nextAlias++,
+                                aliasTotal,
+                                endpointBase,
+                                jsonHeaders,
+                                definition,
+                                boundedPayloadRecipe,
+                                httpClient,
+                                progress,
+                                deadline,
+                                aliasCompletion
+                        ));
+                        inFlightAliases++;
+                    }
+                    continue;
+                }
+
+                // No completed event yet. A short poll lets either the next
+                // alias or the next HLS validation report without imposing a
+                // batch barrier on the other queue.
+                if (candidateRace.hasInFlight()) {
+                    HlsCandidateRace.Attempt attempt = candidateRace.poll(10L);
+                    if (attempt != null) {
+                        if (attempt.getAccepted() != null) {
+                            URI source = attempt.getAccepted();
+                            progress.onProgress(ResolutionProgress.of(
+                                    ResolutionStage.SOURCE_FOUND,
+                                    "HLS válido · GET " + SafePlaybackText.url(source)
+                                            + " · candidato aceptado"
+                            ));
+                            return ResolvedPlaybackSource.dynamic(
+                                    getId(),
+                                    stableSourceId(channel),
+                                    source,
+                                    playbackHeaders,
+                                    PLAYBACK_USER_AGENT,
+                                    expiresAt()
+                            );
+                        }
+                        if (attempt.getError() != null) lastError = attempt.getError();
+                    }
+                } else {
+                    Thread.yield();
                 }
             }
         } catch (IOException error) {
             lastError = error;
         } finally {
+            candidateRace.close();
+            for (AliasState state : aliasStates) state.cancel();
             aliasExecutor.shutdownNow();
-        }
-        if (resolutionMode.usesDirectResolver()) {
-            // The direct engine is an independent recovery path. Give it a
-            // fresh budget instead of inheriting an exhausted external
-            // catalogue budget; otherwise a slow/empty TvVoo endpoint would
-            // prevent the fallback from ever being attempted.
-            return resolveDirect(channel, lastError, progress, newResolutionDeadline());
         }
         throw new IOException("TvVoo no entregó una fuente reproducible.", lastError);
     }
@@ -296,14 +558,18 @@ public final class TvVooStreamResolver implements StreamResolver {
     ) throws IOException {
         try {
             if (directFallback instanceof VavooStreamResolver) {
-                return ((VavooStreamResolver) directFallback).resolve(
+                ResolvedPlaybackSource source = ((VavooStreamResolver) directFallback).resolve(
                         channel,
                         listener,
                         deadline
                 );
+                deadline.check();
+                return source;
             }
             deadline.check();
-            return directFallback.resolve(channel, listener);
+            ResolvedPlaybackSource source = directFallback.resolve(channel, listener);
+            deadline.check();
+            return source;
         } catch (IOException directError) {
             if (externalError != null) directError.addSuppressed(externalError);
             String message = resolutionMode == TvVooResolutionMode.DIRECT_ONLY
@@ -518,10 +784,9 @@ public final class TvVooStreamResolver implements StreamResolver {
         }
     }
 
-    private static List<AliasResult> fetchAliasBatch(
-            List<String> aliases,
-            int offset,
-            int parallelAliases,
+    private static AliasState submitAlias(
+            String alias,
+            int absoluteIndex,
             int aliasTotal,
             String endpointBase,
             Map<String, String> jsonHeaders,
@@ -530,23 +795,22 @@ public final class TvVooStreamResolver implements StreamResolver {
             TokenHttpClient httpClient,
             ResolutionProgressListener progress,
             ResolutionDeadline deadline,
-            ExecutorService executor
-    ) throws IOException {
-        CompletionService<AliasResult> completion = new ExecutorCompletionService<>(executor);
-        List<Future<AliasResult>> submitted = new ArrayList<>();
-        int batchSize = Math.min(parallelAliases, aliases.size() - offset);
-        for (int index = 0; index < batchSize; index++) {
-            int absoluteIndex = offset + index;
-            String alias = aliases.get(absoluteIndex);
-            progress.onProgress(ResolutionProgress.counted(
-                    ResolutionStage.ALIAS_ATTEMPT,
-                    absoluteIndex + 1,
-                    aliasTotal,
-                    "alias=" + alias + " · preparando consulta JSON"
-            ));
-            submitted.add(completion.submit(() -> {
+            CompletionService<AliasResult> completion
+    ) {
+        progress.onProgress(ResolutionProgress.counted(
+                ResolutionStage.ALIAS_ATTEMPT,
+                absoluteIndex + 1,
+                aliasTotal,
+                "alias=" + alias + " · preparando consulta JSON"
+        ));
+        ResolutionContext parent = ResolutionContext.current();
+        if (parent == null) parent = new ResolutionContext(deadline.remainingMillis());
+        ResolutionContext aliasContext = parent.child(deadline.remainingMillis());
+        Callable<AliasResult> task = () -> {
+            try (ResolutionContext.Scope ignored = aliasContext.activate()) {
                 try {
                     deadline.check();
+                    ResolutionContext.current().check();
                     String endpoint = endpointBase + "/" + encodedAlias(alias) + ".json";
                     progress.onProgress(ResolutionProgress.of(
                             ResolutionStage.CATALOG_REQUEST,
@@ -582,49 +846,16 @@ public final class TvVooStreamResolver implements StreamResolver {
                 } catch (IOException error) {
                     return new AliasResult(absoluteIndex, Collections.emptyList(), error);
                 }
-            }));
-        }
-
-        List<AliasResult> results = new ArrayList<>();
-        try {
-            while (results.size() < batchSize) {
-                deadline.check();
-                Future<AliasResult> future;
-                try {
-                    future = completion.poll(
-                            deadline.remainingMillis(),
-                            TimeUnit.MILLISECONDS
-                    );
-                } catch (InterruptedException error) {
-                    Thread.currentThread().interrupt();
-                    throw new IOException("Solicitud cancelada.", error);
-                }
-                if (future == null) throw new IOException("Tiempo de resolución agotado.");
-                try {
-                    results.add(future.get());
-                } catch (ExecutionException error) {
-                    Throwable cause = error.getCause();
-                    results.add(new AliasResult(
-                            offset + results.size(),
-                            Collections.emptyList(),
-                            cause instanceof IOException
-                                    ? (IOException) cause
-                                    : new IOException("No se pudo consultar el alias.", cause)
-                    ));
-                } catch (InterruptedException error) {
-                    Thread.currentThread().interrupt();
-                    throw new IOException("Solicitud cancelada.", error);
-                }
+            } catch (RuntimeException error) {
+                return new AliasResult(
+                        absoluteIndex,
+                        Collections.emptyList(),
+                        new IOException("No se pudo consultar el alias.", error)
+                );
             }
-        } finally {
-            for (Future<AliasResult> future : submitted) {
-                if (!future.isDone()) future.cancel(true);
-            }
-        }
-        Collections.sort(results, (left, right) ->
-                Integer.compare(left.index, right.index)
-        );
-        return results;
+        };
+        Future<AliasResult> future = completion.submit(ResolutionContext.wrapCurrent(task));
+        return new AliasState(aliasContext, future);
     }
 
     private ResolutionDeadline newResolutionDeadline() {
@@ -648,6 +879,46 @@ public final class TvVooStreamResolver implements StreamResolver {
             this.candidates = candidates == null
                     ? Collections.emptyList()
                     : candidates;
+            this.error = error;
+        }
+    }
+
+    private static final class PathState {
+        private final ResolutionContext context;
+        private final Future<PathResult> future;
+
+        PathState(ResolutionContext context, Future<PathResult> future) {
+            this.context = context;
+            this.future = future;
+        }
+
+        void cancel() {
+            context.cancel();
+            if (!future.isDone()) future.cancel(true);
+        }
+    }
+
+    private static final class AliasState {
+        private final ResolutionContext context;
+        private final Future<AliasResult> future;
+
+        AliasState(ResolutionContext context, Future<AliasResult> future) {
+            this.context = context;
+            this.future = future;
+        }
+
+        void cancel() {
+            context.cancel();
+            if (!future.isDone()) future.cancel(true);
+        }
+    }
+
+    private static final class PathResult {
+        private final ResolvedPlaybackSource source;
+        private final IOException error;
+
+        PathResult(ResolvedPlaybackSource source, IOException error) {
+            this.source = source;
             this.error = error;
         }
     }
@@ -725,18 +996,21 @@ public final class TvVooStreamResolver implements StreamResolver {
         }
     }
 
-    private static URI withScheme(URI uri, String scheme) throws IOException {
+    static URI withScheme(URI uri, String scheme) throws IOException {
+        if (uri == null || scheme == null
+                || !scheme.matches("(?i)https?")) {
+            throw new IOException("TvVoo publicó una URL inválida.");
+        }
+        String raw = uri.toString();
+        int separator = raw.indexOf(':');
+        if (separator <= 0) throw new IOException("TvVoo publicó una URL inválida.");
         try {
-            return new URI(
-                    scheme,
-                    uri.getUserInfo(),
-                    uri.getHost(),
-                    -1,
-                    uri.getPath(),
-                    uri.getQuery(),
-                    uri.getFragment()
-            );
-        } catch (Exception error) {
+            // Replacing only the scheme preserves every raw byte in the
+            // authority, path, query and fragment, including escaped octets.
+            // The explicit port policy is to preserve a declared port (even
+            // when it is the default for the new scheme).
+            return URI.create(scheme + raw.substring(separator));
+        } catch (IllegalArgumentException error) {
             throw new IOException("TvVoo publicó una URL inválida.", error);
         }
     }

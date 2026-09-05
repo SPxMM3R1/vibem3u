@@ -92,7 +92,8 @@ public final class PlaylistRepository {
         return new HttpResourceCache.CachedResource(
                 sanitizedBytes,
                 cached.getEtag(),
-                cached.getLastModified()
+                cached.getLastModified(),
+                cached.getCheckedAtMillis()
         );
     }
 

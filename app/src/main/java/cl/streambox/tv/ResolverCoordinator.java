@@ -68,6 +68,8 @@ public final class ResolverCoordinator {
 
         try {
             ResolvedPlaybackSource resolved = resolver.resolve(channel, progress);
+            ResolutionContext context = ResolutionContext.current();
+            if (context != null) context.check();
             if (allowCache
                     && resolved != null
                     && !resolved.isExpired(System.currentTimeMillis())) {
@@ -155,7 +157,13 @@ public final class ResolverCoordinator {
         synchronized ResolvedPlaybackSource await() throws IOException {
             while (!done) {
                 try {
-                    wait();
+                    ResolutionContext context = ResolutionContext.current();
+                    if (context != null) {
+                        context.check();
+                        wait(Math.max(1L, Math.min(100L, context.remainingMillis())));
+                    } else {
+                        wait();
+                    }
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
                     throw new IOException("Solicitud cancelada.", interrupted);

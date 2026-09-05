@@ -37,6 +37,9 @@ final class M3uCacheSanitizer {
     );
     private static final String TVVOO_PLACEHOLDER =
             "https://resolver.invalid/tvvoo.m3u8";
+    private static final Pattern SENSITIVE_HTTP_ATTRIBUTE = Pattern.compile(
+            "(?i)\\s+http-(?:cookie|authorization)\\s*=\\s*\"[^\"]*\""
+    );
 
     private M3uCacheSanitizer() {}
 
@@ -50,12 +53,15 @@ final class M3uCacheSanitizer {
         boolean pendingPremiumStable = false;
         for (String rawLine : content.split("\\r?\\n", -1)) {
             String line = rawLine.trim();
+            if (line.matches("(?i)^#EXTVLCOPT:http-(cookie|authorization)\\s*=.*")) {
+                continue;
+            }
             if (line.regionMatches(true, 0, "#EXTINF:", 0, 8)) {
                 pendingTvgId = extractTvgId(line);
                 pendingResolver = extractResolver(line);
                 pendingResolverId = extractResolverId(line);
                 pendingPremiumStable = isPremiumStable(line, pendingResolver);
-                result.append(rawLine);
+                result.append(SENSITIVE_HTTP_ATTRIBUTE.matcher(rawLine).replaceAll(""));
             } else if (!line.isEmpty() && !line.startsWith("#")
                     && pendingPremiumStable) {
                 // A stable Premium list is allowed to carry only the public

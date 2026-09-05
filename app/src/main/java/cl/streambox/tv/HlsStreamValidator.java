@@ -3,11 +3,14 @@ package cl.streambox.tv;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /** Validates a master/media playlist and samples a recent media segment. */
 public final class HlsStreamValidator {
@@ -21,7 +24,9 @@ public final class HlsStreamValidator {
         this(new TokenHttpClient());
     }
 
-    HlsStreamValidator(TokenHttpClient httpClient) {
+    /** Public for provider tests that inject a local/fake TokenHttpClient. */
+    public HlsStreamValidator(TokenHttpClient httpClient) {
+        if (httpClient == null) throw new NullPointerException("httpClient");
         this.httpClient = httpClient;
     }
 
@@ -31,35 +36,46 @@ public final class HlsStreamValidator {
 
     /**
      * Performs the cheap validation used immediately before Media3 playback.
-     *
-     * <p>The resolver has already paid the provider/API cost by the time this
-     * method is called. Downloading a variant and a media segment here would
-     * make Media3 download the same HLS chain a second time. The playlist is
-     * still checked for a real HLS response and for at least one playable
-     * reference; Media3 remains responsible for opening the selected variant
-     * and segment.</p>
+     * The accepted root playlist is handed to the current context so Media3
+     * can consume the exact bytes without downloading it a second time.
      */
     public void validateForPlayback(
             URI playbackUri,
             Map<String, String> headers,
             ResolutionProgressListener listener
     ) throws IOException {
+        validateForPlayback(
+                playbackUri,
+                headers,
+                ResolutionContext.current(),
+                listener
+        );
+    }
+
+    /** Explicit-context overload for worker code that does not use ThreadLocal. */
+    public void validateForPlayback(
+            URI playbackUri,
+            Map<String, String> headers,
+            ResolutionContext context,
+            ResolutionProgressListener listener
+    ) throws IOException {
         if (playbackUri == null) throw new IOException("Fuente HLS inválida.");
         Map<String, String> safeHeaders = headers == null
                 ? Collections.emptyMap()
-                : headers;
+                : Collections.unmodifiableMap(new java.util.LinkedHashMap<>(headers));
         ResolutionProgressListener progress = listener == null
                 ? ResolutionProgressListener.NONE
                 : listener;
+        check(context);
         progress.onProgress(ResolutionProgress.of(
                 ResolutionStage.HLS_PLAYLIST,
                 "GET " + SafePlaybackText.url(playbackUri) + " · esperando #EXTM3U"
         ));
-        PlaylistResponse response = loadPlaylist(playbackUri, safeHeaders);
-        if (firstVariant(response.lines) == null
-                && mediaReferences(response.lines).isEmpty()) {
+        PlaylistResponse response = loadPlaylist(playbackUri, safeHeaders, context);
+        if (variantUris(response).isEmpty() && mediaReferences(response.lines).isEmpty()) {
             throw new IOException("El HLS no publicó una fuente reproducible.");
         }
+        cacheAccepted(Collections.singletonList(response), context);
         progress.onProgress(ResolutionProgress.of(
                 ResolutionStage.HLS_PLAYLIST,
                 "HTTP " + response.statusCode + " · #EXTM3U válido · referencias "
@@ -73,39 +89,130 @@ public final class HlsStreamValidator {
             Map<String, String> headers,
             ResolutionProgressListener listener
     ) throws IOException {
+        validate(playbackUri, headers, ResolutionContext.current(), listener);
+    }
+
+    /** Explicit-context overload that makes the total budget visible to callers. */
+    public void validate(
+            URI playbackUri,
+            Map<String, String> headers,
+            ResolutionContext context,
+            ResolutionProgressListener listener
+    ) throws IOException {
         if (playbackUri == null) throw new IOException("Fuente HLS inválida.");
         Map<String, String> safeHeaders = headers == null
                 ? Collections.emptyMap()
-                : headers;
+                : Collections.unmodifiableMap(new java.util.LinkedHashMap<>(headers));
         ResolutionProgressListener progress = listener == null
                 ? ResolutionProgressListener.NONE
                 : listener;
+        check(context);
         progress.onProgress(ResolutionProgress.of(
                 ResolutionStage.HLS_PLAYLIST,
                 "GET " + SafePlaybackText.url(playbackUri) + " · esperando #EXTM3U"
         ));
-        PlaylistResponse current = loadPlaylist(playbackUri, safeHeaders);
+        PlaylistResponse root = loadPlaylist(playbackUri, safeHeaders, context);
         progress.onProgress(ResolutionProgress.of(
                 ResolutionStage.HLS_PLAYLIST,
-                "HTTP " + current.statusCode + " · #EXTM3U válido · referencias "
-                        + mediaReferenceCount(current.lines)
+                "HTTP " + root.statusCode + " · #EXTM3U válido · referencias "
+                        + mediaReferenceCount(root.lines)
         ));
 
-        for (int depth = 0; depth < MAX_PLAYLIST_DEPTH; depth++) {
-            String variant = firstVariant(current.lines);
-            if (variant == null) break;
-            URI variantUri = resolve(current.finalUri, variant);
+        List<PlaylistResponse> accepted = validateChain(
+                root,
+                safeHeaders,
+                progress,
+                context,
+                0,
+                new LinkedHashSet<>()
+        );
+        cacheAccepted(accepted, context);
+    }
+
+    /**
+     * Validates and returns the context handoff cache used for this attempt.
+     * This convenience method is useful to coordinators that retain the cache
+     * after the worker's context scope is closed.
+     */
+    public ManifestHandoffCache validateAndCapture(
+            URI playbackUri,
+            Map<String, String> headers,
+            ResolutionContext context,
+            boolean strict,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        if (strict) validate(playbackUri, headers, context, listener);
+        else validateForPlayback(playbackUri, headers, context, listener);
+        return context == null ? null : context.manifests();
+    }
+
+    private List<PlaylistResponse> validateChain(
+            PlaylistResponse current,
+            Map<String, String> headers,
+            ResolutionProgressListener progress,
+            ResolutionContext context,
+            int depth,
+            Set<URI> visited
+    ) throws IOException {
+        check(context);
+        if (depth >= MAX_PLAYLIST_DEPTH) {
+            if (!variantUris(current).isEmpty()) {
+                throw new IOException("El HLS publicó demasiadas variantes anidadas.");
+            }
+            sampleSegments(current, headers, progress, context);
+            return Collections.singletonList(current);
+        }
+
+        List<URI> variants = variantUris(current);
+        if (variants.isEmpty()) {
+            sampleSegments(current, headers, progress, context);
+            return Collections.singletonList(current);
+        }
+
+        IOException lastError = null;
+        for (URI variantUri : variants) {
+            check(context);
+            if (!visited.add(variantUri)) {
+                lastError = new IOException("El HLS publicó una variante circular.");
+                continue;
+            }
             progress.onProgress(ResolutionProgress.of(
                     ResolutionStage.HLS_VARIANT,
                     "GET " + SafePlaybackText.url(variantUri) + " · playlist secundaria"
             ));
-            current = loadPlaylist(variantUri, safeHeaders);
-            progress.onProgress(ResolutionProgress.of(
-                    ResolutionStage.HLS_VARIANT,
-                    "HTTP " + current.statusCode + " · variante #EXTM3U válida"
-            ));
+            try {
+                PlaylistResponse variant = loadPlaylist(variantUri, headers, context);
+                progress.onProgress(ResolutionProgress.of(
+                        ResolutionStage.HLS_VARIANT,
+                        "HTTP " + variant.statusCode + " · variante #EXTM3U válida"
+                ));
+                List<PlaylistResponse> accepted = validateChain(
+                        variant,
+                        headers,
+                        progress,
+                        context,
+                        depth + 1,
+                        visited
+                );
+                List<PlaylistResponse> chain = new ArrayList<>();
+                chain.add(current);
+                chain.addAll(accepted);
+                return chain;
+            } catch (IOException error) {
+                lastError = error;
+            } finally {
+                visited.remove(variantUri);
+            }
         }
+        throw new IOException("El HLS no publicó una variante reproducible.", lastError);
+    }
 
+    private void sampleSegments(
+            PlaylistResponse current,
+            Map<String, String> headers,
+            ResolutionProgressListener progress,
+            ResolutionContext context
+    ) throws IOException {
         List<String> segments = mediaReferences(current.lines);
         if (segments.isEmpty()) throw new IOException("El HLS no publicó segmentos.");
         boolean encryptedSegments = hasEncryptedSegments(current.lines);
@@ -113,6 +220,7 @@ public final class HlsStreamValidator {
         IOException lastError = null;
         for (int index : recentProbeOrder(segments.size())) {
             try {
+                check(context);
                 URI segmentUri = resolve(current.finalUri, segments.get(index));
                 PublicStreamPolicy.requirePublicHttp(segmentUri);
                 progress.onProgress(ResolutionProgress.of(
@@ -122,16 +230,16 @@ public final class HlsStreamValidator {
                 ));
                 TokenHttpClient.Response response = httpClient.getPublicPrefix(
                         segmentUri.toString(),
-                        safeHeaders,
+                        headers,
                         MAX_SEGMENT_PROBE_BYTES,
                         "bytes=0-4095"
                 );
+                check(context);
                 PublicStreamPolicy.requirePublicHttp(response.getFinalUri());
                 if (response.getBody().length == 0
                         || looksLikeErrorDocument(response.getBody())
                         || (!encryptedSegments && !isRecognizedMediaSample(
-                                response.getBody(),
-                                response.getContentType()
+                                response.getBody(), response.getContentType()
                         ))) {
                     throw new IOException("El segmento HLS no es reproducible.");
                 }
@@ -147,8 +255,12 @@ public final class HlsStreamValidator {
         throw new IOException("El HLS no publicó un segmento reciente reproducible.", lastError);
     }
 
-    private PlaylistResponse loadPlaylist(URI uri, Map<String, String> headers)
-            throws IOException {
+    private PlaylistResponse loadPlaylist(
+            URI uri,
+            Map<String, String> headers,
+            ResolutionContext context
+    ) throws IOException {
+        check(context);
         PublicStreamPolicy.requirePublicHttp(uri);
         TokenHttpClient.Response response = httpClient.getPublic(
                 uri.toString(),
@@ -156,7 +268,10 @@ public final class HlsStreamValidator {
                 MAX_PLAYLIST_BYTES,
                 null
         );
+        check(context);
         PublicStreamPolicy.requirePublicHttp(response.getFinalUri());
+        // The Mega adapter's numeric representation is decoded before this
+        // handoff is captured, so Media3 receives ordinary #EXTM3U bytes.
         byte[] playlistBody = MeganoticiasHlsDecoder.decodeIfNeeded(response.getBody());
         String content = new String(playlistBody, StandardCharsets.UTF_8)
                 .replace("\uFEFF", "")
@@ -165,22 +280,65 @@ public final class HlsStreamValidator {
             throw new IOException("La respuesta no es una playlist HLS.");
         }
         return new PlaylistResponse(
+                uri,
                 response.getFinalUri(),
                 response.getStatusCode(),
+                headers,
+                playlistBody,
                 Arrays.asList(content.split("\\r?\\n"))
         );
     }
 
-    private static String firstVariant(List<String> lines) {
-        for (int index = 0; index < lines.size(); index++) {
-            if (!lines.get(index).trim().toUpperCase(Locale.ROOT)
-                    .startsWith("#EXT-X-STREAM-INF:")) continue;
-            for (int candidate = index + 1; candidate < lines.size(); candidate++) {
-                String value = lines.get(candidate).trim();
-                if (!value.isBlank() && !value.startsWith("#")) return value;
+    private static void cacheAccepted(
+            List<PlaylistResponse> responses,
+            ResolutionContext context
+    ) {
+        if (context == null || responses == null) return;
+        ManifestHandoffCache cache = context.manifests();
+        for (PlaylistResponse response : responses) {
+            if (response != null) {
+                cache.put(response.originalUri, response.finalUri, response.requestHeaders,
+                        response.rawBody);
             }
         }
-        return null;
+    }
+
+    private static List<URI> variantUris(PlaylistResponse response) throws IOException {
+        List<URI> result = new ArrayList<>();
+        if (response == null) return result;
+        for (String value : variantReferences(response.lines)) {
+            try {
+                URI resolved = response.finalUri.resolve(value);
+                PublicStreamPolicy.requirePublicHttp(resolved);
+                if (!result.contains(resolved)) result.add(resolved);
+            } catch (IllegalArgumentException | IOException error) {
+                // A malformed alternative is treated as a failed alternative;
+                // another variant can still be playable.
+            }
+        }
+        return result;
+    }
+
+    private static List<String> variantReferences(List<String> lines) {
+        List<String> result = new ArrayList<>();
+        if (lines == null) return result;
+        for (int index = 0; index < lines.size(); index++) {
+            String line = lines.get(index).trim();
+            if (!line.toUpperCase(Locale.ROOT).startsWith("#EXT-X-STREAM-INF:")) continue;
+            for (int candidate = index + 1; candidate < lines.size(); candidate++) {
+                String value = lines.get(candidate).trim();
+                if (!value.isBlank() && !value.startsWith("#")) {
+                    result.add(value);
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+
+    private static String firstVariant(List<String> lines) {
+        List<String> variants = variantReferences(lines);
+        return variants.isEmpty() ? null : variants.get(0);
     }
 
     private static List<String> mediaReferences(List<String> lines) {
@@ -189,6 +347,8 @@ public final class HlsStreamValidator {
             String value = line.trim();
             if (!value.isBlank() && !value.startsWith("#")) references.add(value);
         }
+        // Master variant URIs are references too; callers that need segments
+        // invoke this only after variantUris is empty.
         return references;
     }
 
@@ -253,6 +413,13 @@ public final class HlsStreamValidator {
         }
     }
 
+    private static void check(ResolutionContext context) throws IOException {
+        if (context != null) context.check();
+        else if (Thread.currentThread().isInterrupted()) {
+            throw new IOException("Solicitud cancelada.");
+        }
+    }
+
     private static boolean looksLikeErrorDocument(byte[] body) {
         if (body == null || body.length == 0) return true;
         int length = Math.min(body.length, 256);
@@ -266,13 +433,28 @@ public final class HlsStreamValidator {
     }
 
     private static final class PlaylistResponse {
+        final URI originalUri;
         final URI finalUri;
         final int statusCode;
+        final Map<String, String> requestHeaders;
+        final byte[] rawBody;
         final List<String> lines;
 
-        PlaylistResponse(URI finalUri, int statusCode, List<String> lines) {
+        PlaylistResponse(
+                URI originalUri,
+                URI finalUri,
+                int statusCode,
+                Map<String, String> requestHeaders,
+                byte[] rawBody,
+                List<String> lines
+        ) {
+            this.originalUri = originalUri;
             this.finalUri = finalUri;
             this.statusCode = statusCode;
+            this.requestHeaders = requestHeaders == null
+                    ? Collections.emptyMap()
+                    : requestHeaders;
+            this.rawBody = rawBody == null ? new byte[0] : rawBody;
             this.lines = lines;
         }
     }
