@@ -10,7 +10,11 @@ import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.analytics.AnalyticsListener;
+import androidx.media3.exoplayer.source.LoadEventInfo;
+import androidx.media3.exoplayer.source.MediaLoadData;
 import androidx.media3.exoplayer.upstream.DefaultAllocator;
+import java.io.IOException;
 import java.util.ArrayDeque;
 
 /** Bounded sample memory and a small, URL-free diagnostic history. Never flushes live samples. */
@@ -35,17 +39,27 @@ final class PlaybackBufferManager implements AutoCloseable {
             record("state", 0, 0, state == Player.STATE_BUFFERING);
         }
         @Override public void onPlayerError(PlaybackException error) {
-            int http = 0;
-            Throwable cause = error;
-            for (int depth = 0; cause != null && depth < 12; depth++, cause = cause.getCause()) {
-                if (cause instanceof HttpDataSource.InvalidResponseCodeException) {
-                    http = ((HttpDataSource.InvalidResponseCodeException) cause).responseCode;
-                    break;
-                }
-            }
-            record("error", error.errorCode, http, true);
+            record("error", error.errorCode, httpStatus(error), true);
         }
     };
+    private final AnalyticsListener loadListener = new AnalyticsListener() {
+        @Override public void onLoadError(EventTime time, LoadEventInfo info,
+                MediaLoadData data, IOException error, boolean wasCanceled) {
+            // A late failure from a previous media period is unrelated to the current buffer.
+            if (player == null || !time.timeline.equals(player.getCurrentTimeline())) return;
+            record(wasCanceled ? "load_cancelled" : "load_error", 0, httpStatus(error), false);
+            if (!history.isEmpty()) Log.i(TAG, history.getLast());
+        }
+    };
+
+    private static int httpStatus(Throwable cause) {
+        for (int depth = 0; cause != null && depth < 12; depth++, cause = cause.getCause()) {
+            if (cause instanceof HttpDataSource.InvalidResponseCodeException) {
+                return ((HttpDataSource.InvalidResponseCodeException) cause).responseCode;
+            }
+        }
+        return 0;
+    }
 
     PlaybackBufferManager(long maxHeapBytes, boolean lowRamDevice) {
         targetBytes = PlaybackBufferBudget.targetBytes(maxHeapBytes, lowRamDevice);
@@ -64,6 +78,7 @@ final class PlaybackBufferManager implements AutoCloseable {
         this.player = player;
         this.metrics = metrics;
         player.addListener(listener);
+        player.addAnalyticsListener(loadListener);
         handler.post(sampler);
     }
 
@@ -92,7 +107,10 @@ final class PlaybackBufferManager implements AutoCloseable {
 
     @Override public void close() {
         handler.removeCallbacksAndMessages(null);
-        if (player != null) player.removeListener(listener);
+        if (player != null) {
+            player.removeListener(listener);
+            player.removeAnalyticsListener(loadListener);
+        }
         player = null;
         metrics = null;
         history.clear();
