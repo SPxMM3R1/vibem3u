@@ -488,10 +488,8 @@ public final class HighflyPremiumCatalogRepository {
         if (token == null || token.isBlank()) return 0L;
         long until;
         synchronized (sessionLock) {
-            until = credentialCooldowns.getOrDefault(
-                    cooldownKey(token, safeRegion(region)),
-                    0L
-            );
+            Long storedUntil = credentialCooldowns.get(cooldownKey(token, safeRegion(region)));
+            until = storedUntil == null ? 0L : storedUntil;
             if (until <= 0L) return 0L;
         }
         long remaining = until - System.currentTimeMillis();

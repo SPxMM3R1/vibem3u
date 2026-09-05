@@ -107,12 +107,18 @@ public final class TvnStreamResolver implements StreamResolver {
                         + " · HTML · configuración pública"
         ));
         String page = httpClient.getText(livePage, pageHeaders(pageReferer));
-        long explicitExpiryAtMillis = ProviderStreamParsers.parseOptionalExpiryMillis(page);
         ProviderStreamParsers.TvnConfig providerConfig = ProviderStreamParsers.parseTvn(
                 page,
                 config("idPattern", ""),
                 config("tokenPattern", ""),
                 config("defaultStreamId", "57a498c4d7b86d600e5461cb")
+        );
+        // Restrict page metadata to the object that published this exact
+        // token; ad/player expiration fields elsewhere on the page are not
+        // evidence that the TVN stream token is expiring.
+        long explicitExpiryAtMillis = ProviderStreamParsers.parseTvnExpiryMillis(
+                page,
+                providerConfig.getAccessToken()
         );
         progress.onProgress(ResolutionProgress.of(
                 ResolutionStage.PAGE_PARSED,

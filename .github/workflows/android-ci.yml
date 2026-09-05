@@ -187,6 +187,12 @@ jobs:
             -c:v libx264 -pix_fmt yuv420p -movflags +faststart -an \
             app/src/androidTest/assets/startup-test.mp4
 
+      - name: Habilitar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Ejecutar prueba Android en emulador
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -194,7 +200,7 @@ jobs:
           target: google_apis
           arch: x86_64
           force-avd-creation: true
-          enable-hw-accel: true
+          disable-linux-hw-accel: false
           disable-animations: true
           script: |
             chmod +x gradlew

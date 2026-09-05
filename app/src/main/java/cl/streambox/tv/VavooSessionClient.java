@@ -582,6 +582,7 @@ final class VavooSessionClient {
         String rememberedId = rememberedWinningIdentity(channel);
         for (CatalogEntry entry : entries) {
             if (!strictChannelCompatible(channel, entry)) continue;
+            if (!strictTargetsCompatible(targets, entry)) continue;
             int best = -1;
             // A stable identity is authoritative for the name lookup. The
             // channel-level country/number guard above still applies, so an
@@ -643,6 +644,34 @@ final class VavooSessionClient {
                 && !target.number.equals(extractNumber(entry.name))) return false;
         return !target.countryDeclared
                 || target.country.equals(countryKey(entry.country));
+    }
+
+    /**
+     * Do not let a relaxed target silently widen a declared alias constraint.
+     * Multiple aliases may intentionally declare different countries or
+     * numbers, so an entry is accepted when it matches at least one declared
+     * value of each kind.
+     */
+    private static boolean strictTargetsCompatible(
+            List<Target> targets,
+            CatalogEntry entry
+    ) {
+        boolean countryDeclared = false;
+        boolean countryMatched = false;
+        boolean numberDeclared = false;
+        boolean numberMatched = false;
+        for (Target target : targets) {
+            if (target.countryDeclared) {
+                countryDeclared = true;
+                if (target.country.equals(countryKey(entry.country))) countryMatched = true;
+            }
+            if (target.numberDeclared) {
+                numberDeclared = true;
+                if (target.number.equals(extractNumber(entry.name))) numberMatched = true;
+            }
+        }
+        return (!countryDeclared || countryMatched)
+                && (!numberDeclared || numberMatched);
     }
 
     /** Channel metadata is authoritative even when an alias is less specific. */

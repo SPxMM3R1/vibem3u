@@ -1,7 +1,6 @@
 package cl.streambox.tv;
 
 import java.net.URI;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -70,7 +69,7 @@ public final class ManifestHandoffCache {
                 headers,
                 rawBytes,
                 now
-        ), now));
+        )));
         if (replaced != null) replaced.data.clearBytes();
     }
 
@@ -118,17 +117,27 @@ public final class ManifestHandoffCache {
     }
 
     public synchronized int size() {
+        if (!usable()) return 0;
         purgeExpiredLocked();
         return entries.size();
     }
 
     public synchronized void clear() {
+        clearLocked();
+    }
+
+    private void clearLocked() {
         for (Entry entry : entries.values()) entry.data.clearBytes();
         entries.clear();
     }
 
     private boolean usable() {
-        return !context.isCancelled() && context.remainingMillis() > 0L;
+        if (!context.isCancelled() && context.remainingMillis() > 0L) return true;
+        // A deadline can expire without an explicit cancel. Drop the bytes at
+        // the first subsequent access so stale signed playlists cannot remain
+        // resident until the next TTL sweep.
+        clearLocked();
+        return false;
     }
 
     private void purgeExpiredLocked() {
@@ -186,7 +195,7 @@ public final class ManifestHandoffCache {
         final ManifestHandoffData data;
         final long createdAtNanos;
 
-        Entry(ManifestHandoffData data, long createdAtMillis) {
+        Entry(ManifestHandoffData data) {
             this.data = data;
             this.createdAtNanos = System.nanoTime();
         }

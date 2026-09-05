@@ -46,6 +46,7 @@ public final class VavooSessionClientTest {
         assertNotNull(target);
         assertEquals("SKY SPORTS RACING HD", target.searchName);
         assertEquals("unitedkingdom", target.country);
+        assertEquals("", target.number);
     }
 
     @Test
@@ -75,5 +76,16 @@ public final class VavooSessionClientTest {
                 "Sky Sports F1 HD",
                 "Spain"
         ));
+    }
+
+    @Test
+    public void keepsDeclaredAliasNumberAsPartOfTheStableTarget() {
+        VavooSessionClient.Target target = VavooSessionClient.targetFromAlias(
+                "vavoo_Canal%201%7Cgroup%3Auk%7Cnumber%3A1"
+        );
+
+        assertNotNull(target);
+        assertEquals("1", target.number);
+        assertTrue(target.numberDeclared);
     }
 }

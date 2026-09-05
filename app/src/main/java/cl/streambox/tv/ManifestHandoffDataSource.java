@@ -9,6 +9,7 @@ import androidx.media3.datasource.DataSpec;
 import androidx.media3.datasource.TransferListener;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -47,20 +48,34 @@ public final class ManifestHandoffDataSource implements DataSource {
         // A handoff is looked up only for playlist URIs. Segment and key
         // requests can never consume or enter this cache.
         URIHolder uri = URIHolder.from(dataSpec.uri);
-        if (uri.playlist) {
+        // HLS uses GET for playlists. Preserve POST/HEAD semantics and any
+        // request body by delegating those opens to the configured upstream.
+        // A byte range on a GET remains safe: it is served from the exact
+        // captured bytes below.
+        boolean cacheableGet = dataSpec.httpMethod == DataSpec.HTTP_METHOD_GET
+                && dataSpec.httpBody == null;
+        if (cacheableGet && uri.playlist) {
             handoff = cache.consume(uri.javaUri);
         }
         if (handoff != null) {
             body = handoff.getRawBytes();
             long requestedPosition = Math.max(0L, dataSpec.position);
             if (requestedPosition > body.length) {
+                resetState();
                 throw new IOException("Posición de playlist fuera de rango.");
             }
             position = requestedPosition;
             long requestedEnd = body.length;
             if (dataSpec.length != C.LENGTH_UNSET) {
-                if (dataSpec.length < 0L) throw new IOException("Longitud de playlist inválida.");
-                requestedEnd = Math.min(body.length, requestedPosition + dataSpec.length);
+                if (dataSpec.length < 0L) {
+                    resetState();
+                    throw new IOException("Longitud de playlist inválida.");
+                }
+                long available = body.length - requestedPosition;
+                long requestedLength = Math.min(available, dataSpec.length);
+                // requestedPosition and requestedLength are bounded by the
+                // byte array, so this addition cannot overflow.
+                requestedEnd = requestedPosition + requestedLength;
             }
             endPosition = Math.max(position, requestedEnd);
             openedUri = Uri.parse(handoff.getFinalUri().toString());
@@ -112,6 +127,8 @@ public final class ManifestHandoffDataSource implements DataSource {
     }
 
     private void resetState() {
+        if (body != null) Arrays.fill(body, (byte) 0);
+        if (handoff != null) handoff.clearBytes();
         handoff = null;
         body = null;
         position = 0L;

@@ -235,6 +235,26 @@ final class ProviderStreamParsers {
         }
     }
 
+    /**
+     * Reads expiry metadata from the same JavaScript object that published a
+     * TVN access token. A page can contain unrelated ad/player expiration
+     * fields, so a global search would incorrectly shorten the token lifetime.
+     */
+    static long parseTvnExpiryMillis(String html, String accessToken) {
+        if (html == null || html.isBlank() || accessToken == null || accessToken.isBlank()) {
+            return 0L;
+        }
+        int tokenIndex = html.indexOf(accessToken);
+        if (tokenIndex < 0) return 0L;
+        int objectStart = html.lastIndexOf('{', tokenIndex);
+        int objectEnd = html.indexOf('}', tokenIndex + accessToken.length());
+        if (objectStart < 0 || objectEnd <= objectStart
+                || objectEnd - objectStart > MAX_MEGA_CONFIG_BLOCK_LENGTH) {
+            return 0L;
+        }
+        return parseOptionalExpiryMillis(html.substring(objectStart, objectEnd + 1));
+    }
+
     private static String validateToken(String token, String provider) throws IOException {
         if (token == null || token.isBlank() || !SAFE_TOKEN_PATTERN.matcher(token).matches()) {
             throw new IOException(provider + " no publico un token valido.");

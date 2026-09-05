@@ -43,12 +43,21 @@ public final class TokenExpiryPolicy {
      */
     public long effectiveExpiryAtMillis(long fetchedAtMillis, long explicitExpiryAtMillis) {
         long fetched = Math.max(0L, fetchedAtMillis);
-        long ageExpiry = saturatingAdd(fetched, maxReuseAgeMillis);
         long explicitExpiry = safeExplicitExpiry(explicitExpiryAtMillis);
-        if (explicitExpiry == 0L) return ageExpiry;
-        long guardedExplicit = explicitExpiry <= expiryMarginMillis
+        // A zero reuse age means "do not reuse without provider metadata";
+        // it must not erase a usable explicit expiry supplied by the provider.
+        long ageExpiry = maxReuseAgeMillis <= 0L
                 ? 0L
+                : saturatingAdd(fetched, maxReuseAgeMillis);
+        if (explicitExpiry == 0L) return ageExpiry;
+
+        // Keep an explicit value non-zero even when it is already inside the
+        // safety margin. ResolvedPlaybackSource uses zero to mean "no expiry";
+        // returning one marks this token as already expired on real clocks.
+        long guardedExplicit = explicitExpiry <= expiryMarginMillis
+                ? 1L
                 : explicitExpiry - expiryMarginMillis;
+        if (ageExpiry == 0L) return guardedExplicit;
         return Math.min(ageExpiry, guardedExplicit);
     }
 

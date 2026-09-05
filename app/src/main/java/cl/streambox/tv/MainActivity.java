@@ -955,7 +955,8 @@ public final class MainActivity extends Activity {
 
         if (!hadChannels
                 || !sameChannel
-                || (streamChanged && !preserveResolvedPlayback)
+                || (streamChanged && !preserveResolvedPlayback
+                        && !(resolutionInFlightForChannel && !requestHeadersChanged))
                 || resolverNeedsResolution) {
             playChannel(channelIndex, contentChanged);
         } else {
@@ -970,7 +971,7 @@ public final class MainActivity extends Activity {
             channelName.setText(selectedChannel.getName());
             updateProgrammeInfo();
             loadChannelLogo(selectedChannel, contentChanged);
-            hideLoadingState();
+            if (player != null && player.getPlaybackState() == Player.STATE_READY) hideLoadingState();
         }
     }
 
