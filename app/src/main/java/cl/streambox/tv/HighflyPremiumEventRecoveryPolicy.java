@@ -32,7 +32,7 @@ final class HighflyPremiumEventRecoveryPolicy {
         return attempts == null ? 0 : attempts;
     }
 
-    /** A validated source means the event recovered; begin a new budget. */
+    /** Called only after sustained playback confirms the event recovered. */
     synchronized void markAvailable(String eventId) {
         String key = normalize(eventId);
         if (!key.isBlank()) attemptsByEvent.remove(key);

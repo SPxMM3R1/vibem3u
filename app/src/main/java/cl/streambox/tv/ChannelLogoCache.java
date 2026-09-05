@@ -20,6 +20,10 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
 
 public final class ChannelLogoCache {
     private static final int MAX_LOGO_BYTES = 2 * 1024 * 1024;
@@ -36,6 +40,10 @@ public final class ChannelLogoCache {
     private final LruCache<String, Bitmap> memoryCache;
     private final HttpResourceCache resourceCache;
     private final HttpResourceCache renderedCache;
+    private final ConcurrentMap<String, FutureTask<Bitmap>> fetchInFlight =
+            new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, FutureTask<RefreshResult>> refreshInFlight =
+            new ConcurrentHashMap<>();
 
     public static final class CacheLoad {
         private final Bitmap bitmap;
@@ -139,7 +147,7 @@ public final class ChannelLogoCache {
             return new CacheLoad(cachedBitmap, true);
         }
 
-        Bitmap downloadedBitmap = fetchAndDecode(
+        Bitmap downloadedBitmap = fetchAndDecodeSingleFlight(
                 url,
                 targetWidthPx,
                 targetHeightPx,
@@ -160,6 +168,26 @@ public final class ChannelLogoCache {
     ) throws IOException {
         String url = logoUri.toString();
         String memoryKey = displayCacheKey(url, targetWidthPx, targetHeightPx);
+        String refreshKey = "refresh:" + memoryKey;
+        FutureTask<RefreshResult> task = new FutureTask<>(
+                () -> refreshIfChangedOnce(url, targetWidthPx, targetHeightPx, memoryKey)
+        );
+        FutureTask<RefreshResult> active = refreshInFlight.putIfAbsent(refreshKey, task);
+        if (active != null) return awaitRefresh(active);
+        try {
+            task.run();
+            return awaitRefresh(task);
+        } finally {
+            removeRefreshInFlight(refreshKey, task);
+        }
+    }
+
+    private RefreshResult refreshIfChangedOnce(
+            String url,
+            int targetWidthPx,
+            int targetHeightPx,
+            String memoryKey
+    ) throws IOException {
         HttpResourceCache.FetchResult fetched = resourceCache.fetch(
                 url,
                 MAX_LOGO_BYTES,
@@ -227,6 +255,63 @@ public final class ChannelLogoCache {
         }
         resourceCache.remove(url);
         return null;
+    }
+
+    private Bitmap fetchAndDecodeSingleFlight(
+            String url,
+            int targetWidthPx,
+            int targetHeightPx,
+            String memoryKey
+    ) throws IOException {
+        FutureTask<Bitmap> task = new FutureTask<>(
+                () -> fetchAndDecode(url, targetWidthPx, targetHeightPx, memoryKey)
+        );
+        FutureTask<Bitmap> active = fetchInFlight.putIfAbsent(memoryKey, task);
+        if (active != null) return awaitBitmap(active);
+        try {
+            task.run();
+            return awaitBitmap(task);
+        } finally {
+            removeFetchInFlight(memoryKey, task);
+        }
+    }
+
+    private static Bitmap awaitBitmap(FutureTask<Bitmap> task) throws IOException {
+        try {
+            return task.get();
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new IOException("La carga del logo fue interrumpida.", error);
+        } catch (ExecutionException error) {
+            Throwable cause = error.getCause();
+            if (cause instanceof IOException) throw (IOException) cause;
+            if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+            if (cause instanceof Error) throw (Error) cause;
+            throw new IOException("No se pudo cargar el logo.", cause);
+        }
+    }
+
+    private static RefreshResult awaitRefresh(FutureTask<RefreshResult> task) throws IOException {
+        try {
+            return task.get();
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new IOException("La actualización del logo fue interrumpida.", error);
+        } catch (ExecutionException error) {
+            Throwable cause = error.getCause();
+            if (cause instanceof IOException) throw (IOException) cause;
+            if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+            if (cause instanceof Error) throw (Error) cause;
+            throw new IOException("No se pudo actualizar el logo.", cause);
+        }
+    }
+
+    private void removeFetchInFlight(String key, FutureTask<Bitmap> task) {
+        if (fetchInFlight.get(key) == task) fetchInFlight.remove(key);
+    }
+
+    private void removeRefreshInFlight(String key, FutureTask<RefreshResult> task) {
+        if (refreshInFlight.get(key) == task) refreshInFlight.remove(key);
     }
 
     private Bitmap fetchAndDecode(

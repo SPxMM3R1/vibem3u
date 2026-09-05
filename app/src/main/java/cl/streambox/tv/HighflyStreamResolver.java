@@ -16,6 +16,7 @@ import javax.net.ssl.SSLPeerUnverifiedException;
 public final class HighflyStreamResolver implements StreamResolver {
     private static final String DEFAULT_TEMPLATE =
             "https://leaf.highfly.dev/m3u/{id}/live.m3u8";
+    private static final long DEFAULT_RESOLUTION_BUDGET_MILLIS = 12_000L;
 
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
@@ -78,6 +79,21 @@ public final class HighflyStreamResolver implements StreamResolver {
 
     @Override
     public ResolvedPlaybackSource resolve(
+            Channel channel,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        ResolutionContext parent = ResolutionContext.current();
+        long budget = resolutionBudgetMillis();
+        ResolutionContext context = parent == null
+                ? new ResolutionContext(budget)
+                : parent.child(budget);
+        try (ResolutionContext.Scope ignored = context.activate()) {
+            context.check();
+            return resolveInContext(channel, listener);
+        }
+    }
+
+    private ResolvedPlaybackSource resolveInContext(
             Channel channel,
             ResolutionProgressListener listener
     ) throws IOException {
@@ -318,5 +334,15 @@ public final class HighflyStreamResolver implements StreamResolver {
     private long expiresAt() {
         long ttl = cacheTtlMillis();
         return ttl <= 0L ? 0L : System.currentTimeMillis() + ttl;
+    }
+
+    private long resolutionBudgetMillis() {
+        if (definition == null) return DEFAULT_RESOLUTION_BUDGET_MILLIS;
+        return definition.getIntConfig(
+                "resolutionBudgetMs",
+                (int) DEFAULT_RESOLUTION_BUDGET_MILLIS,
+                1_000,
+                20_000
+        );
     }
 }

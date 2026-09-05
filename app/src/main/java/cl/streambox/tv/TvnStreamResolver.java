@@ -12,10 +12,12 @@ public final class TvnStreamResolver implements StreamResolver {
     private static final String LIVE_PAGE = "https://live.tvn.cl/";
     private static final String PLAYLIST_BASE = "https://mdstrm.com/live-stream-playlist/";
     private static final long DEFAULT_TOKEN_CACHE_TTL_MILLIS = 5L * 60L * 1000L;
+    private static final long DEFAULT_RESOLUTION_BUDGET_MILLIS = 12_000L;
 
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
     private final HlsStreamValidator validator;
+    private final TokenExpiryPolicy tokenExpiryPolicy;
 
     public TvnStreamResolver() {
         this(null, new TokenHttpClient());
@@ -33,6 +35,7 @@ public final class TvnStreamResolver implements StreamResolver {
         this.definition = definition;
         this.httpClient = httpClient;
         this.validator = new HlsStreamValidator(httpClient);
+        this.tokenExpiryPolicy = new TokenExpiryPolicy(DEFAULT_TOKEN_CACHE_TTL_MILLIS);
     }
 
     @Override
@@ -78,6 +81,21 @@ public final class TvnStreamResolver implements StreamResolver {
             Channel channel,
             ResolutionProgressListener listener
     ) throws IOException {
+        ResolutionContext parent = ResolutionContext.current();
+        long budget = resolutionBudgetMillis();
+        ResolutionContext context = parent == null
+                ? new ResolutionContext(budget)
+                : parent.child(budget);
+        try (ResolutionContext.Scope ignored = context.activate()) {
+            context.check();
+            return resolveInContext(channel, listener);
+        }
+    }
+
+    private ResolvedPlaybackSource resolveInContext(
+            Channel channel,
+            ResolutionProgressListener listener
+    ) throws IOException {
         ResolutionProgressListener progress = listener == null
                 ? ResolutionProgressListener.NONE
                 : listener;
@@ -89,6 +107,7 @@ public final class TvnStreamResolver implements StreamResolver {
                         + " · HTML · configuración pública"
         ));
         String page = httpClient.getText(livePage, pageHeaders(pageReferer));
+        long explicitExpiryAtMillis = ProviderStreamParsers.parseOptionalExpiryMillis(page);
         ProviderStreamParsers.TvnConfig providerConfig = ProviderStreamParsers.parseTvn(
                 page,
                 config("idPattern", ""),
@@ -132,7 +151,7 @@ public final class TvnStreamResolver implements StreamResolver {
                 playbackUri,
                 playbackHeaders,
                 TokenHttpClient.BROWSER_USER_AGENT,
-                expiresAt()
+                expiresAt(explicitExpiryAtMillis)
         );
     }
 
@@ -158,7 +177,41 @@ public final class TvnStreamResolver implements StreamResolver {
     }
 
     private long expiresAt() {
+        return expiresAt(0L);
+    }
+
+    private long expiresAt(long explicitExpiryAtMillis) {
         long ttl = cacheTtlMillis();
-        return ttl <= 0L ? 0L : System.currentTimeMillis() + ttl;
+        return ttl <= 0L
+                ? 0L
+                : tokenExpiryPolicy.effectiveExpiryAtMillis(
+                        System.currentTimeMillis(),
+                        explicitExpiryAtMillis > 0L
+                                ? explicitExpiryAtMillis
+                                : configuredExplicitExpiryAtMillis()
+                );
+    }
+
+    private long resolutionBudgetMillis() {
+        if (definition == null) return DEFAULT_RESOLUTION_BUDGET_MILLIS;
+        return definition.getIntConfig(
+                "resolutionBudgetMs",
+                (int) DEFAULT_RESOLUTION_BUDGET_MILLIS,
+                1_000,
+                20_000
+        );
+    }
+
+    /** Optional catalog metadata; zero means the provider supplied no expiry. */
+    private long configuredExplicitExpiryAtMillis() {
+        if (definition == null) return 0L;
+        String value = definition.getConfig("tokenExpiresAtMillis", "");
+        if (value.isBlank()) return 0L;
+        try {
+            long parsed = Long.parseLong(value);
+            return parsed > 0L ? parsed : 0L;
+        } catch (NumberFormatException ignored) {
+            return 0L;
+        }
     }
 }

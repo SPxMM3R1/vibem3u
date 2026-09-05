@@ -26,6 +26,7 @@ final class VavooSessionClient {
     private static final int MAX_CATALOG_PAGE_BYTES = 8 * 1024 * 1024;
     private static final int MAX_RESOLVE_BYTES = 512 * 1024;
     private static final long CATALOG_REUSE_MS = 30 * 60 * 1000L;
+    private static final int DEFAULT_RESOLUTION_BUDGET_MS = 10_000;
     private static final String CLIENT_VERSION = "3.0.2";
     private static final String APP_PACKAGE = "net.vypn.app";
     private static final String APP_VERSION = "1.4.1";
@@ -35,10 +36,13 @@ final class VavooSessionClient {
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
     private final String deviceId = UUID.randomUUID().toString();
+    private final Object stateLock = new Object();
 
+    /* These values are session memory only. Never persist signatures or URLs. */
     private String signature;
     private long signatureCreatedAt;
     private final Map<String, CachedCatalog> catalogsByTarget = new LinkedHashMap<>();
+    private final Map<String, String> winningIdentityByChannel = new LinkedHashMap<>();
     private String activeBase;
 
     VavooSessionClient(ResolverDefinition definition) {
@@ -51,32 +55,75 @@ final class VavooSessionClient {
         this.activeBase = definition.getConfig("catalogBase", "https://vavoo.to");
     }
 
-    synchronized List<URI> resolveCandidates(Channel channel, List<String> aliases)
+    /** Compatibility collector; the resolver uses the streaming overload. */
+    List<URI> resolveCandidates(Channel channel, List<String> aliases)
             throws IOException {
         return resolveCandidates(channel, aliases, ResolutionProgressListener.NONE);
     }
 
-    synchronized List<URI> resolveCandidates(
+    /** Compatibility collector; it still receives each source as soon as it arrives. */
+    List<URI> resolveCandidates(
             Channel channel,
             List<String> aliases,
             ResolutionProgressListener listener
     ) throws IOException {
+        ResolutionDeadline deadline = new ResolutionDeadline(
+                definition.getIntConfig(
+                        "resolutionBudgetMs",
+                        DEFAULT_RESOLUTION_BUDGET_MS,
+                        2_000,
+                        20_000
+                )
+        );
+        List<URI> result = new ArrayList<>();
+        streamCandidates(
+                channel,
+                aliases,
+                listener,
+                deadline,
+                (candidate, identity) -> {
+                    result.add(candidate);
+                    return false;
+                }
+        );
+        return Collections.unmodifiableList(result);
+    }
+
+    /** Receives a fresh resolved URL and its stable catalogue identity. */
+    interface CandidateSink {
+        /** Return true to stop the catalogue walk after this candidate. */
+        boolean onCandidate(URI candidate, String stableIdentity) throws IOException;
+    }
+
+    /**
+     * Streams source POST results to the caller. Network work is intentionally
+     * outside {@link #stateLock}; only short memory reads/writes use the lock.
+     */
+    boolean streamCandidates(
+            Channel channel,
+            List<String> aliases,
+            ResolutionProgressListener listener,
+            ResolutionDeadline deadline,
+            CandidateSink sink
+    ) throws IOException {
         if (channel == null) throw new IOException("Canal Vavoo ausente.");
+        if (deadline == null) throw new IOException("Presupuesto de resolución ausente.");
+        if (sink == null) throw new IOException("Destino de candidato ausente.");
         ResolutionProgressListener progress = listener == null
                 ? ResolutionProgressListener.NONE
                 : listener;
-        int maximum = definition.getIntConfig("maxResolveCandidates", 8, 1, 12);
-        IOException firstError = null;
+        deadline.check();
         List<Target> targets = targets(channel, aliases);
-        clearSessionOnly();
+        IOException firstError = null;
         try {
             for (int pass = 0; pass < 2; pass++) {
+                deadline.check();
                 try {
                     // A signature is authorization material. Generate a new
                     // one for every channel open and retain it only while this
                     // resolve call is active.
                     progress.onProgress(ResolutionProgress.of(ResolutionStage.SESSION));
-                    String currentSignature = signature(true, progress);
+                    String currentSignature = signature(true, progress, deadline);
                     progress.onProgress(ResolutionProgress.of(
                             ResolutionStage.CATALOG_REQUEST,
                             "Catálogo · preparando búsqueda JSON"
@@ -85,7 +132,8 @@ final class VavooSessionClient {
                             currentSignature,
                             targets,
                             pass > 0,
-                            progress
+                            progress,
+                            deadline
                     );
                     progress.onProgress(ResolutionProgress.of(
                             ResolutionStage.CATALOG_PARSED,
@@ -93,7 +141,7 @@ final class VavooSessionClient {
                     ));
                     progress.onProgress(ResolutionProgress.of(
                             ResolutionStage.CATALOG_MATCHING,
-                            "comparando nombre exacto/normalizado + país"
+                            "comparando nombre exacto/normalizado + país + numeración"
                     ));
                     List<CatalogEntry> matches = rankedMatches(channel, aliases, entries);
                     progress.onProgress(ResolutionProgress.of(
@@ -105,32 +153,49 @@ final class VavooSessionClient {
                         throw new IOException("El canal no aparece en el catálogo Vavoo.");
                     }
 
-                    LinkedHashSet<URI> resolved = new LinkedHashSet<>();
+                    int maximum = definition.getIntConfig(
+                            "maxResolveCandidates",
+                            8,
+                            1,
+                            12
+                    );
                     int attempted = 0;
                     for (CatalogEntry match : matches) {
                         if (attempted++ >= maximum) break;
+                        deadline.check();
                         progress.onProgress(ResolutionProgress.counted(
                                 ResolutionStage.SOURCE_REQUEST,
                                 attempted,
                                 Math.min(matches.size(), maximum),
                                 "resolución " + attempted + "/"
                                         + Math.min(matches.size(), maximum)
-                                        + " · source de catálogo"
+                                        + " · source de catálogo · id=" + match.id
                         ));
                         try {
-                            URI candidate = resolveEntry(match, currentSignature, progress);
-                            if (candidate != null) resolved.add(candidate);
+                            // Resolve and publish one URL immediately. The
+                            // caller can validate it and stop before another
+                            // source POST is started.
+                            URI candidate = resolveEntry(
+                                    match,
+                                    currentSignature,
+                                    progress,
+                                    deadline
+                            );
+                            if (candidate == null) continue;
+                            boolean stop = sink.onCandidate(candidate, match.id);
+                            if (stop) {
+                                rememberWinningIdentity(channel, match.id);
+                                return true;
+                            }
                         } catch (IOException error) {
                             if (firstError == null) firstError = error;
                         }
                     }
-                    if (!resolved.isEmpty()) {
-                        return Collections.unmodifiableList(new ArrayList<>(resolved));
-                    }
                 } catch (IOException error) {
                     if (firstError == null) firstError = error;
+                } finally {
+                    clearSessionOnly();
                 }
-                clearSessionOnly();
             }
         } finally {
             clearSessionOnly();
@@ -138,19 +203,25 @@ final class VavooSessionClient {
         throw new IOException("Vavoo no entregó una fuente reproducible.", firstError);
     }
 
-    synchronized void clear() {
-        signature = null;
-        signatureCreatedAt = 0L;
-        catalogsByTarget.clear();
+    void clear() {
+        synchronized (stateLock) {
+            signature = null;
+            signatureCreatedAt = 0L;
+            catalogsByTarget.clear();
+            winningIdentityByChannel.clear();
+        }
     }
 
     private String signature(
             boolean force,
-            ResolutionProgressListener listener
+            ResolutionProgressListener listener,
+            ResolutionDeadline deadline
     ) throws IOException {
         long now = System.currentTimeMillis();
-        if (!force && signature != null) {
-            return signature;
+        if (!force) {
+            synchronized (stateLock) {
+                if (signature != null) return signature;
+            }
         }
         String primary = checkedUrl(
                 definition.getConfig("pingUrl", "https://www.vavoo.tv/api/app/ping"),
@@ -165,24 +236,27 @@ final class VavooSessionClient {
         IOException failure = null;
         for (String endpoint : new String[]{primary, fallback}) {
             try {
+                deadline.check();
                 listener.onProgress(ResolutionProgress.of(
                         ResolutionStage.SESSION,
                         "POST " + SafePlaybackText.url(endpoint)
                                 + " · generando firma en memoria"
                 ));
-                String response = httpClient.postJsonText(
+                String response = withDeadline(deadline, () -> httpClient.postJsonText(
                         endpoint,
                         pingHeaders(),
                         pingPayload().toString(),
                         MAX_PING_BYTES
-                );
+                ));
                 JSONObject root = new JSONObject(response);
                 String value = root.optString("addonSig", root.optString("mhub", "")).trim();
                 if (value.length() < 32 || value.length() > 16 * 1024) {
                     throw new IOException("Vavoo no entregó una sesión válida.");
                 }
-                signature = value;
-                signatureCreatedAt = now;
+                synchronized (stateLock) {
+                    signature = value;
+                    signatureCreatedAt = now;
+                }
                 listener.onProgress(ResolutionProgress.of(
                         ResolutionStage.SESSION,
                         "JSON válido · addonSig recibido · firma solo en memoria"
@@ -201,21 +275,23 @@ final class VavooSessionClient {
             String currentSignature,
             List<Target> targets,
             boolean force,
-            ResolutionProgressListener listener
-    )
-            throws IOException {
+            ResolutionProgressListener listener,
+            ResolutionDeadline deadline
+    ) throws IOException {
         int maxTargets = definition.getIntConfig("maxSearchTargets", 4, 1, 8);
         LinkedHashMap<String, CatalogEntry> loaded = new LinkedHashMap<>();
         IOException lastError = null;
         int searched = 0;
         for (Target target : targets) {
             if (searched++ >= maxTargets) break;
+            deadline.check();
             try {
                 for (CatalogEntry entry : catalogForTarget(
                         currentSignature,
                         target,
                         force,
-                        listener
+                        listener,
+                        deadline
                 )) {
                     loaded.put(entry.id + "\n" + entry.sourceUrl, entry);
                 }
@@ -233,10 +309,14 @@ final class VavooSessionClient {
             String currentSignature,
             Target target,
             boolean force,
-            ResolutionProgressListener listener
+            ResolutionProgressListener listener,
+            ResolutionDeadline deadline
     ) throws IOException {
+        CachedCatalog cached;
+        synchronized (stateLock) {
+            cached = catalogsByTarget.get(target.key());
+        }
         long now = System.currentTimeMillis();
-        CachedCatalog cached = catalogsByTarget.get(target.key());
         if (!force && cached != null && now - cached.createdAt < CATALOG_REUSE_MS) {
             listener.onProgress(ResolutionProgress.of(
                     ResolutionStage.CATALOG_PARSED,
@@ -245,12 +325,26 @@ final class VavooSessionClient {
             ));
             return cached.entries;
         }
-        List<CatalogEntry> loaded = searchCatalog(currentSignature, target, true, listener);
+        List<CatalogEntry> loaded = searchCatalog(
+                currentSignature,
+                target,
+                true,
+                listener,
+                deadline
+        );
         if (loaded.isEmpty() && !target.country.isBlank()) {
-            loaded = searchCatalog(currentSignature, target, false, listener);
+            loaded = searchCatalog(
+                    currentSignature,
+                    target,
+                    false,
+                    listener,
+                    deadline
+            );
         }
         List<CatalogEntry> immutable = Collections.unmodifiableList(loaded);
-        catalogsByTarget.put(target.key(), new CachedCatalog(immutable, now));
+        synchronized (stateLock) {
+            catalogsByTarget.put(target.key(), new CachedCatalog(immutable, now));
+        }
         return immutable;
     }
 
@@ -258,7 +352,8 @@ final class VavooSessionClient {
             String currentSignature,
             Target target,
             boolean filterCountry,
-            ResolutionProgressListener listener
+            ResolutionProgressListener listener,
+            ResolutionDeadline deadline
     ) throws IOException {
         ResolutionProgressListener progress = listener == null
                 ? ResolutionProgressListener.NONE
@@ -268,6 +363,7 @@ final class VavooSessionClient {
         String cursor = null;
         List<CatalogEntry> loaded = new ArrayList<>();
         for (int page = 0; page < maxPages && loaded.size() < maxItems; page++) {
+            deadline.check();
             String endpoint = catalogEndpoint();
             progress.onProgress(ResolutionProgress.counted(
                     ResolutionStage.CATALOG_PAGE,
@@ -303,7 +399,8 @@ final class VavooSessionClient {
                     endpoint,
                     payload,
                     currentSignature,
-                    MAX_CATALOG_PAGE_BYTES
+                    MAX_CATALOG_PAGE_BYTES,
+                    deadline
             );
             JSONArray items = response.optJSONArray("items");
             if (items == null || items.length() == 0) {
@@ -314,6 +411,7 @@ final class VavooSessionClient {
                 break;
             }
             for (int index = 0; index < items.length() && loaded.size() < maxItems; index++) {
+                deadline.check();
                 JSONObject item = items.optJSONObject(index);
                 if (item == null || !"iptv".equalsIgnoreCase(item.optString("type"))) continue;
                 JSONObject ids = item.optJSONObject("ids");
@@ -338,7 +436,8 @@ final class VavooSessionClient {
     private URI resolveEntry(
             CatalogEntry entry,
             String currentSignature,
-            ResolutionProgressListener listener
+            ResolutionProgressListener listener,
+            ResolutionDeadline deadline
     ) throws IOException {
         JSONObject payload = new JSONObject();
         try {
@@ -349,7 +448,6 @@ final class VavooSessionClient {
         } catch (JSONException impossible) {
             throw new IOException("No se pudo preparar la resolución Vavoo.", impossible);
         }
-        JSONObject object;
         String endpoint = resolveEndpoint();
         listener.onProgress(ResolutionProgress.of(
                 ResolutionStage.SOURCE_REQUEST,
@@ -360,7 +458,8 @@ final class VavooSessionClient {
                 endpoint,
                 payload,
                 currentSignature,
-                MAX_RESOLVE_BYTES
+                MAX_RESOLVE_BYTES,
+                deadline
         );
         listener.onProgress(ResolutionProgress.of(
                 ResolutionStage.SOURCE_REQUEST,
@@ -369,6 +468,7 @@ final class VavooSessionClient {
         try {
             String candidate = "";
             String trimmed = response.trim();
+            JSONObject object;
             if (trimmed.startsWith("[")) {
                 JSONArray array = new JSONArray(trimmed);
                 object = array.optJSONObject(0);
@@ -397,9 +497,16 @@ final class VavooSessionClient {
             String endpoint,
             JSONObject payload,
             String currentSignature,
-            int maximumBytes
+            int maximumBytes,
+            ResolutionDeadline deadline
     ) throws IOException {
-        String text = postApiText(endpoint, payload, currentSignature, maximumBytes);
+        String text = postApiText(
+                endpoint,
+                payload,
+                currentSignature,
+                maximumBytes,
+                deadline
+        );
         try {
             return new JSONObject(text);
         } catch (JSONException error) {
@@ -411,28 +518,57 @@ final class VavooSessionClient {
             String endpoint,
             JSONObject payload,
             String currentSignature,
-            int maximumBytes
+            int maximumBytes,
+            ResolutionDeadline deadline
     ) throws IOException {
         try {
-            return httpClient.postJsonText(
+            return withDeadline(deadline, () -> httpClient.postJsonText(
                     endpoint,
                     apiHeaders(currentSignature),
                     payload.toString(),
                     maximumBytes
-            );
+            ));
         } catch (TokenHttpClient.HttpStatusException error) {
             if (error.getStatusCode() != 451 && error.getStatusCode() != 502) throw error;
+            deadline.check();
             switchBase();
             String retryEndpoint = endpoint.contains("mediahubmx-catalog")
                     ? catalogEndpoint()
                     : resolveEndpoint();
-            return httpClient.postJsonText(
+            return withDeadline(deadline, () -> httpClient.postJsonText(
                     retryEndpoint,
                     apiHeaders(currentSignature),
                     payload.toString(),
                     maximumBytes
-            );
+            ));
         }
+    }
+
+    /** Runs one network operation in a child context bounded by the shared deadline. */
+    private <T> T withDeadline(
+            ResolutionDeadline deadline,
+            IoOperation<T> operation
+    ) throws IOException {
+        deadline.check();
+        ResolutionContext parent = ResolutionContext.current();
+        ResolutionContext context = parent == null
+                ? new ResolutionContext(deadline.remainingMillis())
+                : parent.child(deadline.remainingMillis());
+        try (ResolutionContext.Scope ignored = context.activate()) {
+            deadline.check();
+            context.check();
+            try {
+                return operation.call();
+            } catch (IOException error) {
+                throw error;
+            } catch (Exception error) {
+                throw new IOException("No se pudo completar la solicitud Vavoo.", error);
+            }
+        }
+    }
+
+    private interface IoOperation<T> {
+        T call() throws Exception;
     }
 
     private List<CatalogEntry> rankedMatches(
@@ -442,9 +578,21 @@ final class VavooSessionClient {
     ) {
         List<Target> targets = targets(channel, aliases);
         List<ScoredEntry> scored = new ArrayList<>();
-        String explicitId = channel.getAttributes().get("x-resolver-id");
+        String explicitId = attribute(channel, "x-resolver-id");
+        String rememberedId = rememberedWinningIdentity(channel);
         for (CatalogEntry entry : entries) {
-            int best = explicitId != null && explicitId.equalsIgnoreCase(entry.id) ? 1000 : -1;
+            if (!strictChannelCompatible(channel, entry)) continue;
+            int best = -1;
+            // A stable identity is authoritative for the name lookup. The
+            // channel-level country/number guard above still applies, so an
+            // ID can rescue a renamed catalogue entry without crossing a
+            // declared regional or numeric boundary.
+            if (!explicitId.isBlank() && explicitId.equalsIgnoreCase(entry.id)) {
+                best = 2_000;
+            }
+            if (!rememberedId.isBlank() && rememberedId.equalsIgnoreCase(entry.id)) {
+                best = 3_000;
+            }
             for (Target target : targets) {
                 int score = score(target, entry);
                 if (score > best) best = score;
@@ -455,9 +603,9 @@ final class VavooSessionClient {
             @Override
             public int compare(ScoredEntry left, ScoredEntry right) {
                 int byScore = Integer.compare(right.score, left.score);
-                return byScore != 0
-                        ? byScore
-                        : left.entry.name.compareTo(right.entry.name);
+                if (byScore != 0) return byScore;
+                int byId = left.entry.id.compareToIgnoreCase(right.entry.id);
+                return byId != 0 ? byId : left.entry.name.compareTo(right.entry.name);
             }
         });
         List<CatalogEntry> result = new ArrayList<>();
@@ -466,6 +614,8 @@ final class VavooSessionClient {
     }
 
     private static int score(Target target, CatalogEntry entry) {
+        if (!strictCompatible(target, entry)) return -1;
+
         String exactEntry = normalizedName(entry.name, false);
         String relaxedEntry = normalizedName(entry.name, true);
         int score;
@@ -479,14 +629,56 @@ final class VavooSessionClient {
         } else {
             return -1;
         }
-        if (!target.country.isBlank()) {
-            if (target.country.equals(countryKey(entry.country))) score += 80;
-            else score -= 60;
-        }
+        if (target.countryDeclared) score += 80;
+        if (target.numberDeclared) score += 80;
         String lower = entry.name.toLowerCase(Locale.ROOT);
         if (lower.contains("backup") || lower.contains("local")) score -= 10;
         if (lower.contains("hd") || lower.contains("fhd")) score += 4;
         return score;
+    }
+
+    private static boolean strictCompatible(Target target, CatalogEntry entry) {
+        if (target == null || entry == null) return false;
+        if (target.numberDeclared
+                && !target.number.equals(extractNumber(entry.name))) return false;
+        return !target.countryDeclared
+                || target.country.equals(countryKey(entry.country));
+    }
+
+    /** Channel metadata is authoritative even when an alias is less specific. */
+    private static boolean strictChannelCompatible(Channel channel, CatalogEntry entry) {
+        String country = countryKey(attribute(channel, "tvg-country"));
+        String name = attribute(channel, "tvg-name");
+        if (name.isBlank() && channel != null) name = channel.getName();
+        String declaredNumber = firstNonBlank(
+                attribute(channel, "tvg-number"),
+                attribute(channel, "channel-number"),
+                attribute(channel, "x-resolver-number")
+        );
+        return strictChannelCompatible(
+                name,
+                country,
+                declaredNumber,
+                entry.name,
+                entry.country
+        );
+    }
+
+    /** Package-visible for resolver contract tests; uses the same production rule. */
+    static boolean strictChannelCompatible(
+            String channelName,
+            String channelCountry,
+            String channelNumber,
+            String candidateName,
+            String candidateCountry
+    ) {
+        String country = countryKey(channelCountry);
+        if (!country.isBlank() && !country.equals(countryKey(candidateCountry))) return false;
+        String declaredNumber = channelNumber == null ? "" : channelNumber.trim();
+        if (declaredNumber.isBlank()) declaredNumber = extractNumber(channelName);
+        return declaredNumber.isBlank()
+                || declaredNumber.replaceAll("[^0-9]", "")
+                .equals(extractNumber(candidateName));
     }
 
     private static List<Target> targets(Channel channel, List<String> aliases) {
@@ -497,10 +689,19 @@ final class VavooSessionClient {
                 if (target != null) targets.put(target.key(), target);
             }
         }
-        String name = channel.getAttributes().get("tvg-name");
-        if (name == null || name.isBlank()) name = channel.getName();
-        String country = countryKey(channel.getAttributes().get("tvg-country"));
-        Target channelTarget = new Target(name, country);
+        String name = attribute(channel, "tvg-name");
+        if (name.isBlank()) name = channel.getName();
+        String country = countryKey(attribute(channel, "tvg-country"));
+        String declaredNumber = firstNonBlank(
+                attribute(channel, "tvg-number"),
+                attribute(channel, "channel-number"),
+                attribute(channel, "x-resolver-number")
+        );
+        Target channelTarget = new Target(
+                name,
+                country,
+                declaredNumber.isBlank() ? extractNumber(name) : declaredNumber
+        );
         if (!channelTarget.relaxedName.isBlank()) targets.put(channelTarget.key(), channelTarget);
         return new ArrayList<>(targets.values());
     }
@@ -509,13 +710,59 @@ final class VavooSessionClient {
         if (alias == null || alias.isBlank()) return null;
         try {
             String decoded = URLDecoder.decode(alias.trim(), StandardCharsets.UTF_8.name());
-            if (decoded.regionMatches(true, 0, "vavoo_", 0, 6)) decoded = decoded.substring(6);
-            String[] parts = decoded.split("(?i)\\|group:", 2);
-            Target target = new Target(parts[0], parts.length > 1 ? countryKey(parts[1]) : "");
+            if (decoded.regionMatches(true, 0, "vavoo_", 0, 6)) {
+                decoded = decoded.substring(6);
+            }
+            String[] parts = decoded.split("\\|");
+            String name = parts.length == 0 ? "" : parts[0];
+            String country = "";
+            String number = "";
+            for (int index = 1; index < parts.length; index++) {
+                String part = parts[index].trim();
+                int separator = part.indexOf(':');
+                if (separator <= 0) continue;
+                String key = part.substring(0, separator).trim().toLowerCase(Locale.ROOT);
+                String value = part.substring(separator + 1).trim();
+                if ("group".equals(key) || "country".equals(key)) {
+                    country = countryKey(value);
+                } else if ("number".equals(key)
+                        || "channel".equals(key)
+                        || "channelnumber".equals(key)
+                        || "num".equals(key)) {
+                    number = value;
+                }
+            }
+            Target target = new Target(name, country, number);
             return target.relaxedName.isBlank() ? null : target;
         } catch (Exception ignored) {
             return null;
         }
+    }
+
+    private void rememberWinningIdentity(Channel channel, String identity) {
+        if (identity == null || identity.isBlank()) return;
+        synchronized (stateLock) {
+            winningIdentityByChannel.put(channelIdentity(channel), identity.trim());
+        }
+    }
+
+    private String rememberedWinningIdentity(Channel channel) {
+        synchronized (stateLock) {
+            String value = winningIdentityByChannel.get(channelIdentity(channel));
+            return value == null ? "" : value;
+        }
+    }
+
+    private static String channelIdentity(Channel channel) {
+        String configured = attribute(channel, "x-resolver-id");
+        if (!configured.isBlank()) return "id:" + configured.toLowerCase(Locale.ROOT);
+        String tvgId = channel == null ? "" : channel.getTvgId();
+        if (tvgId != null && !tvgId.isBlank()) {
+            return "tvg:" + tvgId.trim().toLowerCase(Locale.ROOT);
+        }
+        return "name:" + (channel == null || channel.getName() == null
+                ? ""
+                : channel.getName().trim().toLowerCase(Locale.ROOT));
     }
 
     private JSONObject pingPayload() throws IOException {
@@ -596,12 +843,16 @@ final class VavooSessionClient {
     }
 
     private String apiEndpoint(String path) throws IOException {
-        String base = checkedBase(activeBase);
+        String base;
+        synchronized (stateLock) {
+            base = activeBase;
+        }
+        String checked = checkedBase(base);
         String cleanPath = path == null ? "" : path.trim();
         if (!cleanPath.matches("[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+){0,3}")) {
             throw new IOException("Ruta Vavoo no permitida.");
         }
-        return base + "/" + cleanPath;
+        return checked + "/" + cleanPath;
     }
 
     private void switchBase() throws IOException {
@@ -609,7 +860,9 @@ final class VavooSessionClient {
         String fallback = checkedBase(
                 definition.getConfig("fallbackCatalogBase", "https://kool.to")
         );
-        activeBase = activeBase.equals(primary) ? fallback : primary;
+        synchronized (stateLock) {
+            activeBase = activeBase.equals(primary) ? fallback : primary;
+        }
     }
 
     private static String checkedBase(String value) throws IOException {
@@ -637,8 +890,10 @@ final class VavooSessionClient {
     }
 
     private void clearSessionOnly() {
-        signature = null;
-        signatureCreatedAt = 0L;
+        synchronized (stateLock) {
+            signature = null;
+            signatureCreatedAt = 0L;
+        }
     }
 
     private static String language() {
@@ -673,6 +928,14 @@ final class VavooSessionClient {
                     .replaceAll("(?i)\\b(fhd|uhd|hd|sd|hevc|h265|raw|4k|backup|local)\\b", " ");
         }
         return result.replaceAll("[^a-z0-9]+", "").trim();
+    }
+
+    private static String extractNumber(String value) {
+        if (value == null) return "";
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("(?:^|\\D)(\\d+)(?:\\D|$)")
+                .matcher(value);
+        return matcher.find() ? matcher.group(1) : "";
     }
 
     private static String countryKey(String value) {
@@ -712,6 +975,20 @@ final class VavooSessionClient {
         };
     }
 
+    private static String attribute(Channel channel, String key) {
+        if (channel == null || channel.getAttributes() == null) return "";
+        String value = channel.getAttributes().get(key);
+        return value == null ? "" : value.trim();
+    }
+
+    private static String firstNonBlank(String... values) {
+        if (values == null) return "";
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value.trim();
+        }
+        return "";
+    }
+
     private static Set<String> setOf(String... values) {
         LinkedHashSet<String> result = new LinkedHashSet<>();
         Collections.addAll(result, values);
@@ -723,16 +1000,28 @@ final class VavooSessionClient {
         final String exactName;
         final String relaxedName;
         final String country;
+        final String number;
+        final boolean countryDeclared;
+        final boolean numberDeclared;
 
         Target(String name, String country) {
+            this(name, country, "");
+        }
+
+        Target(String name, String country, String number) {
             this.searchName = name == null ? "" : name.trim();
             this.exactName = normalizedName(name, false);
             this.relaxedName = normalizedName(name, true);
-            this.country = country == null ? "" : country;
+            this.country = country == null ? "" : countryKey(country);
+            this.number = number == null || number.isBlank()
+                    ? extractNumber(name)
+                    : number.replaceAll("[^0-9]", "");
+            this.countryDeclared = !this.country.isBlank();
+            this.numberDeclared = !this.number.isBlank();
         }
 
         String key() {
-            return exactName + "|" + country;
+            return exactName + "|" + country + "|" + number;
         }
     }
 

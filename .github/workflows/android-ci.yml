@@ -50,8 +50,9 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon \
             testDebugUnitTest \
-            lintDebug lintExperimental \
-            assembleDebug assembleExperimental
+            testExperimentalUnitTest testReleaseUnitTest \
+            lintDebug lintExperimental lintRelease \
+            assembleDebug assembleExperimental assembleRelease
 
       - name: Verificar firma compatible
         if: ${{ env.ANDROID_DEBUG_KEYSTORE_BASE64 != '' }}
@@ -85,6 +86,18 @@ jobs:
           )"
           echo "Certificado experimental SHA-256: $experimental_actual"
           test "$experimental_actual" = "$expected"
+
+          release_output="$(
+            "$apksigner_path" verify --print-certs \
+              app/build/outputs/apk/release/app-release.apk 2>&1
+          )"
+          echo "$release_output"
+          release_actual="$(
+            printf '%s\n' "$release_output" \
+              | grep -oE '[0-9a-fA-F]{64}' | head -n 1 | tr 'A-F' 'a-f'
+          )"
+          echo "Certificado release SHA-256: $release_actual"
+          test "$release_actual" = "$expected"
 
       - name: Verificar instalación paralela
         shell: bash
@@ -123,6 +136,27 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Publicar APK release optimizado
+        uses: actions/upload-artifact@v7
+        with:
+          name: VibeM3U-release-${{ github.sha }}
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publicar reportes de compilación
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: VibeM3U-build-reports-${{ github.sha }}
+          path: |
+            app/build/test-results
+            app/build/reports/tests
+            app/build/reports/lint-results-*.html
+            app/build/reports/lint-results-*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
   android-instrumentation:
     name: Verificar persistencia cifrada en Android
     runs-on: ubuntu-latest
@@ -141,15 +175,39 @@ jobs:
       - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Preparar fixture de reproducción local
+        shell: bash
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+          mkdir -p app/src/androidTest/assets
+          ffmpeg -y -f lavfi -i color=c=blue:s=160x96:r=10 -t 2 \
+            -c:v libx264 -pix_fmt yuv420p -movflags +faststart -an \
+            app/src/androidTest/assets/startup-test.mp4
+
       - name: Ejecutar prueba Android en emulador
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           target: google_apis
           arch: x86_64
-          profile: Pixel_2
           force-avd-creation: true
+          enable-hw-accel: true
           disable-animations: true
           script: |
             chmod +x gradlew
             ./gradlew --no-daemon connectedDebugAndroidTest
+
+      - name: Publicar reportes instrumentados
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: VibeM3U-instrumentation-reports-${{ github.sha }}
+          path: |
+            app/build/outputs/androidTest-results
+            app/build/reports/androidTests
+            app/build/outputs/logs
+          if-no-files-found: ignore
+          retention-days: 30

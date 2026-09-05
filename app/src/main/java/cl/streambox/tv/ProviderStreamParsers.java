@@ -18,6 +18,10 @@ final class ProviderStreamParsers {
     private static final Pattern JSON_ACCESS_TOKEN_PATTERN = Pattern.compile(
             "\\\"access_token\\\"\\s*:\\s*\\\"([^\\\"]+)\\\""
     );
+    private static final Pattern OPTIONAL_EXPIRY_PATTERN = Pattern.compile(
+            "(?i)\\\"?(?:expires[_-]?at|expiresAt|expiration)\\\"?\\s*[:=]\\s*"
+                    + "['\\\"]?(\\d{9,14})['\\\"]?"
+    );
     private static final Pattern MEGANOTICIAS_DECLARATION_PATTERN = Pattern.compile(
             "var\\s+VideoSenalEnVivo\\s*=\\s*\\{",
             Pattern.CASE_INSENSITIVE
@@ -208,6 +212,27 @@ final class ProviderStreamParsers {
             }
         }
         throw new IOException("Meganoticias devolvio una respuesta invalida.");
+    }
+
+    /**
+     * Reads provider supplied expiry metadata without attempting to decode a
+     * token. Values with ten or fewer digits are Unix seconds; longer values
+     * are interpreted as milliseconds. A missing/malformed field returns zero.
+     */
+    static long parseOptionalExpiryMillis(String payload) {
+        if (payload == null || payload.isBlank()) return 0L;
+        Matcher matcher = OPTIONAL_EXPIRY_PATTERN.matcher(payload);
+        if (!matcher.find()) return 0L;
+        try {
+            long value = Long.parseLong(matcher.group(1));
+            if (value <= 0L) return 0L;
+            if (matcher.group(1).length() <= 10) {
+                return value <= Long.MAX_VALUE / 1000L ? value * 1000L : 0L;
+            }
+            return value;
+        } catch (NumberFormatException ignored) {
+            return 0L;
+        }
     }
 
     private static String validateToken(String token, String provider) throws IOException {

@@ -45,7 +45,7 @@ import androidx.media3.common.text.Cue;
 import androidx.media3.common.text.CueGroup;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DataSource;
-import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.datasource.okhttp.OkHttpDataSource;
 import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.Renderer;
@@ -95,6 +95,9 @@ public final class MainActivity extends Activity {
     private PlaylistRepository repository;
     private EpgRepository epgRepository;
     private final PlaybackRecoveryPolicy playbackRecoveryPolicy = new PlaybackRecoveryPolicy();
+    private final PlaybackRecoveryEpisode playbackRecoveryEpisode = new PlaybackRecoveryEpisode();
+    private final PlaybackStartupMetrics startupMetrics = new PlaybackStartupMetrics();
+    private PlaybackBufferManager playbackBufferManager;
     private final HighflyPremiumEventRecoveryPolicy temporaryEventRecoveryPolicy =
             new HighflyPremiumEventRecoveryPolicy();
     private final ResolverCoordinator resolverCoordinator = new ResolverCoordinator();
@@ -159,22 +162,27 @@ public final class MainActivity extends Activity {
     private String subtitleTextObservedFor;
     private int playlistGeneration;
     private long logoRequestGeneration;
+    private Future<?> logoRequestTask;
     private String displayedLogoIdentity = "";
     private final Set<String> logoRevalidatedThisSession = new HashSet<>();
     private boolean playerUsesVolumeNormalization;
     private long playbackGeneration;
     private Runnable scheduledPlaybackRetry;
     private Future<?> playbackResolutionTask;
+    private ResolutionContext playbackResolutionContext;
+    private ManifestHandoffCache playbackManifestCache;
     private long playbackResolutionRequestId;
     private long activePlaybackSourceRequestId = NO_RESOLUTION_REQUEST;
     private Channel playbackChannel;
     private ResolvedPlaybackSource currentPlaybackSource;
-    private boolean tokenRefreshAttempted;
-    private boolean fallbackAttempted;
     private String loadingMessageBase = "";
     private boolean loadingMessageAnimating;
     private boolean loadingAnimationScheduled;
     private int loadingDotCount;
+    private boolean startupSelectionPending;
+    private String startupPreferredChannelIdentity = "";
+    private String epgMergeInputSignature = "";
+    private long epgMergeGeneration;
     private boolean playbackDiagnosticsActive;
     private final AtomicBoolean diagnosticsUpdateQueued = new AtomicBoolean();
     private final Runnable applyMeasuredDiagnostics = () -> {
@@ -301,22 +309,23 @@ public final class MainActivity extends Activity {
     }
 
     private void createPlayer() {
+        if (playbackBufferManager != null) playbackBufferManager.close();
+        ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        playbackBufferManager = new PlaybackBufferManager(Runtime.getRuntime().maxMemory(),
+                activityManager != null && activityManager.isLowRamDevice());
         playerUsesVolumeNormalization = isVolumeNormalizationEnabled();
         VibeRenderersFactory renderersFactory = new VibeRenderersFactory(
                 this,
                 playerUsesVolumeNormalization
         );
-        DefaultHttpDataSource.Factory httpDataSourceFactory =
-                new DefaultHttpDataSource.Factory()
-                        .setUserAgent(PLAYER_USER_AGENT)
-                        .setAllowCrossProtocolRedirects(true)
-                        .setConnectTimeoutMs(12_000)
-                        .setReadTimeoutMs(20_000);
+        OkHttpDataSource.Factory httpDataSourceFactory =
+                new OkHttpDataSource.Factory(SharedHttpClient.get()).setUserAgent(PLAYER_USER_AGENT);
         player = new ExoPlayer.Builder(
                 this,
                 renderersFactory
         )
                 .setMediaSourceFactory(new DefaultMediaSourceFactory(httpDataSourceFactory))
+                .setLoadControl(playbackBufferManager.loadControl())
                 .setAudioAttributes(
                         new AudioAttributes.Builder()
                                 .setUsage(C.USAGE_MEDIA)
@@ -326,11 +335,13 @@ public final class MainActivity extends Activity {
                 )
                 .build();
         playerView.setPlayer(player);
+        playbackBufferManager.attach(player, startupMetrics);
         PlaybackDiagnosticsWorker newBitrateMeter = new PlaybackDiagnosticsWorker(
                 this::requestDiagnosticsUpdate);
         playbackBitrateMeter = newBitrateMeter;
         updateDiagnosticsVisibility();
         player.addAnalyticsListener(newBitrateMeter);
+        player.addAnalyticsListener(new PlaybackStartupAnalytics(startupMetrics));
         MediaCodecVideoRenderer videoRenderer = renderersFactory.getVideoRenderer();
         if (videoRenderer != null) {
             player.createMessage(videoRenderer)
@@ -339,6 +350,10 @@ public final class MainActivity extends Activity {
                     .send();
         }
         player.addListener(new Player.Listener() {
+            @Override public void onIsPlayingChanged(boolean isPlaying) {
+                settlePlaybackEpisode(isPlaying);
+            }
+
             @Override public void onPlaybackStateChanged(int playbackState) {
                 maybeActivatePlaybackDiagnostics();
                 updateStreamStatus(playbackState);
@@ -372,6 +387,8 @@ public final class MainActivity extends Activity {
             }
 
             @Override public void onPlayerError(PlaybackException error) {
+                settlePlaybackEpisode(false);
+                startupMetrics.failed(startupMetrics.currentId());
                 setStatus("ERROR", R.color.red);
                 codecInfo.setText(shortMessage(error));
                 overlayAwaitingPlayback = true;
@@ -423,13 +440,21 @@ public final class MainActivity extends Activity {
 
         boolean sourceChanged = !sourceSignature.equals(loadedPlaylistSignature);
         boolean keepCurrentUi = !sourceChanged && !channels.isEmpty();
+        // A source refresh can publish cache and network snapshots in several
+        // callbacks. Keep the playback request alive while those snapshots
+        // describe the same configured source; applyPlaylists will still
+        // replace it if the selected channel disappears or its request
+        // details change.
+        boolean preserveCurrentPlayback = !sourceChanged && !channels.isEmpty();
         boolean resetPlayback = sourceChanged || channels.isEmpty();
         int generation = ++playlistGeneration;
-        playbackGeneration++;
         epgRequests.clear();
-        cancelScheduledPlaybackRetry();
-        cancelPlaybackResolution();
-        playbackRecoveryPolicy.reset();
+        if (!preserveCurrentPlayback) {
+            playbackGeneration++;
+            cancelScheduledPlaybackRetry();
+            cancelPlaybackResolution();
+            playbackRecoveryPolicy.reset();
+        }
         if (resetPlayback) {
             boolean discardProviderMedia = playbackChannel != null
                     && streamResolverRegistry.find(playbackChannel) != null;
@@ -458,6 +483,8 @@ public final class MainActivity extends Activity {
             epgDataByUrl.clear();
             activeEpgUrls.clear();
             epgData = EpgData.empty();
+            epgMergeInputSignature = "";
+            epgMergeGeneration++;
             mainHandler.removeCallbacks(updateProgramme);
         }
         if (!keepCurrentUi) {
@@ -466,174 +493,203 @@ public final class MainActivity extends Activity {
 
         final boolean existingPlaylist = !channels.isEmpty();
         final Map<Integer, Playlist> visiblePlaylists = new LinkedHashMap<>(playlistsBySource);
-        resourceCacheExecutor.submit(() -> {
-            Map<Integer, Playlist> cachedPlaylists = new LinkedHashMap<>();
-            try {
-                if (!keepCurrentUi) {
-                    for (PlaylistSource source : sources) {
-                        Playlist cached = repository.loadCached(source.getUrl());
-                        if (cached != null) {
-                            cachedPlaylists.put(source.getPosition(), cached);
-                        }
+        if (!existingPlaylist) {
+            startupSelectionPending = true;
+            startupPreferredChannelIdentity = readLastChannelIdentity();
+        }
+
+        final boolean networkAvailable = isNetworkAvailable();
+        final boolean premiumIncludeEvents = premiumConfigured
+                && HighflyPremiumPreferences.includeEvents(MainActivity.this);
+        final Set<String> selectedPremiumEventIds = premiumConfigured
+                ? HighflyPremiumPreferences.selectedEventIds(MainActivity.this)
+                : Collections.emptySet();
+        PlaylistRefreshState refresh = new PlaylistRefreshState(
+                generation,
+                sourceSignature,
+                visiblePlaylists,
+                sources
+        );
+        // A disabled Premium account must not keep a previous in-memory event
+        // list visible while the ordinary sources are refreshed.
+        if (!premiumConfigured || !premiumIncludeEvents) {
+            refresh.latest.remove(PREMIUM_EVENT_SOURCE_POSITION);
+            if (!premiumConfigured) refresh.latest.remove(PREMIUM_STABLE_SOURCE_POSITION);
+        }
+        if (!networkAvailable) {
+            refresh.pendingNetwork = 0;
+        }
+
+        // Disk reads are deliberately short tasks. They report independently
+        // and never wait for a network future, so a slow cache entry cannot
+        // hold the executor while a remote source is being downloaded.
+        for (PlaylistSource source : sources) {
+            resourceCacheExecutor.submit(() -> {
+                Playlist cached = null;
+                try {
+                    cached = repository.loadCached(source.getUrl());
+                } catch (Exception ignored) {
+                    // The corresponding network result remains authoritative.
+                }
+                Playlist cachedResult = cached;
+                mainHandler.post(() -> {
+                    if (!isCurrentPlaylistRefresh(refresh)) return;
+                    refresh.pendingCacheReads = Math.max(0, refresh.pendingCacheReads - 1);
+                    int position = source.getPosition();
+                    if (cachedResult != null && !refresh.completedNetworkPositions.contains(position)) {
+                        refresh.latest.put(position, cachedResult);
+                        publishPlaylistRefresh(refresh, false);
+                    } else {
+                        finishPlaylistRefreshIfReady(refresh);
                     }
-                    if (!cachedPlaylists.isEmpty()) {
-                        Map<Integer, Playlist> cachedSnapshot = new LinkedHashMap<>(visiblePlaylists);
-                        cachedSnapshot.putAll(cachedPlaylists);
-                        mainHandler.post(() -> {
-                            if (generation != playlistGeneration || isFinishing()) return;
-                            showLoadingState(getString(R.string.loading_playlist_cache));
-                            applyPlaylists(cachedSnapshot, sourceSignature, generation, false);
-                            loadEpgForPlaylists(cachedSnapshot, generation);
-                        });
-                    }
-                }
+                });
+            });
+        }
 
-                Map<Integer, Playlist> baseline = new LinkedHashMap<>(visiblePlaylists);
-                baseline.putAll(cachedPlaylists);
-                if (!isNetworkAvailable()) {
-                    boolean hasUsablePlaylist = !baseline.isEmpty() || existingPlaylist;
-                    mainHandler.post(() -> {
-                        if (generation != playlistGeneration || isFinishing()) return;
-                        if (hasUsablePlaylist) {
-                            hidePlaylistLoadingIfPlaybackPending();
-                        } else {
-                            showPlaylistError("No hay conexión a Internet.");
-                        }
-                    });
-                    return;
-                }
-
-                List<Future<PlaylistNetworkResult>> futures = new ArrayList<>();
-                for (PlaylistSource source : sources) {
-                    futures.add(networkExecutor.submit(() -> {
-                        try {
-                            PlaylistRepository.LoadResult result =
-                                    repository.downloadIfChanged(source.getUrl());
-                            return PlaylistNetworkResult.success(source, result);
-                        } catch (Exception error) {
-                            return PlaylistNetworkResult.failure(source, error);
-                        }
-                    }));
-                }
-
-                final boolean premiumIncludeEvents = premiumConfigured
-                        && HighflyPremiumPreferences.includeEvents(MainActivity.this);
-                final Set<String> selectedPremiumEventIds = premiumConfigured
-                        ? HighflyPremiumPreferences.selectedEventIds(MainActivity.this)
-                        : Collections.emptySet();
-                Future<PremiumNetworkResult> premiumFuture = null;
-                // Stable Premium channels arrive through the cached/public
-                // Lista 3 source. The protected catalog is needed only when
-                // the user opted into temporary events; do not query it on
-                // every app start just to rebuild stable metadata.
-                if (premiumIncludeEvents && highflyPremiumCatalogRepository != null) {
-                    premiumFuture = networkExecutor.submit(() -> {
-                        try {
-                            HighflyPremiumCatalogRepository.PremiumPlaylists result =
-                                    highflyPremiumCatalogRepository.loadPlaylistsForDisplay(
-                                            HighflyPremiumPreferences.region(MainActivity.this),
-                                            premiumIncludeEvents,
-                                            selectedPremiumEventIds,
-                                            sourceChanged
-                                    );
-                            return PremiumNetworkResult.success(result);
-                        } catch (Exception error) {
-                            return PremiumNetworkResult.failure(error);
-                        }
-                    });
-                }
-
-                Map<Integer, Playlist> latest = new LinkedHashMap<>(baseline);
-                boolean contentChanged = false;
-                Throwable firstError = null;
-                for (Future<PlaylistNetworkResult> future : futures) {
+        if (networkAvailable) {
+            for (PlaylistSource source : sources) {
+                refresh.pendingNetwork++;
+                networkExecutor.submit(() -> {
                     PlaylistNetworkResult result;
                     try {
-                        result = future.get();
-                    } catch (InterruptedException error) {
-                        Thread.currentThread().interrupt();
-                        firstError = error;
-                        break;
+                        PlaylistRepository.LoadResult loadResult =
+                                repository.downloadIfChanged(source.getUrl());
+                        result = PlaylistNetworkResult.success(source, loadResult);
                     } catch (Exception error) {
-                        if (firstError == null) firstError = error;
-                        continue;
+                        result = PlaylistNetworkResult.failure(source, error);
                     }
-                    if (result.playlist != null) {
-                        latest.put(result.source.getPosition(), result.playlist);
-                        contentChanged |= result.changed;
-                    } else if (firstError == null) {
-                        firstError = result.error;
-                    }
-                }
-
-                boolean premiumChanged = false;
-                if (premiumFuture != null) {
-                    PremiumNetworkResult result;
-                    try {
-                        result = premiumFuture.get();
-                    } catch (InterruptedException error) {
-                        Thread.currentThread().interrupt();
-                        result = PremiumNetworkResult.failure(error);
-                    } catch (Exception error) {
-                        result = PremiumNetworkResult.failure(error);
-                    }
-                    if (result.playlists != null) {
-                        // Lista 3 is the remote GitHub playlist already loaded
-                        // above. Only Lista 4 is reconstructed from the
-                        // protected catalog and kept in memory.
-                        latest.remove(PREMIUM_EVENT_SOURCE_POSITION);
-                        Playlist events = result.playlists.getEventPlaylist();
-                        if (events != null && !events.getChannels().isEmpty()) {
-                            latest.put(PREMIUM_EVENT_SOURCE_POSITION, events);
-                        }
-                        premiumChanged = true;
-                    } else if (firstError == null) {
-                        firstError = result.error;
-                    }
-                } else if (!premiumConfigured || !premiumIncludeEvents) {
-                    // A disabled Premium account must not leave an old
-                    // in-memory event list visible. Stable List 3 is removed
-                    // by the source signature/source set when Premium is off.
-                    latest.remove(PREMIUM_EVENT_SOURCE_POSITION);
-                    if (!premiumConfigured) {
-                        latest.remove(PREMIUM_STABLE_SOURCE_POSITION);
-                    }
-                }
-
-                Map<Integer, Playlist> finalPlaylists = new LinkedHashMap<>(latest);
-                boolean finalContentChanged = contentChanged || premiumChanged || channels.isEmpty();
-                boolean hasUsablePlaylist = !finalPlaylists.isEmpty() || existingPlaylist;
-                Throwable finalError = firstError;
-                mainHandler.post(() -> {
-                    if (generation != playlistGeneration || isFinishing()) return;
-                    if (hasUsablePlaylist) {
-                        if (!finalPlaylists.isEmpty()) {
-                            applyPlaylists(
-                                    finalPlaylists,
-                                    sourceSignature,
-                                    generation,
-                                    finalContentChanged
-                            );
-                            loadEpgForPlaylists(finalPlaylists, generation);
-                        } else {
-                            hidePlaylistLoadingIfPlaybackPending();
-                        }
-                    } else {
-                        showPlaylistError(shortMessage(finalError));
-                    }
-                });
-            } catch (Exception error) {
-                boolean hasUsablePlaylist = existingPlaylist || !visiblePlaylists.isEmpty();
-                mainHandler.post(() -> {
-                    if (generation != playlistGeneration || isFinishing()) return;
-                    if (hasUsablePlaylist) {
-                        hidePlaylistLoadingIfPlaybackPending();
-                    } else {
-                        showPlaylistError(shortMessage(error));
-                    }
+                    PlaylistNetworkResult completed = result;
+                    mainHandler.post(() -> applyPlaylistNetworkResult(refresh, completed));
                 });
             }
-        });
+        }
+
+        // Stable Premium channels arrive through the cached/public Lista 3
+        // source. The protected catalog is needed only when the user opted
+        // into temporary events; keep it independent from ordinary lists.
+        if (premiumIncludeEvents && highflyPremiumCatalogRepository != null && networkAvailable) {
+            refresh.pendingPremium = true;
+            networkExecutor.submit(() -> {
+                PremiumNetworkResult result;
+                try {
+                    HighflyPremiumCatalogRepository.PremiumPlaylists playlists =
+                            highflyPremiumCatalogRepository.loadPlaylistsForDisplay(
+                                    HighflyPremiumPreferences.region(MainActivity.this),
+                                    true,
+                                    selectedPremiumEventIds,
+                                    sourceChanged
+                            );
+                    result = PremiumNetworkResult.success(playlists);
+                } catch (Exception error) {
+                    result = PremiumNetworkResult.failure(error);
+                }
+                PremiumNetworkResult completed = result;
+                mainHandler.post(() -> applyPremiumNetworkResult(refresh, completed));
+            });
+        }
+        finishPlaylistRefreshIfReady(refresh);
+    }
+
+    private boolean isCurrentPlaylistRefresh(PlaylistRefreshState refresh) {
+        return refresh != null
+                && refresh.generation == playlistGeneration
+                && !isFinishing();
+    }
+
+    private void applyPlaylistNetworkResult(
+            PlaylistRefreshState refresh,
+            PlaylistNetworkResult result
+    ) {
+        if (!isCurrentPlaylistRefresh(refresh) || result == null) return;
+        int position = result.source.getPosition();
+        if (!refresh.completedNetworkPositions.add(position)) return;
+        refresh.pendingNetwork = Math.max(0, refresh.pendingNetwork - 1);
+        if (result.playlist != null) {
+            refresh.latest.put(position, result.playlist);
+            publishPlaylistRefresh(refresh, result.changed);
+        } else {
+            if (refresh.firstError == null) refresh.firstError = result.error;
+            finishPlaylistRefreshIfReady(refresh);
+        }
+    }
+
+    private void applyPremiumNetworkResult(
+            PlaylistRefreshState refresh,
+            PremiumNetworkResult result
+    ) {
+        if (!isCurrentPlaylistRefresh(refresh) || result == null) return;
+        if (!refresh.pendingPremium) return;
+        refresh.pendingPremium = false;
+        if (result.playlists != null) {
+            // Lista 3 is the remote public playlist already loaded above. Only
+            // Lista 4 is reconstructed from the protected catalog and kept in
+            // memory.
+            refresh.latest.remove(PREMIUM_EVENT_SOURCE_POSITION);
+            Playlist events = result.playlists.getEventPlaylist();
+            if (events != null && !events.getChannels().isEmpty()) {
+                refresh.latest.put(PREMIUM_EVENT_SOURCE_POSITION, events);
+            }
+            publishPlaylistRefresh(refresh, true);
+        } else {
+            if (refresh.firstError == null) refresh.firstError = result.error;
+            finishPlaylistRefreshIfReady(refresh);
+        }
+    }
+
+    private void publishPlaylistRefresh(PlaylistRefreshState refresh, boolean contentChanged) {
+        if (!isCurrentPlaylistRefresh(refresh) || refresh.latest.isEmpty()) {
+            finishPlaylistRefreshIfReady(refresh);
+            return;
+        }
+        Map<Integer, Playlist> snapshot = new LinkedHashMap<>(refresh.latest);
+        applyPlaylists(snapshot, refresh.sourceSignature, refresh.generation, contentChanged);
+        loadEpgForPlaylists(snapshot, refresh.generation);
+        finishPlaylistRefreshIfReady(refresh);
+    }
+
+    private void finishPlaylistRefreshIfReady(PlaylistRefreshState refresh) {
+        if (!isCurrentPlaylistRefresh(refresh) || !refresh.isComplete()) return;
+        if (!refresh.latest.isEmpty()) {
+            hidePlaylistLoadingIfPlaybackPending();
+        } else if (!channels.isEmpty()) {
+            hidePlaylistLoadingIfPlaybackPending();
+        } else {
+            showPlaylistError(shortMessage(refresh.firstError));
+        }
+        startupSelectionPending = false;
+    }
+
+    private String readLastChannelIdentity() {
+        return getSharedPreferences("playback_state", MODE_PRIVATE)
+                .getString("last_channel", "");
+    }
+
+    private static final class PlaylistRefreshState {
+        private final int generation;
+        private final String sourceSignature;
+        private final Map<Integer, Playlist> latest;
+        private final Set<Integer> completedNetworkPositions = new HashSet<>();
+        private int pendingCacheReads;
+        private int pendingNetwork;
+        private boolean pendingPremium;
+        private Throwable firstError;
+
+        private PlaylistRefreshState(
+                int generation,
+                String sourceSignature,
+                Map<Integer, Playlist> visiblePlaylists,
+                List<PlaylistSource> sources
+        ) {
+            this.generation = generation;
+            this.sourceSignature = sourceSignature;
+            this.latest = new LinkedHashMap<>(visiblePlaylists);
+            this.pendingCacheReads = sources == null ? 0 : sources.size();
+            this.pendingNetwork = 0;
+        }
+
+        private boolean isComplete() {
+            return pendingCacheReads <= 0 && pendingNetwork <= 0 && !pendingPremium;
+        }
     }
 
     private static final class PlaylistNetworkResult {
@@ -752,9 +808,33 @@ public final class MainActivity extends Activity {
                 expectedUrl,
                 data == null ? EpgData.empty() : data
         );
-        epgData = EpgData.merge(new ArrayList<>(epgDataByUrl.values()));
-        mainHandler.removeCallbacks(updateProgramme);
-        updateProgramme.run();
+        scheduleEpgMerge(generation);
+    }
+
+    /**
+     * Merges immutable XMLTV snapshots off the main thread. A guide can have
+     * tens of thousands of programmes; rebuilding and sorting that index for
+     * every source callback would otherwise compete with channel startup.
+     */
+    private void scheduleEpgMerge(int generation) {
+        String inputSignature = EpgData.mergeSignature(epgDataByUrl);
+        if (inputSignature.equals(epgMergeInputSignature)) return;
+        epgMergeInputSignature = inputSignature;
+        long mergeGeneration = ++epgMergeGeneration;
+        List<EpgData> snapshot = Collections.unmodifiableList(
+                new ArrayList<>(epgDataByUrl.values())
+        );
+        networkExecutor.submit(() -> {
+            EpgData merged = EpgData.merge(snapshot);
+            mainHandler.post(() -> {
+                if (generation != playlistGeneration
+                        || mergeGeneration != epgMergeGeneration
+                        || isFinishing()) return;
+                epgData = merged;
+                mainHandler.removeCallbacks(updateProgramme);
+                updateProgramme.run();
+            });
+        });
     }
 
     private void applyPlaylists(
@@ -794,13 +874,35 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        channelIndex = hadChannels
+        int nextChannelIndex = hadChannels
                 ? PlaybackPreferences.findChannelIndex(
                         channels,
                         previousIdentity,
                         channelIndex
                 )
                 : playbackPreferences.findInitialChannelIndex(channels);
+        if (startupSelectionPending) {
+            if (startupPreferredChannelIdentity.isBlank()) {
+                startupSelectionPending = false;
+            } else {
+                int preferredIndex = findChannelIndexByIdentity(
+                        channels,
+                        startupPreferredChannelIdentity
+                );
+                if (preferredIndex >= 0) {
+                    boolean preferredIsCurrent = hadChannels
+                            && startupPreferredChannelIdentity.equals(previousIdentity);
+                    if (!preferredIsCurrent && (!hadChannels || !hasEstablishedPlayback())) {
+                        nextChannelIndex = preferredIndex;
+                    }
+                    // Once the preferred channel is visible, preserve the
+                    // user's current channel if it is already healthy. This
+                    // avoids a refresh interrupting an established stream.
+                    startupSelectionPending = false;
+                }
+            }
+        }
+        channelIndex = nextChannelIndex;
         loadedPlaylistSignature = sourceSignature;
 
         LinkedHashSet<String> nextEpgUrls = new LinkedHashSet<>();
@@ -816,7 +918,7 @@ public final class MainActivity extends Activity {
         activeEpgUrls.clear();
         activeEpgUrls.addAll(nextEpgUrls);
         epgDataByUrl.keySet().retainAll(activeEpgUrls);
-        epgData = EpgData.merge(new ArrayList<>(epgDataByUrl.values()));
+        scheduleEpgMerge(generation);
         if (epgSourcesChanged) {
             mainHandler.removeCallbacks(updateProgramme);
         }
@@ -824,27 +926,68 @@ public final class MainActivity extends Activity {
         Channel selectedChannel = channels.get(channelIndex);
         boolean sameChannel = previousChannel != null
                 && previousIdentity.equals(PlaybackPreferences.channelIdentity(selectedChannel));
-        boolean streamChanged = sameChannel
-                && previousStreamUri != null
-                && !previousStreamUri.equals(selectedChannel.getStreamUri());
+        boolean requestHeadersChanged = sameChannel
+                && !ChannelRequestHeaders.from(previousChannel).equals(
+                ChannelRequestHeaders.from(selectedChannel)
+        );
+        boolean streamChanged = sameChannel && (
+                (previousStreamUri != null
+                        && !previousStreamUri.equals(selectedChannel.getStreamUri()))
+                        || requestHeadersChanged
+        );
         StreamResolver resolver = streamResolverRegistry.find(selectedChannel);
+        boolean resolutionInFlightForChannel = sameChannel
+                && playbackResolutionTask != null
+                && playbackChannel != null
+                && previousIdentity.equals(PlaybackPreferences.channelIdentity(playbackChannel));
+        boolean preserveResolvedPlayback = sameChannel
+                && !requestHeadersChanged
+                && currentPlaybackSource != null
+                && currentPlaybackSource.isDynamicallyResolved()
+                && player != null
+                && player.getCurrentMediaItem() != null
+                && player.getPlayerError() == null
+                && player.getPlaybackState() != Player.STATE_IDLE
+                && player.getPlaybackState() != Player.STATE_ENDED;
         boolean resolverNeedsResolution = resolver != null
-                && (currentPlaybackSource == null
-                || !currentPlaybackSource.isDynamicallyResolved());
+                && currentPlaybackSource == null
+                && !resolutionInFlightForChannel;
 
-        if (!hadChannels || !sameChannel || streamChanged || resolverNeedsResolution) {
+        if (!hadChannels
+                || !sameChannel
+                || (streamChanged && !preserveResolvedPlayback)
+                || resolverNeedsResolution) {
             playChannel(channelIndex, contentChanged);
         } else {
             // The source may have been resolved for the previous Channel
             // object. Keep the fresh in-memory source, but associate it with
             // the current playlist object for future retries.
-            playbackChannel = selectedChannel;
+            // An in-flight resolver checks the original Channel object in
+            // isCurrentPlayback(); replacing it here would make its result
+            // stale even though the channel identity is unchanged.
+            if (!resolutionInFlightForChannel) playbackChannel = selectedChannel;
             channelNumber.setText(String.format(Locale.ROOT, "%03d", channelIndex + 1));
             channelName.setText(selectedChannel.getName());
             updateProgrammeInfo();
             loadChannelLogo(selectedChannel, contentChanged);
             hideLoadingState();
         }
+    }
+
+    private static int findChannelIndexByIdentity(List<Channel> candidates, String identity) {
+        if (candidates == null || identity == null || identity.isBlank()) return -1;
+        for (int index = 0; index < candidates.size(); index++) {
+            if (identity.equals(PlaybackPreferences.channelIdentity(candidates.get(index)))) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private boolean hasEstablishedPlayback() {
+        return player != null
+                && player.getCurrentMediaItem() != null
+                && player.getPlaybackState() == Player.STATE_READY;
     }
 
     /**
@@ -1052,8 +1195,8 @@ public final class MainActivity extends Activity {
         playbackRecoveryPolicy.reset();
         playbackChannel = channel;
         discardCurrentPlaybackSource();
-        tokenRefreshAttempted = false;
-        fallbackAttempted = false;
+        playbackRecoveryEpisode.reset();
+        beginStartupMeasurement(channel, PlaybackStartupMetrics.Reason.CHANNEL);
         qualityPreferenceAppliedFor = null;
         subtitlePreferenceAppliedFor = null;
         subtitleTextObservedFor = null;
@@ -1105,6 +1248,10 @@ public final class MainActivity extends Activity {
         // A cancelled resolver may still finish its HTTP call. Incrementing
         // the request generation makes its token unusable even if its
         // callback arrives after a new channel or retry has started.
+        if (playbackResolutionContext != null) {
+            playbackResolutionContext.cancel();
+            playbackResolutionContext = null;
+        }
         if (playbackResolutionTask == null) return;
         playbackResolutionRequestId++;
         playbackResolutionTask.cancel(true);
@@ -1129,6 +1276,8 @@ public final class MainActivity extends Activity {
         if (player == null || !isCurrentPlayback(channel, expectedGeneration)) return;
         StreamResolver resolver = streamResolverRegistry.find(channel);
         if (resolver == null) {
+            startupMetrics.dequeued(startupMetrics.currentId());
+            startupMetrics.resolved(startupMetrics.currentId());
             showLoadingState(getString(R.string.loading_direct_source));
             startResolvedPlayback(
                     channel,
@@ -1146,15 +1295,21 @@ public final class MainActivity extends Activity {
         player.stop();
         player.clearMediaItems();
         long requestId = ++playbackResolutionRequestId;
+        long measurementId = startupMetrics.currentId();
+        ResolutionContext resolutionContext = new ResolutionContext(20_000L);
+        playbackResolutionContext = resolutionContext;
         showLoadingState(getString(R.string.loading_resolver_initializing));
         ResolutionProgressListener progressListener = progress -> mainHandler.post(() -> {
             if (isCurrentPlayback(channel, expectedGeneration)
                     && requestId == playbackResolutionRequestId) {
+                startupMetrics.stage(measurementId, progress.getStage());
                 showResolutionProgress(progress);
             }
         });
         playbackResolutionTask = playbackExecutor.submit(() -> {
-            try {
+            try (ResolutionContext.Scope ignored = resolutionContext.activate()) {
+                resolutionContext.check();
+                startupMetrics.dequeued(measurementId);
                 mainHandler.post(() -> {
                     if (isCurrentPlayback(channel, expectedGeneration)
                             && requestId == playbackResolutionRequestId) {
@@ -1167,10 +1322,17 @@ public final class MainActivity extends Activity {
                         forceRefresh,
                         progressListener
                 );
+                resolutionContext.check();
+                if (source == null || source.isExpired(System.currentTimeMillis())) {
+                    throw new java.io.IOException("La fuente venció antes de iniciar la reproducción.");
+                }
+                startupMetrics.resolved(measurementId);
                 mainHandler.post(() -> {
                     if (!isCurrentPlayback(channel, expectedGeneration)
                             || requestId != playbackResolutionRequestId) return;
                     playbackResolutionTask = null;
+                    playbackResolutionContext = null;
+                    playbackManifestCache = resolutionContext.manifests();
                     startResolvedPlayback(channel, source, expectedGeneration, requestId);
                 });
             } catch (Exception error) {
@@ -1179,6 +1341,9 @@ public final class MainActivity extends Activity {
                     if (!isCurrentPlayback(channel, expectedGeneration)
                             || requestId != playbackResolutionRequestId) return;
                     playbackResolutionTask = null;
+                    playbackResolutionContext = null;
+                    startupMetrics.failed(measurementId);
+                    resolutionContext.cancel();
                     handleResolutionFailure(channel, resolver, expectedGeneration);
                 });
             }
@@ -1194,12 +1359,12 @@ public final class MainActivity extends Activity {
             handleTemporaryEventFailure(channel, expectedGeneration);
             return;
         }
-        if (fallbackAttempted) {
+        if (!playbackRecoveryEpisode.tryFallback()) {
             showPlaybackFailure();
             return;
         }
-        tokenRefreshAttempted = true;
-        fallbackAttempted = true;
+        playbackRecoveryEpisode.resolutionFailed();
+        beginStartupMeasurement(channel, PlaybackStartupMetrics.Reason.FALLBACK);
         codecInfo.setText("Probando respaldo del canal");
         showLoadingState(getString(R.string.loading_fallback_source));
         startResolvedPlayback(
@@ -1230,10 +1395,11 @@ public final class MainActivity extends Activity {
                 ? expectedResolutionRequestId
                 : NO_RESOLUTION_REQUEST;
         currentPlaybackSource = source;
-        playbackRecoveryPolicy.reset();
-        if (isTemporaryEventChannel(channel)) {
-            temporaryEventRecoveryPolicy.markAvailable(temporaryEventId(channel));
+        if (playbackManifestCache != null) {
+            ManifestHandoffCache handoff = playbackManifestCache;
+            mainHandler.postDelayed(handoff::clear, ManifestHandoffCache.DEFAULT_TTL_MILLIS);
         }
+        playbackRecoveryPolicy.reset();
         player.setMediaSource(mediaSourceFor(channel, source));
         showLoadingState(getString(R.string.loading_starting_playback));
         prepareAndPlay();
@@ -1241,6 +1407,8 @@ public final class MainActivity extends Activity {
 
     private void discardCurrentPlaybackSource() {
         currentPlaybackSource = null;
+        if (playbackManifestCache != null) playbackManifestCache.clear();
+        playbackManifestCache = null;
         activePlaybackSourceRequestId = NO_RESOLUTION_REQUEST;
     }
 
@@ -1253,23 +1421,40 @@ public final class MainActivity extends Activity {
         String userAgent = source.getUserAgent().isBlank()
                 ? PLAYER_USER_AGENT
                 : source.getUserAgent();
-        DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory()
-                .setUserAgent(userAgent)
-                .setAllowCrossProtocolRedirects(true)
-                .setConnectTimeoutMs(12_000)
-                .setReadTimeoutMs(20_000);
+        OkHttpDataSource.Factory dataSourceFactory =
+                new OkHttpDataSource.Factory(SharedHttpClient.get()).setUserAgent(userAgent);
         Map<String, String> headers = source.getRequestHeaders();
         if (!headers.isEmpty()) {
             dataSourceFactory.setDefaultRequestProperties(headers);
         }
         DataSource.Factory playbackDataSourceFactory = dataSourceFactory;
+        if (playbackManifestCache != null) {
+            playbackDataSourceFactory = new ManifestHandoffDataSource.Factory(
+                    playbackDataSourceFactory, playbackManifestCache);
+        }
         if ("meganoticias".equalsIgnoreCase(source.getResolverId())) {
             playbackDataSourceFactory = new MeganoticiasPlaylistDataSource.Factory(
-                    dataSourceFactory
+                    playbackDataSourceFactory
             );
         }
         return new DefaultMediaSourceFactory(playbackDataSourceFactory)
-                .createMediaSource(mediaItemFor(channel, source.getPlaybackUri()));
+                .setLoadErrorHandlingPolicy(new PlaybackLoadErrorPolicy(source.isDynamicallyResolved()))
+                .createMediaSource(mediaItemFor(channel, source.getPlaybackUri()).buildUpon()
+                        .setTag(Long.valueOf(startupMetrics.currentId())).build());
+    }
+
+    private void beginStartupMeasurement(Channel channel, PlaybackStartupMetrics.Reason reason) {
+        StreamResolver resolver = channel == null || streamResolverRegistry == null
+                ? null : streamResolverRegistry.find(channel);
+        startupMetrics.begin(resolver == null ? "direct" : resolver.getId(), reason);
+    }
+
+    private void settlePlaybackEpisode(boolean playing) {
+        if (!playbackRecoveryEpisode.onPlayingChanged(playing, System.nanoTime())) return;
+        playbackRecoveryPolicy.reset();
+        if (isTemporaryEventChannel(playbackChannel)) {
+            temporaryEventRecoveryPolicy.markAvailable(temporaryEventId(playbackChannel));
+        }
     }
 
     private boolean isCurrentPlayback(Channel channel, long expectedGeneration) {
@@ -1304,6 +1489,7 @@ public final class MainActivity extends Activity {
         }
 
         if (temporaryEventRecoveryPolicy.tryConsume(eventId)) {
+            beginStartupMeasurement(channel, PlaybackStartupMetrics.Reason.REFRESH);
             int attempt = temporaryEventRecoveryPolicy.attemptsFor(eventId);
             setStatus("RECONECTANDO", R.color.amber);
             codecInfo.setText(getString(
@@ -1400,8 +1586,8 @@ public final class MainActivity extends Activity {
 
         Channel channel = playbackChannel;
         long expectedGeneration = playbackGeneration;
-        if (!tokenRefreshAttempted) {
-            tokenRefreshAttempted = true;
+        if (playbackRecoveryEpisode.tryRefresh()) {
+            beginStartupMeasurement(channel, PlaybackStartupMetrics.Reason.REFRESH);
             setStatus("RENOVANDO", R.color.amber);
             codecInfo.setText("Renovando fuente");
             StreamResolver resolver = streamResolverRegistry.find(channel);
@@ -1418,8 +1604,9 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        if (!fallbackAttempted) {
-            fallbackAttempted = true;
+        if (playbackRecoveryEpisode.tryFallback()) {
+            playbackManifestCache = null;
+            beginStartupMeasurement(channel, PlaybackStartupMetrics.Reason.FALLBACK);
             setStatus("RESPALDO", R.color.amber);
             codecInfo.setText("Probando respaldo del canal");
             showLoadingState(getString(R.string.loading_fallback_source));
@@ -1439,6 +1626,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showPlaybackFailure() {
+        startupMetrics.failed(startupMetrics.currentId());
         setStatus("ERROR", R.color.red);
         codecInfo.setText("Canal no disponible");
         hideLoadingState();
@@ -1450,6 +1638,10 @@ public final class MainActivity extends Activity {
         if (player == null || expectedGeneration != playbackGeneration) return;
         MediaItem current = player.getCurrentMediaItem();
         if (current == null || !expectedMediaId.equals(current.mediaId)) return;
+        beginStartupMeasurement(playbackChannel, PlaybackStartupMetrics.Reason.RETRY);
+        startupMetrics.dequeued(startupMetrics.currentId());
+        startupMetrics.resolved(startupMetrics.currentId());
+        playbackManifestCache = null;
 
         // Segment timeouts, transient CDN failures and rolled live segments
         // must keep the current resolved URL. Re-running the provider resolver
@@ -1472,8 +1664,8 @@ public final class MainActivity extends Activity {
             StreamResolver resolver = streamResolverRegistry.find(playbackChannel);
             if (resolver != null) {
                 if (playbackResolutionTask != null && !playbackResolutionTask.isDone()) return;
-                tokenRefreshAttempted = false;
-                fallbackAttempted = false;
+                playbackRecoveryEpisode.reset();
+                beginStartupMeasurement(playbackChannel, PlaybackStartupMetrics.Reason.RETRY);
                 discardCurrentPlaybackSource();
                 player.stop();
                 player.clearMediaItems();
@@ -1620,7 +1812,9 @@ public final class MainActivity extends Activity {
                 : dpToPx(54);
         boolean shouldRevalidate = revalidate
                 || logoRevalidatedThisSession.add(logoUri.toString());
-        logoCacheExecutor.submit(() -> {
+        Future<?> previousTask = logoRequestTask;
+        if (previousTask != null) previousTask.cancel(true);
+        logoRequestTask = logoCacheExecutor.submit(() -> {
             android.graphics.Bitmap cached = channelLogoCache.loadCached(
                     logoUri,
                     targetWidthPx,
@@ -1636,24 +1830,22 @@ public final class MainActivity extends Activity {
             }
 
             if (cached != null && !shouldRevalidate) return;
-            networkExecutor.submit(() -> {
-                try {
-                    ChannelLogoCache.RefreshResult refreshed = channelLogoCache.refreshIfChanged(
-                            logoUri,
-                            targetWidthPx,
-                            targetHeightPx
-                    );
-                    if (cached != null && !refreshed.isChanged()) return;
-                    mainHandler.post(() -> showChannelLogo(
-                            refreshed.getBitmap(),
-                            expectedIndex,
-                            expectedIdentity,
-                            requestGeneration
-                    ));
-                } catch (Exception ignored) {
-                    // El logo en caché ya mostrado permanece si falla la actualización.
-                }
-            });
+            try {
+                ChannelLogoCache.RefreshResult refreshed = channelLogoCache.refreshIfChanged(
+                        logoUri,
+                        targetWidthPx,
+                        targetHeightPx
+                );
+                if (cached != null && !refreshed.isChanged()) return;
+                mainHandler.post(() -> showChannelLogo(
+                        refreshed.getBitmap(),
+                        expectedIndex,
+                        expectedIdentity,
+                        requestGeneration
+                ));
+            } catch (Exception ignored) {
+                // El logo en caché ya mostrado permanece si falla la actualización.
+            }
         });
     }
 
@@ -2190,6 +2382,11 @@ public final class MainActivity extends Activity {
     private void releaseAppResources() {
         if (resourcesReleased) return;
         resourcesReleased = true;
+        if (playbackBufferManager != null) {
+            playbackBufferManager.close();
+            playbackBufferManager = null;
+        }
+        startupMetrics.finish();
         playlistGeneration++;
         playbackGeneration++;
         cancelScheduledPlaybackRetry();
@@ -2704,6 +2901,16 @@ public final class MainActivity extends Activity {
     protected void onDestroy() {
         releaseAppResources();
         super.onDestroy();
+    }
+
+    @Override public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (playbackBufferManager != null) playbackBufferManager.onMemoryPressure(level);
+    }
+
+    @Override public void onLowMemory() {
+        super.onLowMemory();
+        if (playbackBufferManager != null) playbackBufferManager.onMemoryPressure(80);
     }
 
     private static final class VideoTrackOption {

@@ -3,20 +3,23 @@ package cl.streambox.tv;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.Locale;
+
+import okhttp3.Call;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
 
 /** Small cancellable HTTP client for provider pages and token APIs. */
-public final class TokenHttpClient {
+public class TokenHttpClient {
     public static final String BROWSER_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
                     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
@@ -25,6 +28,8 @@ public final class TokenHttpClient {
     private static final int DEFAULT_READ_TIMEOUT_MS = 20_000;
     private static final int MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
     private static final int MAX_PUBLIC_REDIRECTS = 4;
+    private static final MediaType JSON_MEDIA_TYPE =
+            MediaType.get("application/json; charset=utf-8");
 
     private final int connectTimeoutMs;
     private final int readTimeoutMs;
@@ -33,9 +38,13 @@ public final class TokenHttpClient {
         this(DEFAULT_CONNECT_TIMEOUT_MS, DEFAULT_READ_TIMEOUT_MS);
     }
 
-    TokenHttpClient(int connectTimeoutMs, int readTimeoutMs) {
-        this.connectTimeoutMs = Math.max(1_000, connectTimeoutMs);
-        this.readTimeoutMs = Math.max(1_000, readTimeoutMs);
+    /**
+     * Kept non-final and public so provider tests and integrations can supply
+     * a small-timeout/subclassed client without changing resolver signatures.
+     */
+    public TokenHttpClient(int connectTimeoutMs, int readTimeoutMs) {
+        this.connectTimeoutMs = Math.max(1, connectTimeoutMs);
+        this.readTimeoutMs = Math.max(1, readTimeoutMs);
     }
 
     public String getText(String url, Map<String, String> headers) throws IOException {
@@ -79,13 +88,7 @@ public final class TokenHttpClient {
         return getPublicInternal(url, headers, maxResponseBytes, range, false, allowedHosts);
     }
 
-    /**
-     * Reads at most {@code maxResponseBytes} and then closes the response.
-     *
-     * Some HLS origins ignore Range and return the complete media segment. A
-     * probe only needs the first bytes, so treating the remaining response as
-     * an oversized error would reject a healthy stream.
-     */
+    /** Reads at most {@code maxResponseBytes}; useful for a media probe. */
     public Response getPrefix(
             String url,
             Map<String, String> headers,
@@ -112,84 +115,12 @@ public final class TokenHttpClient {
             String range,
             boolean prefixOnly
     ) throws IOException {
-        if (Thread.currentThread().isInterrupted()) {
-            throw new IOException("Solicitud cancelada.");
-        }
-
-        URI uri;
-        try {
-            uri = URI.create(url);
-        } catch (IllegalArgumentException error) {
-            throw new IOException("URL no válida.");
-        }
-        if (!"http".equalsIgnoreCase(uri.getScheme())
-                && !"https".equalsIgnoreCase(uri.getScheme())) {
-            throw new IOException("URL no válida.");
-        }
-
-        HttpURLConnection connection = null;
-        try {
-            connection = (HttpURLConnection) uri.toURL().openConnection();
-            connection.setRequestMethod("GET");
-            connection.setConnectTimeout(connectTimeoutMs);
-            connection.setReadTimeout(readTimeoutMs);
-            connection.setInstanceFollowRedirects(true);
-            connection.setUseCaches(false);
-            connection.setDoInput(true);
-            // Resolver pages and token responses are credentials, never
-            // reusable application resources. These headers also prevent an
-            // intermediary HTTP cache from serving a previous response.
-            connection.setRequestProperty("Cache-Control", "no-store, no-cache, max-age=0");
-            connection.setRequestProperty("Pragma", "no-cache");
-            connection.setRequestProperty("Expires", "0");
-            if (headers != null) {
-                for (Map.Entry<String, String> header : headers.entrySet()) {
-                    if (header.getKey() != null && header.getValue() != null) {
-                        connection.setRequestProperty(header.getKey(), header.getValue());
-                    }
-                }
-            }
-            if (range != null && !range.isBlank()) {
-                connection.setRequestProperty("Range", range);
-            }
-            if (connection.getRequestProperty("User-Agent") == null) {
-                connection.setRequestProperty("User-Agent", BROWSER_USER_AGENT);
-            }
-
-            int responseCode = connection.getResponseCode();
-            if (responseCode < 200 || responseCode >= 300) {
-                throw new HttpStatusException(responseCode);
-            }
-            try (InputStream input = connection.getInputStream()) {
-                URI finalUri;
-                try {
-                    finalUri = connection.getURL().toURI();
-                } catch (URISyntaxException error) {
-                    throw new IOException("El servidor devolvió una URL inválida.", error);
-                }
-                Map<String, String> responseHeaders = new LinkedHashMap<>();
-                for (Map.Entry<String, java.util.List<String>> entry
-                        : connection.getHeaderFields().entrySet()) {
-                    if (entry.getKey() != null && entry.getValue() != null
-                            && !entry.getValue().isEmpty()) {
-                        responseHeaders.put(entry.getKey(), entry.getValue().get(0));
-                    }
-                }
-                return new Response(
-                        responseCode,
-                        finalUri,
-                        connection.getContentType(),
-                        responseHeaders,
-                        prefixOnly
-                                ? readPrefix(input, Math.max(1, maxResponseBytes))
-                                : readLimited(input, Math.max(1, maxResponseBytes))
-                );
-            }
-        } finally {
-            if (connection != null) {
-                connection.disconnect();
-            }
-        }
+        URI uri = parseHttpUri(url);
+        ResolutionContext context = ResolutionContext.current();
+        check(context);
+        OkHttpClient client = clientFor(context, true);
+        Request request = getRequest(uri.toString(), headers, range);
+        return execute(client, request, maxResponseBytes, prefixOnly, context);
     }
 
     private Response getPublicInternal(
@@ -200,54 +131,26 @@ public final class TokenHttpClient {
             boolean prefixOnly,
             Set<String> allowedHosts
     ) throws IOException {
-        if (Thread.currentThread().isInterrupted()) {
-            throw new IOException("Solicitud cancelada.");
-        }
-        URI currentUri;
-        try {
-            currentUri = URI.create(url);
-        } catch (IllegalArgumentException error) {
-            throw new IOException("URL no válida.", error);
-        }
-
+        URI currentUri = parseHttpUri(url);
+        ResolutionContext context = ResolutionContext.current();
         for (int redirects = 0; redirects <= MAX_PUBLIC_REDIRECTS; redirects++) {
+            check(context);
             PublicStreamPolicy.requirePublicHttp(currentUri);
             requireAllowedHost(currentUri, allowedHosts);
-            HttpURLConnection connection = null;
+            OkHttpClient client = clientFor(context, false);
+            Request request = getRequest(currentUri.toString(), headers, range);
+            Call call = client.newCall(request);
+            ResolutionContext.Registration registration = register(context, call);
+            okhttp3.Response networkResponse = null;
             try {
-                connection = (HttpURLConnection) currentUri.toURL().openConnection();
-                connection.setRequestMethod("GET");
-                connection.setConnectTimeout(connectTimeoutMs);
-                connection.setReadTimeout(readTimeoutMs);
-                // Validate every redirect before opening it. Automatic
-                // redirects could otherwise move a resolver candidate from a
-                // public CDN to localhost, a LAN host or metadata service.
-                connection.setInstanceFollowRedirects(false);
-                connection.setUseCaches(false);
-                connection.setDoInput(true);
-                connection.setRequestProperty("Cache-Control", "no-store, no-cache, max-age=0");
-                connection.setRequestProperty("Pragma", "no-cache");
-                connection.setRequestProperty("Expires", "0");
-                if (headers != null) {
-                    for (Map.Entry<String, String> header : headers.entrySet()) {
-                        if (header.getKey() != null && header.getValue() != null) {
-                            connection.setRequestProperty(header.getKey(), header.getValue());
-                        }
-                    }
-                }
-                if (range != null && !range.isBlank()) {
-                    connection.setRequestProperty("Range", range);
-                }
-                if (connection.getRequestProperty("User-Agent") == null) {
-                    connection.setRequestProperty("User-Agent", BROWSER_USER_AGENT);
-                }
-
-                int responseCode = connection.getResponseCode();
+                networkResponse = call.execute();
+                check(context);
+                int responseCode = networkResponse.code();
                 if (isRedirect(responseCode)) {
                     if (redirects >= MAX_PUBLIC_REDIRECTS) {
                         throw new IOException("Demasiadas redirecciones del stream.");
                     }
-                    String location = connection.getHeaderField("Location");
+                    String location = networkResponse.header("Location");
                     if (location == null || location.isBlank()) {
                         throw new IOException("Redirección del stream sin destino.");
                     }
@@ -261,38 +164,160 @@ public final class TokenHttpClient {
                 if (responseCode < 200 || responseCode >= 300) {
                     throw new HttpStatusException(responseCode);
                 }
-                try (InputStream input = connection.getInputStream()) {
-                    URI finalUri;
-                    try {
-                        finalUri = connection.getURL().toURI();
-                    } catch (URISyntaxException error) {
-                        throw new IOException("El servidor devolvió una URL inválida.", error);
-                    }
-                    PublicStreamPolicy.requirePublicHttp(finalUri);
-                    requireAllowedHost(finalUri, allowedHosts);
-                    Map<String, String> responseHeaders = new LinkedHashMap<>();
-                    for (Map.Entry<String, java.util.List<String>> entry
-                            : connection.getHeaderFields().entrySet()) {
-                        if (entry.getKey() != null && entry.getValue() != null
-                                && !entry.getValue().isEmpty()) {
-                            responseHeaders.put(entry.getKey(), entry.getValue().get(0));
-                        }
-                    }
-                    return new Response(
-                            responseCode,
-                            finalUri,
-                            connection.getContentType(),
-                            responseHeaders,
-                            prefixOnly
-                                    ? readPrefix(input, Math.max(1, maxResponseBytes))
-                                    : readLimited(input, Math.max(1, maxResponseBytes))
-                    );
+                return readResponse(networkResponse, maxResponseBytes, prefixOnly, context);
+            } catch (java.io.InterruptedIOException error) {
+                if (context != null && context.isCancelled()) {
+                    throw new IOException("Solicitud cancelada.", error);
                 }
+                throw error;
             } finally {
-                if (connection != null) connection.disconnect();
+                if (networkResponse != null) networkResponse.close();
+                if (registration != null) registration.close();
             }
         }
         throw new IOException("Demasiadas redirecciones del stream.");
+    }
+
+    private Response execute(
+            OkHttpClient client,
+            Request request,
+            int maxResponseBytes,
+            boolean prefixOnly,
+            ResolutionContext context
+    ) throws IOException {
+        Call call = client.newCall(request);
+        ResolutionContext.Registration registration = register(context, call);
+        okhttp3.Response response = null;
+        try {
+            response = call.execute();
+            check(context);
+            int responseCode = response.code();
+            if (responseCode < 200 || responseCode >= 300) {
+                throw new HttpStatusException(responseCode);
+            }
+            return readResponse(response, maxResponseBytes, prefixOnly, context);
+        } catch (java.io.InterruptedIOException error) {
+            if (context != null && context.isCancelled()) {
+                throw new IOException("Solicitud cancelada.", error);
+            }
+            throw error;
+        } finally {
+            if (response != null) response.close();
+            if (registration != null) registration.close();
+        }
+    }
+
+    private Response readResponse(
+            okhttp3.Response response,
+            int maxResponseBytes,
+            boolean prefixOnly,
+            ResolutionContext context
+    ) throws IOException {
+        byte[] body = new byte[0];
+        if (response.body() != null) {
+            try (InputStream input = response.body().byteStream()) {
+                body = prefixOnly
+                        ? readPrefix(input, Math.max(1, maxResponseBytes), context)
+                        : readLimited(input, Math.max(1, maxResponseBytes), context);
+            }
+        }
+        URI finalUri;
+        try {
+            finalUri = response.request().url().uri();
+        } catch (RuntimeException error) {
+            throw new IOException("El servidor devolvió una URL inválida.", error);
+        }
+        Map<String, String> responseHeaders = new LinkedHashMap<>();
+        for (String name : response.headers().names()) {
+            String value = response.header(name);
+            if (value != null) responseHeaders.put(name, value);
+        }
+        return new Response(
+                response.code(),
+                finalUri,
+                response.header("Content-Type"),
+                responseHeaders,
+                body
+        );
+    }
+
+    private OkHttpClient clientFor(ResolutionContext context, boolean followRedirects) {
+        long remaining = context == null ? readTimeoutMs : Math.max(1L, context.remainingMillis());
+        int connect = (int) Math.min((long) connectTimeoutMs, remaining);
+        int read = (int) Math.min((long) readTimeoutMs, remaining);
+        return SharedHttpClient.forResolution(context, connect, read, read, followRedirects);
+    }
+
+    private static Request getRequest(
+            String url,
+            Map<String, String> headers,
+            String range
+    ) throws IOException {
+        try {
+            Request.Builder builder = new Request.Builder().url(url).get();
+            addHeaders(builder, headers);
+            if (range != null && !range.isBlank()) builder.header("Range", range);
+            if (headers == null || !containsHeader(headers, "User-Agent")) {
+                builder.header("User-Agent", BROWSER_USER_AGENT);
+            }
+            return builder.build();
+        } catch (IllegalArgumentException error) {
+            throw new IOException("URL no válida.", error);
+        }
+    }
+
+    private static void addHeaders(Request.Builder builder, Map<String, String> headers)
+            throws IOException {
+        builder.header("Cache-Control", "no-store, no-cache, max-age=0");
+        builder.header("Pragma", "no-cache");
+        builder.header("Expires", "0");
+        if (headers == null) return;
+        try {
+            for (Map.Entry<String, String> header : headers.entrySet()) {
+                if (header.getKey() != null && header.getValue() != null) {
+                    builder.header(header.getKey(), header.getValue());
+                }
+            }
+        } catch (IllegalArgumentException error) {
+            throw new IOException("Cabecera HTTP no válida.", error);
+        }
+    }
+
+    private static boolean containsHeader(Map<String, String> headers, String name) {
+        if (headers == null || name == null) return false;
+        for (String key : headers.keySet()) {
+            if (key != null && name.equalsIgnoreCase(key)) return true;
+        }
+        return false;
+    }
+
+    private static ResolutionContext.Registration register(
+            ResolutionContext context,
+            Call call
+    ) {
+        return context == null ? null : context.register(call);
+    }
+
+    private static void check(ResolutionContext context) throws IOException {
+        if (context != null) context.check();
+        else if (Thread.currentThread().isInterrupted()) {
+            throw new IOException("Solicitud cancelada.");
+        }
+    }
+
+    private static URI parseHttpUri(String value) throws IOException {
+        URI uri;
+        try {
+            uri = URI.create(value == null ? "" : value.trim());
+        } catch (IllegalArgumentException error) {
+            throw new IOException("URL no válida.", error);
+        }
+        if (!("http".equalsIgnoreCase(uri.getScheme())
+                || "https".equalsIgnoreCase(uri.getScheme()))
+                || uri.getHost() == null) {
+            throw new IOException("URL no válida.");
+        }
+        return uri;
     }
 
     private static void requireAllowedHost(URI uri, Set<String> allowedHosts)
@@ -312,11 +337,8 @@ public final class TokenHttpClient {
     }
 
     private static boolean isRedirect(int statusCode) {
-        return statusCode == HttpURLConnection.HTTP_MOVED_PERM
-                || statusCode == HttpURLConnection.HTTP_MOVED_TEMP
-                || statusCode == HttpURLConnection.HTTP_SEE_OTHER
-                || statusCode == 307
-                || statusCode == 308;
+        return statusCode == 301 || statusCode == 302 || statusCode == 303
+                || statusCode == 307 || statusCode == 308;
     }
 
     public static String buildUrl(String baseUrl, Map<String, String> parameters)
@@ -344,15 +366,17 @@ public final class TokenHttpClient {
         return result.toString();
     }
 
-    private static byte[] readLimited(InputStream input, int maximumBytes) throws IOException {
+    private static byte[] readLimited(
+            InputStream input,
+            int maximumBytes,
+            ResolutionContext context
+    ) throws IOException {
         ByteArrayOutputStream output = new ByteArrayOutputStream(64 * 1024);
         byte[] buffer = new byte[16 * 1024];
         int total = 0;
         int count;
         while ((count = input.read(buffer)) != -1) {
-            if (Thread.currentThread().isInterrupted()) {
-                throw new IOException("Solicitud cancelada.");
-            }
+            check(context);
             total += count;
             if (total > maximumBytes) {
                 throw new IOException("Respuesta demasiado grande.");
@@ -363,15 +387,22 @@ public final class TokenHttpClient {
     }
 
     static byte[] readPrefix(InputStream input, int maximumBytes) throws IOException {
+        return readPrefix(input, maximumBytes, ResolutionContext.current());
+    }
+
+    private static byte[] readPrefix(
+            InputStream input,
+            int maximumBytes,
+            ResolutionContext context
+    ) throws IOException {
         ByteArrayOutputStream output = new ByteArrayOutputStream(
-                Math.min(16 * 1024, maximumBytes)
+                Math.min(16 * 1024, Math.max(1, maximumBytes))
         );
-        byte[] buffer = new byte[Math.min(16 * 1024, maximumBytes)];
-        int remaining = maximumBytes;
+        int bufferSize = Math.min(16 * 1024, Math.max(1, maximumBytes));
+        byte[] buffer = new byte[bufferSize];
+        int remaining = Math.max(1, maximumBytes);
         while (remaining > 0) {
-            if (Thread.currentThread().isInterrupted()) {
-                throw new IOException("Solicitud cancelada.");
-            }
+            check(context);
             int count = input.read(buffer, 0, Math.min(buffer.length, remaining));
             if (count == -1) break;
             output.write(buffer, 0, count);
@@ -398,83 +429,36 @@ public final class TokenHttpClient {
             String json,
             int maxResponseBytes
     ) throws IOException {
-        if (Thread.currentThread().isInterrupted()) {
-            throw new IOException("Solicitud cancelada.");
-        }
-        URI uri;
-        try {
-            uri = URI.create(url);
-        } catch (IllegalArgumentException error) {
-            throw new IOException("URL no válida.");
-        }
-        if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
+        URI uri = parseHttpUri(url);
+        if (!"https".equalsIgnoreCase(uri.getScheme())) {
             throw new IOException("URL HTTPS no válida.");
         }
-
         byte[] requestBody = (json == null ? "{}" : json)
                 .getBytes(StandardCharsets.UTF_8);
         if (requestBody.length > 256 * 1024) {
             throw new IOException("Solicitud demasiado grande.");
         }
-
-        HttpURLConnection connection = null;
+        ResolutionContext context = ResolutionContext.current();
+        check(context);
+        OkHttpClient client = clientFor(context, false);
+        Request request;
         try {
-            connection = (HttpURLConnection) uri.toURL().openConnection();
-            connection.setRequestMethod("POST");
-            connection.setConnectTimeout(connectTimeoutMs);
-            connection.setReadTimeout(readTimeoutMs);
-            connection.setInstanceFollowRedirects(false);
-            connection.setUseCaches(false);
-            connection.setDoInput(true);
-            connection.setDoOutput(true);
-            connection.setFixedLengthStreamingMode(requestBody.length);
-            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            connection.setRequestProperty("Cache-Control", "no-store, no-cache, max-age=0");
-            connection.setRequestProperty("Pragma", "no-cache");
-            connection.setRequestProperty("Expires", "0");
-            if (headers != null) {
-                for (Map.Entry<String, String> header : headers.entrySet()) {
-                    if (header.getKey() != null && header.getValue() != null) {
-                        connection.setRequestProperty(header.getKey(), header.getValue());
-                    }
-                }
+            Request.Builder builder = new Request.Builder()
+                    .url(uri.toString())
+                    .post(RequestBody.create(requestBody, JSON_MEDIA_TYPE));
+            addHeaders(builder, headers);
+            builder.header("Content-Type", "application/json; charset=utf-8");
+            if (headers == null || !containsHeader(headers, "User-Agent")) {
+                builder.header("User-Agent", BROWSER_USER_AGENT);
             }
-            if (connection.getRequestProperty("User-Agent") == null) {
-                connection.setRequestProperty("User-Agent", BROWSER_USER_AGENT);
-            }
-            try (OutputStream output = connection.getOutputStream()) {
-                output.write(requestBody);
-            }
-
-            int responseCode = connection.getResponseCode();
-            if (responseCode < 200 || responseCode >= 300) {
-                throw new HttpStatusException(responseCode);
-            }
-            try (InputStream input = connection.getInputStream()) {
-                URI finalUri;
-                try {
-                    finalUri = connection.getURL().toURI();
-                } catch (URISyntaxException error) {
-                    throw new IOException("El servidor devolvió una URL inválida.", error);
-                }
-                Map<String, String> responseHeaders = new LinkedHashMap<>();
-                for (Map.Entry<String, java.util.List<String>> entry
-                        : connection.getHeaderFields().entrySet()) {
-                    if (entry.getKey() != null && entry.getValue() != null
-                            && !entry.getValue().isEmpty()) {
-                        responseHeaders.put(entry.getKey(), entry.getValue().get(0));
-                    }
-                }
-                return new Response(
-                        responseCode,
-                        finalUri,
-                        connection.getContentType(),
-                        responseHeaders,
-                        readLimited(input, Math.max(1, maxResponseBytes))
-                );
-            }
+            request = builder.build();
+        } catch (IllegalArgumentException error) {
+            throw new IOException("URL o cabecera no válida.", error);
+        }
+        try {
+            return execute(client, request, maxResponseBytes, false, context);
         } finally {
-            if (connection != null) connection.disconnect();
+            java.util.Arrays.fill(requestBody, (byte) 0);
         }
     }
 
@@ -495,8 +479,10 @@ public final class TokenHttpClient {
             this.statusCode = statusCode;
             this.finalUri = finalUri;
             this.contentType = contentType == null ? "" : contentType;
-            this.headers = Collections.unmodifiableMap(new LinkedHashMap<>(headers));
-            this.body = body;
+            this.headers = Collections.unmodifiableMap(new LinkedHashMap<>(
+                    headers == null ? Collections.emptyMap() : headers
+            ));
+            this.body = body == null ? new byte[0] : body;
         }
 
         public int getStatusCode() { return statusCode; }
@@ -506,10 +492,10 @@ public final class TokenHttpClient {
         public byte[] getBody() { return body; }
     }
 
-    public static final class HttpStatusException extends IOException {
+    public static class HttpStatusException extends IOException {
         private final int statusCode;
 
-        HttpStatusException(int statusCode) {
+        public HttpStatusException(int statusCode) {
             super("HTTP " + statusCode);
             this.statusCode = statusCode;
         }

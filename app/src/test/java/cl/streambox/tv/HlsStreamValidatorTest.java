@@ -98,4 +98,35 @@ public final class HlsStreamValidatorTest {
         assertEquals(1, attempts.size());
         assertEquals("http", attempts.get(0).getScheme());
     }
+
+    @Test
+    public void schemeFallbackPreservesEscapedPathQueryFragmentAndPort() throws Exception {
+        List<URI> attempts = new ArrayList<>();
+        TvVooStreamResolver.HlsCandidateValidator validator = (
+                playbackUri,
+                headers,
+                strictValidation,
+                listener
+        ) -> attempts.add(playbackUri);
+        URI published = URI.create(
+                "https://node.ngolpdkyoctjcddxshli469r.org:8443/"
+                        + "sunshine/live%2Findex.m3u8?token=a%2Bb&x=%2F#frag%20ment"
+        );
+
+        URI accepted = TvVooStreamResolver.validateCandidate(
+                validator,
+                published,
+                true,
+                Collections.emptyMap(),
+                true,
+                ResolutionProgressListener.NONE
+        );
+
+        assertEquals(
+                "http://node.ngolpdkyoctjcddxshli469r.org:8443/"
+                        + "sunshine/live%2Findex.m3u8?token=a%2Bb&x=%2F#frag%20ment",
+                accepted.toString()
+        );
+        assertEquals(accepted.toString(), attempts.get(0).toString());
+    }
 }

@@ -46,6 +46,9 @@ public final class M3uParser {
             }
 
             if (line.startsWith("#")) {
+                if (pendingName != null || !pendingAttributes.isEmpty()) {
+                    ChannelRequestHeaders.parseOption(line, pendingAttributes);
+                }
                 continue;
             }
 

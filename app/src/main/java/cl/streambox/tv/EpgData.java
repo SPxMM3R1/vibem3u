@@ -2,6 +2,7 @@ package cl.streambox.tv;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,9 +13,27 @@ public final class EpgData {
     private final Map<String, List<EpgProgramme>> programmesByChannel;
     private final List<EpgProgramme> programmes;
     private final int programmeCount;
+    private final long snapshotSignature;
 
     public EpgData(List<EpgProgramme> programmes) {
-        this.programmes = Collections.unmodifiableList(new ArrayList<>(programmes));
+        List<EpgProgramme> sorted = new ArrayList<>();
+        if (programmes != null) {
+            for (EpgProgramme programme : programmes) {
+                if (programme != null) sorted.add(programme);
+            }
+        }
+        // Keep the immutable snapshot in a deterministic order. Parsing and
+        // merging happen on a worker, so the main thread only receives this
+        // ready-to-query index and never sorts a large XMLTV guide.
+        sorted.sort(Comparator
+                .comparing(EpgProgramme::getChannelId, Comparator.nullsFirst(String::compareTo))
+                .thenComparingLong(EpgProgramme::getStartMillis)
+                .thenComparingLong(EpgProgramme::getStopMillis)
+                .thenComparing(
+                        EpgProgramme::getTitle,
+                        Comparator.nullsFirst(String::compareTo)
+                ));
+        this.programmes = Collections.unmodifiableList(sorted);
         Map<String, List<EpgProgramme>> mutable = new LinkedHashMap<>();
         for (EpgProgramme programme : this.programmes) {
             List<EpgProgramme> channelProgrammes = mutable.get(programme.getChannelId());
@@ -33,6 +52,7 @@ public final class EpgData {
         }
         programmesByChannel = Collections.unmodifiableMap(immutable);
         programmeCount = this.programmes.size();
+        snapshotSignature = signatureFor(this.programmes);
     }
 
     public static EpgData empty() { return EMPTY; }
@@ -45,10 +65,40 @@ public final class EpgData {
     public static EpgData merge(List<EpgData> dataSets) {
         if (dataSets == null || dataSets.isEmpty()) return EMPTY;
         List<EpgProgramme> merged = new ArrayList<>();
+        EpgData only = null;
+        int nonNullDataSets = 0;
         for (EpgData data : dataSets) {
-            if (data != null) merged.addAll(data.programmes);
+            if (data != null) {
+                nonNullDataSets++;
+                only = data;
+                merged.addAll(data.programmes);
+            }
         }
-        return merged.isEmpty() ? EMPTY : new EpgData(merged);
+        if (merged.isEmpty()) return EMPTY;
+        if (nonNullDataSets == 1 && only != null) return only;
+        return new EpgData(merged);
+    }
+
+    /**
+     * Compact identity for a set of immutable snapshots. It lets callers
+     * discard duplicate EPG callbacks before scheduling another merge.
+     */
+    static String mergeSignature(Map<String, EpgData> dataByUrl) {
+        if (dataByUrl == null || dataByUrl.isEmpty()) return "";
+        StringBuilder result = new StringBuilder(dataByUrl.size() * 32);
+        for (Map.Entry<String, EpgData> entry : dataByUrl.entrySet()) {
+            result.append(entry.getKey()).append('=');
+            EpgData data = entry.getValue();
+            if (data == null) {
+                result.append("null");
+            } else {
+                result.append(data.programmeCount)
+                        .append(':')
+                        .append(data.snapshotSignature);
+            }
+            result.append(';');
+        }
+        return result.toString();
     }
 
     public EpgProgramme findCurrent(String channelId, long nowMillis) {
@@ -91,4 +141,19 @@ public final class EpgData {
     public int getProgrammeCount() { return programmeCount; }
 
     List<EpgProgramme> getProgrammes() { return programmes; }
+
+    private static long signatureFor(List<EpgProgramme> programmes) {
+        long result = 1125899906842597L;
+        for (EpgProgramme programme : programmes) {
+            result = 31L * result + safeHash(programme.getChannelId());
+            result = 31L * result + safeHash(programme.getTitle());
+            result = 31L * result + programme.getStartMillis();
+            result = 31L * result + programme.getStopMillis();
+        }
+        return 31L * result + programmes.size();
+    }
+
+    private static int safeHash(String value) {
+        return value == null ? 0 : value.hashCode();
+    }
 }

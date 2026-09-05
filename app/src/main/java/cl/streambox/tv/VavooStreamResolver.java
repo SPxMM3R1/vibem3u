@@ -3,7 +3,6 @@ package cl.streambox.tv;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -11,7 +10,6 @@ import java.util.Map;
 /** Direct Vavoo engine used by the experimental provider and TvVoo fallback. */
 public final class VavooStreamResolver implements StreamResolver {
     private static final int DEFAULT_RESOLUTION_BUDGET_MS = 10_000;
-    private static final int DEFAULT_PARALLEL_CANDIDATES = 3;
 
     private final ResolverDefinition definition;
     private final VavooSessionClient sessionClient;
@@ -61,16 +59,24 @@ public final class VavooStreamResolver implements StreamResolver {
             Channel channel,
             ResolutionProgressListener listener
     ) throws IOException {
-        return resolve(
-                channel,
-                listener,
-                new ResolutionDeadline(
-                        definition.getIntConfig(
-                                "resolutionBudgetMs",
-                                DEFAULT_RESOLUTION_BUDGET_MS,
-                                2_000,
-                                20_000
-                        )
+        ResolutionDeadline deadline = newResolutionDeadline();
+        ResolutionContext ambient = ResolutionContext.current();
+        if (ambient == null) {
+            ResolutionContext root = new ResolutionContext(deadline.remainingMillis());
+            try (ResolutionContext.Scope ignored = root.activate()) {
+                return resolve(channel, listener, deadline);
+            }
+        }
+        return resolve(channel, listener, deadline);
+    }
+
+    private ResolutionDeadline newResolutionDeadline() {
+        return new ResolutionDeadline(
+                definition.getIntConfig(
+                        "resolutionBudgetMs",
+                        DEFAULT_RESOLUTION_BUDGET_MS,
+                        2_000,
+                        20_000
                 )
         );
     }
@@ -85,54 +91,53 @@ public final class VavooStreamResolver implements StreamResolver {
                 : listener;
         deadline.check();
         LinkedHashSet<String> aliases = new LinkedHashSet<>(definition.resolverAliases(channel));
-        List<URI> candidates = sessionClient.resolveCandidates(
-                channel,
-                new ArrayList<>(aliases),
-                progress
-        );
-        deadline.check();
         Map<String, String> playbackHeaders = TvVooStreamResolver.playbackHeaders();
         boolean allowHttpFallback = definition.getBooleanConfig("allowHttpFallback", true);
-        int maxCandidates = definition.getIntConfig("maxResolveCandidates", 8, 1, 12);
-        int parallelCandidates = definition.getIntConfig(
-                "parallelCandidates",
-                DEFAULT_PARALLEL_CANDIDATES,
-                1,
-                4
-        );
-        HlsCandidateRace.Result race = HlsCandidateRace.firstValid(
-                candidates,
-                maxCandidates,
-                parallelCandidates,
-                deadline,
-                0,
-                Math.min(candidates.size(), maxCandidates),
-                progress,
-                candidate -> TvVooStreamResolver.validateCandidate(
-                        validator,
-                        candidate,
-                        allowHttpFallback,
-                        playbackHeaders,
-                        true,
-                        progress
-                )
-        );
-        if (race.getSource() != null) {
+        final URI[] accepted = new URI[1];
+        final IOException[] lastValidationError = new IOException[1];
+        try {
+            sessionClient.streamCandidates(
+                    channel,
+                    new ArrayList<>(aliases),
+                    progress,
+                    deadline,
+                    (candidate, stableIdentity) -> {
+                        try {
+                            accepted[0] = TvVooStreamResolver.validateCandidate(
+                                    validator,
+                                    candidate,
+                                    allowHttpFallback,
+                                    playbackHeaders,
+                                    true,
+                                    progress
+                            );
+                            return true;
+                        } catch (IOException error) {
+                            lastValidationError[0] = error;
+                            return false;
+                        }
+                    }
+            );
+        } catch (IOException error) {
+            if (lastValidationError[0] == null) lastValidationError[0] = error;
+        }
+        if (accepted[0] != null) {
+            deadline.check();
             progress.onProgress(ResolutionProgress.of(
                     ResolutionStage.SOURCE_FOUND,
-                    "HLS válido · GET " + SafePlaybackText.url(race.getSource())
+                    "HLS válido · GET " + SafePlaybackText.url(accepted[0])
                             + " · fuente Vavoo aceptada"
             ));
             return ResolvedPlaybackSource.dynamic(
                     getId(),
                     stableSourceId(channel),
-                    race.getSource(),
+                    accepted[0],
                     playbackHeaders,
                     TvVooStreamResolver.PLAYBACK_USER_AGENT,
                     expiresAt()
             );
         }
-        throw new IOException("Vavoo no entregó un HLS reproducible.", race.getLastError());
+        throw new IOException("Vavoo no entregó un HLS reproducible.", lastValidationError[0]);
     }
 
     @Override
