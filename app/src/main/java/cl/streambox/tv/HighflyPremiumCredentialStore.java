@@ -128,8 +128,15 @@ public final class HighflyPremiumCredentialStore {
                 memoryToken = decrypted;
                 return new String(decrypted);
             } catch (GeneralSecurityException | IllegalArgumentException error) {
-                clearEncryptedDataLocked();
-                status = new TokenStatus(Status.NOT_CONFIGURED, "", 0L);
+                // A transient Keystore/provider failure must not erase the
+                // only persisted credential. Keep it for a later retry or an
+                // explicit replacement by the user.
+                status = new TokenStatus(Status.UNKNOWN, "", 0L);
+                preferences.edit()
+                        .putString(KEY_STATUS, Status.UNKNOWN.name())
+                        .remove(KEY_PLAN)
+                        .remove(KEY_EXPIRES_AT)
+                        .apply();
                 return null;
             }
         }
@@ -276,7 +283,8 @@ public final class HighflyPremiumCredentialStore {
     }
 
     private void clearEncryptedDataLocked() {
-        preferences.edit().remove(KEY_CIPHERTEXT).remove(KEY_IV).apply();
+        // Explicit removal must be durable before the Keystore key is deleted.
+        preferences.edit().remove(KEY_CIPHERTEXT).remove(KEY_IV).commit();
     }
 
     private byte[][] encrypt(String token) throws GeneralSecurityException {

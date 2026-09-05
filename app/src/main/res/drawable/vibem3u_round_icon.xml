@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Full-bleed dark circle for launchers that honor android:roundIcon. -->
+    <path
+        android:fillColor="#081018"
+        android:pathData="M54,2A52,52 0,1 0,54 106A52,52 0,1 0,54 2" />
+    <path
+        android:fillColor="#12303A"
+        android:pathData="M54,8A46,46 0,1 0,54 100A46,46 0,1 0,54 8" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#00D4F5"
+        android:strokeWidth="2"
+        android:pathData="M54,5A49,49 0,1 0,54 103A49,49 0,1 0,54 5" />
+
+    <!-- Simplified VibeM3U screen/play mark, kept inside the circular safe area. -->
+    <path
+        android:fillColor="#F7FBFD"
+        android:pathData="M22,32h64a5,5 0,0 1,5 5v34a5,5 0,0 1,-5 5H22a5,5 0,0 1,-5 -5V37a5,5 0,0 1,5 -5z" />
+    <path
+        android:fillColor="#081018"
+        android:pathData="M24,35h60a3,3 0,0 1,3 3v32a3,3 0,0 1,-3 3H24a3,3 0,0 1,-3 -3V38a3,3 0,0 1,3 -3z" />
+
+    <path
+        android:fillColor="#FF675B"
+        android:pathData="M31,42l18,12 -18,12z" />
+    <path
+        android:fillColor="#00D4F5"
+        android:pathData="M35,46l12,8 -12,8z" />
+
+    <path
+        android:fillColor="#F7FBFD"
+        android:pathData="M56,43h21v4H56zM56,52h21v4H56zM56,61h21v4H56z" />
+    <path
+        android:fillColor="#00D4F5"
+        android:pathData="M56,68h14v2H56z" />
+</vector>

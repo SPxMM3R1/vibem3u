@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public final class ResolverCoordinatorTest {
@@ -145,6 +146,31 @@ public final class ResolverCoordinatorTest {
         assertEquals(5L * 60L * 1000L, tvn.cacheTtlMillis());
         assertTrue(mega.cacheResolvedSource());
         assertEquals(5L * 60L * 1000L, mega.cacheTtlMillis());
+    }
+
+    @Test
+    public void legacyZeroTtlCatalogDoesNotDisableOfficialTokenCache() {
+        TvnStreamResolver tvn = new TvnStreamResolver(definition("tvn", "tvn", 0L,
+                Collections.emptyMap()));
+        MeganoticiasStreamResolver mega = new MeganoticiasStreamResolver(
+                definition("meganoticias", "meganoticias", 0L, Collections.emptyMap())
+        );
+
+        assertTrue(tvn.cacheResolvedSource());
+        assertEquals(5L * 60L * 1000L, tvn.cacheTtlMillis());
+        assertTrue(mega.cacheResolvedSource());
+        assertEquals(5L * 60L * 1000L, mega.cacheTtlMillis());
+    }
+
+    @Test
+    public void explicitCatalogOptOutStillDisablesOfficialTokenCache() {
+        TvnStreamResolver tvn = new TvnStreamResolver(definition(
+                "tvn", "tvn", 300_000L,
+                Collections.singletonMap("cacheEnabled", "false")
+        ));
+
+        assertFalse(tvn.cacheResolvedSource());
+        assertEquals(0L, tvn.cacheTtlMillis());
     }
 
     @Test
@@ -283,6 +309,26 @@ public final class ResolverCoordinatorTest {
                 Collections.emptyMap(),
                 "test-agent",
                 System.currentTimeMillis() + 60_000L
+        );
+    }
+
+    private static ResolverDefinition definition(
+            String id,
+            String engine,
+            long cacheTtlMillis,
+            java.util.Map<String, String> config
+    ) {
+        return new ResolverDefinition(
+                id,
+                id,
+                engine,
+                true,
+                cacheTtlMillis,
+                Collections.emptySet(),
+                Collections.emptyList(),
+                Collections.emptySet(),
+                config,
+                Collections.emptyMap()
         );
     }
 }

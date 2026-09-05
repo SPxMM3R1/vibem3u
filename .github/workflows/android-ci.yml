@@ -122,3 +122,34 @@ jobs:
           path: app/build/outputs/apk/experimental/app-experimental.apk
           if-no-files-found: error
           retention-days: 30
+
+  android-instrumentation:
+    name: Verificar persistencia cifrada en Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v6
+
+      - name: Configurar Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Ejecutar prueba Android en emulador
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: Pixel_2
+          force-avd-creation: true
+          disable-animations: true
+          script: |
+            chmod +x gradlew
+            ./gradlew --no-daemon connectedDebugAndroidTest

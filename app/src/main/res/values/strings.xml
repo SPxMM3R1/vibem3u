@@ -55,7 +55,8 @@
     <string name="highfly_premium_title">Lista 3 · Highfly Premium</string>
     <string name="highfly_premium_description">Activa la Lista 3 estable generada por el runner de GitHub. La app muestra su copia cacheada de inmediato y la actualiza en segundo plano; la credencial se conserva cifrada y el token de reproducción se renueva al abrir cada canal. Los eventos seleccionados se agregan aparte en la Lista 4 temporal.</string>
     <string name="highfly_premium_enabled">Lista 3 · canales estables Premium</string>
-    <string name="highfly_premium_token_hint">Token Premium · se oculta después de guardarlo</string>
+    <string name="highfly_premium_token_hint">Token Premium · se oculta después de verificarlo</string>
+    <string name="highfly_premium_token_saved_hint">Credencial Premium guardada · escribe solo para reemplazarla</string>
     <string name="highfly_premium_token_feedback_verified">✓ Verificado</string>
     <string name="highfly_premium_token_feedback_verifying">Verificando…</string>
     <string name="highfly_premium_token_feedback_unverified">Sin verificar</string>

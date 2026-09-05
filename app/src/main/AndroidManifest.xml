@@ -16,6 +16,7 @@
         android:allowBackup="false"
         android:banner="@drawable/vibem3u_banner"
         android:icon="@drawable/vibem3u_banner"
+        android:roundIcon="@drawable/vibem3u_round_icon"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.VibeM3U"

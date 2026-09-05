@@ -63,8 +63,9 @@ public final class MeganoticiasStreamResolver implements StreamResolver {
 
     @Override public long cacheTtlMillis() {
         if (definition == null) return DEFAULT_TOKEN_CACHE_TTL_MILLIS;
+        if (!definition.getBooleanConfig("cacheEnabled", true)) return 0L;
         long configured = definition.getCacheTtlMillis();
-        if (configured <= 0L) return 0L;
+        if (configured <= 0L) return DEFAULT_TOKEN_CACHE_TTL_MILLIS;
         // Token lifetime is provider-controlled. Keep the externally
         // configurable value bounded so a stale token cannot remain reusable
         // for an unexpectedly long period.

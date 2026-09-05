@@ -147,6 +147,8 @@ public final class MainActivity extends Activity {
     private int channelIndex;
     private boolean loadFailed;
     private boolean settingsOpen;
+    private String resolverSettingsSnapshotBeforeSettings = "";
+    private String playlistSourcesSnapshotBeforeSettings = "";
     private boolean refreshAfterSettings;
     private boolean overlayAwaitingPlayback;
     private boolean exiting;
@@ -231,6 +233,7 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        SettingsActivity.ensureDefaultPlaylistConfigured(this);
         repository = new PlaylistRepository(this);
         epgRepository = new EpgRepository(this);
         channelLogoCache = new ChannelLogoCache(this);
@@ -2339,6 +2342,8 @@ public final class MainActivity extends Activity {
 
     private void openSettings(int initialTab) {
         if (settingsOpen) return;
+        resolverSettingsSnapshotBeforeSettings = resolverSettingsSnapshot();
+        playlistSourcesSnapshotBeforeSettings = playlistSourceSignature(getPlaylistSources());
         settingsOpen = true;
         startActivityForResult(createSettingsIntent(initialTab), SETTINGS_REQUEST);
     }
@@ -2400,12 +2405,22 @@ public final class MainActivity extends Activity {
         if (appUpdater != null && appUpdater.onActivityResult(requestCode)) return;
         if (requestCode == SETTINGS_REQUEST) {
             settingsOpen = false;
+            String resolverSnapshotBefore = resolverSettingsSnapshotBeforeSettings;
+            String playlistSnapshotBefore = playlistSourcesSnapshotBeforeSettings;
+            resolverSettingsSnapshotBeforeSettings = "";
+            playlistSourcesSnapshotBeforeSettings = "";
             List<PlaylistSource> sources = getPlaylistSources();
             if (resultCode == RESULT_OK
                     && (!sources.isEmpty() || isHighflyPremiumConfigured())) {
                 applyPlaybackSettingsResult(data);
-                resolverCoordinator.clear();
                 reloadResolverRegistry();
+                boolean resolverConfigurationChanged = resolverSnapshotBefore.isBlank()
+                        || !resolverSnapshotBefore.equals(resolverSettingsSnapshot());
+                boolean playlistConfigurationChanged = playlistSnapshotBefore.isBlank()
+                        || !playlistSnapshotBefore.equals(playlistSourceSignature(sources));
+                if (resolverConfigurationChanged || playlistConfigurationChanged) {
+                    resolverCoordinator.clear();
+                }
                 temporaryEventRecoveryPolicy.clearAll();
                 if (playerUsesVolumeNormalization != isVolumeNormalizationEnabled()) {
                     if (playbackBitrateMeter != null) {
@@ -2472,6 +2487,27 @@ public final class MainActivity extends Activity {
                 );
         return (m3uSignature.isBlank() ? "sources=none" : m3uSignature)
                 + "|premium=" + premiumSignature;
+    }
+
+    private String resolverSettingsSnapshot() {
+        if (streamResolverRegistry == null) return "resolver=unavailable";
+        StringBuilder snapshot = new StringBuilder(
+                streamResolverRegistry.getCatalogVersion()
+        );
+        if (resolverPreferences != null) {
+            snapshot.append("|tvvoo=")
+                    .append(resolverPreferences.getTvVooResolutionMode());
+        }
+        for (ResolverDefinition definition : streamResolverRegistry.getDefinitions()) {
+            snapshot.append('|')
+                    .append(definition.getId())
+                    .append(':')
+                    .append(definition.getEngine())
+                    .append('=')
+                    .append(resolverPreferences == null
+                            || resolverPreferences.isEnabled(definition));
+        }
+        return snapshot.toString();
     }
 
     private boolean isChannelNavigationInverted() {

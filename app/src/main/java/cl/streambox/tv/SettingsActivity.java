@@ -1,6 +1,7 @@
 package cl.streambox.tv;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Rect;
@@ -50,6 +51,9 @@ public final class SettingsActivity extends Activity {
     public static final int TAB_INTERFACE = 4;
     public static final int TAB_UPDATES = 5;
     public static final String PREFS = "streambox_settings";
+    /** Public Lista 1 used on a new installation. */
+    public static final String DEFAULT_PLAYLIST_URL =
+            "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/m3u.m3u";
     public static final String KEY_PLAYLIST_URL = "playlist_url";
     public static final String KEY_PLAYLIST_URL_2 = "playlist_url_2";
     public static final String KEY_PLAYLIST_ENABLED = "playlist_enabled";
@@ -145,6 +149,25 @@ public final class SettingsActivity extends Activity {
     private final Map<String, Switch> highflyPremiumEventSwitches = new LinkedHashMap<>();
     private HighflyPremiumCatalog loadedHighflyPremiumCatalog;
 
+    /**
+     * Seeds only a completely unconfigured installation. Once the user has
+     * saved or configured either playlist, their choice remains authoritative,
+     * including an intentionally disabled or empty Lista 1.
+     */
+    public static void ensureDefaultPlaylistConfigured(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        if (prefs.contains(KEY_PLAYLIST_URL)
+                || prefs.contains(KEY_PLAYLIST_URL_2)
+                || prefs.contains(KEY_PLAYLIST_ENABLED)
+                || prefs.contains(KEY_PLAYLIST_ENABLED_2)) {
+            return;
+        }
+        prefs.edit()
+                .putString(KEY_PLAYLIST_URL, DEFAULT_PLAYLIST_URL)
+                .putBoolean(KEY_PLAYLIST_ENABLED, true)
+                .apply();
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -152,6 +175,7 @@ public final class SettingsActivity extends Activity {
         enterImmersiveMode();
         fitSettingsPanelToAspectRatio();
 
+        ensureDefaultPlaylistConfigured(this);
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         highflyPremiumCredentialStore = HighflyPremiumCredentialStore.getInstance(this);
         highflyPremiumCatalogRepository = new HighflyPremiumCatalogRepository(this);
@@ -631,6 +655,9 @@ public final class SettingsActivity extends Activity {
     private void renderHighflyPremiumStatus() {
         HighflyPremiumCredentialStore.TokenStatus tokenStatus =
                 highflyPremiumCredentialStore.tokenStatus();
+        highflyPremiumToken.setHint(highflyPremiumCredentialStore.hasCredential()
+                ? R.string.highfly_premium_token_saved_hint
+                : R.string.highfly_premium_token_hint);
         switch (tokenStatus.getStatus()) {
             case VALID:
                 highflyPremiumStatus.setText(getString(
