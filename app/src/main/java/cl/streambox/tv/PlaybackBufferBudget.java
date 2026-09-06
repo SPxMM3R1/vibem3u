@@ -6,8 +6,8 @@ final class PlaybackBufferBudget {
     private PlaybackBufferBudget() {}
 
     static int targetBytes(long maxHeapBytes, boolean lowRamDevice) {
-        long ceiling = (lowRamDevice ? 32L : 64L) * MIB;
-        long share = Math.max(0L, maxHeapBytes) / 8L;
+        long ceiling = (lowRamDevice ? 32L : 96L) * MIB;
+        long share = Math.max(0L, maxHeapBytes) / 6L;
         return (int) Math.max(8L * MIB, Math.min(ceiling, share));
     }
 }
