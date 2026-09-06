@@ -32,6 +32,11 @@ final class ResolvedSourceRefreshPolicy {
     ) {
         if (shouldRefresh(responseCode, failedRequestUri)) return true;
         if (responseCode >= 400) return false;
+        return isHlsSourceFailure(playbackErrorCode);
+    }
+
+    /** Errors that mean the media source itself is unusable, not merely slow. */
+    static boolean isHlsSourceFailure(int playbackErrorCode) {
         return playbackErrorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND
                 || playbackErrorCode == PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE
                 || playbackErrorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED

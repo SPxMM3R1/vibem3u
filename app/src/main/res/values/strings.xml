@@ -32,6 +32,7 @@
     <string name="loading_validating_segment">Validando segmento inicial…</string>
     <string name="loading_retrying_source">Reintentando fuente HLS…</string>
     <string name="loading_refreshing_source">Renovando autorización…</string>
+    <string name="loading_reopening_source">Reabriendo fuente HLS…</string>
     <string name="loading_fallback_source">Probando respaldo…</string>
     <string name="loading_network_retry">Reintentando conexión…</string>
     <string name="empty_playlist">La lista no contiene canales reproducibles.</string>

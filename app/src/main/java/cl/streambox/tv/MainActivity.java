@@ -15,6 +15,7 @@ import android.os.Bundle;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextUtils;
@@ -78,6 +79,10 @@ public final class MainActivity extends Activity {
     private static final long OVERLAY_TIMEOUT_MS = 4_500;
     private static final long LIGHT_EPG_TIMEOUT_MS = 6_500;
     private static final long PLAYER_RETRY_DELAY_MS = 2_500;
+    private static final long PLAYBACK_STALL_TIMEOUT_MS = 5_000L;
+    private static final long PLAYBACK_WATCHDOG_INTERVAL_MS = 1_000L;
+    private static final long LIVE_FEED_MAX_OFFSET_MS = 30_000L;
+    private static final long LIVE_FEED_OFFSET_GRACE_MS = 3_000L;
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
     private static final long NO_RESOLUTION_REQUEST = -1L;
     private static final int PREMIUM_STABLE_SOURCE_POSITION = 3;
@@ -168,6 +173,11 @@ public final class MainActivity extends Activity {
     private boolean playerUsesVolumeNormalization;
     private long playbackGeneration;
     private Runnable scheduledPlaybackRetry;
+    private boolean playbackWatchdogScheduled;
+    private long playbackLoadingSinceElapsedRealtime = -1L;
+    private long liveOffsetExceededSinceElapsedRealtime = -1L;
+    private boolean playbackAutoRecoveryInFlight;
+    private boolean playbackRecoveryFailed;
     private Future<?> playbackResolutionTask;
     private ResolutionContext playbackResolutionContext;
     private ManifestHandoffCache playbackManifestCache;
@@ -216,6 +226,14 @@ public final class MainActivity extends Activity {
             if (!exiting && !isFinishing()) {
                 mainHandler.postDelayed(this, 30_000);
             }
+        }
+    };
+    private final Runnable playbackWatchdog = new Runnable() {
+        @Override public void run() {
+            playbackWatchdogScheduled = false;
+            if (exiting || resourcesReleased || isFinishing()) return;
+            checkPlaybackHealth();
+            schedulePlaybackWatchdog();
         }
     };
     private final Runnable animateLoadingText = new Runnable() {
@@ -359,11 +377,26 @@ public final class MainActivity extends Activity {
                 updateStreamStatus(playbackState);
                 updateDiagnostics();
                 if (playbackState == Player.STATE_READY && !loadFailed) {
+                    if (hasRenderedVideoFrame()) {
+                        playbackLoadingSinceElapsedRealtime = -1L;
+                    } else if (playbackLoadingSinceElapsedRealtime < 0L) {
+                        playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
+                    }
+                    liveOffsetExceededSinceElapsedRealtime = -1L;
                     hideLoadingState();
-                } else if (playbackState == Player.STATE_BUFFERING
-                        && loadingPanel != null
-                        && loadingPanel.getVisibility() == View.VISIBLE) {
-                    showLoadingState(getString(R.string.loading_validating_segment));
+                } else if (playbackState == Player.STATE_BUFFERING) {
+                    if (playbackLoadingSinceElapsedRealtime < 0L) {
+                        playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
+                    }
+                    if (loadingPanel != null
+                            && loadingPanel.getVisibility() == View.VISIBLE) {
+                        showLoadingState(getString(R.string.loading_validating_segment));
+                    }
+                } else if (playbackState == Player.STATE_IDLE
+                        && playbackChannel != null) {
+                    if (playbackLoadingSinceElapsedRealtime < 0L) {
+                        playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
+                    }
                 }
             }
 
@@ -389,6 +422,8 @@ public final class MainActivity extends Activity {
             @Override public void onPlayerError(PlaybackException error) {
                 settlePlaybackEpisode(false);
                 startupMetrics.failed(startupMetrics.currentId());
+                playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
+                liveOffsetExceededSinceElapsedRealtime = -1L;
                 setStatus("ERROR", R.color.red);
                 codecInfo.setText(shortMessage(error));
                 overlayAwaitingPlayback = true;
@@ -398,12 +433,20 @@ public final class MainActivity extends Activity {
                         && currentPlaybackSource != null
                         && currentPlaybackSource.isDynamicallyResolved()
                         && (isProviderRefreshError(error)
-                        || PlaybackRecoveryPolicy.isRecoverable(error.errorCode))) {
+                        || isAutomaticSourceRecoveryError(error))) {
                     handleTemporaryEventFailure(playbackChannel, playbackGeneration);
                     return;
                 }
                 if (isProviderRefreshError(error)) {
                     handleProviderAuthorizationFailure();
+                    return;
+                }
+                if (isAutomaticSourceRecoveryError(error)) {
+                    if (hasResolverForPlaybackChannel()) {
+                        handleProviderAuthorizationFailure();
+                    } else {
+                        handleDirectPlaybackFailure();
+                    }
                     return;
                 }
                 MediaItem current = player == null ? null : player.getCurrentMediaItem();
@@ -425,6 +468,7 @@ public final class MainActivity extends Activity {
                 }
             }
         });
+        schedulePlaybackWatchdog();
     }
 
     private void refreshPlaylists(List<PlaylistSource> configuredSources) {
@@ -1190,6 +1234,10 @@ public final class MainActivity extends Activity {
         channelIndex = (requestedIndex % channels.size() + channels.size()) % channels.size();
         Channel channel = channels.get(channelIndex);
         playbackGeneration++;
+        playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
+        liveOffsetExceededSinceElapsedRealtime = -1L;
+        playbackAutoRecoveryInFlight = false;
+        playbackRecoveryFailed = false;
         resetPlaybackBitrateMeter();
         cancelScheduledPlaybackRetry();
         cancelPlaybackResolution();
@@ -1228,6 +1276,120 @@ public final class MainActivity extends Activity {
         if (player == null) return;
         player.prepare();
         player.play();
+    }
+
+    private void schedulePlaybackWatchdog() {
+        if (playbackWatchdogScheduled || exiting || resourcesReleased || isFinishing()) return;
+        playbackWatchdogScheduled = true;
+        mainHandler.postDelayed(playbackWatchdog, PLAYBACK_WATCHDOG_INTERVAL_MS);
+    }
+
+    private void cancelPlaybackWatchdog() {
+        mainHandler.removeCallbacks(playbackWatchdog);
+        playbackWatchdogScheduled = false;
+    }
+
+    private boolean hasRenderedVideoFrame() {
+        return playbackBitrateMeter != null
+                && playbackBitrateMeter.snapshot().hasRenderedVideoFrame;
+    }
+
+    /**
+     * Checks the playback boundary rather than network throughput. A stream
+     * can keep downloading bytes while its decoder is no longer receiving
+     * frames, so the watchdog also uses the last renderer timestamp.
+     */
+    private void checkPlaybackHealth() {
+        if (player == null || playbackChannel == null || settingsOpen || loadFailed
+                || playbackRecoveryFailed
+                || playbackAutoRecoveryInFlight) return;
+
+        long nowMs = SystemClock.elapsedRealtime();
+        int state = player.getPlaybackState();
+        boolean waitingForStart = playbackResolutionTask != null
+                || state == Player.STATE_IDLE
+                || state == Player.STATE_BUFFERING
+                || (state == Player.STATE_READY
+                && player.isPlaying()
+                && player.getVideoFormat() != null
+                && !hasRenderedVideoFrame());
+        if (waitingForStart) {
+            if (playbackLoadingSinceElapsedRealtime < 0L) {
+                playbackLoadingSinceElapsedRealtime = nowMs;
+            }
+            if (nowMs - playbackLoadingSinceElapsedRealtime >= PLAYBACK_STALL_TIMEOUT_MS) {
+                requestAutomaticPlaybackRecovery("carga prolongada");
+                return;
+            }
+        } else if (state == Player.STATE_READY && hasRenderedVideoFrame()) {
+            playbackLoadingSinceElapsedRealtime = -1L;
+        }
+
+        if (!player.isPlaying() || state != Player.STATE_READY) return;
+
+        PlaybackDiagnosticsWorker.Snapshot measurements = playbackBitrateMeter == null
+                ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
+        long lastFrameNs = measurements.lastRenderedVideoFrameRealtimeNs;
+        if (measurements.hasRenderedVideoFrame
+                && lastFrameNs != androidx.media3.common.C.TIME_UNSET
+                && System.nanoTime() - lastFrameNs
+                >= PLAYBACK_STALL_TIMEOUT_MS * 1_000_000L) {
+            requestAutomaticPlaybackRecovery("video detenido");
+            return;
+        }
+
+        long liveOffsetMs = player.isCommandAvailable(Player.COMMAND_GET_CURRENT_MEDIA_ITEM)
+                ? player.getCurrentLiveOffset()
+                : androidx.media3.common.C.TIME_UNSET;
+        if (liveOffsetMs != androidx.media3.common.C.TIME_UNSET
+                && liveOffsetMs >= LIVE_FEED_MAX_OFFSET_MS) {
+            if (liveOffsetExceededSinceElapsedRealtime < 0L) {
+                liveOffsetExceededSinceElapsedRealtime = nowMs;
+            }
+            if (nowMs - liveOffsetExceededSinceElapsedRealtime >= LIVE_FEED_OFFSET_GRACE_MS) {
+                requestAutomaticPlaybackRecovery("feed retrasado");
+            }
+        } else {
+            liveOffsetExceededSinceElapsedRealtime = -1L;
+        }
+    }
+
+    private void requestAutomaticPlaybackRecovery(String reason) {
+        if (playbackAutoRecoveryInFlight || playbackChannel == null) return;
+        playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
+        liveOffsetExceededSinceElapsedRealtime = -1L;
+        if (hasResolverForPlaybackChannel()) {
+            handleProviderAuthorizationFailure();
+        } else {
+            handleDirectPlaybackFailure();
+        }
+    }
+
+    private void handleDirectPlaybackFailure() {
+        if (playbackChannel == null || player == null
+                || !playbackRecoveryEpisode.trySourceReload()) {
+            showPlaybackFailure();
+            return;
+        }
+
+        Channel channel = playbackChannel;
+        long expectedGeneration = playbackGeneration;
+        playbackAutoRecoveryInFlight = true;
+        beginStartupMeasurement(channel, PlaybackStartupMetrics.Reason.RETRY);
+        setStatus("RECONECTANDO", R.color.amber);
+        codecInfo.setText("Reabriendo fuente");
+        showLoadingState(getString(R.string.loading_reopening_source));
+        cancelScheduledPlaybackRetry();
+        cancelPlaybackResolution();
+        discardCurrentPlaybackSource();
+        player.stop();
+        player.clearMediaItems();
+        startResolvedPlayback(
+                channel,
+                ResolvedPlaybackSource.direct(channel, PLAYER_USER_AGENT),
+                expectedGeneration,
+                NO_RESOLUTION_REQUEST
+        );
     }
 
     private void schedulePlaybackRetry(String expectedMediaId, long expectedGeneration) {
@@ -1392,6 +1554,10 @@ public final class MainActivity extends Activity {
         }
         cancelScheduledPlaybackRetry();
         resetPlaybackBitrateMeter();
+        playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
+        liveOffsetExceededSinceElapsedRealtime = -1L;
+        playbackAutoRecoveryInFlight = false;
+        playbackRecoveryFailed = false;
         activePlaybackSourceRequestId = source.isDynamicallyResolved()
                 ? expectedResolutionRequestId
                 : NO_RESOLUTION_REQUEST;
@@ -1579,22 +1745,23 @@ public final class MainActivity extends Activity {
             handleTemporaryEventFailure(playbackChannel, playbackGeneration);
             return;
         }
-        if (playbackChannel == null || currentPlaybackSource == null
-                || !currentPlaybackSource.hasResolver()) {
+        if (playbackChannel == null || !hasResolverForPlaybackChannel()) {
             showPlaybackFailure();
             return;
         }
 
         Channel channel = playbackChannel;
         long expectedGeneration = playbackGeneration;
+        StreamResolver resolver = streamResolverRegistry.find(channel);
         if (playbackRecoveryEpisode.tryRefresh()) {
+            playbackAutoRecoveryInFlight = true;
             beginStartupMeasurement(channel, PlaybackStartupMetrics.Reason.REFRESH);
             setStatus("RENOVANDO", R.color.amber);
             codecInfo.setText("Renovando fuente");
-            StreamResolver resolver = streamResolverRegistry.find(channel);
             showLoadingState(getString(R.string.loading_refreshing_source));
             // Drop the rejected URL before requesting the replacement token.
             // It must not be available to a generic retry path.
+            cancelPlaybackResolution();
             discardCurrentPlaybackSource();
             resolverCoordinator.invalidate(channel, resolver);
             if (player != null) {
@@ -1605,17 +1772,20 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        if (playbackRecoveryEpisode.tryFallback()) {
+        if (currentPlaybackSource != null
+                && currentPlaybackSource.hasResolver()
+                && playbackRecoveryEpisode.tryFallback()) {
             playbackManifestCache = null;
             beginStartupMeasurement(channel, PlaybackStartupMetrics.Reason.FALLBACK);
             setStatus("RESPALDO", R.color.amber);
             codecInfo.setText("Probando respaldo del canal");
             showLoadingState(getString(R.string.loading_fallback_source));
+            String resolverId = currentPlaybackSource.getResolverId();
             startResolvedPlayback(
                     channel,
                     ResolvedPlaybackSource.fallback(
                             channel,
-                            currentPlaybackSource.getResolverId(),
+                            resolverId,
                             PLAYER_USER_AGENT
                     ),
                     expectedGeneration,
@@ -1627,6 +1797,10 @@ public final class MainActivity extends Activity {
     }
 
     private void showPlaybackFailure() {
+        playbackAutoRecoveryInFlight = false;
+        playbackRecoveryFailed = true;
+        playbackLoadingSinceElapsedRealtime = -1L;
+        liveOffsetExceededSinceElapsedRealtime = -1L;
         startupMetrics.failed(startupMetrics.currentId());
         setStatus("ERROR", R.color.red);
         codecInfo.setText("Canal no disponible");
@@ -1639,6 +1813,11 @@ public final class MainActivity extends Activity {
         if (player == null || expectedGeneration != playbackGeneration) return;
         MediaItem current = player.getCurrentMediaItem();
         if (current == null || !expectedMediaId.equals(current.mediaId)) return;
+        playbackRecoveryEpisode.reset();
+        playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
+        liveOffsetExceededSinceElapsedRealtime = -1L;
+        playbackAutoRecoveryInFlight = false;
+        playbackRecoveryFailed = false;
         beginStartupMeasurement(playbackChannel, PlaybackStartupMetrics.Reason.RETRY);
         startupMetrics.dequeued(startupMetrics.currentId());
         startupMetrics.resolved(startupMetrics.currentId());
@@ -1662,6 +1841,7 @@ public final class MainActivity extends Activity {
     private void startPlaybackFromInput() {
         if (player == null) return;
         if (player.getPlayerError() != null || player.getPlaybackState() == Player.STATE_IDLE) {
+            playbackRecoveryFailed = false;
             StreamResolver resolver = streamResolverRegistry.find(playbackChannel);
             if (resolver != null) {
                 if (playbackResolutionTask != null && !playbackResolutionTask.isDone()) return;
@@ -1674,6 +1854,7 @@ public final class MainActivity extends Activity {
                 return;
             }
             if (player.getCurrentMediaItem() == null) return;
+            playbackRecoveryEpisode.reset();
             playbackRecoveryPolicy.reset();
             retryCurrentPlayback(
                     player.getCurrentMediaItem().mediaId,
@@ -2391,6 +2572,7 @@ public final class MainActivity extends Activity {
         playlistGeneration++;
         playbackGeneration++;
         cancelScheduledPlaybackRetry();
+        cancelPlaybackWatchdog();
         cancelPlaybackResolution();
         resolverCoordinator.clear();
         if (streamResolverRegistry != null) streamResolverRegistry.clearSensitiveState();
@@ -2756,6 +2938,32 @@ public final class MainActivity extends Activity {
         return value == Math.round(value)
                 ? String.valueOf(Math.round(value))
                 : String.format(Locale.ROOT, "%.1f", value);
+    }
+
+    private boolean hasResolverForPlaybackChannel() {
+        return playbackChannel != null
+                && streamResolverRegistry != null
+                && streamResolverRegistry.find(playbackChannel) != null;
+    }
+
+    private static boolean isAutomaticSourceRecoveryError(PlaybackException error) {
+        if (error == null) return false;
+        if (PlaybackRecoveryPolicy.isRecoverable(error.errorCode)
+                || ResolvedSourceRefreshPolicy.isHlsSourceFailure(error.errorCode)) {
+            return true;
+        }
+
+        Throwable current = error;
+        int depth = 0;
+        while (current != null && depth++ < 8) {
+            String message = current.getMessage();
+            if (message != null
+                    && message.toLowerCase(Locale.ROOT).contains("source error")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private static String shortMessage(Throwable error) {

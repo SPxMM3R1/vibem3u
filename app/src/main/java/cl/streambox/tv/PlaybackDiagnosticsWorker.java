@@ -44,7 +44,7 @@ final class PlaybackDiagnosticsWorker implements AnalyticsListener, VideoFrameMe
     }
 
     static final class Snapshot {
-        static final Snapshot EMPTY = new Snapshot(0f, 0L, 0L, 0L, false, false);
+        static final Snapshot EMPTY = new Snapshot(0f, 0L, 0L, 0L, false, false, -1L);
 
         final float measuredFrameRate;
         final float displayFrameRate;
@@ -53,9 +53,11 @@ final class PlaybackDiagnosticsWorker implements AnalyticsListener, VideoFrameMe
         final long streamBitrate;
         final boolean muxedStream;
         final boolean hasRenderedVideoFrame;
+        final long lastRenderedVideoFrameRealtimeNs;
 
         Snapshot(float measuredFrameRate, long videoBitrate, long audioBitrate, long streamBitrate,
-                boolean muxedStream, boolean hasRenderedVideoFrame) {
+                boolean muxedStream, boolean hasRenderedVideoFrame,
+                long lastRenderedVideoFrameRealtimeNs) {
             this.measuredFrameRate = measuredFrameRate;
             this.displayFrameRate = PlaybackBitrateMeter.normalizeFrameRate(measuredFrameRate);
             this.videoBitrate = videoBitrate;
@@ -63,13 +65,15 @@ final class PlaybackDiagnosticsWorker implements AnalyticsListener, VideoFrameMe
             this.streamBitrate = streamBitrate;
             this.muxedStream = muxedStream;
             this.hasRenderedVideoFrame = hasRenderedVideoFrame;
+            this.lastRenderedVideoFrameRealtimeNs = lastRenderedVideoFrameRealtimeNs;
         }
 
         boolean sameValues(Snapshot other) {
             return Float.compare(measuredFrameRate, other.measuredFrameRate) == 0
                     && videoBitrate == other.videoBitrate && audioBitrate == other.audioBitrate
                     && streamBitrate == other.streamBitrate && muxedStream == other.muxedStream
-                    && hasRenderedVideoFrame == other.hasRenderedVideoFrame;
+                    && hasRenderedVideoFrame == other.hasRenderedVideoFrame
+                    && lastRenderedVideoFrameRealtimeNs == other.lastRenderedVideoFrameRealtimeNs;
         }
     }
 
@@ -203,7 +207,7 @@ final class PlaybackDiagnosticsWorker implements AnalyticsListener, VideoFrameMe
         PlaybackBitrateMeter meter = expected.meter;
         Snapshot measured = new Snapshot(meter.getMeasuredFrameRate(), meter.getVideoBitrate(),
                 meter.getAudioBitrate(), meter.getStreamBitrate(), meter.isMuxedStream(),
-                meter.hasRenderedVideoFrame());
+                meter.hasRenderedVideoFrame(), meter.getLastRenderedVideoFrameRealtimeNs());
         if (!measured.sameValues(expected.snapshot)) expected.snapshot = measured;
         if (!notificationsEnabled || listener == null || measured.sameValues(expected.lastNotified)) return;
         long nowNs = nanoTime.now();

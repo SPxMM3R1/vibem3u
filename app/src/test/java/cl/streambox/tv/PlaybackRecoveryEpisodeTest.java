@@ -36,4 +36,18 @@ public final class PlaybackRecoveryEpisodeTest {
         episode.reset();
         assertTrue(episode.tryRefresh());
     }
+
+    @Test public void directSourceReloadsAreBoundedAndResetAfterStablePlayback() {
+        PlaybackRecoveryEpisode episode = new PlaybackRecoveryEpisode();
+        assertTrue(episode.trySourceReload());
+        assertTrue(episode.trySourceReload());
+        assertFalse(episode.trySourceReload());
+
+        episode.onPlayingChanged(true, 0L);
+        assertTrue(episode.onPlayingChanged(false, TimeUnit.SECONDS.toNanos(16)));
+
+        assertTrue(episode.trySourceReload());
+        assertTrue(episode.trySourceReload());
+        assertFalse(episode.trySourceReload());
+    }
 }

@@ -60,6 +60,7 @@ final class PlaybackBitrateMeter implements AnalyticsListener, VideoFrameMetadat
     private long renderedFpsWindowStartRealtimeNs = C.TIME_UNSET;
     private long renderedFpsWindowFrameCount;
     private boolean renderedVideoFrameObserved;
+    private long lastRenderedVideoFrameRealtimeNs = C.TIME_UNSET;
 
     PlaybackBitrateMeter(Listener listener) {
         this.listener = listener;
@@ -167,6 +168,7 @@ final class PlaybackBitrateMeter implements AnalyticsListener, VideoFrameMetadat
 
         boolean firstRenderedFrame = !renderedVideoFrameObserved;
         renderedVideoFrameObserved = true;
+        lastRenderedVideoFrameRealtimeNs = realtimeNs;
         if (firstRenderedFrame && listener != null) {
             // Let the UI expose the track metadata as soon as playback has
             // crossed the first-frame boundary, without waiting for the FPS
@@ -200,6 +202,10 @@ final class PlaybackBitrateMeter implements AnalyticsListener, VideoFrameMetadat
 
     synchronized boolean hasRenderedVideoFrame() {
         return renderedVideoFrameObserved;
+    }
+
+    synchronized long getLastRenderedVideoFrameRealtimeNs() {
+        return lastRenderedVideoFrameRealtimeNs;
     }
 
     /**
@@ -294,6 +300,7 @@ final class PlaybackBitrateMeter implements AnalyticsListener, VideoFrameMetadat
         resetFpsWindow();
         frameRateSource = FrameRateSource.NONE;
         renderedVideoFrameObserved = false;
+        lastRenderedVideoFrameRealtimeNs = C.TIME_UNSET;
     }
 
     synchronized void resetFrameRate() {

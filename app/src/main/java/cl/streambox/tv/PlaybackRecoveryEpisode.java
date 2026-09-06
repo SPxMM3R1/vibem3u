@@ -5,14 +5,17 @@ import java.util.concurrent.TimeUnit;
 /** Bounded recovery per outage; sustained playback starts a new recovery episode. */
 final class PlaybackRecoveryEpisode {
     static final long STABLE_PLAYBACK_MS = 15_000L;
+    static final int MAX_AUTOMATIC_SOURCE_RELOADS = 2;
     private boolean refreshUsed;
     private boolean fallbackUsed;
+    private int sourceReloads;
     private long playingSinceNanos = -1L;
     private boolean stableReported;
 
     void reset() {
         refreshUsed = false;
         fallbackUsed = false;
+        sourceReloads = 0;
         playingSinceNanos = -1L;
         stableReported = false;
     }
@@ -40,6 +43,13 @@ final class PlaybackRecoveryEpisode {
         return true;
     }
 
+    /** Allows bounded reopening when a direct live URL loses continuity. */
+    boolean trySourceReload() {
+        if (sourceReloads >= MAX_AUTOMATIC_SOURCE_RELOADS) return false;
+        sourceReloads++;
+        return true;
+    }
+
     void resolutionFailed() {
         refreshUsed = true;
     }
@@ -52,6 +62,7 @@ final class PlaybackRecoveryEpisode {
         stableReported = true;
         refreshUsed = false;
         fallbackUsed = false;
+        sourceReloads = 0;
         return true;
     }
 }

@@ -44,6 +44,8 @@ public final class PlaybackDiagnosticsWorkerTest {
             assertTrue(measured.await(5L, TimeUnit.SECONDS));
             assertEquals(60f, worker.snapshot().measuredFrameRate, 0.02f);
             assertEquals(60f, worker.snapshot().displayFrameRate, 0f);
+            assertEquals(1_000_000_020L,
+                    worker.snapshot().lastRenderedVideoFrameRealtimeNs);
             assertEquals("VibeM3U-Diagnostics", callbackThread.get());
             assertNotEquals(Thread.currentThread().getName(), callbackThread.get());
         }

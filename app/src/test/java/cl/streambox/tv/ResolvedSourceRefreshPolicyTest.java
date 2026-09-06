@@ -89,4 +89,17 @@ public final class ResolvedSourceRefreshPolicyTest {
                 PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
         ));
     }
+
+    @Test
+    public void sourceErrorsAreRecognizedForAutomaticReopen() {
+        assertTrue(ResolvedSourceRefreshPolicy.isHlsSourceFailure(
+                PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND
+        ));
+        assertTrue(ResolvedSourceRefreshPolicy.isHlsSourceFailure(
+                PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE
+        ));
+        assertTrue(ResolvedSourceRefreshPolicy.isHlsSourceFailure(
+                PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED
+        ));
+    }
 }
