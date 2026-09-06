@@ -31,6 +31,17 @@ public final class SharedHttpClient {
     }
 
     /**
+     * Releases process-wide HTTP work during an explicit app exit. This must
+     * not be called from a normal activity recreation because the singleton is
+     * reused by the next activity in the same process.
+     */
+    static void shutdownForProcessExit() {
+        INSTANCE.dispatcher().cancelAll();
+        INSTANCE.connectionPool().evictAll();
+        INSTANCE.dispatcher().executorService().shutdownNow();
+    }
+
+    /**
      * Creates a short-lived client sharing the singleton's dispatcher, pool,
      * cache and TLS configuration while applying a per-attempt deadline.
      */

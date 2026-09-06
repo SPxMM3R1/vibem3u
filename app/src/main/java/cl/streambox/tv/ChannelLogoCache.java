@@ -110,6 +110,24 @@ public final class ChannelLogoCache {
         memoryCache.evictAll();
     }
 
+    /**
+     * Ends the current logo-loading session. This is stronger than
+     * {@link #clearMemory()}: explicit app exit must also cancel any
+     * single-flight network/decode operation that could retain a task,
+     * bitmap or response until the executor is collected.
+     */
+    public synchronized void clearSession() {
+        for (FutureTask<Bitmap> task : fetchInFlight.values()) {
+            task.cancel(true);
+        }
+        for (FutureTask<RefreshResult> task : refreshInFlight.values()) {
+            task.cancel(true);
+        }
+        fetchInFlight.clear();
+        refreshInFlight.clear();
+        memoryCache.evictAll();
+    }
+
     public Bitmap load(URI logoUri) throws IOException {
         return load(logoUri, 0, 0);
     }

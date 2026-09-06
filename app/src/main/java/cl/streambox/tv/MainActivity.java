@@ -2593,6 +2593,14 @@ public final class MainActivity extends Activity {
             appUpdater.destroy();
             appUpdater = null;
         }
+        // Invalidate and cancel logo work before clearing the list/session
+        // objects. The task may otherwise keep the previous channel and its
+        // decoded response reachable until the executor thread exits.
+        logoRequestGeneration++;
+        if (logoRequestTask != null) {
+            logoRequestTask.cancel(true);
+            logoRequestTask = null;
+        }
         networkExecutor.shutdownNow();
         playbackExecutor.shutdownNow();
         logoCacheExecutor.shutdownNow();
@@ -2606,7 +2614,18 @@ public final class MainActivity extends Activity {
         playbackChannel = null;
         discardCurrentPlaybackSource();
         channels.clear();
+        playlistsBySource.clear();
+        epgDataByUrl.clear();
+        activeEpgUrls.clear();
+        epgRequests.clear();
         epgData = EpgData.empty();
+        loadedPlaylistSignature = "";
+        resolverChannelCounts = Collections.emptyMap();
+        resolverSettingsSnapshotBeforeSettings = "";
+        playlistSourcesSnapshotBeforeSettings = "";
+        epgMergeInputSignature = "";
+        startupPreferredChannelIdentity = "";
+        startupSelectionPending = false;
         qualityPreferenceAppliedFor = null;
         subtitlePreferenceAppliedFor = null;
         subtitleTextObservedFor = null;
@@ -2617,7 +2636,7 @@ public final class MainActivity extends Activity {
         displayedLogoIdentity = "";
         logoRevalidatedThisSession.clear();
         if (channelLogoCache != null) {
-            channelLogoCache.clearMemory();
+            channelLogoCache.clearSession();
         }
 
         if (player != null) {
@@ -2632,6 +2651,10 @@ public final class MainActivity extends Activity {
             } finally {
                 releasedPlayer.release();
             }
+        }
+
+        if (exiting) {
+            SharedHttpClient.shutdownForProcessExit();
         }
     }
 
