@@ -21,6 +21,10 @@ import java.util.ArrayDeque;
 @UnstableApi
 final class PlaybackBufferManager implements AutoCloseable {
     private static final String TAG = "VibeM3U-Buffer";
+    private static final int MIN_BUFFER_MS = 50_000;
+    private static final int MAX_BUFFER_MS = 50_000;
+    private static final int BUFFER_FOR_PLAYBACK_MS = 3_000;
+    private static final int BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 3_000;
     private final DefaultAllocator allocator = new DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE);
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ArrayDeque<String> history = new ArrayDeque<>();
@@ -66,9 +70,17 @@ final class PlaybackBufferManager implements AutoCloseable {
     }
 
     DefaultLoadControl loadControl() {
-        // Retain Media3's playback and rebuffer duration defaults. The byte target takes
-        // priority; it is a loading threshold, not a hard cap on decoder/process memory.
+        // Require a little more media before starting or resuming live playback so a stream
+        // does not begin on only the first HLS segment and immediately rebuffer. The longer
+        // 50-second loading window remains unchanged; the byte target is a loading threshold,
+        // not a hard cap on decoder/process memory.
         return new DefaultLoadControl.Builder().setAllocator(allocator)
+                .setBufferDurationsMs(
+                        MIN_BUFFER_MS,
+                        MAX_BUFFER_MS,
+                        BUFFER_FOR_PLAYBACK_MS,
+                        BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+                )
                 .setTargetBufferBytes(targetBytes)
                 .setPrioritizeTimeOverSizeThresholds(false)
                 .setBackBuffer(0, false).build();
