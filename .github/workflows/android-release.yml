@@ -61,7 +61,10 @@ jobs:
         shell: bash
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
+          ./gradlew --no-daemon \
+            testDebugUnitTest testExperimentalUnitTest testReleaseUnitTest \
+            lintDebug lintExperimental lintRelease \
+            assembleDebug assembleExperimental assembleRelease
 
       - name: Verificar firma compatible
         shell: bash
@@ -83,12 +86,24 @@ jobs:
           echo "Certificado SHA-256: $actual"
           test "$actual" = "$expected"
 
+          release_output="$(
+            "$apksigner_path" verify --print-certs \
+              app/build/outputs/apk/release/app-release.apk 2>&1
+          )"
+          echo "$release_output"
+          release_actual="$(
+            printf '%s\n' "$release_output" \
+              | grep -oE '[0-9a-fA-F]{64}' | head -n 1 | tr 'A-F' 'a-f'
+          )"
+          echo "Certificado release SHA-256: $release_actual"
+          test "$release_actual" = "$expected"
+
       - name: Preparar el APK
         id: apk
         shell: bash
         run: |
           apk_name="VibeM3U-${GITHUB_REF_NAME}.apk"
-          cp app/build/outputs/apk/debug/app-debug.apk "$apk_name"
+          cp app/build/outputs/apk/release/app-release.apk "$apk_name"
           echo "name=$apk_name" >> "$GITHUB_OUTPUT"
 
       - name: Conservar el APK como artefacto
@@ -113,3 +128,16 @@ jobs:
               --title "VibeM3U $version" \
               --generate-notes
           fi
+
+      - name: Publicar reportes de release
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: VibeM3U-release-reports-${{ github.sha }}
+          path: |
+            app/build/test-results
+            app/build/reports/tests
+            app/build/reports/lint-results-*.html
+            app/build/reports/lint-results-*.xml
+          if-no-files-found: ignore
+          retention-days: 90

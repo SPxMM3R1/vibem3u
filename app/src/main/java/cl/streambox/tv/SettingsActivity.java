@@ -181,8 +181,8 @@ public final class SettingsActivity extends Activity {
         highflyPremiumCatalogRepository = new HighflyPremiumCatalogRepository(this);
         String existingUrl = prefs.getString(KEY_PLAYLIST_URL, "");
         String existingUrl2 = prefs.getString(KEY_PLAYLIST_URL_2, "");
-        hasExistingUrl = (existingUrl != null && !existingUrl.isBlank())
-                || (existingUrl2 != null && !existingUrl2.isBlank())
+        hasExistingUrl = (existingUrl != null && !AppStrings.isBlank(existingUrl))
+                || (existingUrl2 != null && !AppStrings.isBlank(existingUrl2))
                 || (prefs.getBoolean(HighflyPremiumPreferences.KEY_ENABLED, false)
                 && highflyPremiumCredentialStore.hasCredential());
         if (Build.VERSION.SDK_INT >= 33) {
@@ -257,7 +257,7 @@ public final class SettingsActivity extends Activity {
         urlInput2.setText(existingUrl2 == null ? "" : existingUrl2);
         boolean firstPlaylistEnabled = prefs.contains(KEY_PLAYLIST_ENABLED)
                 ? prefs.getBoolean(KEY_PLAYLIST_ENABLED, true)
-                : existingUrl != null && !existingUrl.isBlank();
+                : existingUrl != null && !AppStrings.isBlank(existingUrl);
         playlistOneEnabled.setChecked(firstPlaylistEnabled);
         playlistTwoEnabled.setChecked(prefs.getBoolean(
                 KEY_PLAYLIST_ENABLED_2,
@@ -337,7 +337,7 @@ public final class SettingsActivity extends Activity {
         currentChannelIndex = intent.getIntExtra(EXTRA_CHANNEL_INDEX, -1);
         currentChannelTvgId = safeString(intent.getStringExtra(EXTRA_CHANNEL_TVG_ID));
         String channelName = safeString(intent.getStringExtra(EXTRA_CHANNEL_NAME));
-        hasCurrentChannel = currentChannelIndex >= 0 && !channelName.isBlank();
+        hasCurrentChannel = currentChannelIndex >= 0 && !AppStrings.isBlank(channelName);
         currentChannelName.setText(hasCurrentChannel
                 ? channelName
                 : getString(R.string.settings_no_current_channel));
@@ -694,10 +694,10 @@ public final class SettingsActivity extends Activity {
     private String premiumAccountLabel(HighflyPremiumCredentialStore.TokenStatus status) {
         String plan = safeString(status.getPlanName());
         long expiresAt = status.getExpiresAtMillis();
-        if (expiresAt <= 0L) return plan.isBlank() ? "Premium" : plan;
+        if (expiresAt <= 0L) return AppStrings.isBlank(plan) ? "Premium" : plan;
         String date = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
                 .format(new Date(expiresAt));
-        return (plan.isBlank() ? "Premium" : plan) + " · vence " + date;
+        return (AppStrings.isBlank(plan) ? "Premium" : plan) + " · vence " + date;
     }
 
     private void renderHighflyPremiumCatalog(HighflyPremiumCatalog catalog) {
@@ -771,9 +771,7 @@ public final class SettingsActivity extends Activity {
                 getResources().getDimension(R.dimen.settings_control_text_size)
         );
         eventSwitch.setChecked(selected);
-        if (Build.VERSION.SDK_INT >= 21) {
-            eventSwitch.setThumbTintList(getColorStateList(R.color.cyan));
-        }
+        eventSwitch.setThumbTintList(getColorStateList(R.color.cyan));
         return eventSwitch;
     }
 
@@ -916,7 +914,7 @@ public final class SettingsActivity extends Activity {
             ));
             resolverCatalogVersion.setText(getString(
                     R.string.resolver_catalog_version,
-                    fallbackVersion.isBlank() ? getString(R.string.unknown_version) : fallbackVersion
+                    AppStrings.isBlank(fallbackVersion) ? getString(R.string.unknown_version) : fallbackVersion
             ));
             resolverUpdateStatus.setText(R.string.resolver_catalog_load_error);
             resolverUpdateStatus.setVisibility(View.VISIBLE);
@@ -1002,9 +1000,7 @@ public final class SettingsActivity extends Activity {
                 channelCount
         ));
         groupSwitch.setChecked(resolverPreferences.isEnabled(definition));
-        if (Build.VERSION.SDK_INT >= 21) {
-            groupSwitch.setThumbTintList(getColorStateList(R.color.cyan));
-        }
+        groupSwitch.setThumbTintList(getColorStateList(R.color.cyan));
         return groupSwitch;
     }
 

@@ -4,12 +4,12 @@ import org.junit.Test;
 
 import java.io.IOException;
 
-import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 
 public final class ExperimentalEngineIsolationTest {
     @Test
-    public void stableBuildRejectsExperimentalVavooCatalog() {
+    public void onlyExperimentalBuildAcceptsExperimentalVavooCatalog() throws Exception {
         String json = "{"
                 + "\"schemaVersion\":1,"
                 + "\"catalogVersion\":\"1\","
@@ -24,7 +24,12 @@ public final class ExperimentalEngineIsolationTest {
                 + "\"catalogBase\":\"https://vavoo.to\""
                 + "}}]}";
 
-        assertFalse(BuildConfig.ENABLE_EXPERIMENTAL_VAVOO);
-        assertThrows(IOException.class, () -> ResolverCatalog.parse(json));
+        boolean experimental = "experimental".equals(BuildConfig.BUILD_TYPE);
+        assertEquals(experimental, BuildConfig.ENABLE_EXPERIMENTAL_VAVOO);
+        if (experimental) {
+            assertEquals("vavoo", ResolverCatalog.parse(json).getProviders().get(0).getEngine());
+        } else {
+            assertThrows(IOException.class, () -> ResolverCatalog.parse(json));
+        }
     }
 }

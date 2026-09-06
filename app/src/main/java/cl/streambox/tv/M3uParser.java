@@ -46,6 +46,9 @@ public final class M3uParser {
             }
 
             if (line.startsWith("#")) {
+                if (pendingName != null || !pendingAttributes.isEmpty()) {
+                    ChannelRequestHeaders.parseOption(line, pendingAttributes);
+                }
                 continue;
             }
 
@@ -59,7 +62,7 @@ public final class M3uParser {
             }
 
             String name = pendingName;
-            if (name == null || name.isBlank()) {
+            if (name == null || AppStrings.isBlank(name)) {
                 name = valueOrDefault(pendingAttributes, "tvg-name", "Canal " + (channels.size() + 1));
             }
             channels.add(new Channel(name.trim(), streamUri, pendingLogo, pendingGroup, pendingAttributes));
@@ -81,8 +84,8 @@ public final class M3uParser {
 
             Map<String, String> attributes = parseAttributes(line);
             String value = attributes.get("x-tvg-url");
-            if (value == null || value.isBlank()) value = attributes.get("url-tvg");
-            if (value == null || value.isBlank()) return Collections.emptyList();
+            if (value == null || AppStrings.isBlank(value)) value = attributes.get("url-tvg");
+            if (value == null || AppStrings.isBlank(value)) return Collections.emptyList();
             List<URI> epgUris = new ArrayList<>();
             for (String candidate : value.split(",")) {
                 URI epgUri = resolveUri(playlistUri, candidate);
@@ -118,7 +121,7 @@ public final class M3uParser {
     }
 
     private static URI resolveUri(URI baseUri, String value) {
-        if (value == null || value.isBlank()) {
+        if (value == null || AppStrings.isBlank(value)) {
             return null;
         }
         String candidate = value.trim();

@@ -33,7 +33,7 @@ final class SafePlaybackText {
     private SafePlaybackText() {}
 
     static String detail(String value) {
-        if (value == null || value.isBlank()) return "";
+        if (value == null || AppStrings.isBlank(value)) return "";
         Matcher urls = URL_PATTERN.matcher(value);
         StringBuffer formatted = new StringBuffer();
         while (urls.find()) {
@@ -63,7 +63,7 @@ final class SafePlaybackText {
         if (uri == null) return "";
         String scheme = uri.getScheme();
         String host = uri.getHost();
-        if (scheme == null || host == null || host.isBlank()) {
+        if (scheme == null || host == null || AppStrings.isBlank(host)) {
             return redactUnparsed(uri.toString());
         }
 
@@ -76,16 +76,16 @@ final class SafePlaybackText {
         }
         if (uri.getPort() > 0) result.append(':').append(uri.getPort());
         String path = uri.getRawPath();
-        if (path != null && !path.isBlank()) result.append(redactPath(path));
+        if (path != null && !AppStrings.isBlank(path)) result.append(redactPath(path));
         String query = uri.getRawQuery();
-        if (query != null && !query.isBlank()) result.append('?').append(redactQuery(query));
+        if (query != null && !AppStrings.isBlank(query)) result.append('?').append(redactQuery(query));
         // A fragment is not needed to identify a playback endpoint and can
         // carry provider session data, so it is intentionally omitted.
         return result.toString();
     }
 
     static String url(String value) {
-        if (value == null || value.isBlank()) return "";
+        if (value == null || AppStrings.isBlank(value)) return "";
         try {
             return url(URI.create(value.trim()));
         } catch (IllegalArgumentException error) {
@@ -145,7 +145,7 @@ final class SafePlaybackText {
     }
 
     private static boolean isSensitivePathMarker(String segment) {
-        if (segment == null || segment.isBlank()) return false;
+        if (segment == null || AppStrings.isBlank(segment)) return false;
         String normalized;
         try {
             normalized = URLDecoder.decode(segment, StandardCharsets.UTF_8.name())

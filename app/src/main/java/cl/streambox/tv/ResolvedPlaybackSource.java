@@ -32,8 +32,8 @@ public final class ResolvedPlaybackSource {
                         : requestHeaders)
         );
         this.userAgent = userAgent == null ? "" : userAgent;
-        this.resolverId = resolverId == null || resolverId.isBlank() ? null : resolverId;
-        this.stableSourceId = stableSourceId == null || stableSourceId.isBlank()
+        this.resolverId = resolverId == null || AppStrings.isBlank(resolverId) ? null : resolverId;
+        this.stableSourceId = stableSourceId == null || AppStrings.isBlank(stableSourceId)
                 ? null
                 : stableSourceId;
         this.expiresAtMillis = Math.max(0L, expiresAtMillis);
@@ -44,8 +44,8 @@ public final class ResolvedPlaybackSource {
         Objects.requireNonNull(channel, "channel");
         return new ResolvedPlaybackSource(
                 channel.getStreamUri(),
-                Collections.emptyMap(),
-                userAgent,
+                ChannelRequestHeaders.from(channel),
+                ChannelRequestHeaders.userAgent(channel, userAgent),
                 null,
                 null,
                 0L,
@@ -97,8 +97,8 @@ public final class ResolvedPlaybackSource {
         Objects.requireNonNull(channel, "channel");
         return new ResolvedPlaybackSource(
                 channel.getStreamUri(),
-                Collections.emptyMap(),
-                userAgent,
+                ChannelRequestHeaders.from(channel),
+                ChannelRequestHeaders.userAgent(channel, userAgent),
                 resolverId,
                 null,
                 0L,

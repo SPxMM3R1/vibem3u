@@ -20,3 +20,6 @@ captures/
 
 # Los APK se publican desde GitHub Actions
 /releases/*.apk
+
+# Synthetic playback fixture generated in GitHub Actions, never a provider stream.
+/app/src/androidTest/assets/startup-test.mp4

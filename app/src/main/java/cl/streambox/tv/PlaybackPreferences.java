@@ -51,7 +51,7 @@ final class PlaybackPreferences {
 
     QualityPreference getQuality(Channel channel) {
         String value = preferences.getString(qualityKey(channel), "");
-        if (value == null || value.isBlank() || AUTOMATIC_QUALITY_VALUE.equals(value)) {
+        if (value == null || AppStrings.isBlank(value) || AUTOMATIC_QUALITY_VALUE.equals(value)) {
             return null;
         }
         String[] parts = value.split(",", -1);
@@ -95,7 +95,7 @@ final class PlaybackPreferences {
 
     static int findChannelIndex(List<Channel> channels, String savedIdentity, int fallbackIndex) {
         if (channels.isEmpty()) return 0;
-        if (savedIdentity != null && !savedIdentity.isBlank()) {
+        if (savedIdentity != null && !AppStrings.isBlank(savedIdentity)) {
             for (int index = 0; index < channels.size(); index++) {
                 if (savedIdentity.equals(channelIdentity(channels.get(index)))) return index;
             }
@@ -105,7 +105,7 @@ final class PlaybackPreferences {
 
     static String channelIdentity(Channel channel) {
         String tvgId = channel.getTvgId();
-        return !tvgId.isBlank()
+        return !AppStrings.isBlank(tvgId)
                 ? "tvg:" + tvgId
                 : "uri:" + channel.getStreamUri();
     }

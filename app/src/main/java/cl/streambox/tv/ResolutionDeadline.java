@@ -26,5 +26,7 @@ final class ResolutionDeadline {
         if (Thread.currentThread().isInterrupted() || isExpired()) {
             throw new IOException("Tiempo de resolución agotado.");
         }
+        ResolutionContext context = ResolutionContext.current();
+        if (context != null) context.check();
     }
 }

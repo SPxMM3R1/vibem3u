@@ -16,6 +16,7 @@ import javax.net.ssl.SSLPeerUnverifiedException;
 public final class HighflyStreamResolver implements StreamResolver {
     private static final String DEFAULT_TEMPLATE =
             "https://leaf.highfly.dev/m3u/{id}/live.m3u8";
+    private static final long DEFAULT_RESOLUTION_BUDGET_MILLIS = 12_000L;
 
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
@@ -64,7 +65,7 @@ public final class HighflyStreamResolver implements StreamResolver {
 
     @Override public String stableSourceId(Channel channel) {
         String slug = slug(channel);
-        return slug.isBlank() ? definition.stableSourceId(channel) : slug;
+        return AppStrings.isBlank(slug) ? definition.stableSourceId(channel) : slug;
     }
 
     @Override public long cacheTtlMillis() { return definition.getCacheTtlMillis(); }
@@ -78,6 +79,21 @@ public final class HighflyStreamResolver implements StreamResolver {
 
     @Override
     public ResolvedPlaybackSource resolve(
+            Channel channel,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        ResolutionContext parent = ResolutionContext.current();
+        long budget = resolutionBudgetMillis();
+        ResolutionContext context = parent == null
+                ? new ResolutionContext(budget)
+                : parent.child(budget);
+        try (ResolutionContext.Scope ignored = context.activate()) {
+            context.check();
+            return resolveInContext(channel, listener);
+        }
+    }
+
+    private ResolvedPlaybackSource resolveInContext(
             Channel channel,
             ResolutionProgressListener listener
     ) throws IOException {
@@ -120,7 +136,7 @@ public final class HighflyStreamResolver implements StreamResolver {
         }
 
         String slug = slug(channel);
-        if (slug.isBlank()) throw new IOException("Highfly no publicó un identificador estable.");
+        if (AppStrings.isBlank(slug)) throw new IOException("Highfly no publicó un identificador estable.");
 
         // The configured leaf URL is the normal fast path. The manifest is a
         // recovery catalogue and should not add a network round trip to every
@@ -164,7 +180,7 @@ public final class HighflyStreamResolver implements StreamResolver {
         }
 
         String manifestUrl = definition.channelManifestUrl(channel);
-        if (!manifestUrl.isBlank()) {
+        if (!AppStrings.isBlank(manifestUrl)) {
             try {
                 URI manifestUri = validManifestUri(manifestUrl);
                 progress.onProgress(ResolutionProgress.of(
@@ -318,5 +334,15 @@ public final class HighflyStreamResolver implements StreamResolver {
     private long expiresAt() {
         long ttl = cacheTtlMillis();
         return ttl <= 0L ? 0L : System.currentTimeMillis() + ttl;
+    }
+
+    private long resolutionBudgetMillis() {
+        if (definition == null) return DEFAULT_RESOLUTION_BUDGET_MILLIS;
+        return definition.getIntConfig(
+                "resolutionBudgetMs",
+                (int) DEFAULT_RESOLUTION_BUDGET_MILLIS,
+                1_000,
+                20_000
+        );
     }
 }

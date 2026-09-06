@@ -3,8 +3,10 @@ package cl.streambox.tv;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 public final class VavooSessionClientTest {
     @Test
@@ -44,5 +46,46 @@ public final class VavooSessionClientTest {
         assertNotNull(target);
         assertEquals("SKY SPORTS RACING HD", target.searchName);
         assertEquals("unitedkingdom", target.country);
+        assertEquals("", target.number);
+    }
+
+    @Test
+    public void rejectsNumericPrefixMatchesSuchAsCanal1AgainstCanal10() {
+        assertFalse(VavooSessionClient.strictChannelCompatible(
+                "Canal1",
+                "GB",
+                "",
+                "Canal10",
+                "GB"
+        ));
+        assertTrue(VavooSessionClient.strictChannelCompatible(
+                "Canal1",
+                "GB",
+                "",
+                "Canal1 HD",
+                "United Kingdom"
+        ));
+    }
+
+    @Test
+    public void rejectsCountryMismatchWhenChannelDeclaresCountry() {
+        assertFalse(VavooSessionClient.strictChannelCompatible(
+                "Sky Sports F1",
+                "GB",
+                "",
+                "Sky Sports F1 HD",
+                "Spain"
+        ));
+    }
+
+    @Test
+    public void keepsDeclaredAliasNumberAsPartOfTheStableTarget() {
+        VavooSessionClient.Target target = VavooSessionClient.targetFromAlias(
+                "vavoo_Canal%201%7Cgroup%3Auk%7Cnumber%3A1"
+        );
+
+        assertNotNull(target);
+        assertEquals("1", target.number);
+        assertTrue(target.numberDeclared);
     }
 }
