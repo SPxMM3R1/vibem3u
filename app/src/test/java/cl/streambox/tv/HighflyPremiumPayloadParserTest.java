@@ -168,6 +168,38 @@ public final class HighflyPremiumPayloadParserTest {
     }
 
     @Test
+    public void ranksHigherResolutionAndBitrateAboveLowerQualityStreams() throws Exception {
+        List<HighflyPremiumPayloadParser.StreamCandidate> candidates =
+                HighflyPremiumPayloadParser.parseStreams(
+                        "{\"streams\":["
+                                + "{\"title\":\"720p · 3 Mbps\","
+                                + "\"url\":\"https://leaf.highfly.dev/live/720.m3u8\"},"
+                                + "{\"title\":\"1080p · 5 Mbps\","
+                                + "\"url\":\"https://leaf.highfly.dev/live/1080.m3u8\"},"
+                                + "{\"title\":\"4K UHD · 12 Mbps\","
+                                + "\"url\":\"https://leaf.highfly.dev/live/2160.m3u8\"}]}"
+                );
+
+        HighflyPremiumCatalogRepository.sortCandidates(
+                candidates,
+                HighflyPremiumPreferences.StreamSort.HIGHEST_FIRST
+        );
+
+        assertEquals(
+                URI.create("https://leaf.highfly.dev/live/2160.m3u8"),
+                candidates.get(0).getUri()
+        );
+        assertTrue(
+                candidates.get(0).getQualityScore()
+                        > candidates.get(1).getQualityScore()
+        );
+        assertTrue(
+                candidates.get(1).getQualityScore()
+                        > candidates.get(2).getQualityScore()
+        );
+    }
+
+    @Test
     public void generatedPlaylistsSeparateStableChannelsAndSelectedEvents() {
         HighflyPremiumCatalog.Entry stable = new HighflyPremiumCatalog.Entry(
                 "leaf:stable-channel",

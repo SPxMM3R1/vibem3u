@@ -40,7 +40,13 @@ final class HighflyPremiumPayloadParser {
             "(?i)(\\d{3,4})\\s*[x×]\\s*(\\d{3,4})"
     );
     private static final Pattern BITRATE_PATTERN = Pattern.compile(
-            "(?i)(\\d+(?:[.,]\\d+)?)\\s*(?:mbps|mbit/s)"
+            "(?i)(\\d+(?:[.,]\\d+)?)\\s*(mbps|mbit/s|kbps|kbit/s)"
+    );
+    private static final Pattern PROGRESSIVE_RESOLUTION_PATTERN = Pattern.compile(
+            "(?i)(?<!\\d)(\\d{3,4})\\s*[pi](?!\\w)"
+    );
+    private static final Pattern FPS_PATTERN = Pattern.compile(
+            "(?i)(\\d+(?:[.,]\\d+)?)\\s*(?:fps|frames?/s)"
     );
 
     private HighflyPremiumPayloadParser() {}
@@ -147,11 +153,20 @@ final class HighflyPremiumPayloadParser {
                         "Fuente Premium"
                 ), MAX_TEXT_LENGTH);
                 String title = clean(stream.optString("title", ""), MAX_TEXT_LENGTH);
+                String declaredWidth = stream.optString("width", "");
+                String declaredHeight = stream.optString("height", "");
+                String metadata = name + " " + title + " "
+                        + stream.optString("quality", "") + " "
+                        + stream.optString("resolution", "") + " "
+                        + stream.optString("bitrate", "") + " "
+                        + stream.optString("bandwidth", "") + " "
+                        + declaredWidth + "x" + declaredHeight + " "
+                        + stream.optString("fps", "");
                 StreamCandidate candidate = new StreamCandidate(
                         uri,
                         name,
                         title,
-                        qualityScore(name + " " + title)
+                        qualityScore(metadata)
                 );
                 if (!unique.containsKey(uri.toString())) {
                     unique.put(uri.toString(), candidate);
@@ -252,7 +267,7 @@ final class HighflyPremiumPayloadParser {
         }
     }
 
-    private static int qualityScore(String value) {
+    static long qualityScore(String value) {
         int height = 0;
         int width = 0;
         Matcher resolution = RESOLUTION_PATTERN.matcher(value == null ? "" : value);
@@ -260,18 +275,55 @@ final class HighflyPremiumPayloadParser {
             width = parseInt(resolution.group(1));
             height = parseInt(resolution.group(2));
         }
-        int bitrate = 0;
+        Matcher progressive = PROGRESSIVE_RESOLUTION_PATTERN.matcher(
+                value == null ? "" : value
+        );
+        while (progressive.find()) {
+            int candidateHeight = parseInt(progressive.group(1));
+            if (candidateHeight > height) height = candidateHeight;
+        }
+        String normalized = value == null ? "" : value.toLowerCase(Locale.ROOT);
+        if (normalized.contains("8k")) height = Math.max(height, 4320);
+        else if (normalized.contains("4k") || normalized.contains("uhd")) {
+            height = Math.max(height, 2160);
+        } else if (normalized.contains("fhd") || normalized.contains("full hd")) {
+            height = Math.max(height, 1080);
+        } else if (normalized.matches(".*\\bhd\\b.*")) {
+            height = Math.max(height, 720);
+        }
+
+        if (width == 0 && height > 0) {
+            width = Math.round(height * 16f / 9f);
+        }
+
+        long bitrate = 0L;
         Matcher bitrateMatcher = BITRATE_PATTERN.matcher(value == null ? "" : value);
         if (bitrateMatcher.find()) {
             try {
-                bitrate = (int) Math.round(Double.parseDouble(
+                double amount = Double.parseDouble(
                         bitrateMatcher.group(1).replace(',', '.')
-                ) * 1000d);
+                );
+                String unit = bitrateMatcher.group(2).toLowerCase(Locale.ROOT);
+                bitrate = Math.round(amount * (unit.startsWith("m") ? 1_000_000d : 1_000d));
             } catch (NumberFormatException ignored) {
                 bitrate = 0;
             }
         }
-        return height * 1_000_000 + width * 1_000 + Math.max(0, bitrate);
+        Matcher fpsMatcher = FPS_PATTERN.matcher(value == null ? "" : value);
+        long fps = 0L;
+        if (fpsMatcher.find()) {
+            try {
+                fps = Math.round(Double.parseDouble(
+                        fpsMatcher.group(1).replace(',', '.')
+                ));
+            } catch (NumberFormatException ignored) {
+                fps = 0L;
+            }
+        }
+        return (long) height * 1_000_000_000L
+                + (long) width * 1_000_000L
+                + Math.max(0L, bitrate)
+                + fps;
     }
 
     private static int parseInt(String value) {
@@ -329,9 +381,9 @@ final class HighflyPremiumPayloadParser {
         private final URI uri;
         private final String name;
         private final String title;
-        private final int qualityScore;
+        private final long qualityScore;
 
-        StreamCandidate(URI uri, String name, String title, int qualityScore) {
+        StreamCandidate(URI uri, String name, String title, long qualityScore) {
             this.uri = uri;
             this.name = name;
             this.title = title;
@@ -350,7 +402,7 @@ final class HighflyPremiumPayloadParser {
             return title;
         }
 
-        int getQualityScore() {
+        long getQualityScore() {
             return qualityScore;
         }
     }

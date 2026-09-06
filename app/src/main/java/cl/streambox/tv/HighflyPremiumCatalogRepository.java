@@ -307,29 +307,38 @@ public final class HighflyPremiumCatalogRepository {
         sortCandidates(candidates, streamSort);
         if (candidates.isEmpty()) throw new IOException("Highfly Premium no publicó fuentes HLS.");
 
-        List<URI> uris = new ArrayList<>();
-        for (HighflyPremiumPayloadParser.StreamCandidate candidate : candidates) {
-            uris.add(candidate.getUri());
-        }
         ResolutionProgressListener safeProgress = progressWithoutUrls(progress);
-        HlsCandidateRace.Result race = HlsCandidateRace.firstValid(
-                uris,
-                Math.min(6, uris.size()),
-                2,
-                new ResolutionDeadline(18_000L),
-                0,
-                Math.min(6, uris.size()),
-                safeProgress,
-                candidate -> {
-                    validator.validateForPlayback(
-                            candidate,
-                            Collections.emptyMap(),
-                            safeProgress
-                    );
-                    return candidate;
-                }
-        );
-        URI accepted = race.getSource();
+        URI accepted;
+        if (streamSort == HighflyPremiumPreferences.StreamSort.HIGHEST_FIRST) {
+            // A completion race is incorrect for quality selection: a lower
+            // quality source can answer first while the best source is still
+            // being validated. Validate in sorted order so the first accepted
+            // source is actually the highest-quality playable one.
+            accepted = firstValidHighestQuality(candidates, safeProgress);
+        } else {
+            List<URI> uris = new ArrayList<>();
+            for (HighflyPremiumPayloadParser.StreamCandidate candidate : candidates) {
+                uris.add(candidate.getUri());
+            }
+            HlsCandidateRace.Result race = HlsCandidateRace.firstValid(
+                    uris,
+                    Math.min(6, uris.size()),
+                    2,
+                    new ResolutionDeadline(18_000L),
+                    0,
+                    Math.min(6, uris.size()),
+                    safeProgress,
+                    candidate -> {
+                        validator.validateForPlayback(
+                                candidate,
+                                Collections.emptyMap(),
+                                safeProgress
+                        );
+                        return candidate;
+                    }
+            );
+            accepted = race.getSource();
+        }
         if (accepted == null) throw new IOException("Fuente HLS Premium no reproducible.");
         progress.onProgress(ResolutionProgress.of(
                 ResolutionStage.SOURCE_FOUND,
@@ -642,9 +651,9 @@ public final class HighflyPremiumCatalogRepository {
         return new ArrayList<>(selected);
     }
 
-    private static void sortCandidates(
+    static void sortCandidates(
             List<HighflyPremiumPayloadParser.StreamCandidate> candidates,
-        HighflyPremiumPreferences.StreamSort sort
+            HighflyPremiumPreferences.StreamSort sort
     ) {
         if (sort == null || sort == HighflyPremiumPreferences.StreamSort.DEFAULT) return;
         final boolean highestFirst = sort == HighflyPremiumPreferences.StreamSort.HIGHEST_FIRST;
@@ -654,14 +663,43 @@ public final class HighflyPremiumCatalogRepository {
                     HighflyPremiumPayloadParser.StreamCandidate left,
                     HighflyPremiumPayloadParser.StreamCandidate right
             ) {
-                int leftScore = left.getQualityScore();
-                int rightScore = right.getQualityScore();
-                if (leftScore == rightScore) return 0;
-                boolean leftBeforeRight = leftScore < rightScore;
-                if (highestFirst) leftBeforeRight = !leftBeforeRight;
-                return leftBeforeRight ? -1 : 1;
+                long leftScore = left.getQualityScore();
+                long rightScore = right.getQualityScore();
+                return highestFirst
+                        ? Long.compare(rightScore, leftScore)
+                        : Long.compare(leftScore, rightScore);
             }
         });
+    }
+
+    private URI firstValidHighestQuality(
+            List<HighflyPremiumPayloadParser.StreamCandidate> candidates,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        ResolutionDeadline deadline = new ResolutionDeadline(18_000L);
+        IOException lastError = null;
+        for (int index = 0; index < candidates.size(); index++) {
+            deadline.check();
+            HighflyPremiumPayloadParser.StreamCandidate candidate = candidates.get(index);
+            listener.onProgress(ResolutionProgress.counted(
+                    ResolutionStage.SOURCE_CANDIDATE,
+                    index + 1,
+                    candidates.size(),
+                    "GET " + SafePlaybackText.url(candidate.getUri())
+                            + " · calidad más alta disponible primero"
+            ));
+            try {
+                validator.validateForPlayback(
+                        candidate.getUri(),
+                        Collections.emptyMap(),
+                        listener
+                );
+                return candidate.getUri();
+            } catch (IOException error) {
+                lastError = error;
+            }
+        }
+        throw new IOException("Ninguna fuente Premium de calidad utilizable respondió.", lastError);
     }
 
     private static ResolutionProgressListener progressWithoutUrls(
