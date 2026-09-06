@@ -131,7 +131,7 @@ final class M3uCacheSanitizer {
         return "0104".equalsIgnoreCase(tvgId)
                 || "Meganoticias.cl".equalsIgnoreCase(tvgId)
                 || "MeganoticiasAhora.cl".equalsIgnoreCase(tvgId)
-                || !resolver.isBlank();
+                || !AppStrings.isBlank(resolver);
     }
 
     private static boolean isTvVoo(String tvgId, String resolver) {
@@ -154,7 +154,7 @@ final class M3uCacheSanitizer {
         String query = withoutFragment.substring(queryStart + 1);
         List<String> kept = new ArrayList<>();
         for (String parameter : query.split("&")) {
-            if (parameter.isBlank()) continue;
+            if (AppStrings.isBlank(parameter)) continue;
             int equals = parameter.indexOf('=');
             String key = (equals < 0 ? parameter : parameter.substring(0, equals))
                     .trim()

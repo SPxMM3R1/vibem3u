@@ -43,7 +43,7 @@ final class ResolverPayloadParsers {
             String streamsPath,
             String urlField
     ) throws IOException {
-        if (json == null || json.isBlank()) return Collections.emptyList();
+        if (json == null || AppStrings.isBlank(json)) return Collections.emptyList();
         try {
             JSONObject root = new JSONObject(json);
             Object streamsValue = jsonValueAtPath(root, streamsPath);
@@ -81,7 +81,7 @@ final class ResolverPayloadParsers {
             int maximumStrings,
             int maximumCandidates
     ) throws IOException {
-        if (payload == null || payload.isBlank() || baseUri == null) {
+        if (payload == null || AppStrings.isBlank(payload) || baseUri == null) {
             return Collections.emptyList();
         }
         int depthLimit = Math.max(1, Math.min(8, maximumDepth));
@@ -97,7 +97,7 @@ final class ResolverPayloadParsers {
                 && candidates.size() < candidateLimit) {
             DiscoveryValue current = pending.removeFirst();
             String value = current.value == null ? "" : current.value.trim();
-            if (value.isBlank() || value.length() > MAX_DISCOVERY_VALUE_LENGTH
+            if (AppStrings.isBlank(value) || value.length() > MAX_DISCOVERY_VALUE_LENGTH
                     || !seen.add(value)) {
                 continue;
             }
@@ -163,7 +163,7 @@ final class ResolverPayloadParsers {
             String decoded,
             int depth
     ) {
-        if (decoded != null && !decoded.isBlank() && !decoded.equals(original)
+        if (decoded != null && !AppStrings.isBlank(decoded) && !decoded.equals(original)
                 && decoded.length() <= MAX_DISCOVERY_VALUE_LENGTH) {
             pending.addLast(new DiscoveryValue(decoded, depth));
         }
@@ -191,7 +191,7 @@ final class ResolverPayloadParsers {
         }
     }
 
-    /** Standard and URL-safe Base64 decoder compatible with Android API 23. */
+    /** Standard and URL-safe Base64 decoder compatible with the Android TV API 29 floor. */
     private static byte[] decodeBase64(String value) {
         ByteArrayOutputStream output = new ByteArrayOutputStream(value.length() * 3 / 4);
         int buffer = 0;
@@ -273,17 +273,17 @@ final class ResolverPayloadParsers {
             }
         } else {
             String scalar = String.valueOf(node).trim();
-            if (!scalar.isBlank() && scalar.length() <= MAX_DISCOVERY_VALUE_LENGTH) {
+            if (!AppStrings.isBlank(scalar) && scalar.length() <= MAX_DISCOVERY_VALUE_LENGTH) {
                 pending.addLast(new DiscoveryValue(scalar, depth));
             }
         }
     }
 
     static Object jsonValueAtPath(JSONObject root, String path) {
-        if (root == null || path == null || path.isBlank()) return null;
+        if (root == null || path == null || AppStrings.isBlank(path)) return null;
         Object current = root;
         for (String field : path.split("\\.")) {
-            if (!(current instanceof JSONObject) || field.isBlank()) return null;
+            if (!(current instanceof JSONObject) || AppStrings.isBlank(field)) return null;
             current = ((JSONObject) current).opt(field);
             if (current == null || current == JSONObject.NULL) return null;
         }
@@ -292,13 +292,13 @@ final class ResolverPayloadParsers {
 
     static URI parseHighflyManifest(String json, List<String> identifiers)
             throws IOException {
-        if (json == null || json.isBlank() || identifiers == null || identifiers.isEmpty()) {
+        if (json == null || AppStrings.isBlank(json) || identifiers == null || identifiers.isEmpty()) {
             throw new IOException("El manifiesto Highfly está vacío.");
         }
         Set<String> normalized = new LinkedHashSet<>();
         for (String identifier : identifiers) {
             String value = normalize(identifier);
-            if (!value.isBlank()) normalized.add(value);
+            if (!AppStrings.isBlank(value)) normalized.add(value);
         }
         try {
             Object root = json.trim().startsWith("[")
@@ -364,7 +364,7 @@ final class ResolverPayloadParsers {
     }
 
     private static URI httpUri(String value) {
-        if (value == null || value.isBlank()) return null;
+        if (value == null || AppStrings.isBlank(value)) return null;
         try {
             URI uri = URI.create(value.trim());
             String scheme = uri.getScheme();

@@ -51,14 +51,14 @@ final class ProviderStreamParsers {
             String configuredTokenPattern,
             String defaultId
     ) throws IOException {
-        if (html == null || html.isBlank()) {
+        if (html == null || AppStrings.isBlank(html)) {
             throw new IOException("TVN no publico la configuracion del reproductor.");
         }
 
         String streamId = null;
         String accessToken = null;
-        if ((configuredIdPattern == null || configuredIdPattern.isBlank())
-                && (configuredTokenPattern == null || configuredTokenPattern.isBlank())) {
+        if ((configuredIdPattern == null || AppStrings.isBlank(configuredIdPattern))
+                && (configuredTokenPattern == null || AppStrings.isBlank(configuredTokenPattern))) {
             Matcher fields = TVN_FIELD_PATTERN.matcher(html);
             while (fields.find()) {
                 String field = fields.group(1);
@@ -79,7 +79,7 @@ final class ProviderStreamParsers {
         if (accessToken == null) {
             throw new IOException("TVN no publico la autorizacion del reproductor.");
         }
-        String fallbackId = defaultId == null || defaultId.isBlank()
+        String fallbackId = defaultId == null || AppStrings.isBlank(defaultId)
                 ? TVN_DEFAULT_ID
                 : defaultId.trim();
         return new TvnConfig(
@@ -91,7 +91,7 @@ final class ProviderStreamParsers {
     }
 
     private static String firstCaptured(String input, String expression) throws IOException {
-        if (expression == null || expression.isBlank()) return null;
+        if (expression == null || AppStrings.isBlank(expression)) return null;
         try {
             Matcher matcher = Pattern.compile(expression, Pattern.CASE_INSENSITIVE).matcher(input);
             return matcher.find() && matcher.groupCount() >= 1
@@ -103,7 +103,7 @@ final class ProviderStreamParsers {
     }
 
     static MeganoticiasConfig parseMeganoticiasConfig(String html) throws IOException {
-        if (html == null || html.isBlank()) {
+        if (html == null || AppStrings.isBlank(html)) {
             throw new IOException("Meganoticias no publico la configuracion del reproductor.");
         }
 
@@ -125,7 +125,7 @@ final class ProviderStreamParsers {
         }
 
         String configuredId = idMatcher.group(1).trim();
-        String streamId = configuredId.isBlank()
+        String streamId = AppStrings.isBlank(configuredId)
                 ? MEGANOTICIAS_DEFAULT_ID
                 : configuredId;
         String serverKey = serverKeyMatcher.group(1).trim();
@@ -140,18 +140,18 @@ final class ProviderStreamParsers {
             String configuredIdPattern,
             String configuredServerKeyPattern
     ) throws IOException {
-        if ((configuredIdPattern == null || configuredIdPattern.isBlank())
+        if ((configuredIdPattern == null || AppStrings.isBlank(configuredIdPattern))
                 && (configuredServerKeyPattern == null
-                || configuredServerKeyPattern.isBlank())) {
+                || AppStrings.isBlank(configuredServerKeyPattern))) {
             return parseMeganoticiasConfig(html);
         }
-        if (html == null || html.isBlank()) {
+        if (html == null || AppStrings.isBlank(html)) {
             throw new IOException("Meganoticias no publico la configuracion del reproductor.");
         }
         String streamId = firstCaptured(html, configuredIdPattern);
         String serverKey = firstCaptured(html, configuredServerKeyPattern);
         if (streamId == null || !SAFE_STREAM_ID_PATTERN.matcher(streamId).matches()
-                || serverKey == null || serverKey.isBlank()) {
+                || serverKey == null || AppStrings.isBlank(serverKey)) {
             throw new IOException("Meganoticias no publico la configuracion del reproductor.");
         }
         return new MeganoticiasConfig(streamId, serverKey);
@@ -191,7 +191,7 @@ final class ProviderStreamParsers {
 
     static String parseMeganoticiasAccessToken(String json, String tokenPath)
             throws IOException {
-        if (json == null || json.isBlank()) {
+        if (json == null || AppStrings.isBlank(json)) {
             throw new IOException("Meganoticias devolvio una respuesta invalida.");
         }
         try {
@@ -220,7 +220,7 @@ final class ProviderStreamParsers {
      * are interpreted as milliseconds. A missing/malformed field returns zero.
      */
     static long parseOptionalExpiryMillis(String payload) {
-        if (payload == null || payload.isBlank()) return 0L;
+        if (payload == null || AppStrings.isBlank(payload)) return 0L;
         Matcher matcher = OPTIONAL_EXPIRY_PATTERN.matcher(payload);
         if (!matcher.find()) return 0L;
         try {
@@ -241,7 +241,7 @@ final class ProviderStreamParsers {
      * fields, so a global search would incorrectly shorten the token lifetime.
      */
     static long parseTvnExpiryMillis(String html, String accessToken) {
-        if (html == null || html.isBlank() || accessToken == null || accessToken.isBlank()) {
+        if (html == null || AppStrings.isBlank(html) || accessToken == null || AppStrings.isBlank(accessToken)) {
             return 0L;
         }
         int tokenIndex = html.indexOf(accessToken);
@@ -256,7 +256,7 @@ final class ProviderStreamParsers {
     }
 
     private static String validateToken(String token, String provider) throws IOException {
-        if (token == null || token.isBlank() || !SAFE_TOKEN_PATTERN.matcher(token).matches()) {
+        if (token == null || AppStrings.isBlank(token) || !SAFE_TOKEN_PATTERN.matcher(token).matches()) {
             throw new IOException(provider + " no publico un token valido.");
         }
         return token;

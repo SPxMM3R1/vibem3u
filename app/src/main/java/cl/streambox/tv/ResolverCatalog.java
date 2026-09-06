@@ -83,7 +83,7 @@ public final class ResolverCatalog {
     public ResolverDefinition find(Channel channel) {
         if (channel == null) return null;
         String explicit = channel.getAttributes().get("x-resolver");
-        if (explicit != null && !explicit.isBlank()) {
+        if (explicit != null && !AppStrings.isBlank(explicit)) {
             for (ResolverDefinition provider : providers) {
                 if (provider.matchesExplicit(channel)) return provider;
             }
@@ -99,7 +99,7 @@ public final class ResolverCatalog {
     }
 
     public static ResolverCatalog parse(String json) throws IOException {
-        if (json == null || json.isBlank()) throw new IOException("Catálogo vacío.");
+        if (json == null || AppStrings.isBlank(json)) throw new IOException("Catálogo vacío.");
         if (json.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_CATALOG_BYTES) {
             throw new IOException("Catálogo demasiado grande.");
         }
@@ -184,7 +184,7 @@ public final class ResolverCatalog {
         for (int index = 0; index < array.length(); index++) {
             String value = array.getString(index).trim();
             if (value.length() > 160) throw new IOException("Coincidencia demasiado larga.");
-            if (!value.isBlank()) values.add(value);
+            if (!AppStrings.isBlank(value)) values.add(value);
         }
         return values;
     }
@@ -224,7 +224,7 @@ public final class ResolverCatalog {
         for (Iterator<String> keys = object.keys(); keys.hasNext();) {
             String rawKey = keys.next();
             String key = rawKey.trim();
-            if (key.isBlank() || key.length() > MAX_ALIAS_KEY_LENGTH) {
+            if (AppStrings.isBlank(key) || key.length() > MAX_ALIAS_KEY_LENGTH) {
                 throw new IOException("Clave de alias inválida.");
             }
             if (result.containsKey(key)) {
@@ -244,7 +244,7 @@ public final class ResolverCatalog {
                 if (alias.length() > MAX_ALIAS_LENGTH) {
                     throw new IOException("Alias demasiado largo.");
                 }
-                if (!alias.isBlank()) aliases.add(alias);
+                if (!AppStrings.isBlank(alias)) aliases.add(alias);
             }
             result.put(key, new ArrayList<>(aliases));
         }
@@ -284,7 +284,7 @@ public final class ResolverCatalog {
                     || lowerKey.endsWith("template")
                     || lowerKey.endsWith("origin")
                     || lowerKey.endsWith("referer");
-            if (!networkValue || value.isBlank()) continue;
+            if (!networkValue || AppStrings.isBlank(value)) continue;
             String sample = value
                     .replace("{id}", "sample")
                     .replace("{alias}", "sample")
@@ -325,7 +325,7 @@ public final class ResolverCatalog {
     private static String requiredString(JSONObject object, String key, int maxLength)
             throws JSONException, IOException {
         String value = object.getString(key).trim();
-        if (value.isBlank() || value.length() > maxLength) {
+        if (AppStrings.isBlank(value) || value.length() > maxLength) {
             throw new IOException("Campo de catálogo inválido.");
         }
         return value;

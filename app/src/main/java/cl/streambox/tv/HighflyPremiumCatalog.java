@@ -114,7 +114,7 @@ public final class HighflyPremiumCatalog {
                 continue;
             }
             String identity = entry.getIdentity();
-            if (identity.isBlank() || seen.put(identity, Boolean.TRUE) != null) continue;
+            if (AppStrings.isBlank(identity) || seen.put(identity, Boolean.TRUE) != null) continue;
 
             Map<String, String> attributes = new LinkedHashMap<>();
             attributes.put("tvg-id", "highfly-premium:" + identity);
@@ -156,7 +156,7 @@ public final class HighflyPremiumCatalog {
     }
 
     private static String groupFor(Entry entry) {
-        String category = entry.getCategory().isBlank() ? "Eventos" : entry.getCategory();
+        String category = AppStrings.isBlank(entry.getCategory()) ? "Eventos" : entry.getCategory();
         return entry.getType() == EntryType.TEMPORARY_EVENT
                 ? "Lista 4 · Eventos temporales · " + category
                 : "Lista 3 · Highfly · " + category;
@@ -223,7 +223,7 @@ public final class HighflyPremiumCatalog {
         ) {
             this.id = id == null ? "" : id;
             this.slug = slug == null ? "" : slug;
-            this.name = name == null || name.isBlank() ? this.id : name;
+            this.name = name == null || AppStrings.isBlank(name) ? this.id : name;
             this.category = category == null ? "" : category;
             this.logoUri = logoUri;
             this.description = description == null ? "" : description;

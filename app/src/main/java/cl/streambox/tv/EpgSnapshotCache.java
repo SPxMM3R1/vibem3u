@@ -69,7 +69,7 @@ final class EpgSnapshotCache {
                 String title = readString(input);
                 long startMillis = input.readLong();
                 long stopMillis = input.readLong();
-                if (channelId.isBlank() || title.isBlank() || stopMillis <= startMillis) {
+                if (AppStrings.isBlank(channelId) || AppStrings.isBlank(title) || stopMillis <= startMillis) {
                     throw new IOException("La instantánea EPG no es válida.");
                 }
                 programmes.add(new EpgProgramme(channelId, title, startMillis, stopMillis));

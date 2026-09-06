@@ -58,7 +58,7 @@ final class HighflyPremiumPlaylistMerger {
         if (premiumChannels != null) {
             for (Channel premium : premiumChannels) {
                 String key = stableChannelKey(premium);
-                if (!key.isBlank() && !premiumByKey.containsKey(key)) {
+                if (!AppStrings.isBlank(key) && !premiumByKey.containsKey(key)) {
                     premiumByKey.put(key, premium);
                 }
             }
@@ -69,7 +69,7 @@ final class HighflyPremiumPlaylistMerger {
         if (baseChannels != null) {
             for (Channel base : baseChannels) {
                 String key = isHighflyChannel(base) ? stableChannelKey(base) : "";
-                Channel premium = key.isBlank() ? null : premiumByKey.get(key);
+                Channel premium = AppStrings.isBlank(key) ? null : premiumByKey.get(key);
                 if (premium != null && consumedPremiumKeys.add(key)) {
                     merged.add(withOriginalEpgIdentity(premium, base));
                 } else {
@@ -98,19 +98,19 @@ final class HighflyPremiumPlaylistMerger {
     private static String stableChannelKey(Channel channel) {
         if (channel == null || channel.getAttributes() == null) return "";
         String value = channel.getAttributes().get("x-resolver-id");
-        if (value == null || value.isBlank()) value = channel.getTvgId();
+        if (value == null || AppStrings.isBlank(value)) value = channel.getTvgId();
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
     /** Retain the original tvg-id so an existing EPG entry still matches. */
     private static Channel withOriginalEpgIdentity(Channel premium, Channel original) {
-        if (premium == null || original == null || original.getTvgId().isBlank()) {
+        if (premium == null || original == null || AppStrings.isBlank(original.getTvgId())) {
             return premium;
         }
         Map<String, String> attributes = new LinkedHashMap<>(premium.getAttributes());
         attributes.put("tvg-id", original.getTvgId());
         String originalTvgName = original.getAttributes().get("tvg-name");
-        if (originalTvgName != null && !originalTvgName.isBlank()) {
+        if (originalTvgName != null && !AppStrings.isBlank(originalTvgName)) {
             attributes.put("tvg-name", originalTvgName);
         }
         return new Channel(

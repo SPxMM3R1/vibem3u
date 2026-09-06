@@ -151,7 +151,7 @@ public class TokenHttpClient {
                         throw new IOException("Demasiadas redirecciones del stream.");
                     }
                     String location = networkResponse.header("Location");
-                    if (location == null || location.isBlank()) {
+                    if (location == null || AppStrings.isBlank(location)) {
                         throw new IOException("Redirección del stream sin destino.");
                     }
                     try {
@@ -256,7 +256,7 @@ public class TokenHttpClient {
         try {
             Request.Builder builder = new Request.Builder().url(url).get();
             addHeaders(builder, headers);
-            if (range != null && !range.isBlank()) builder.header("Range", range);
+            if (range != null && !AppStrings.isBlank(range)) builder.header("Range", range);
             if (headers == null || !containsHeader(headers, "User-Agent")) {
                 builder.header("User-Agent", BROWSER_USER_AGENT);
             }
@@ -343,7 +343,7 @@ public class TokenHttpClient {
 
     public static String buildUrl(String baseUrl, Map<String, String> parameters)
             throws IOException {
-        if (baseUrl == null || baseUrl.isBlank()) {
+        if (baseUrl == null || AppStrings.isBlank(baseUrl)) {
             throw new IOException("URL no válida.");
         }
         if (parameters == null || parameters.isEmpty()) {

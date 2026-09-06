@@ -80,7 +80,7 @@ public final class ManifestHandoffCache {
             byte[] rawBytes
     ) {
         URI original = parseUri(originalUri);
-        URI target = finalUri == null || finalUri.isBlank() ? original : parseUri(finalUri);
+        URI target = finalUri == null || AppStrings.isBlank(finalUri) ? original : parseUri(finalUri);
         put(original, target, headers, rawBytes);
     }
 
@@ -183,7 +183,7 @@ public final class ManifestHandoffCache {
     }
 
     private static URI parseUri(String value) {
-        if (value == null || value.isBlank()) return null;
+        if (value == null || AppStrings.isBlank(value)) return null;
         try {
             return URI.create(value.trim());
         } catch (IllegalArgumentException ignored) {

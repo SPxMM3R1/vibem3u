@@ -5,10 +5,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.LongSupplier;
 
 /** Bounded, process-only opening measurements. No channel names, URLs, or credentials. */
 final class PlaybackStartupMetrics {
-    interface LongSupplier { long getAsLong(); }
     enum Reason { CHANNEL, RETRY, REFRESH, FALLBACK }
     private static final int MAX_HISTORY = 128;
     private final LongSupplier nanoTime;

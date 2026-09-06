@@ -43,7 +43,7 @@ public final class ResolverDefinition {
         this.tvgIds = immutableLowerSet(tvgIds);
         List<String> suffixes = new ArrayList<>();
         for (String suffix : tvgIdSuffixes) {
-            if (suffix != null && !suffix.isBlank()) {
+            if (suffix != null && !AppStrings.isBlank(suffix)) {
                 suffixes.add(suffix.trim().toLowerCase(Locale.ROOT));
             }
         }
@@ -55,7 +55,7 @@ public final class ResolverDefinition {
         for (Map.Entry<String, List<String>> entry : compatibilityAliases.entrySet()) {
             List<String> values = new ArrayList<>();
             for (String value : entry.getValue()) {
-                if (value != null && !value.isBlank()) values.add(value.trim());
+                if (value != null && !AppStrings.isBlank(value)) values.add(value.trim());
             }
             aliases.put(
                     entry.getKey().trim().toLowerCase(Locale.ROOT),
@@ -93,7 +93,7 @@ public final class ResolverDefinition {
 
     public String getConfig(String key, String fallback) {
         String value = config.get(key);
-        return value == null || value.isBlank() ? fallback : value;
+        return value == null || AppStrings.isBlank(value) ? fallback : value;
     }
 
     public boolean getBooleanConfig(String key, boolean fallback) {
@@ -114,7 +114,7 @@ public final class ResolverDefinition {
 
     boolean matchesExplicit(Channel channel) {
         String value = attribute(channel, "x-resolver");
-        return !value.isBlank()
+        return !AppStrings.isBlank(value)
                 && (id.equalsIgnoreCase(value) || engine.equalsIgnoreCase(value));
     }
 
@@ -131,23 +131,23 @@ public final class ResolverDefinition {
     boolean matchesHost(Channel channel) {
         if (channel == null || channel.getStreamUri() == null) return false;
         String host = safe(channel.getStreamUri().getHost()).toLowerCase(Locale.ROOT);
-        return !host.isBlank() && hosts.contains(host);
+        return !AppStrings.isBlank(host) && hosts.contains(host);
     }
 
     public String stableSourceId(Channel channel) {
         String configured = attribute(channel, "x-resolver-id");
-        if (!configured.isBlank()) return configured;
+        if (!AppStrings.isBlank(configured)) return configured;
         String tvgId = safe(channel == null ? null : channel.getTvgId()).trim();
-        if (!tvgId.isBlank()) return tvgId;
+        if (!AppStrings.isBlank(tvgId)) return tvgId;
         return safe(channel == null ? null : channel.getName()).trim();
     }
 
     public List<String> resolverAliases(Channel channel) {
         LinkedHashSet<String> result = new LinkedHashSet<>();
         String values = attribute(channel, "x-resolver-ids");
-        if (!values.isBlank()) {
+        if (!AppStrings.isBlank(values)) {
             for (String value : values.split(";")) {
-                if (!value.isBlank()) result.add(value.trim());
+                if (!AppStrings.isBlank(value)) result.add(value.trim());
             }
             // The list project controls this order. Do not append APK-side
             // compatibility aliases when the M3U already carries an explicit
@@ -156,7 +156,7 @@ public final class ResolverDefinition {
             return Collections.unmodifiableList(new ArrayList<>(result));
         }
         String single = attribute(channel, "x-resolver-id");
-        if (!single.isBlank()) {
+        if (!AppStrings.isBlank(single)) {
             return Collections.singletonList(single);
         }
 
@@ -175,7 +175,7 @@ public final class ResolverDefinition {
 
     public String channelManifestUrl(Channel channel) {
         String manifest = attribute(channel, "x-resolver-manifest");
-        return manifest.isBlank() ? getConfig("manifestUrl", "") : manifest;
+        return AppStrings.isBlank(manifest) ? getConfig("manifestUrl", "") : manifest;
     }
 
     /**
@@ -189,7 +189,7 @@ public final class ResolverDefinition {
      */
     public boolean usesRecipe(Channel channel, String supportedRecipe) {
         String requested = attribute(channel, "x-resolver-recipe");
-        if (requested.isBlank() || supportedRecipe == null) return false;
+        if (AppStrings.isBlank(requested) || supportedRecipe == null) return false;
         String authorised = getConfig("recipeId", "");
         return requested.equalsIgnoreCase(supportedRecipe)
                 && requested.equalsIgnoreCase(authorised);
@@ -207,7 +207,7 @@ public final class ResolverDefinition {
     private static Set<String> immutableLowerSet(Iterable<String> values) {
         LinkedHashSet<String> result = new LinkedHashSet<>();
         for (String value : values) {
-            if (value != null && !value.isBlank()) {
+            if (value != null && !AppStrings.isBlank(value)) {
                 result.add(value.trim().toLowerCase(Locale.ROOT));
             }
         }

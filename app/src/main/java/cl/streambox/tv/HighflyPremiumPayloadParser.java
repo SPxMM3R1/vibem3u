@@ -192,7 +192,7 @@ final class HighflyPremiumPayloadParser {
         }
 
         String name = clean(meta.optString("name", ""), 180);
-        if (name.isBlank()) name = slug.isBlank() ? id : slug;
+        if (AppStrings.isBlank(name)) name = AppStrings.isBlank(slug) ? id : slug;
         String category = firstGenre(meta.optJSONArray("genres"));
         URI logo = parseImageUri(firstNonBlank(
                 meta.optString("poster", ""),
@@ -214,13 +214,13 @@ final class HighflyPremiumPayloadParser {
         if (genres == null) return "";
         for (int index = 0; index < genres.length(); index++) {
             String genre = clean(genres.optString(index, ""), 80);
-            if (!genre.isBlank()) return genre;
+            if (!AppStrings.isBlank(genre)) return genre;
         }
         return "";
     }
 
     private static URI parseImageUri(String value) {
-        if (value == null || value.isBlank()) return null;
+        if (value == null || AppStrings.isBlank(value)) return null;
         try {
             URI uri = URI.create(value.trim());
             if (!"https".equalsIgnoreCase(uri.getScheme())
@@ -237,7 +237,7 @@ final class HighflyPremiumPayloadParser {
     }
 
     private static URI parseHttpsUri(String value) {
-        if (value == null || value.isBlank()) return null;
+        if (value == null || AppStrings.isBlank(value)) return null;
         try {
             URI uri = URI.create(value.trim());
             if (!"https".equalsIgnoreCase(uri.getScheme())
@@ -285,7 +285,7 @@ final class HighflyPremiumPayloadParser {
     private static String firstNonBlank(String... values) {
         if (values == null) return "";
         for (String value : values) {
-            if (value != null && !value.isBlank()) return value.trim();
+            if (value != null && !AppStrings.isBlank(value)) return value.trim();
         }
         return "";
     }
@@ -301,7 +301,7 @@ final class HighflyPremiumPayloadParser {
 
     private static void requireSize(String value, int maximumBytes, String label)
             throws IOException {
-        if (value == null || value.isBlank()) throw new IOException("Respuesta " + label + " vacía.");
+        if (value == null || AppStrings.isBlank(value)) throw new IOException("Respuesta " + label + " vacía.");
         if (value.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > maximumBytes) {
             throw new IOException("Respuesta " + label + " demasiado grande.");
         }

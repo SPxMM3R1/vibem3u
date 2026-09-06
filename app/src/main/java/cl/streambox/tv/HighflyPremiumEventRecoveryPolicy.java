@@ -16,7 +16,7 @@ final class HighflyPremiumEventRecoveryPolicy {
 
     synchronized boolean tryConsume(String eventId) {
         String key = normalize(eventId);
-        if (key.isBlank()) return false;
+        if (AppStrings.isBlank(key)) return false;
         int attempts = attemptsByEvent.containsKey(key)
                 ? attemptsByEvent.get(key)
                 : 0;
@@ -27,7 +27,7 @@ final class HighflyPremiumEventRecoveryPolicy {
 
     synchronized int attemptsFor(String eventId) {
         String key = normalize(eventId);
-        if (key.isBlank()) return 0;
+        if (AppStrings.isBlank(key)) return 0;
         Integer attempts = attemptsByEvent.get(key);
         return attempts == null ? 0 : attempts;
     }
@@ -35,12 +35,12 @@ final class HighflyPremiumEventRecoveryPolicy {
     /** Called only after sustained playback confirms the event recovered. */
     synchronized void markAvailable(String eventId) {
         String key = normalize(eventId);
-        if (!key.isBlank()) attemptsByEvent.remove(key);
+        if (!AppStrings.isBlank(key)) attemptsByEvent.remove(key);
     }
 
     synchronized void clear(String eventId) {
         String key = normalize(eventId);
-        if (!key.isBlank()) attemptsByEvent.remove(key);
+        if (!AppStrings.isBlank(key)) attemptsByEvent.remove(key);
     }
 
     synchronized void clearAll() {

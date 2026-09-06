@@ -128,7 +128,7 @@ public final class HighflyPremiumPreferences {
      */
     public static Set<String> selectedEventIds(Context context) {
         String stored = preferences(context).getString(KEY_SELECTED_EVENT_IDS, "");
-        if (stored == null || stored.isBlank()) return Collections.emptySet();
+        if (stored == null || AppStrings.isBlank(stored)) return Collections.emptySet();
         LinkedHashSet<String> result = new LinkedHashSet<>();
         for (String value : stored.split(EVENT_ID_SEPARATOR)) {
             String id = value == null ? "" : value.trim();

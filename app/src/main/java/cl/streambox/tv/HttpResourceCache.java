@@ -91,7 +91,7 @@ final class HttpResourceCache {
 
         boolean isFresh(long nowMillis, long maxAgeMillis) {
             if (checkedAtMillis <= 0L || maxAgeMillis <= 0L) return false;
-            if (etag.isBlank() && lastModified.isBlank()) return false;
+            if (AppStrings.isBlank(etag) && AppStrings.isBlank(lastModified)) return false;
             return nowMillis >= checkedAtMillis
                     && nowMillis - checkedAtMillis < maxAgeMillis;
         }
@@ -261,10 +261,10 @@ final class HttpResourceCache {
             connection.setRequestProperty("Pragma", "no-cache");
             connection.setRequestProperty("User-Agent", userAgent);
             if (cached != null) {
-                if (!cached.getEtag().isBlank()) {
+                if (!AppStrings.isBlank(cached.getEtag())) {
                     connection.setRequestProperty("If-None-Match", cached.getEtag());
                 }
-                if (!cached.getLastModified().isBlank()) {
+                if (!AppStrings.isBlank(cached.getLastModified())) {
                     connection.setRequestProperty("If-Modified-Since", cached.getLastModified());
                 }
             }
@@ -450,8 +450,8 @@ final class HttpResourceCache {
 
     private static Properties metadataFor(CachedResource resource) {
         Properties metadata = new Properties();
-        if (!resource.getEtag().isBlank()) metadata.setProperty("etag", resource.getEtag());
-        if (!resource.getLastModified().isBlank()) {
+        if (!AppStrings.isBlank(resource.getEtag())) metadata.setProperty("etag", resource.getEtag());
+        if (!AppStrings.isBlank(resource.getLastModified())) {
             metadata.setProperty("last_modified", resource.getLastModified());
         }
         long checkedAtMillis = resource.getCheckedAtMillis() > 0L

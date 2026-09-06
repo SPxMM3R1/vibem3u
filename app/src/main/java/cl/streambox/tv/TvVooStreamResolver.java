@@ -318,7 +318,7 @@ public final class TvVooStreamResolver implements StreamResolver {
         boolean boundedPayloadRecipe;
         try {
             endpointBase = channel.getAttributes().get("x-resolver-endpoint");
-            if (endpointBase == null || endpointBase.isBlank()) {
+            if (endpointBase == null || AppStrings.isBlank(endpointBase)) {
                 endpointBase = definition.getConfig("endpointBase", DEFAULT_ENDPOINT);
             }
             endpointBase = validEndpoint(endpointBase);
@@ -329,7 +329,7 @@ public final class TvVooStreamResolver implements StreamResolver {
             ) && MEDIA_SIGNATURE_VALIDATION.equals(
                     definition.getConfig("validationMode", "")
             );
-            if (!requestedRecipe.isBlank() && !boundedPayloadRecipe) {
+            if (!AppStrings.isBlank(requestedRecipe) && !boundedPayloadRecipe) {
                 throw new IOException("La receta declarativa del canal no está autorizada.");
             }
         } catch (IOException setupError) {
@@ -949,9 +949,9 @@ public final class TvVooStreamResolver implements StreamResolver {
     private static List<String> generatedAliases(Channel channel) {
         if (channel == null) return Collections.emptyList();
         String name = channel.getAttributes().get("tvg-name");
-        if (name == null || name.isBlank()) name = channel.getName();
+        if (name == null || AppStrings.isBlank(name)) name = channel.getName();
         String country = channel.getAttributes().get("tvg-country");
-        if (name == null || name.isBlank() || country == null || country.isBlank()) {
+        if (name == null || AppStrings.isBlank(name) || country == null || AppStrings.isBlank(country)) {
             return Collections.emptyList();
         }
         String normalizedName = name.trim().toUpperCase(Locale.ROOT);

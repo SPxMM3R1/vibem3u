@@ -47,7 +47,7 @@ final class ChannelRequestHeaders {
     }
 
     private static String safeValue(String value) {
-        if (value == null || value.isBlank() || value.length() > 8192) return null;
+        if (value == null || AppStrings.isBlank(value) || value.length() > 8192) return null;
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
             if ((c < 0x20 && c != '\t') || c == 0x7f) return null;

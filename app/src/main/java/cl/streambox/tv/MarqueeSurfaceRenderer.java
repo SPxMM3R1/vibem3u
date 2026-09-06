@@ -113,7 +113,7 @@ final class MarqueeSurfaceRenderer implements Choreographer.FrameCallback, AutoC
                 if (startFrameTimeNs < 0L) startFrameTimeNs = frameTimeNanos;
                 float offset = MarqueeMotion.offset(frameTimeNanos - startFrameTimeNs,
                         spec.cycleWidth, spec.speedPxPerSecond);
-                Canvas canvas = surface.lockHardwareCanvas(); // Available since minSdk 23.
+                Canvas canvas = surface.lockHardwareCanvas(); // Available on the API 29 floor.
                 try {
                     // Hardware buffers are not preserved between frames. Clear the complete
                     // small surface, not the Activity/video, including after a surface resize.

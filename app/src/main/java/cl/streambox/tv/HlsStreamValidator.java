@@ -327,7 +327,7 @@ public final class HlsStreamValidator {
             if (!line.toUpperCase(Locale.ROOT).startsWith("#EXT-X-STREAM-INF:")) continue;
             for (int candidate = index + 1; candidate < lines.size(); candidate++) {
                 String value = lines.get(candidate).trim();
-                if (!value.isBlank() && !value.startsWith("#")) {
+                if (!AppStrings.isBlank(value) && !value.startsWith("#")) {
                     result.add(value);
                     break;
                 }
@@ -345,7 +345,7 @@ public final class HlsStreamValidator {
         java.util.ArrayList<String> references = new java.util.ArrayList<>();
         for (String line : lines) {
             String value = line.trim();
-            if (!value.isBlank() && !value.startsWith("#")) references.add(value);
+            if (!AppStrings.isBlank(value) && !value.startsWith("#")) references.add(value);
         }
         // Master variant URIs are references too; callers that need segments
         // invoke this only after variantUris is empty.

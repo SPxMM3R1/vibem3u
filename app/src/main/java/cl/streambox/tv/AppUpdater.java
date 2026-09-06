@@ -391,6 +391,6 @@ final class AppUpdater {
 
     private static String shortMessage(Throwable error) {
         String message = error == null ? null : error.getMessage();
-        return message == null || message.isBlank() ? "Error desconocido." : message;
+        return message == null || AppStrings.isBlank(message) ? "Error desconocido." : message;
     }
 }

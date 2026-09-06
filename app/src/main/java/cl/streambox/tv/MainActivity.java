@@ -882,7 +882,7 @@ public final class MainActivity extends Activity {
                 )
                 : playbackPreferences.findInitialChannelIndex(channels);
         if (startupSelectionPending) {
-            if (startupPreferredChannelIdentity.isBlank()) {
+            if (AppStrings.isBlank(startupPreferredChannelIdentity)) {
                 startupSelectionPending = false;
             } else {
                 int preferredIndex = findChannelIndexByIdentity(
@@ -976,7 +976,7 @@ public final class MainActivity extends Activity {
     }
 
     private static int findChannelIndexByIdentity(List<Channel> candidates, String identity) {
-        if (candidates == null || identity == null || identity.isBlank()) return -1;
+        if (candidates == null || identity == null || AppStrings.isBlank(identity)) return -1;
         for (int index = 0; index < candidates.size(); index++) {
             if (identity.equals(PlaybackPreferences.channelIdentity(candidates.get(index)))) {
                 return index;
@@ -1011,7 +1011,7 @@ public final class MainActivity extends Activity {
         stopLoadingTextAnimation();
         loadingPanel.setVisibility(View.VISIBLE);
         String message = getString(R.string.playlist_error);
-        if (detail != null && !detail.isBlank()) {
+        if (detail != null && !AppStrings.isBlank(detail)) {
             message += " · " + SafePlaybackText.detail(detail.replace('\n', ' '));
         }
         loadingText.setText(message);
@@ -1419,7 +1419,7 @@ public final class MainActivity extends Activity {
     }
 
     private MediaSource mediaSourceFor(Channel channel, ResolvedPlaybackSource source) {
-        String userAgent = source.getUserAgent().isBlank()
+        String userAgent = AppStrings.isBlank(source.getUserAgent())
                 ? PLAYER_USER_AGENT
                 : source.getUserAgent();
         OkHttpDataSource.Factory dataSourceFactory =
@@ -1484,7 +1484,7 @@ public final class MainActivity extends Activity {
     private void handleTemporaryEventFailure(Channel channel, long expectedGeneration) {
         if (!isCurrentPlayback(channel, expectedGeneration)) return;
         String eventId = temporaryEventId(channel);
-        if (eventId.isBlank()) {
+        if (AppStrings.isBlank(eventId)) {
             showPlaybackFailure();
             return;
         }
@@ -1707,7 +1707,7 @@ public final class MainActivity extends Activity {
         EpgProgramme programme = epgData.findCurrent(channel.getTvgId(), now);
 
         if (programme == null) {
-            contentTitle.setText(channel.getGroup().isBlank()
+            contentTitle.setText(AppStrings.isBlank(channel.getGroup())
                     ? getString(R.string.live_content)
                     : channel.getGroup());
             programmeTime.setVisibility(View.GONE);
@@ -1748,13 +1748,13 @@ public final class MainActivity extends Activity {
 
         lightEpgChannelNumber.setText(String.format(Locale.ROOT, "%03d", channelIndex + 1));
         lightEpgChannelName.setText(channel.getName());
-        lightEpgGroup.setText(channel.getGroup().isBlank()
+        lightEpgGroup.setText(AppStrings.isBlank(channel.getGroup())
                 ? getString(R.string.live_content)
                 : channel.getGroup());
         lightEpgClock.setText(timeFormat.format(new Date(now)));
 
         if (current == null) {
-            lightEpgCurrentTitle.setText(channel.getGroup().isBlank()
+            lightEpgCurrentTitle.setText(AppStrings.isBlank(channel.getGroup())
                     ? getString(R.string.live_content)
                     : channel.getGroup());
             lightEpgCurrentTime.setText(R.string.epg_no_information);
@@ -2090,7 +2090,7 @@ public final class MainActivity extends Activity {
 
     private static boolean hasNonBlankTextCue(CueGroup cueGroup) {
         for (Cue cue : cueGroup.cues) {
-            if (cue.text != null && !cue.text.toString().isBlank()) {
+            if (cue.text != null && !AppStrings.isBlank(cue.text.toString())) {
                 return true;
             }
         }
@@ -2562,7 +2562,7 @@ public final class MainActivity extends Activity {
                 SettingsActivity.EXTRA_CHANNEL_TVG_ID
         );
         String expectedName = data.getStringExtra(SettingsActivity.EXTRA_CHANNEL_NAME);
-        if (expectedTvgId != null && !expectedTvgId.isBlank()
+        if (expectedTvgId != null && !AppStrings.isBlank(expectedTvgId)
                 && !expectedTvgId.equals(channel.getTvgId())) return;
         if (expectedName != null && !expectedName.equals(channel.getName())) return;
 
@@ -2612,9 +2612,9 @@ public final class MainActivity extends Activity {
                     && (!sources.isEmpty() || isHighflyPremiumConfigured())) {
                 applyPlaybackSettingsResult(data);
                 reloadResolverRegistry();
-                boolean resolverConfigurationChanged = resolverSnapshotBefore.isBlank()
+                boolean resolverConfigurationChanged = AppStrings.isBlank(resolverSnapshotBefore)
                         || !resolverSnapshotBefore.equals(resolverSettingsSnapshot());
-                boolean playlistConfigurationChanged = playlistSnapshotBefore.isBlank()
+                boolean playlistConfigurationChanged = AppStrings.isBlank(playlistSnapshotBefore)
                         || !playlistSnapshotBefore.equals(playlistSourceSignature(sources));
                 if (resolverConfigurationChanged || playlistConfigurationChanged) {
                     resolverCoordinator.clear();
@@ -2651,7 +2651,7 @@ public final class MainActivity extends Activity {
         String url2 = prefs.getString(SettingsActivity.KEY_PLAYLIST_URL_2, "");
         boolean enabled1 = prefs.contains(SettingsActivity.KEY_PLAYLIST_ENABLED)
                 ? prefs.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED, true)
-                : url1 != null && !url1.isBlank();
+                : url1 != null && !AppStrings.isBlank(url1);
         boolean enabled2 = prefs.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, false);
         List<PlaylistSource> sources = new ArrayList<>();
         if (enabled1 && url1 != null && !url1.trim().isEmpty()) {
@@ -2683,7 +2683,7 @@ public final class MainActivity extends Activity {
                         this,
                         highflyPremiumCredentialStore
                 );
-        return (m3uSignature.isBlank() ? "sources=none" : m3uSignature)
+        return (AppStrings.isBlank(m3uSignature) ? "sources=none" : m3uSignature)
                 + "|premium=" + premiumSignature;
     }
 
@@ -2728,7 +2728,7 @@ public final class MainActivity extends Activity {
     }
 
     private static String initials(String name) {
-        if (name == null || name.isBlank()) return "TV";
+        if (name == null || AppStrings.isBlank(name)) return "TV";
         StringBuilder result = new StringBuilder(2);
         for (String word : name.trim().split("\\s+")) {
             if (!word.isEmpty()) result.append(Character.toUpperCase(word.charAt(0)));
@@ -2769,7 +2769,7 @@ public final class MainActivity extends Activity {
                     : "Segmento temporal no disponible.";
         }
         String message = error == null ? null : error.getMessage();
-        if (message == null || message.isBlank()) return "Error desconocido.";
+        if (message == null || AppStrings.isBlank(message)) return "Error desconocido.";
         return SafePlaybackText.detail(message);
     }
 

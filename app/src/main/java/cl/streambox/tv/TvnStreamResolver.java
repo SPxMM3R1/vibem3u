@@ -212,7 +212,7 @@ public final class TvnStreamResolver implements StreamResolver {
     private long configuredExplicitExpiryAtMillis() {
         if (definition == null) return 0L;
         String value = definition.getConfig("tokenExpiresAtMillis", "");
-        if (value.isBlank()) return 0L;
+        if (AppStrings.isBlank(value)) return 0L;
         try {
             long parsed = Long.parseLong(value);
             return parsed > 0L ? parsed : 0L;

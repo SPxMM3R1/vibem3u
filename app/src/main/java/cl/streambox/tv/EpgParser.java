@@ -105,7 +105,7 @@ public final class EpgParser {
                 readingTitle = false;
                 text = null;
             } else if ("programme".equalsIgnoreCase(qName)) {
-                if (channelId != null && !channelId.isBlank() && title != null
+                if (channelId != null && !AppStrings.isBlank(channelId) && title != null
                         && startMillis >= 0 && stopMillis > startMillis) {
                     programmes.add(new EpgProgramme(channelId, title, startMillis, stopMillis));
                 }

@@ -200,7 +200,7 @@ final class UpdateRepository {
 
             String location = connection.getHeaderField("Location");
             connection.disconnect();
-            if (location == null || location.isBlank()) {
+            if (location == null || AppStrings.isBlank(location)) {
                 throw new IOException("GitHub redirigió la descarga sin destino.");
             }
             current = current.resolve(location);

@@ -24,7 +24,10 @@ android {
 
     defaultConfig {
         applicationId = "cl.streambox.tv"
-        minSdk = 23
+        // Android TV 10 (API 29) is the supported floor. Keeping the old
+        // Android 6 floor forced compatibility branches that are no longer
+        // relevant to the devices this app targets.
+        minSdk = 29
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 76

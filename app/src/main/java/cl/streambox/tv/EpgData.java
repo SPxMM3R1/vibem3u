@@ -25,12 +25,14 @@ public final class EpgData {
         // Keep the immutable snapshot in a deterministic order. Parsing and
         // merging happen on a worker, so the main thread only receives this
         // ready-to-query index and never sorts a large XMLTV guide.
-        Collections.sort(sorted, (left, right) -> {
-            int order = compareNullable(left.getChannelId(), right.getChannelId());
-            if (order == 0) order = Long.compare(left.getStartMillis(), right.getStartMillis());
-            if (order == 0) order = Long.compare(left.getStopMillis(), right.getStopMillis());
-            return order == 0 ? compareNullable(left.getTitle(), right.getTitle()) : order;
-        });
+        sorted.sort(Comparator
+                .comparing(EpgProgramme::getChannelId, Comparator.nullsFirst(String::compareTo))
+                .thenComparingLong(EpgProgramme::getStartMillis)
+                .thenComparingLong(EpgProgramme::getStopMillis)
+                .thenComparing(
+                        EpgProgramme::getTitle,
+                        Comparator.nullsFirst(String::compareTo)
+                ));
         this.programmes = Collections.unmodifiableList(sorted);
         Map<String, List<EpgProgramme>> mutable = new LinkedHashMap<>();
         for (EpgProgramme programme : this.programmes) {
@@ -54,10 +56,6 @@ public final class EpgData {
     }
 
     public static EpgData empty() { return EMPTY; }
-
-    private static int compareNullable(String left, String right) {
-        return left == null ? (right == null ? 0 : -1) : right == null ? 1 : left.compareTo(right);
-    }
 
     /**
      * Combines the independent XMLTV snapshots used by multiple M3U sources.
@@ -104,7 +102,7 @@ public final class EpgData {
     }
 
     public EpgProgramme findCurrent(String channelId, long nowMillis) {
-        if (channelId == null || channelId.isBlank()) return null;
+        if (channelId == null || AppStrings.isBlank(channelId)) return null;
         List<EpgProgramme> programmes = programmesByChannel.get(channelId);
         if (programmes == null) return null;
         for (EpgProgramme programme : programmes) {
@@ -121,7 +119,7 @@ public final class EpgData {
      * If there is no current programme, the first future programme is used.
      */
     public EpgProgramme findNext(String channelId, long nowMillis) {
-        if (channelId == null || channelId.isBlank()) return null;
+        if (channelId == null || AppStrings.isBlank(channelId)) return null;
         List<EpgProgramme> programmes = programmesByChannel.get(channelId);
         if (programmes == null) return null;
 

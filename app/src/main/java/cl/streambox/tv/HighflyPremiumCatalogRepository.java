@@ -90,7 +90,7 @@ public final class HighflyPremiumCatalogRepository {
     /** Returns whether account/API rejection backoff is active for this region. */
     public boolean isCredentialOnCooldown(HighflyPremiumPreferences.Region region) {
         String token = credentialStore == null ? null : credentialStore.readTokenForRequest();
-        return token != null && !token.isBlank()
+        return token != null && !AppStrings.isBlank(token)
                 && cooldownRemainingMillis(token, safeRegion(region)) > 0L;
     }
 
@@ -101,7 +101,7 @@ public final class HighflyPremiumCatalogRepository {
 
     public long cooldownRemainingMillis(HighflyPremiumPreferences.Region region) {
         String token = credentialStore == null ? null : credentialStore.readTokenForRequest();
-        return token == null || token.isBlank()
+        return token == null || AppStrings.isBlank(token)
                 ? 0L
                 : cooldownRemainingMillis(token, safeRegion(region));
     }
@@ -115,7 +115,7 @@ public final class HighflyPremiumCatalogRepository {
 
     public void clearCredentialCooldown(HighflyPremiumPreferences.Region region) {
         String token = credentialStore == null ? null : credentialStore.readTokenForRequest();
-        if (token == null || token.isBlank()) return;
+        if (token == null || AppStrings.isBlank(token)) return;
         synchronized (sessionLock) {
             credentialCooldowns.remove(cooldownKey(token, safeRegion(region)));
         }
@@ -139,7 +139,7 @@ public final class HighflyPremiumCatalogRepository {
             HighflyPremiumPreferences.Region region
     ) throws IOException {
         String token = credentialStore == null ? null : credentialStore.readTokenForRequest();
-        if (token == null || token.isBlank()) {
+        if (token == null || AppStrings.isBlank(token)) {
             throw new CredentialRejectedException(0);
         }
         try {
@@ -159,7 +159,7 @@ public final class HighflyPremiumCatalogRepository {
     ) throws IOException {
         if (credentialStore == null) throw new CredentialRejectedException(0);
         String token = credentialStore.readTokenForRequest();
-        if (token == null || token.isBlank()) throw new CredentialRejectedException(0);
+        if (token == null || AppStrings.isBlank(token)) throw new CredentialRejectedException(0);
         HighflyPremiumPreferences.Region safeRegion = safeRegion(region);
         checkCooldown(token, safeRegion);
         long generation = credentialStore.getGeneration();
@@ -288,7 +288,7 @@ public final class HighflyPremiumCatalogRepository {
         }
 
         String token = credentialStore.readTokenForRequest();
-        if (token == null || token.isBlank()) throw new CredentialRejectedException(0);
+        if (token == null || AppStrings.isBlank(token)) throw new CredentialRejectedException(0);
         progress.onProgress(ResolutionProgress.of(
                 ResolutionStage.SOURCE_REQUEST,
                 "GET Premium · solicitando fuente actual"
@@ -351,14 +351,14 @@ public final class HighflyPremiumCatalogRepository {
     ) {
         if (catalog == null || channel == null) return null;
         String premiumId = attribute(channel, "x-highfly-premium-id");
-        if (!premiumId.isBlank()) {
+        if (!AppStrings.isBlank(premiumId)) {
             for (HighflyPremiumCatalog.Entry entry : catalog.getEntries()) {
                 if (premiumId.equals(entry.getId())) return entry;
             }
         }
 
         String resolverId = attribute(channel, "x-resolver-id");
-        if (!resolverId.isBlank()) {
+        if (!AppStrings.isBlank(resolverId)) {
             for (HighflyPremiumCatalog.Entry entry : catalog.getEntries()) {
                 if (resolverId.equals(entry.getSlug())
                         || resolverId.equals(entry.getId())) return entry;
@@ -376,7 +376,7 @@ public final class HighflyPremiumCatalogRepository {
         return "true".equalsIgnoreCase(attribute(channel, "x-highfly-premium-stable"))
                 && "estable".equalsIgnoreCase(attribute(channel, "x-highfly-premium-kind"))
                 && "3".equals(attribute(channel, "x-highfly-premium-list"))
-                && !attribute(channel, "x-highfly-premium-id").isBlank();
+                && !AppStrings.isBlank(attribute(channel, "x-highfly-premium-id"));
     }
 
     private static String stableSlug(Channel channel) throws IOException {
@@ -396,7 +396,7 @@ public final class HighflyPremiumCatalogRepository {
         return "true".equalsIgnoreCase(attribute(channel, "x-highfly-premium"))
                 && "true".equalsIgnoreCase(attribute(channel, "x-highfly-premium-virtual"))
                 && "4".equals(attribute(channel, "x-highfly-premium-list"))
-                && !attribute(channel, "x-highfly-premium-id").isBlank();
+                && !AppStrings.isBlank(attribute(channel, "x-highfly-premium-id"));
     }
 
     public boolean isTemporaryEvent(Channel channel) {
@@ -454,7 +454,7 @@ public final class HighflyPremiumCatalogRepository {
             String token,
             HighflyPremiumPreferences.Region region
     ) throws IOException {
-        if (token == null || token.isBlank() || credentialCooldownMillis <= 0L) return;
+        if (token == null || AppStrings.isBlank(token) || credentialCooldownMillis <= 0L) return;
         long remaining = cooldownRemainingMillis(token, safeRegion(region));
         if (remaining > 0L) {
             throw new CredentialCooldownException(remaining);
@@ -465,7 +465,7 @@ public final class HighflyPremiumCatalogRepository {
             String token,
             HighflyPremiumPreferences.Region region
     ) {
-        if (token == null || token.isBlank() || credentialCooldownMillis <= 0L) return;
+        if (token == null || AppStrings.isBlank(token) || credentialCooldownMillis <= 0L) return;
         long until;
         long now = System.currentTimeMillis();
         if (Long.MAX_VALUE - now < credentialCooldownMillis) {
@@ -485,11 +485,13 @@ public final class HighflyPremiumCatalogRepository {
             String token,
             HighflyPremiumPreferences.Region region
     ) {
-        if (token == null || token.isBlank()) return 0L;
+        if (token == null || AppStrings.isBlank(token)) return 0L;
         long until;
         synchronized (sessionLock) {
-            Long storedUntil = credentialCooldowns.get(cooldownKey(token, safeRegion(region)));
-            until = storedUntil == null ? 0L : storedUntil;
+            until = credentialCooldowns.getOrDefault(
+                    cooldownKey(token, safeRegion(region)),
+                    0L
+            );
             if (until <= 0L) return 0L;
         }
         long remaining = until - System.currentTimeMillis();
@@ -539,7 +541,7 @@ public final class HighflyPremiumCatalogRepository {
         String safeToken = HighflyPremiumTokenRules.normalize(token);
         HighflyPremiumPreferences.Region safeRegion = safeRegion(region);
         String safePath = path == null ? "" : path.trim();
-        if (safePath.isBlank() || safePath.startsWith("/") || safePath.contains("..")
+        if (AppStrings.isBlank(safePath) || safePath.startsWith("/") || safePath.contains("..")
                 || safePath.contains("?") || safePath.contains("#")) {
             throw new IOException("Ruta Premium no válida.");
         }
@@ -556,7 +558,7 @@ public final class HighflyPremiumCatalogRepository {
     }
 
     static AccountInfo parseAccount(String json) throws IOException {
-        if (json == null || json.isBlank()) throw new IOException("Respuesta Premium vacía.");
+        if (json == null || AppStrings.isBlank(json)) throw new IOException("Respuesta Premium vacía.");
         try {
             JSONObject object = new JSONObject(json);
             /*
@@ -751,7 +753,7 @@ public final class HighflyPremiumCatalogRepository {
             this.active = active;
             this.activeKnown = activeKnown;
             this.expiresAtMillis = Math.max(0L, expiresAtMillis);
-            this.planName = planName == null || planName.isBlank() ? "Premium" : planName;
+            this.planName = planName == null || AppStrings.isBlank(planName) ? "Premium" : planName;
         }
 
         public boolean isActive() {

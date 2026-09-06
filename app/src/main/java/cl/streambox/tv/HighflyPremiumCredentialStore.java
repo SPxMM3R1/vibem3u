@@ -109,8 +109,8 @@ public final class HighflyPremiumCredentialStore {
     public boolean hasCredential() {
         synchronized (lock) {
             if (memoryToken != null && memoryToken.length > 0) return true;
-            return !preferences.getString(KEY_CIPHERTEXT, "").isBlank()
-                    && !preferences.getString(KEY_IV, "").isBlank();
+            return !AppStrings.isBlank(preferences.getString(KEY_CIPHERTEXT, ""))
+                    && !AppStrings.isBlank(preferences.getString(KEY_IV, ""));
         }
     }
 
@@ -122,7 +122,7 @@ public final class HighflyPremiumCredentialStore {
             }
             String ciphertext = preferences.getString(KEY_CIPHERTEXT, "");
             String iv = preferences.getString(KEY_IV, "");
-            if (ciphertext.isBlank() || iv.isBlank()) return null;
+            if (AppStrings.isBlank(ciphertext) || AppStrings.isBlank(iv)) return null;
             try {
                 char[] decrypted = decrypt(ciphertext, iv);
                 memoryToken = decrypted;
@@ -160,7 +160,9 @@ public final class HighflyPremiumCredentialStore {
                         .commit();
                 if (!committed) throw new IOException("No se pudo guardar la credencial.");
             } catch (GeneralSecurityException error) {
-                throw new IOException("No se pudo proteger la credencial.");
+                // Preserve the provider cause for diagnostics without ever
+                // including the credential itself in the exception text.
+                throw new IOException("No se pudo proteger la credencial.", error);
             }
             replaceMemoryTokenLocked(token);
             status = new TokenStatus(Status.UNKNOWN, "", 0L);
@@ -246,14 +248,12 @@ public final class HighflyPremiumCredentialStore {
                     .commit();
             status = new TokenStatus(Status.NOT_CONFIGURED, "", 0L);
             generation++;
-            try {
-                KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
-                keyStore.load(null);
-                if (keyStore.containsAlias(KEY_ALIAS)) keyStore.deleteEntry(KEY_ALIAS);
-            } catch (GeneralSecurityException | IOException ignored) {
-                // The ciphertext has already been removed. A stale Keystore
-                // key cannot decrypt anything without the removed IV/ciphertext.
-            }
+            // Keep the AES key as an inert Keystore object. Removing the
+            // ciphertext and IV is sufficient to make the credential
+            // unrecoverable, while deleting and immediately recreating the
+            // alias can fail on Android Keystore implementations used by TV
+            // devices and emulators. Reusing the key also makes a subsequent
+            // save deterministic; the key contains no token by itself.
         }
     }
 
@@ -283,7 +283,8 @@ public final class HighflyPremiumCredentialStore {
     }
 
     private void clearEncryptedDataLocked() {
-        // Explicit removal must be durable before the Keystore key is deleted.
+        // Explicit removal must be durable; the Keystore key is intentionally
+        // retained as an inert encryption key for safe reuse.
         preferences.edit().remove(KEY_CIPHERTEXT).remove(KEY_IV).commit();
     }
 

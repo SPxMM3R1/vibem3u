@@ -65,7 +65,7 @@ public final class HighflyStreamResolver implements StreamResolver {
 
     @Override public String stableSourceId(Channel channel) {
         String slug = slug(channel);
-        return slug.isBlank() ? definition.stableSourceId(channel) : slug;
+        return AppStrings.isBlank(slug) ? definition.stableSourceId(channel) : slug;
     }
 
     @Override public long cacheTtlMillis() { return definition.getCacheTtlMillis(); }
@@ -136,7 +136,7 @@ public final class HighflyStreamResolver implements StreamResolver {
         }
 
         String slug = slug(channel);
-        if (slug.isBlank()) throw new IOException("Highfly no publicó un identificador estable.");
+        if (AppStrings.isBlank(slug)) throw new IOException("Highfly no publicó un identificador estable.");
 
         // The configured leaf URL is the normal fast path. The manifest is a
         // recovery catalogue and should not add a network round trip to every
@@ -180,7 +180,7 @@ public final class HighflyStreamResolver implements StreamResolver {
         }
 
         String manifestUrl = definition.channelManifestUrl(channel);
-        if (!manifestUrl.isBlank()) {
+        if (!AppStrings.isBlank(manifestUrl)) {
             try {
                 URI manifestUri = validManifestUri(manifestUrl);
                 progress.onProgress(ResolutionProgress.of(

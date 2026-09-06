@@ -24,7 +24,7 @@ public interface StreamResolver {
     default String stableSourceId(Channel channel) {
         if (channel == null) return "";
         String tvgId = channel.getTvgId();
-        return tvgId == null || tvgId.isBlank() ? channel.getName() : tvgId;
+        return tvgId == null || AppStrings.isBlank(tvgId) ? channel.getName() : tvgId;
     }
 
     default long cacheTtlMillis() {

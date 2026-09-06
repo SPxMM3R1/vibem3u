@@ -332,7 +332,7 @@ final class VavooSessionClient {
                 listener,
                 deadline
         );
-        if (loaded.isEmpty() && !target.country.isBlank()) {
+        if (loaded.isEmpty() && !AppStrings.isBlank(target.country)) {
             loaded = searchCatalog(
                     currentSignature,
                     target,
@@ -371,7 +371,7 @@ final class VavooSessionClient {
                     maxPages,
                     "POST " + SafePlaybackText.url(endpoint)
                             + " · search=\"" + target.searchName + "\""
-                            + (filterCountry && !target.country.isBlank()
+                            + (filterCountry && !AppStrings.isBlank(target.country)
                             ? " · filter.group=" + countryGroup(target.country)
                             : " · sin filtro de país")
             ));
@@ -385,7 +385,7 @@ final class VavooSessionClient {
                 payload.put("search", target.searchName);
                 payload.put("sort", "");
                 JSONObject filter = new JSONObject();
-                if (filterCountry && !target.country.isBlank()) {
+                if (filterCountry && !AppStrings.isBlank(target.country)) {
                     filter.put("group", countryGroup(target.country));
                 }
                 payload.put("filter", filter);
@@ -419,7 +419,7 @@ final class VavooSessionClient {
                 String name = item.optString("name", "").trim();
                 String url = item.optString("url", "").trim();
                 String group = item.optString("group", "").trim();
-                if (id.isBlank() || name.isBlank() || url.isBlank()) continue;
+                if (AppStrings.isBlank(id) || AppStrings.isBlank(name) || AppStrings.isBlank(url)) continue;
                 loaded.add(new CatalogEntry(id, name, url, baseCountry(group), group));
             }
             progress.onProgress(ResolutionProgress.of(
@@ -428,7 +428,7 @@ final class VavooSessionClient {
                             + " · acumulados=" + loaded.size()
             ));
             cursor = response.optString("nextCursor", "").trim();
-            if (cursor.isBlank()) break;
+            if (AppStrings.isBlank(cursor)) break;
         }
         return loaded;
     }
@@ -481,7 +481,7 @@ final class VavooSessionClient {
                         object.optString("streamUrl", "")
                 ).trim();
             }
-            URI uri = candidate.isBlank() ? null : URI.create(candidate);
+            URI uri = AppStrings.isBlank(candidate) ? null : URI.create(candidate);
             if (uri == null || uri.getHost() == null
                     || !("https".equalsIgnoreCase(uri.getScheme())
                     || "http".equalsIgnoreCase(uri.getScheme()))) {
@@ -588,10 +588,10 @@ final class VavooSessionClient {
             // channel-level country/number guard above still applies, so an
             // ID can rescue a renamed catalogue entry without crossing a
             // declared regional or numeric boundary.
-            if (!explicitId.isBlank() && explicitId.equalsIgnoreCase(entry.id)) {
+            if (!AppStrings.isBlank(explicitId) && explicitId.equalsIgnoreCase(entry.id)) {
                 best = 2_000;
             }
-            if (!rememberedId.isBlank() && rememberedId.equalsIgnoreCase(entry.id)) {
+            if (!AppStrings.isBlank(rememberedId) && rememberedId.equalsIgnoreCase(entry.id)) {
                 best = 3_000;
             }
             for (Target target : targets) {
@@ -678,7 +678,7 @@ final class VavooSessionClient {
     private static boolean strictChannelCompatible(Channel channel, CatalogEntry entry) {
         String country = countryKey(attribute(channel, "tvg-country"));
         String name = attribute(channel, "tvg-name");
-        if (name.isBlank() && channel != null) name = channel.getName();
+        if (AppStrings.isBlank(name) && channel != null) name = channel.getName();
         String declaredNumber = firstNonBlank(
                 attribute(channel, "tvg-number"),
                 attribute(channel, "channel-number"),
@@ -702,10 +702,10 @@ final class VavooSessionClient {
             String candidateCountry
     ) {
         String country = countryKey(channelCountry);
-        if (!country.isBlank() && !country.equals(countryKey(candidateCountry))) return false;
+        if (!AppStrings.isBlank(country) && !country.equals(countryKey(candidateCountry))) return false;
         String declaredNumber = channelNumber == null ? "" : channelNumber.trim();
-        if (declaredNumber.isBlank()) declaredNumber = extractNumber(channelName);
-        return declaredNumber.isBlank()
+        if (AppStrings.isBlank(declaredNumber)) declaredNumber = extractNumber(channelName);
+        return AppStrings.isBlank(declaredNumber)
                 || declaredNumber.replaceAll("[^0-9]", "")
                 .equals(extractNumber(candidateName));
     }
@@ -719,7 +719,7 @@ final class VavooSessionClient {
             }
         }
         String name = attribute(channel, "tvg-name");
-        if (name.isBlank()) name = channel.getName();
+        if (AppStrings.isBlank(name)) name = channel.getName();
         String country = countryKey(attribute(channel, "tvg-country"));
         String declaredNumber = firstNonBlank(
                 attribute(channel, "tvg-number"),
@@ -729,14 +729,14 @@ final class VavooSessionClient {
         Target channelTarget = new Target(
                 name,
                 country,
-                declaredNumber.isBlank() ? extractNumber(name) : declaredNumber
+                AppStrings.isBlank(declaredNumber) ? extractNumber(name) : declaredNumber
         );
-        if (!channelTarget.relaxedName.isBlank()) targets.put(channelTarget.key(), channelTarget);
+        if (!AppStrings.isBlank(channelTarget.relaxedName)) targets.put(channelTarget.key(), channelTarget);
         return new ArrayList<>(targets.values());
     }
 
     static Target targetFromAlias(String alias) {
-        if (alias == null || alias.isBlank()) return null;
+        if (alias == null || AppStrings.isBlank(alias)) return null;
         try {
             String decoded = URLDecoder.decode(alias.trim(), StandardCharsets.UTF_8.name());
             if (decoded.regionMatches(true, 0, "vavoo_", 0, 6)) {
@@ -762,14 +762,14 @@ final class VavooSessionClient {
                 }
             }
             Target target = new Target(name, country, number);
-            return target.relaxedName.isBlank() ? null : target;
+            return AppStrings.isBlank(target.relaxedName) ? null : target;
         } catch (Exception ignored) {
             return null;
         }
     }
 
     private void rememberWinningIdentity(Channel channel, String identity) {
-        if (identity == null || identity.isBlank()) return;
+        if (identity == null || AppStrings.isBlank(identity)) return;
         synchronized (stateLock) {
             winningIdentityByChannel.put(channelIdentity(channel), identity.trim());
         }
@@ -784,9 +784,9 @@ final class VavooSessionClient {
 
     private static String channelIdentity(Channel channel) {
         String configured = attribute(channel, "x-resolver-id");
-        if (!configured.isBlank()) return "id:" + configured.toLowerCase(Locale.ROOT);
+        if (!AppStrings.isBlank(configured)) return "id:" + configured.toLowerCase(Locale.ROOT);
         String tvgId = channel == null ? "" : channel.getTvgId();
-        if (tvgId != null && !tvgId.isBlank()) {
+        if (tvgId != null && !AppStrings.isBlank(tvgId)) {
             return "tvg:" + tvgId.trim().toLowerCase(Locale.ROOT);
         }
         return "name:" + (channel == null || channel.getName() == null
@@ -897,7 +897,7 @@ final class VavooSessionClient {
     private static String checkedBase(String value) throws IOException {
         String checked = checkedUrl(value, API_HOSTS, null);
         URI uri = URI.create(checked);
-        if (uri.getPath() != null && !uri.getPath().isBlank() && !"/".equals(uri.getPath())) {
+        if (uri.getPath() != null && !AppStrings.isBlank(uri.getPath()) && !"/".equals(uri.getPath())) {
             throw new IOException("Base Vavoo no permitida.");
         }
         return checked.endsWith("/") ? checked.substring(0, checked.length() - 1) : checked;
@@ -927,12 +927,12 @@ final class VavooSessionClient {
 
     private static String language() {
         String language = Locale.getDefault().getLanguage();
-        return language == null || language.isBlank() ? "en" : language;
+        return language == null || AppStrings.isBlank(language) ? "en" : language;
     }
 
     private static String region() {
         String country = Locale.getDefault().getCountry();
-        return country == null || country.isBlank() ? "US" : country.toUpperCase(Locale.ROOT);
+        return country == null || AppStrings.isBlank(country) ? "US" : country.toUpperCase(Locale.ROOT);
     }
 
     private static String baseCountry(String group) {
@@ -1013,7 +1013,7 @@ final class VavooSessionClient {
     private static String firstNonBlank(String... values) {
         if (values == null) return "";
         for (String value : values) {
-            if (value != null && !value.isBlank()) return value.trim();
+            if (value != null && !AppStrings.isBlank(value)) return value.trim();
         }
         return "";
     }
@@ -1042,11 +1042,11 @@ final class VavooSessionClient {
             this.exactName = normalizedName(name, false);
             this.relaxedName = normalizedName(name, true);
             this.country = country == null ? "" : countryKey(country);
-            this.number = number == null || number.isBlank()
+            this.number = number == null || AppStrings.isBlank(number)
                     ? extractNumber(name)
                     : number.replaceAll("[^0-9]", "");
-            this.countryDeclared = !this.country.isBlank();
-            this.numberDeclared = !this.number.isBlank();
+            this.countryDeclared = !AppStrings.isBlank(this.country);
+            this.numberDeclared = !AppStrings.isBlank(this.number);
         }
 
         String key() {
