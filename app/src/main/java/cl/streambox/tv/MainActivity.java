@@ -79,7 +79,7 @@ public final class MainActivity extends Activity {
     private static final long OVERLAY_TIMEOUT_MS = 4_500;
     private static final long LIGHT_EPG_TIMEOUT_MS = 6_500;
     private static final long PLAYER_RETRY_DELAY_MS = 2_500;
-    private static final long PLAYBACK_STALL_TIMEOUT_MS = 5_000L;
+    private static final long PLAYBACK_FREEZE_TIMEOUT_MS = 5_000L;
     private static final long PLAYBACK_WATCHDOG_INTERVAL_MS = 1_000L;
     private static final long LIVE_FEED_MAX_OFFSET_MS = 30_000L;
     private static final long LIVE_FEED_OFFSET_GRACE_MS = 3_000L;
@@ -432,21 +432,12 @@ public final class MainActivity extends Activity {
                 if (isTemporaryEventChannel(playbackChannel)
                         && currentPlaybackSource != null
                         && currentPlaybackSource.isDynamicallyResolved()
-                        && (isProviderRefreshError(error)
-                        || isAutomaticSourceRecoveryError(error))) {
+                        && isProviderRefreshError(error)) {
                     handleTemporaryEventFailure(playbackChannel, playbackGeneration);
                     return;
                 }
                 if (isProviderRefreshError(error)) {
                     handleProviderAuthorizationFailure();
-                    return;
-                }
-                if (isAutomaticSourceRecoveryError(error)) {
-                    if (hasResolverForPlaybackChannel()) {
-                        handleProviderAuthorizationFailure();
-                    } else {
-                        handleDirectPlaybackFailure();
-                    }
                     return;
                 }
                 MediaItem current = player == null ? null : player.getCurrentMediaItem();
@@ -455,17 +446,18 @@ public final class MainActivity extends Activity {
                     schedulePlaybackRetry(current.mediaId, playbackGeneration);
                     return;
                 }
-                // A generated host can disappear without returning an HTTP
-                // authorization code. After bounded retries of the same URL,
-                // discard it and resolve once more instead of remaining stuck
-                // on an unreachable source forever.
-                if (currentPlaybackSource != null
-                        && currentPlaybackSource.isDynamicallyResolved()
-                        && PlaybackRecoveryPolicy.isRecoverable(error.errorCode)) {
-                    handleProviderAuthorizationFailure();
-                } else {
-                    hideLoadingState();
+                // A transient segment/CDN error gets the same-source retries
+                // above first. Only after that budget is exhausted should a
+                // generated source be discarded and resolved again.
+                if (isAutomaticSourceRecoveryError(error)) {
+                    if (hasResolverForPlaybackChannel()) {
+                        handleProviderAuthorizationFailure();
+                    } else {
+                        handleDirectPlaybackFailure();
+                    }
+                    return;
                 }
+                hideLoadingState();
             }
         });
         schedulePlaybackWatchdog();
@@ -1317,10 +1309,11 @@ public final class MainActivity extends Activity {
             if (playbackLoadingSinceElapsedRealtime < 0L) {
                 playbackLoadingSinceElapsedRealtime = nowMs;
             }
-            if (nowMs - playbackLoadingSinceElapsedRealtime >= PLAYBACK_STALL_TIMEOUT_MS) {
-                requestAutomaticPlaybackRecovery("carga prolongada");
-                return;
-            }
+            // Waiting for a live playlist, its first segment or the decoder
+            // is normal HLS operation. Media3 owns playlist reloads and its
+            // internal load backoff; do not turn five seconds of buffering
+            // into a source/token refresh from the app watchdog.
+            return;
         } else if (state == Player.STATE_READY && hasRenderedVideoFrame()) {
             playbackLoadingSinceElapsedRealtime = -1L;
         }
@@ -1333,7 +1326,7 @@ public final class MainActivity extends Activity {
         if (measurements.hasRenderedVideoFrame
                 && lastFrameNs != androidx.media3.common.C.TIME_UNSET
                 && System.nanoTime() - lastFrameNs
-                >= PLAYBACK_STALL_TIMEOUT_MS * 1_000_000L) {
+                >= PLAYBACK_FREEZE_TIMEOUT_MS * 1_000_000L) {
             requestAutomaticPlaybackRecovery("video detenido");
             return;
         }
@@ -1358,6 +1351,13 @@ public final class MainActivity extends Activity {
         if (playbackAutoRecoveryInFlight || playbackChannel == null) return;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
         liveOffsetExceededSinceElapsedRealtime = -1L;
+        MediaItem current = player == null ? null : player.getCurrentMediaItem();
+        if (current != null && playbackRecoveryEpisode.trySameSourceRecovery()) {
+            // A real post-start freeze or live-edge drift is first recovered
+            // without changing the resolved URL, token or request headers.
+            retryCurrentPlayback(current.mediaId, playbackGeneration);
+            return;
+        }
         if (hasResolverForPlaybackChannel()) {
             handleProviderAuthorizationFailure();
         } else {
@@ -1813,7 +1813,6 @@ public final class MainActivity extends Activity {
         if (player == null || expectedGeneration != playbackGeneration) return;
         MediaItem current = player.getCurrentMediaItem();
         if (current == null || !expectedMediaId.equals(current.mediaId)) return;
-        playbackRecoveryEpisode.reset();
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
         liveOffsetExceededSinceElapsedRealtime = -1L;
         playbackAutoRecoveryInFlight = false;

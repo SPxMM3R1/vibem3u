@@ -50,4 +50,18 @@ public final class PlaybackRecoveryEpisodeTest {
         assertTrue(episode.trySourceReload());
         assertFalse(episode.trySourceReload());
     }
+
+    @Test public void sameSourceRecoveriesAreBoundedAndResetAfterStablePlayback() {
+        PlaybackRecoveryEpisode episode = new PlaybackRecoveryEpisode();
+        assertTrue(episode.trySameSourceRecovery());
+        assertTrue(episode.trySameSourceRecovery());
+        assertFalse(episode.trySameSourceRecovery());
+
+        episode.onPlayingChanged(true, 0L);
+        assertTrue(episode.onPlayingChanged(false, TimeUnit.SECONDS.toNanos(16)));
+
+        assertTrue(episode.trySameSourceRecovery());
+        assertTrue(episode.trySameSourceRecovery());
+        assertFalse(episode.trySameSourceRecovery());
+    }
 }
