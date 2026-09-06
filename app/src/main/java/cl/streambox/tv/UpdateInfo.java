@@ -15,6 +15,19 @@ final class UpdateInfo {
         this.sizeBytes = sizeBytes;
     }
 
+    static UpdateInfo fromCachedApk(String versionName) {
+        String normalized = versionName == null ? "" : versionName.trim();
+        String tagName = normalized.startsWith("v") ? normalized : "v" + normalized;
+        URI downloadUri = URI.create(
+                "https://github.com/SPxMM3R1/vibem3u/releases/download/"
+                        + tagName
+                        + "/VibeM3U-"
+                        + tagName
+                        + ".apk"
+        );
+        return new UpdateInfo(tagName, normalized, downloadUri, 0L);
+    }
+
     String getTagName() {
         return tagName;
     }

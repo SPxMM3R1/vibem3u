@@ -29,6 +29,13 @@ final class UpdateRepository {
         void onProgress(int percent);
     }
 
+    File completedApk(File cacheDirectory) {
+        return new File(
+                new File(cacheDirectory, "updates"),
+                "VibeM3U-update.apk"
+        );
+    }
+
     UpdateInfo findAvailableUpdate(String currentVersionName) throws Exception {
         HttpURLConnection connection = openConnection(LATEST_RELEASE_URI);
         connection.setRequestProperty("Accept", "application/vnd.github+json");
@@ -85,7 +92,7 @@ final class UpdateRepository {
         }
 
         File partial = new File(updateDirectory, "VibeM3U-update.apk.part");
-        File completed = new File(updateDirectory, "VibeM3U-update.apk");
+        File completed = completedApk(cacheDirectory);
         if (partial.exists() && !partial.delete()) {
             throw new IOException("No se pudo limpiar la descarga anterior.");
         }

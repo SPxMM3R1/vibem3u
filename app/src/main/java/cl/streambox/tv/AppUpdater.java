@@ -2,15 +2,20 @@ package cl.streambox.tv;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.app.DownloadManager;
 import android.content.ClipData;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
+import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
 import android.os.Handler;
 import android.provider.Settings;
 import android.view.View;
@@ -30,6 +35,10 @@ import java.util.concurrent.ExecutorService;
 
 final class AppUpdater {
     static final int UNKNOWN_SOURCES_REQUEST = 1002;
+    private static final String DOWNLOAD_PREFS = "vibem3u_update_download";
+    private static final String DOWNLOAD_ID_KEY = "download_id";
+    private static final String DOWNLOAD_FILE_KEY = "download_file";
+    private static final long NO_DOWNLOAD_ID = -1L;
 
     private final Activity activity;
     private final ExecutorService executor;
@@ -47,6 +56,7 @@ final class AppUpdater {
     private boolean awaitingUnknownSources;
     private boolean hostResumed;
     private boolean destroyed;
+    private boolean deferredThisSession;
 
     AppUpdater(Activity activity, ExecutorService executor, Handler mainHandler) {
         this.activity = activity;
@@ -79,13 +89,30 @@ final class AppUpdater {
                 mainHandler.post(() -> {
                     manualCheckInProgress = false;
                     if (destroyed) return;
+                    if (update != null) availableUpdate = update;
+                    restorePendingApk();
                     if (update == null) {
-                        if (listener != null) listener.onUpToDate();
+                        if (listener != null) {
+                            if (availableUpdate != null) {
+                                listener.onUpdateAvailable(availableUpdate);
+                            } else {
+                                listener.onUpToDate();
+                            }
+                        }
+                        if (availableUpdate != null
+                                && !deferredThisSession
+                                && updateDialog == null
+                                && canPresentDialog()) {
+                            showUpdateDialog(availableUpdate, null);
+                        }
                         return;
                     }
-                    availableUpdate = update;
                     if (listener != null) listener.onUpdateAvailable(update);
-                    if (canPresentDialog()) showUpdateDialog(update, null);
+                    if (canPresentDialog()
+                            && !deferredThisSession
+                            && updateDialog == null) {
+                        showUpdateDialog(update, null);
+                    }
                 });
             } catch (Exception error) {
                 mainHandler.post(() -> {
@@ -113,6 +140,7 @@ final class AppUpdater {
 
     void onHostResume() {
         hostResumed = true;
+        restorePendingApk();
         if (awaitingUnknownSources && pendingApk != null && pendingApk.isFile()) {
             awaitingUnknownSources = false;
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O
@@ -135,9 +163,9 @@ final class AppUpdater {
             deferredDialogMessage = null;
             showUpdateDialog(availableUpdate, message);
         } else if (availableUpdate != null
-                && pendingApk == null
                 && updateDialog == null
-                && !downloading) {
+                && !downloading
+                && !deferredThisSession) {
             showUpdateDialog(availableUpdate, null);
         }
     }
@@ -173,7 +201,13 @@ final class AppUpdater {
                 ? activity.getString(R.string.update_available, update.getVersionName())
                 : statusMessage);
         progress.setVisibility(View.GONE);
-        laterButton.setOnClickListener(view -> dialog.dismiss());
+        laterButton.setOnClickListener(view -> {
+            deferredThisSession = true;
+            dialog.dismiss();
+            if (pendingApk == null || !pendingApk.isFile()) {
+                downloadInBackground(update);
+            }
+        });
         installButton.setOnClickListener(view -> {
             if (pendingApk != null && pendingApk.isFile()) {
                 installRequested = true;
@@ -209,6 +243,7 @@ final class AppUpdater {
             Button installButton
     ) {
         if (downloading) return;
+        clearDeferredDownload(true);
         downloading = true;
         installRequested = true;
         progress.setIndeterminate(update.getSizeBytes() <= 0);
@@ -255,6 +290,163 @@ final class AppUpdater {
                 });
             }
         });
+    }
+
+    private void downloadInBackground(UpdateInfo update) {
+        if (downloading || destroyed || update == null) return;
+        if (pendingApk != null && pendingApk.isFile()) return;
+
+        if (enqueueDeferredDownload(update)) {
+            downloading = true;
+            return;
+        }
+
+        downloading = true;
+        executor.submit(() -> {
+            try {
+                File apk = repository.download(update, activity.getCacheDir(), percent -> {});
+                verifyDownloadedApk(apk);
+                mainHandler.post(() -> {
+                    downloading = false;
+                    if (destroyed) return;
+                    pendingApk = apk;
+                });
+            } catch (Exception ignored) {
+                mainHandler.post(() -> downloading = false);
+            }
+        });
+    }
+
+    private boolean enqueueDeferredDownload(UpdateInfo update) {
+        DownloadManager manager = downloadManager();
+        if (manager == null || update.getDownloadUri() == null) return false;
+
+        File downloadDirectory = activity.getExternalFilesDir(
+                Environment.DIRECTORY_DOWNLOADS
+        );
+        if (downloadDirectory == null) return false;
+
+        String fileName = deferredDownloadFileName(update);
+        File destination = new File(downloadDirectory, fileName);
+        try {
+            clearDeferredDownload(true);
+            if (destination.isFile() && !destination.delete()) return false;
+
+            DownloadManager.Request request = new DownloadManager.Request(
+                    Uri.parse(update.getDownloadUri().toString())
+            );
+            request.setTitle(activity.getString(R.string.app_name));
+            request.setDescription(
+                    activity.getString(R.string.update_downloading_background)
+            );
+            request.setMimeType("application/vnd.android.package-archive");
+            request.setNotificationVisibility(
+                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+            );
+            request.setAllowedOverMetered(true);
+            request.setAllowedOverRoaming(false);
+            request.setDestinationInExternalFilesDir(
+                    activity,
+                    Environment.DIRECTORY_DOWNLOADS,
+                    fileName
+            );
+
+            long downloadId = manager.enqueue(request);
+            updateDownloadPreferences().edit()
+                    .putLong(DOWNLOAD_ID_KEY, downloadId)
+                    .putString(DOWNLOAD_FILE_KEY, fileName)
+                    .apply();
+            return true;
+        } catch (Exception ignored) {
+            clearDeferredDownload(true);
+            return false;
+        }
+    }
+
+    private File findCompletedDeferredDownload() {
+        SharedPreferences preferences = updateDownloadPreferences();
+        long downloadId = preferences.getLong(DOWNLOAD_ID_KEY, NO_DOWNLOAD_ID);
+        String fileName = preferences.getString(DOWNLOAD_FILE_KEY, "");
+        if (downloadId == NO_DOWNLOAD_ID || AppStrings.isBlank(fileName)) return null;
+
+        File downloadDirectory = activity.getExternalFilesDir(
+                Environment.DIRECTORY_DOWNLOADS
+        );
+        if (downloadDirectory == null) return null;
+        File destination = new File(downloadDirectory, fileName);
+        DownloadManager manager = downloadManager();
+        if (manager == null) return destination.isFile() ? destination : null;
+
+        try (Cursor cursor = manager.query(
+                new DownloadManager.Query().setFilterById(downloadId)
+        )) {
+            if (cursor == null || !cursor.moveToFirst()) {
+                clearDeferredDownload(false);
+                return destination.isFile() ? destination : null;
+            }
+            int status = cursor.getInt(cursor.getColumnIndexOrThrow(
+                    DownloadManager.COLUMN_STATUS
+            ));
+            if (status == DownloadManager.STATUS_SUCCESSFUL && destination.isFile()) {
+                downloading = false;
+                return destination;
+            }
+            if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                clearDeferredDownload(true);
+                return null;
+            }
+            if (status == DownloadManager.STATUS_FAILED) {
+                clearDeferredDownload(true);
+            }
+            return null;
+        } catch (Exception ignored) {
+            return destination.isFile() ? destination : null;
+        }
+    }
+
+    private DownloadManager downloadManager() {
+        Object service = activity.getSystemService(Context.DOWNLOAD_SERVICE);
+        return service instanceof DownloadManager ? (DownloadManager) service : null;
+    }
+
+    private SharedPreferences updateDownloadPreferences() {
+        return activity.getSharedPreferences(DOWNLOAD_PREFS, Context.MODE_PRIVATE);
+    }
+
+    private void clearDeferredDownload(boolean deleteFile) {
+        SharedPreferences preferences = updateDownloadPreferences();
+        long downloadId = preferences.getLong(DOWNLOAD_ID_KEY, NO_DOWNLOAD_ID);
+        String fileName = preferences.getString(DOWNLOAD_FILE_KEY, "");
+        DownloadManager manager = downloadManager();
+        if (manager != null && downloadId != NO_DOWNLOAD_ID) {
+            try {
+                manager.remove(downloadId);
+            } catch (Exception ignored) {
+                // The system download may already have been removed.
+            }
+        }
+        if (deleteFile && !AppStrings.isBlank(fileName)) {
+            File directory = activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+            if (directory != null) {
+                File file = new File(directory, fileName);
+                if (file.isFile()) file.delete();
+            }
+        }
+        preferences.edit().clear().apply();
+    }
+
+    private boolean isDeferredDownloadFile(File file) {
+        if (file == null) return false;
+        String fileName = updateDownloadPreferences().getString(DOWNLOAD_FILE_KEY, "");
+        File directory = activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+        if (directory == null || AppStrings.isBlank(fileName)) return false;
+        return new File(directory, fileName).getAbsoluteFile().equals(file.getAbsoluteFile());
+    }
+
+    private static String deferredDownloadFileName(UpdateInfo update) {
+        String tag = update.getTagName() == null ? "update" : update.getTagName();
+        String safeTag = tag.replaceAll("[^A-Za-z0-9._-]", "_");
+        return "VibeM3U-" + safeTag + ".apk";
     }
 
     private void requestInstallPermissionOrLaunch() {
@@ -315,7 +507,46 @@ final class AppUpdater {
         }
     }
 
-    private void verifyDownloadedApk(File apk) throws Exception {
+    private void restorePendingApk() {
+        File cached = pendingApk != null
+                ? pendingApk
+                : repository.completedApk(activity.getCacheDir());
+        if (!cached.isFile()) cached = findCompletedDeferredDownload();
+        if (cached == null || !cached.isFile()) {
+            pendingApk = null;
+            return;
+        }
+
+        try {
+            String cachedVersion = verifyDownloadedApk(cached);
+            if (availableUpdate != null
+                    && UpdateRepository.isNewerVersion(
+                    availableUpdate.getVersionName(),
+                    cachedVersion
+            )) {
+                if (isDeferredDownloadFile(cached)) {
+                    clearDeferredDownload(true);
+                } else if (!cached.delete() && cached.isFile()) {
+                    return;
+                }
+                pendingApk = null;
+                return;
+            }
+            pendingApk = cached;
+            if (availableUpdate == null) {
+                availableUpdate = UpdateInfo.fromCachedApk(cachedVersion);
+            }
+        } catch (Exception ignored) {
+            if (isDeferredDownloadFile(cached)) {
+                clearDeferredDownload(true);
+            } else if (cached.isFile()) {
+                cached.delete();
+            }
+            pendingApk = null;
+        }
+    }
+
+    private String verifyDownloadedApk(File apk) throws Exception {
         PackageManager packageManager = activity.getPackageManager();
         int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
                 ? PackageManager.GET_SIGNING_CERTIFICATES
@@ -342,6 +573,7 @@ final class AppUpdater {
         if (installedSigners.isEmpty() || !installedSigners.equals(candidateSigners)) {
             throw new SecurityException("La firma del APK no coincide con la instalación.");
         }
+        return candidate.versionName == null ? "" : candidate.versionName.trim();
     }
 
     private static Set<String> signerDigests(PackageInfo packageInfo) throws Exception {

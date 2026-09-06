@@ -101,6 +101,7 @@
     <string name="update_later">Más tarde</string>
     <string name="update_now">Actualizar</string>
     <string name="update_downloading">Descargando… %1$d%%</string>
+    <string name="update_downloading_background">Descargando actualización para instalarla al próximo inicio.</string>
     <string name="update_download_error">No se pudo actualizar: %1$s</string>
     <string name="update_permission_required">Activa “Permitir desde esta fuente” y vuelve para continuar.</string>
     <string name="update_permission_unavailable">Abre los ajustes del sistema y permite que VibeM3U instale aplicaciones.</string>
