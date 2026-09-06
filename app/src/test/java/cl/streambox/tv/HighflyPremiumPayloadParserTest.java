@@ -3,6 +3,7 @@ package cl.streambox.tv;
 import org.junit.Test;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -170,7 +171,7 @@ public final class HighflyPremiumPayloadParserTest {
     @Test
     public void ranksHigherResolutionAndBitrateAboveLowerQualityStreams() throws Exception {
         List<HighflyPremiumPayloadParser.StreamCandidate> candidates =
-                HighflyPremiumPayloadParser.parseStreams(
+                new ArrayList<>(HighflyPremiumPayloadParser.parseStreams(
                         "{\"streams\":["
                                 + "{\"title\":\"720p · 3 Mbps\","
                                 + "\"url\":\"https://leaf.highfly.dev/live/720.m3u8\"},"
@@ -178,7 +179,7 @@ public final class HighflyPremiumPayloadParserTest {
                                 + "\"url\":\"https://leaf.highfly.dev/live/1080.m3u8\"},"
                                 + "{\"title\":\"4K UHD · 12 Mbps\","
                                 + "\"url\":\"https://leaf.highfly.dev/live/2160.m3u8\"}]}"
-                );
+                ));
 
         HighflyPremiumCatalogRepository.sortCandidates(
                 candidates,
