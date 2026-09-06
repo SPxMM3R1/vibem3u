@@ -81,8 +81,6 @@ public final class MainActivity extends Activity {
     private static final long PLAYER_RETRY_DELAY_MS = 2_500;
     private static final long PLAYBACK_FREEZE_TIMEOUT_MS = 5_000L;
     private static final long PLAYBACK_WATCHDOG_INTERVAL_MS = 1_000L;
-    private static final long LIVE_FEED_MAX_OFFSET_MS = 30_000L;
-    private static final long LIVE_FEED_OFFSET_GRACE_MS = 3_000L;
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
     private static final long NO_RESOLUTION_REQUEST = -1L;
     private static final int PREMIUM_STABLE_SOURCE_POSITION = 3;
@@ -175,7 +173,6 @@ public final class MainActivity extends Activity {
     private Runnable scheduledPlaybackRetry;
     private boolean playbackWatchdogScheduled;
     private long playbackLoadingSinceElapsedRealtime = -1L;
-    private long liveOffsetExceededSinceElapsedRealtime = -1L;
     private boolean playbackAutoRecoveryInFlight;
     private boolean playbackRecoveryFailed;
     private Future<?> playbackResolutionTask;
@@ -382,7 +379,6 @@ public final class MainActivity extends Activity {
                     } else if (playbackLoadingSinceElapsedRealtime < 0L) {
                         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
                     }
-                    liveOffsetExceededSinceElapsedRealtime = -1L;
                     hideLoadingState();
                 } else if (playbackState == Player.STATE_BUFFERING) {
                     if (playbackLoadingSinceElapsedRealtime < 0L) {
@@ -423,7 +419,6 @@ public final class MainActivity extends Activity {
                 settlePlaybackEpisode(false);
                 startupMetrics.failed(startupMetrics.currentId());
                 playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
-                liveOffsetExceededSinceElapsedRealtime = -1L;
                 setStatus("ERROR", R.color.red);
                 codecInfo.setText(shortMessage(error));
                 overlayAwaitingPlayback = true;
@@ -1227,7 +1222,6 @@ public final class MainActivity extends Activity {
         Channel channel = channels.get(channelIndex);
         playbackGeneration++;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
-        liveOffsetExceededSinceElapsedRealtime = -1L;
         playbackAutoRecoveryInFlight = false;
         playbackRecoveryFailed = false;
         resetPlaybackBitrateMeter();
@@ -1331,30 +1325,15 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        long liveOffsetMs = player.isCommandAvailable(Player.COMMAND_GET_CURRENT_MEDIA_ITEM)
-                ? player.getCurrentLiveOffset()
-                : androidx.media3.common.C.TIME_UNSET;
-        if (liveOffsetMs != androidx.media3.common.C.TIME_UNSET
-                && liveOffsetMs >= LIVE_FEED_MAX_OFFSET_MS) {
-            if (liveOffsetExceededSinceElapsedRealtime < 0L) {
-                liveOffsetExceededSinceElapsedRealtime = nowMs;
-            }
-            if (nowMs - liveOffsetExceededSinceElapsedRealtime >= LIVE_FEED_OFFSET_GRACE_MS) {
-                requestAutomaticPlaybackRecovery("feed retrasado");
-            }
-        } else {
-            liveOffsetExceededSinceElapsedRealtime = -1L;
-        }
     }
 
     private void requestAutomaticPlaybackRecovery(String reason) {
         if (playbackAutoRecoveryInFlight || playbackChannel == null) return;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
-        liveOffsetExceededSinceElapsedRealtime = -1L;
         MediaItem current = player == null ? null : player.getCurrentMediaItem();
         if (current != null && playbackRecoveryEpisode.trySameSourceRecovery()) {
-            // A real post-start freeze or live-edge drift is first recovered
-            // without changing the resolved URL, token or request headers.
+            // A real post-start video freeze is first recovered without
+            // changing the resolved URL, token or request headers.
             retryCurrentPlayback(current.mediaId, playbackGeneration);
             return;
         }
@@ -1555,7 +1534,6 @@ public final class MainActivity extends Activity {
         cancelScheduledPlaybackRetry();
         resetPlaybackBitrateMeter();
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
-        liveOffsetExceededSinceElapsedRealtime = -1L;
         playbackAutoRecoveryInFlight = false;
         playbackRecoveryFailed = false;
         activePlaybackSourceRequestId = source.isDynamicallyResolved()
@@ -1800,7 +1778,6 @@ public final class MainActivity extends Activity {
         playbackAutoRecoveryInFlight = false;
         playbackRecoveryFailed = true;
         playbackLoadingSinceElapsedRealtime = -1L;
-        liveOffsetExceededSinceElapsedRealtime = -1L;
         startupMetrics.failed(startupMetrics.currentId());
         setStatus("ERROR", R.color.red);
         codecInfo.setText("Canal no disponible");
@@ -1814,7 +1791,6 @@ public final class MainActivity extends Activity {
         MediaItem current = player.getCurrentMediaItem();
         if (current == null || !expectedMediaId.equals(current.mediaId)) return;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
-        liveOffsetExceededSinceElapsedRealtime = -1L;
         playbackAutoRecoveryInFlight = false;
         playbackRecoveryFailed = false;
         beginStartupMeasurement(playbackChannel, PlaybackStartupMetrics.Reason.RETRY);
