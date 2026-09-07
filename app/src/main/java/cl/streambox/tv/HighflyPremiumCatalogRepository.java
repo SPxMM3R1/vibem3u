@@ -21,7 +21,8 @@ import java.util.regex.Pattern;
 /**
  * Reads the Highfly Premium Stremio catalogue when temporary events need to be
  * shown and resolves short-lived streams at playback time. Stable channel
- * metadata comes from Lista 3/GitHub and is cached by PlaylistRepository;
+ * metadata comes from the configured M3U/GitHub source and is cached by
+ * PlaylistRepository;
  * manifests, signed URLs and the credential are never written to a resource
  * cache.
  */
@@ -267,7 +268,7 @@ public final class HighflyPremiumCatalogRepository {
         String streamId;
         String sourceIdentity;
         if (isPremiumStableChannel(channel)) {
-            // Lista 3 already contains the complete stable membership and the
+            // The stable M3U entry already contains the complete membership and
             // slug. Do not query the protected catalogue just to rediscover
             // metadata; use the credential only for this playback request.
             String stableSlug = stableSlug(channel);
@@ -382,10 +383,27 @@ public final class HighflyPremiumCatalogRepository {
     }
 
     public boolean isPremiumStableChannel(Channel channel) {
-        return "true".equalsIgnoreCase(attribute(channel, "x-highfly-premium-stable"))
-                && "estable".equalsIgnoreCase(attribute(channel, "x-highfly-premium-kind"))
-                && "3".equals(attribute(channel, "x-highfly-premium-list"))
-                && !AppStrings.isBlank(attribute(channel, "x-highfly-premium-id"));
+        if (!"highfly".equalsIgnoreCase(attribute(channel, "x-resolver"))) return false;
+        if (isVirtualChannel(channel)
+                || "evento".equalsIgnoreCase(attribute(channel, "x-highfly-premium-kind"))) {
+            return false;
+        }
+
+        String resolverId = attribute(channel, "x-resolver-id");
+        boolean explicitlyStable =
+                "true".equalsIgnoreCase(attribute(channel, "x-highfly-premium-stable"))
+                        && !AppStrings.isBlank(resolverId)
+                        && ("estable".equalsIgnoreCase(
+                        attribute(channel, "x-highfly-premium-kind"))
+                        || AppStrings.isBlank(attribute(channel, "x-highfly-premium-kind")));
+        if (explicitlyStable) return true;
+
+        // Lista 1 may carry stable Premium entries directly. Its explicit
+        // HighflyPremium tvg-id is a stable identity marker, while ordinary
+        // Highfly channels keep their normal provider tvg-id and remain on
+        // the public leaf resolver path.
+        String tvgId = attribute(channel, "tvg-id").toLowerCase(Locale.ROOT);
+        return tvgId.startsWith("highflypremium.") && !AppStrings.isBlank(resolverId);
     }
 
     private static String stableSlug(Channel channel) throws IOException {

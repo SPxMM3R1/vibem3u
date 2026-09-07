@@ -9,7 +9,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/** Flattens ordinary sources, public stable Lista 3 and virtual Lista 4 events. */
+/** Flattens ordinary sources, stable Premium metadata and virtual events. */
 final class HighflyPremiumPlaylistMerger {
     private HighflyPremiumPlaylistMerger() {}
 

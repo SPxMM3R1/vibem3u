@@ -116,7 +116,7 @@ public final class HighflyStreamResolver implements StreamResolver {
                                 : ResolutionStage.SOURCE_REQUEST,
                         temporaryEvent
                                 ? "Consultando catálogo Premium · verificando evento"
-                                : "Solicitando fuente Premium · usando slug de Lista 3"
+                                : "Solicitando fuente Premium · usando slug estable"
                 ));
                 try {
                     return premiumCatalogRepository.resolve(channel, progress);
