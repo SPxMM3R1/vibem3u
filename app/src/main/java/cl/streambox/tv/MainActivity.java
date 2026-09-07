@@ -173,6 +173,7 @@ public final class MainActivity extends Activity {
     private Runnable scheduledPlaybackRetry;
     private boolean playbackWatchdogScheduled;
     private long playbackLoadingSinceElapsedRealtime = -1L;
+    private boolean playbackHasStarted;
     private boolean playbackAutoRecoveryInFlight;
     private boolean playbackRecoveryFailed;
     private Future<?> playbackResolutionTask;
@@ -375,6 +376,7 @@ public final class MainActivity extends Activity {
                 updateDiagnostics();
                 if (playbackState == Player.STATE_READY && !loadFailed) {
                     if (hasRenderedVideoFrame()) {
+                        playbackHasStarted = true;
                         playbackLoadingSinceElapsedRealtime = -1L;
                     } else if (playbackLoadingSinceElapsedRealtime < 0L) {
                         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
@@ -1222,6 +1224,7 @@ public final class MainActivity extends Activity {
         Channel channel = channels.get(channelIndex);
         playbackGeneration++;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
+        playbackHasStarted = false;
         playbackAutoRecoveryInFlight = false;
         playbackRecoveryFailed = false;
         resetPlaybackBitrateMeter();
@@ -1292,23 +1295,40 @@ public final class MainActivity extends Activity {
 
         long nowMs = SystemClock.elapsedRealtime();
         int state = player.getPlaybackState();
-        boolean waitingForStart = playbackResolutionTask != null
-                || state == Player.STATE_IDLE
+        boolean renderedFrame = hasRenderedVideoFrame();
+        if (renderedFrame) playbackHasStarted = true;
+        boolean waitingWithoutFrames = state == Player.STATE_IDLE
                 || state == Player.STATE_BUFFERING
                 || (state == Player.STATE_READY
                 && player.isPlaying()
                 && player.getVideoFormat() != null
-                && !hasRenderedVideoFrame());
-        if (waitingForStart) {
+                && !renderedFrame);
+        if (playbackResolutionTask != null) {
+            // The resolver has its own bounded HTTP timeout. Do not start a
+            // second recovery while a fresh Premium source is still being
+            // requested.
             if (playbackLoadingSinceElapsedRealtime < 0L) {
                 playbackLoadingSinceElapsedRealtime = nowMs;
             }
-            // Waiting for a live playlist, its first segment or the decoder
-            // is normal HLS operation. Media3 owns playlist reloads and its
-            // internal load backoff; do not turn five seconds of buffering
-            // into a source/token refresh from the app watchdog.
             return;
-        } else if (state == Player.STATE_READY && hasRenderedVideoFrame()) {
+        }
+        if (waitingWithoutFrames) {
+            if (playbackLoadingSinceElapsedRealtime < 0L) {
+                playbackLoadingSinceElapsedRealtime = nowMs;
+            }
+            // Startup buffering belongs to Media3. Once this channel has
+            // rendered a frame, the same state means a post-start stall and
+            // must not wait forever for Media3 to emit a fatal error.
+            if (playbackHasStarted
+                    && PlaybackStallPolicy.isExpired(
+                    playbackLoadingSinceElapsedRealtime,
+                    nowMs,
+                    PLAYBACK_FREEZE_TIMEOUT_MS
+            )) {
+                requestAutomaticPlaybackRecovery("carga prolongada");
+            }
+            return;
+        } else if (state == Player.STATE_READY && renderedFrame) {
             playbackLoadingSinceElapsedRealtime = -1L;
         }
 
