@@ -631,9 +631,9 @@ public final class MainActivity extends Activity {
             }
         }
 
-        // Stable Premium channels arrive through the cached/public Lista 3
-        // source. The protected catalog is needed only when the user opted
-        // into temporary events; keep it independent from ordinary lists.
+        // Stable Premium channels arrive through the cached/public M3U source.
+        // The protected catalog is needed only when the user opted into
+        // temporary events; keep it independent from ordinary lists.
         if (premiumIncludeEvents && highflyPremiumCatalogRepository != null && networkAvailable) {
             refresh.pendingPremium = true;
             networkExecutor.submit(() -> {
@@ -688,9 +688,9 @@ public final class MainActivity extends Activity {
         if (!refresh.pendingPremium) return;
         refresh.pendingPremium = false;
         if (result.playlists != null) {
-            // Lista 3 is the remote public playlist already loaded above. Only
-            // Lista 4 is reconstructed from the protected catalog and kept in
-            // memory.
+            // The public stable playlist was already loaded above. Only the
+            // selected temporary events are reconstructed from the protected
+            // catalog and kept in memory.
             refresh.latest.remove(PREMIUM_EVENT_SOURCE_POSITION);
             Playlist events = result.playlists.getEventPlaylist();
             if (events != null && !events.getChannels().isEmpty()) {
@@ -1060,10 +1060,9 @@ public final class MainActivity extends Activity {
 
     /**
      * Flattens the configured sources and keeps the virtual Premium lists in
-     * their user-facing positions. Stable Premium entries replace an exact
-     * Highfly slot when the M3U exposes the same resolver ID; newly discovered
-     * stable entries are appended as Lista 3. Selected events are always
-     * appended after every other source as Lista 4.
+     * their user-facing positions. Stable Premium entries from the public M3U
+     * replace an exact Highfly slot when the same resolver ID is exposed;
+     * selected temporary events are appended after every other source.
      */
     private List<Channel> buildOrderedChannelList(Map<Integer, Playlist> playlists) {
         return HighflyPremiumPlaylistMerger.merge(

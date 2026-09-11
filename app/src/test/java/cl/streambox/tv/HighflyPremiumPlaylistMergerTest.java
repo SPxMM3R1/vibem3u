@@ -107,7 +107,7 @@ public final class HighflyPremiumPlaylistMergerTest {
                 name,
                 URI.create("https://leaf.highfly.dev/m3u/" + resolverId + "/live.m3u8"),
                 null,
-                "Lista " + ("evento".equals(kind) ? "4" : "3"),
+                "evento".equals(kind) ? "Eventos temporales" : "Deportes",
                 attrs
         );
     }

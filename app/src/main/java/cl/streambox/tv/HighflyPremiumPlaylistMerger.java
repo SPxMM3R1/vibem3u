@@ -78,8 +78,8 @@ final class HighflyPremiumPlaylistMerger {
             }
         }
 
-        // New stable entries have no old M3U slot. Keep them in catalog order
-        // after the ordinary sources and before Lista 4 events.
+        // New stable entries have no old M3U slot. Keep them in the public
+        // source order after the ordinary sources and before temporary events.
         for (Map.Entry<String, Channel> entry : premiumByKey.entrySet()) {
             if (!consumedPremiumKeys.contains(entry.getKey())) {
                 merged.add(entry.getValue());

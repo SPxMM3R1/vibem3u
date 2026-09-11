@@ -40,7 +40,7 @@
     <string name="settings_title">Opciones</string>
     <string name="settings_description">Organiza la fuente, la reproducción, el audio y las actualizaciones desde un solo lugar.</string>
     <string name="settings_source_title">Fuente de canales</string>
-    <string name="settings_source_description">Activa una o dos listas M3U. La lista 1 aparece primero y la lista 2 continúa con la numeración correlativa. La Lista 3 estable de Highfly se sincroniza desde GitHub y la Lista 4 se reserva para eventos temporales seleccionados.</string>
+    <string name="settings_source_description">Activa una o dos listas M3U. La lista 1 aparece primero y la lista 2 continúa con la numeración correlativa. Los canales estables de Highfly llegan desde su fuente pública y los eventos temporales se pueden seleccionar por separado.</string>
     <string name="settings_playback_title">Reproducción</string>
     <string name="playlist_url_hint">https://ejemplo.com/lista.m3u</string>
     <string name="playlist_url_2_hint">https://ejemplo.com/segunda-lista.m3u</string>
@@ -52,10 +52,10 @@
     <string name="exit">Salir</string>
     <string name="cancel">Cancelar</string>
     <string name="url_required">Ingresa una URL http:// o https:// válida.</string>
-    <string name="playlist_source_required">Activa al menos una lista M3U o la Lista 3 Premium.</string>
-    <string name="highfly_premium_title">Lista 3 · Highfly Premium</string>
-    <string name="highfly_premium_description">Activa la Lista 3 estable generada por el runner de GitHub. La app muestra su copia cacheada de inmediato y la actualiza en segundo plano; la credencial se conserva cifrada y el token de reproducción se renueva al abrir cada canal. Los eventos seleccionados se agregan aparte en la Lista 4 temporal.</string>
-    <string name="highfly_premium_enabled">Lista 3 · canales estables Premium</string>
+    <string name="playlist_source_required">Activa al menos una lista M3U o configura Highfly Premium.</string>
+    <string name="highfly_premium_title">Highfly Premium</string>
+    <string name="highfly_premium_description">Los canales estables llegan desde la fuente pública mantenida por el flujo de listas. La app muestra su copia cacheada de inmediato y la actualiza en segundo plano; la credencial se conserva cifrada y el token de reproducción se renueva al abrir cada canal. Los eventos temporales seleccionados se agregan aparte.</string>
+    <string name="highfly_premium_enabled">Canales estables Premium</string>
     <string name="highfly_premium_token_hint">Token Premium · se oculta después de verificarlo</string>
     <string name="highfly_premium_token_saved_hint">Credencial Premium guardada · escribe solo para reemplazarla</string>
     <string name="highfly_premium_token_feedback_verified">✓ Verificado</string>
@@ -74,7 +74,7 @@
     <string name="highfly_premium_region_us1">US-1</string>
     <string name="highfly_premium_region_us2">US-2</string>
     <string name="highfly_premium_region_eu1">Europa</string>
-    <string name="highfly_premium_include_events">Lista 4 · incluir eventos temporales seleccionados</string>
+    <string name="highfly_premium_include_events">Incluir eventos temporales seleccionados</string>
     <string name="highfly_premium_events_description">Consulta el catálogo y marca los eventos que quieras agregar. Solo los seleccionados se anexan al final de todas las listas.</string>
     <string name="highfly_premium_event_selection_title">Eventos temporales disponibles</string>
     <string name="highfly_premium_sort_title">Selección de fuente</string>
@@ -87,11 +87,11 @@
     <string name="highfly_premium_catalog_summary">%1$d estables · %2$d eventos · %3$d no compatibles</string>
     <string name="highfly_premium_catalog_empty">Todavía no se ha consultado el catálogo.</string>
     <string name="highfly_premium_events_empty">No hay eventos temporales publicados ahora.</string>
-    <string name="highfly_premium_token_required">La Lista 3 requiere un token Premium verificado.</string>
+    <string name="highfly_premium_token_required">Highfly Premium requiere un token verificado.</string>
     <string name="highfly_premium_token_verify_required">Verifica el token Premium antes de guardar.</string>
     <string name="loading_premium_catalog">Consultando catálogo Premium…</string>
     <string name="loading_premium_event_reconnecting">Reconectando fuente Premium · intento %1$d/%2$d…</string>
-    <string name="highfly_premium_event_removed">Evento retirado de Lista 4 · fuente no disponible</string>
+    <string name="highfly_premium_event_removed">Evento temporal retirado · fuente no disponible</string>
     <string name="channel_controls_title">Cambio de canales</string>
     <string name="invert_channel_keys">Invertir botones arriba y abajo</string>
     <string name="invert_channel_keys_description">Activado: ↑ avanza al canal siguiente y ↓ vuelve al anterior.</string>

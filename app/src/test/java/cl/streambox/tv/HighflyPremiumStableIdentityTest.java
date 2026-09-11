@@ -46,7 +46,7 @@ public final class HighflyPremiumStableIdentityTest {
                 "Sky Sports F1 UHD",
                 URI.create("https://leaf.highfly.dev/m3u/now-sky-sports-f1-2/live.m3u8"),
                 null,
-                "Lista 3",
+                "Deportes",
                 attributes
         );
 
@@ -79,16 +79,16 @@ public final class HighflyPremiumStableIdentityTest {
         attributes.put("x-highfly-premium", "true");
         attributes.put("x-highfly-premium-virtual", "true");
         attributes.put("x-highfly-premium-kind", "evento");
-        attributes.put("x-highfly-premium-list", "4");
         attributes.put("x-highfly-premium-id", "event-123");
         Channel channel = new Channel(
                 "Evento Premium",
                 URI.create("https://premium.highfly.dev/premium-event/event.m3u8"),
                 null,
-                "Lista 4",
+                "Eventos temporales",
                 attributes
         );
 
         assertFalse(repository().isPremiumStableChannel(channel));
+        assertTrue(repository().isVirtualChannel(channel));
     }
 }

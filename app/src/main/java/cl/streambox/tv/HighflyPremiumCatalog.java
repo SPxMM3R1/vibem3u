@@ -64,53 +64,23 @@ public final class HighflyPremiumCatalog {
     }
 
     /**
-     * Compatibility view containing stable entries and, when requested, every
-     * event. The application uses {@link #toStablePlaylist()} and
-     * {@link #toEventsPlaylist(Set)} to keep Lista 3 and Lista 4 separate.
-     */
-    public Playlist toPlaylist(boolean includeEvents) {
-        LinkedHashMap<String, Boolean> selectedEvents = new LinkedHashMap<>();
-        if (includeEvents) {
-            for (Entry entry : entries) {
-                if (entry.getType() == EntryType.TEMPORARY_EVENT) {
-                    selectedEvents.put(entry.getId(), Boolean.TRUE);
-                }
-            }
-        }
-        return buildPlaylist(true, includeEvents, selectedEvents.keySet());
-    }
-
-    /** Creates Lista 3: every stable Premium channel, without events. */
-    public Playlist toStablePlaylist() {
-        return buildPlaylist(true, false, Collections.emptySet());
-    }
-
-    /**
-     * Creates Lista 4 from the exact event identities selected by the user.
-     * A stale or unknown selection simply produces no channel; it can never
-     * turn an arbitrary value into a provider URL.
+     * Creates the temporary-event playlist from the exact identities selected
+     * by the user. Stable channels are deliberately not reconstructed here:
+     * they come from the ordinary public M3U flow.
      */
     public Playlist toEventsPlaylist(Set<String> selectedEventIds) {
-        return buildPlaylist(false, true, selectedEventIds);
+        return buildEventPlaylist(selectedEventIds);
     }
 
-    private Playlist buildPlaylist(
-            boolean includeStable,
-            boolean includeEvents,
-            Set<String> selectedEventIds
-    ) {
+    private Playlist buildEventPlaylist(Set<String> selectedEventIds) {
         List<Channel> channels = new ArrayList<>();
         Map<String, Boolean> seen = new LinkedHashMap<>();
         Set<String> safeSelected = selectedEventIds == null
                 ? Collections.emptySet()
                 : selectedEventIds;
         for (Entry entry : entries) {
-            boolean stable = entry.getType() == EntryType.STABLE_CHANNEL;
-            boolean event = entry.getType() == EntryType.TEMPORARY_EVENT;
-            if (entry.getType() == EntryType.UNSUPPORTED
-                    || stable && !includeStable
-                    || event && !includeEvents
-                    || event && !safeSelected.contains(entry.getId())) {
+            if (entry.getType() != EntryType.TEMPORARY_EVENT
+                    || !safeSelected.contains(entry.getId())) {
                 continue;
             }
             String identity = entry.getIdentity();
@@ -121,35 +91,20 @@ public final class HighflyPremiumCatalog {
             attributes.put("tvg-name", entry.getName());
             attributes.put("group-title", groupFor(entry));
             attributes.put("x-resolver", "highfly");
-            if (stable) {
-                // Stable entries may be reconstructed from the local metadata
-                // snapshot. They are not virtual playback items.
-                attributes.put("x-highfly-premium-stable", "true");
-            } else {
-                // Only temporary events are virtual: their signed stream is
-                // intentionally resolved at selection time and never cached.
-                attributes.put("x-highfly-premium", "true");
-                attributes.put("x-highfly-premium-virtual", "true");
-            }
+            // Only temporary events are virtual: their signed stream is
+            // intentionally resolved at selection time and never cached.
+            attributes.put("x-highfly-premium", "true");
+            attributes.put("x-highfly-premium-virtual", "true");
             attributes.put("x-highfly-premium-id", entry.getId());
             attributes.put("x-highfly-premium-kind", entry.getType().getValue());
-            attributes.put("x-highfly-premium-list", entry.getType() == EntryType.STABLE_CHANNEL
-                    ? "3"
-                    : "4");
-            attributes.put("x-resolver-id", stable
-                    ? entry.getSlug()
-                    : eventResolverId(entry.getId()));
+            attributes.put("x-resolver-id", eventResolverId(entry.getId()));
 
-            URI streamUri = stable
-                    ? URI.create("https://leaf.highfly.dev/m3u/"
-                    + entry.getSlug() + "/live.m3u8")
-                    : eventPlaceholder(entry.getId());
             channels.add(new Channel(
-                    entry.getName(),
-                    streamUri,
-                    entry.getLogoUri(),
-                    groupFor(entry),
-                    attributes
+                entry.getName(),
+                eventPlaceholder(entry.getId()),
+                entry.getLogoUri(),
+                groupFor(entry),
+                attributes
             ));
         }
         return Playlist.withEpgUris(channels, Collections.emptyList());
@@ -157,9 +112,7 @@ public final class HighflyPremiumCatalog {
 
     private static String groupFor(Entry entry) {
         String category = AppStrings.isBlank(entry.getCategory()) ? "Eventos" : entry.getCategory();
-        return entry.getType() == EntryType.TEMPORARY_EVENT
-                ? "Lista 4 · Eventos temporales · " + category
-                : "Lista 3 · Highfly · " + category;
+        return "Eventos temporales · " + category;
     }
 
     static String eventResolverId(String id) {

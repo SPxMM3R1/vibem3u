@@ -223,20 +223,11 @@ public final class HighflyPremiumCatalogRepository {
         }
     }
 
-    public Playlist loadPlaylistForDisplay(
-            HighflyPremiumPreferences.Region region,
-            boolean includeEvents,
-            boolean forceRefresh
-    ) throws IOException {
-        return queryCatalog(region, includeEvents, forceRefresh).toPlaylist(includeEvents);
-    }
-
     /**
-     * Loads the Premium catalog for the event selector. The generated stable
-     * view is retained as a compatibility/preview object, but production
-     * playback receives stable metadata from the public Lista 3 source. The
-     * event view contains only selected identities and placeholders, never a
-     * signed HLS URL.
+     * Loads the Premium catalog for the event selector. Stable channel
+     * metadata and membership come exclusively from the ordinary public M3U
+     * flow. The event view contains only selected identities and placeholders,
+     * never a signed HLS URL.
      */
     public PremiumPlaylists loadPlaylistsForDisplay(
             HighflyPremiumPreferences.Region region,
@@ -247,7 +238,6 @@ public final class HighflyPremiumCatalogRepository {
         HighflyPremiumCatalog catalog = queryCatalog(region, includeEvents, forceRefresh);
         return new PremiumPlaylists(
                 catalog,
-                catalog.toStablePlaylist(),
                 catalog.toEventsPlaylist(selectedEventIds)
         );
     }
@@ -275,7 +265,7 @@ public final class HighflyPremiumCatalogRepository {
             streamId = "leaf:" + stableSlug;
             sourceIdentity = stableSlug;
         } else if (temporaryEvent) {
-            // Lista 4 is app-owned and its event identity must be checked
+            // The temporary event is app-owned and its identity must be checked
             // against the current protected catalogue before playback.
             HighflyPremiumCatalog catalog = queryCatalog(region, true, false);
             HighflyPremiumCatalog.Entry entry = findEntry(catalog, channel);
@@ -418,11 +408,10 @@ public final class HighflyPremiumCatalogRepository {
         return slug;
     }
 
-    /** Only Lista 4 event placeholders are virtual playback channels. */
+    /** Only temporary-event placeholders are virtual playback channels. */
     public boolean isVirtualChannel(Channel channel) {
         return "true".equalsIgnoreCase(attribute(channel, "x-highfly-premium"))
                 && "true".equalsIgnoreCase(attribute(channel, "x-highfly-premium-virtual"))
-                && "4".equals(attribute(channel, "x-highfly-premium-list"))
                 && !AppStrings.isBlank(attribute(channel, "x-highfly-premium-id"));
     }
 
@@ -768,25 +757,18 @@ public final class HighflyPremiumCatalogRepository {
 
     public static final class PremiumPlaylists {
         private final HighflyPremiumCatalog catalog;
-        private final Playlist stablePlaylist;
         private final Playlist eventPlaylist;
 
         PremiumPlaylists(
                 HighflyPremiumCatalog catalog,
-                Playlist stablePlaylist,
                 Playlist eventPlaylist
         ) {
             this.catalog = catalog;
-            this.stablePlaylist = stablePlaylist;
             this.eventPlaylist = eventPlaylist;
         }
 
         public HighflyPremiumCatalog getCatalog() {
             return catalog;
-        }
-
-        public Playlist getStablePlaylist() {
-            return stablePlaylist;
         }
 
         public Playlist getEventPlaylist() {

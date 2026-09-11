@@ -182,7 +182,7 @@ public final class HighflyPremiumPreferences {
      * is process-local and changes whenever the user replaces or clears the
      * Premium credential, which invalidates event/playback state without
      * putting a token or token hash into a persistent configuration. The
-     * stable List 3 metadata itself is fetched through PlaylistRepository.
+     * stable Premium metadata itself is fetched through PlaylistRepository.
      */
     static String sourceSignature(Context context, HighflyPremiumCredentialStore store) {
         return "enabled=" + isEnabled(context)

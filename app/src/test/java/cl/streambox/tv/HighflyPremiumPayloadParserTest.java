@@ -228,31 +228,19 @@ public final class HighflyPremiumPayloadParserTest {
                 1L
         );
 
-        Playlist stablePlaylist = catalog.toStablePlaylist();
-        assertEquals(1, stablePlaylist.getChannels().size());
-        assertEquals(
-                "Lista 3 · Highfly · Sports",
-                stablePlaylist.getChannels().get(0).getGroup()
-        );
-        assertEquals(
-                "true",
-                stablePlaylist.getChannels().get(0)
-                        .getAttributes().get("x-highfly-premium-stable")
-        );
-        assertFalse(stablePlaylist.getChannels().get(0)
-                .getAttributes().containsKey("x-highfly-premium"));
-
         Set<String> selected = new LinkedHashSet<>();
         selected.add(event.getId());
         Playlist eventPlaylist = catalog.toEventsPlaylist(selected);
         assertEquals(1, eventPlaylist.getChannels().size());
         assertEquals(
-                "Lista 4 · Eventos temporales · Football",
+                "Eventos temporales · Football",
                 eventPlaylist.getChannels().get(0).getGroup()
         );
         assertEquals("evento", eventPlaylist.getChannels().get(0)
                 .getAttributes().get("x-highfly-premium-kind"));
         assertEquals("true", eventPlaylist.getChannels().get(0)
                 .getAttributes().get("x-highfly-premium-virtual"));
+        assertFalse(eventPlaylist.getChannels().get(0)
+                .getAttributes().containsKey("x-highfly-premium-list"));
     }
 }
