@@ -20,6 +20,7 @@ import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.Window;
@@ -81,6 +82,8 @@ public final class MainActivity extends Activity {
     private static final long PLAYER_RETRY_DELAY_MS = 2_500;
     private static final long PLAYBACK_FREEZE_TIMEOUT_MS = 5_000L;
     private static final long PLAYBACK_WATCHDOG_INTERVAL_MS = 1_000L;
+    private static final long PLAYBACK_RECOVERY_COOLDOWN_MS = 4_000L;
+    private static final String PLAYBACK_HEALTH_TAG = "VibeM3U-Playback";
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
     private static final long NO_RESOLUTION_REQUEST = -1L;
     private static final int PREMIUM_STABLE_SOURCE_POSITION = 3;
@@ -174,6 +177,10 @@ public final class MainActivity extends Activity {
     private boolean playbackWatchdogScheduled;
     private long playbackLoadingSinceElapsedRealtime = -1L;
     private boolean playbackHasStarted;
+    private final IntermittentBufferingDetector intermittentBufferingDetector =
+            new IntermittentBufferingDetector();
+    private final PlaybackAvSyncDetector playbackAvSyncDetector = new PlaybackAvSyncDetector();
+    private long playbackRecoveryCooldownUntilElapsedRealtime;
     private boolean playbackAutoRecoveryInFlight;
     private boolean playbackRecoveryFailed;
     private Future<?> playbackResolutionTask;
@@ -368,6 +375,10 @@ public final class MainActivity extends Activity {
         player.addListener(new Player.Listener() {
             @Override public void onIsPlayingChanged(boolean isPlaying) {
                 settlePlaybackEpisode(isPlaying);
+                if (!isPlaybackRequested()) {
+                    intermittentBufferingDetector.resetForDiscontinuity();
+                    playbackAvSyncDetector.reset();
+                }
             }
 
             @Override public void onPlaybackStateChanged(int playbackState) {
@@ -383,6 +394,9 @@ public final class MainActivity extends Activity {
                     }
                     hideLoadingState();
                 } else if (playbackState == Player.STATE_BUFFERING) {
+                    // A simultaneous renderer stop is a normal loading episode, not an A/V
+                    // mismatch. Start a fresh renderer baseline when Media3 enters buffering.
+                    playbackAvSyncDetector.reset();
                     if (playbackLoadingSinceElapsedRealtime < 0L) {
                         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
                     }
@@ -395,6 +409,26 @@ public final class MainActivity extends Activity {
                     if (playbackLoadingSinceElapsedRealtime < 0L) {
                         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
                     }
+                }
+                intermittentBufferingDetector.onPlaybackStateChanged(
+                        playbackState,
+                        isPlaybackRequested(),
+                        hasRenderedVideoFrame(),
+                        SystemClock.elapsedRealtime()
+                );
+            }
+
+            @Override public void onPositionDiscontinuity(
+                    Player.PositionInfo oldPosition,
+                    Player.PositionInfo newPosition,
+                    int reason
+            ) {
+                if (reason == Player.DISCONTINUITY_REASON_SEEK
+                        || reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT) {
+                    // An explicit search invalidates the short-term progress baseline. Normal
+                    // HLS period rolls are intentionally not treated as user seeks.
+                    intermittentBufferingDetector.resetForDiscontinuity();
+                    playbackAvSyncDetector.reset();
                 }
             }
 
@@ -1225,8 +1259,11 @@ public final class MainActivity extends Activity {
         playbackGeneration++;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
         playbackHasStarted = false;
+        playbackRecoveryCooldownUntilElapsedRealtime = 0L;
         playbackAutoRecoveryInFlight = false;
         playbackRecoveryFailed = false;
+        intermittentBufferingDetector.reset();
+        playbackAvSyncDetector.reset();
         resetPlaybackBitrateMeter();
         cancelScheduledPlaybackRetry();
         cancelPlaybackResolution();
@@ -1283,6 +1320,13 @@ public final class MainActivity extends Activity {
                 && playbackBitrateMeter.snapshot().hasRenderedVideoFrame;
     }
 
+    private boolean isPlaybackRequested() {
+        return player != null
+                && player.getPlayWhenReady()
+                && player.getPlaybackSuppressionReason()
+                == Player.PLAYBACK_SUPPRESSION_REASON_NONE;
+    }
+
     /**
      * Checks the playback boundary rather than network throughput. A stream
      * can keep downloading bytes while its decoder is no longer receiving
@@ -1294,6 +1338,7 @@ public final class MainActivity extends Activity {
                 || playbackAutoRecoveryInFlight) return;
 
         long nowMs = SystemClock.elapsedRealtime();
+        if (nowMs < playbackRecoveryCooldownUntilElapsedRealtime) return;
         int state = player.getPlaybackState();
         boolean renderedFrame = hasRenderedVideoFrame();
         if (renderedFrame) playbackHasStarted = true;
@@ -1337,19 +1382,55 @@ public final class MainActivity extends Activity {
         PlaybackDiagnosticsWorker.Snapshot measurements = playbackBitrateMeter == null
                 ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
         long lastFrameNs = measurements.lastRenderedVideoFrameRealtimeNs;
-        if (measurements.hasRenderedVideoFrame
-                && lastFrameNs != androidx.media3.common.C.TIME_UNSET
-                && System.nanoTime() - lastFrameNs
-                >= PLAYBACK_FREEZE_TIMEOUT_MS * 1_000_000L) {
-            requestAutomaticPlaybackRecovery("video detenido");
+        long nowNs = System.nanoTime();
+        boolean hasVideo = player.getVideoFormat() != null;
+        PlaybackAvSyncDetector.Signal avSignal = playbackAvSyncDetector.sample(
+                nowMs,
+                nowNs,
+                isPlaybackRequested(),
+                false,
+                hasVideo,
+                lastFrameNs,
+                measurements.audioEnabled,
+                measurements.audioPositionAdvancingObserved,
+                player.getCurrentPosition(),
+                measurements.audioUnderrunCount
+        );
+        if (avSignal != PlaybackAvSyncDetector.Signal.NONE) {
+            requestAvSyncRecovery(avSignal == PlaybackAvSyncDetector.Signal
+                    .VIDEO_STALLED_WITH_AUDIO
+                    ? "desincronización A/V: vídeo detenido con audio activo"
+                    : "desincronización A/V: underrun de audio");
             return;
         }
 
+        if (intermittentBufferingDetector.shouldRecover(
+                nowMs,
+                playbackAvSyncDetector.isRealProgressStalled(nowMs, hasVideo)
+        )) {
+            intermittentBufferingDetector.reset();
+            requestAutomaticPlaybackRecovery("carga intermitente");
+            return;
+        }
+
+        intermittentBufferingDetector.onStablePlayback(nowMs, true);
+
+        if (measurements.hasRenderedVideoFrame
+                && lastFrameNs != androidx.media3.common.C.TIME_UNSET
+                && nowNs - lastFrameNs >= PLAYBACK_FREEZE_TIMEOUT_MS * 1_000_000L) {
+            requestAutomaticPlaybackRecovery("vídeo detenido");
+            return;
+        }
     }
 
     private void requestAutomaticPlaybackRecovery(String reason) {
         if (playbackAutoRecoveryInFlight || playbackChannel == null) return;
-        playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
+        long nowMs = SystemClock.elapsedRealtime();
+        if (nowMs < playbackRecoveryCooldownUntilElapsedRealtime) return;
+        playbackRecoveryCooldownUntilElapsedRealtime = nowMs + PLAYBACK_RECOVERY_COOLDOWN_MS;
+        Log.i(PLAYBACK_HEALTH_TAG, "recovery reason=" + reason);
+        playbackLoadingSinceElapsedRealtime = nowMs;
+        playbackAvSyncDetector.reset();
         MediaItem current = player == null ? null : player.getCurrentMediaItem();
         if (current != null && playbackRecoveryEpisode.trySameSourceRecovery()) {
             // A real post-start video freeze is first recovered without
@@ -1362,6 +1443,33 @@ public final class MainActivity extends Activity {
         } else {
             handleDirectPlaybackFailure();
         }
+    }
+
+    private void requestAvSyncRecovery(String reason) {
+        if (playbackAutoRecoveryInFlight || playbackChannel == null) return;
+        long nowMs = SystemClock.elapsedRealtime();
+        if (nowMs < playbackRecoveryCooldownUntilElapsedRealtime) return;
+        playbackRecoveryCooldownUntilElapsedRealtime = nowMs + PLAYBACK_RECOVERY_COOLDOWN_MS;
+        Log.i(PLAYBACK_HEALTH_TAG, "recovery reason=" + reason);
+        playbackLoadingSinceElapsedRealtime = nowMs;
+        intermittentBufferingDetector.reset();
+        playbackAvSyncDetector.reset();
+
+        MediaItem current = player == null ? null : player.getCurrentMediaItem();
+        if (current != null && playbackRecoveryEpisode.tryAvSoftResync()) {
+            // First repair only the current item and keep its live position when possible.
+            resynchronizeCurrentPlayback(current.mediaId, playbackGeneration);
+            return;
+        }
+        if (playbackRecoveryEpisode.tryAvFullReload()) {
+            if (hasResolverForPlaybackChannel()) {
+                handleProviderAuthorizationFailure();
+            } else {
+                handleDirectPlaybackFailure();
+            }
+            return;
+        }
+        showPlaybackFailure();
     }
 
     private void handleDirectPlaybackFailure() {
@@ -1580,6 +1688,8 @@ public final class MainActivity extends Activity {
     private void resetPlaybackBitrateMeter() {
         playbackDiagnosticsActive = false;
         if (playbackBitrateMeter != null) playbackBitrateMeter.reset();
+        intermittentBufferingDetector.reset();
+        playbackAvSyncDetector.reset();
     }
 
     private MediaSource mediaSourceFor(Channel channel, ResolvedPlaybackSource source) {
@@ -1804,6 +1914,37 @@ public final class MainActivity extends Activity {
         hideLoadingState();
         overlayAwaitingPlayback = true;
         showOverlay(true);
+    }
+
+    private void resynchronizeCurrentPlayback(String expectedMediaId, long expectedGeneration) {
+        if (player == null || expectedGeneration != playbackGeneration) return;
+        MediaItem current = player.getCurrentMediaItem();
+        if (current == null || !expectedMediaId.equals(current.mediaId)) return;
+
+        long resumePositionMs = player.getCurrentPosition();
+        boolean hasResumePosition = resumePositionMs != C.TIME_UNSET && resumePositionMs >= 0L;
+        playbackAutoRecoveryInFlight = false;
+        playbackRecoveryFailed = false;
+        beginStartupMeasurement(playbackChannel, PlaybackStartupMetrics.Reason.RETRY);
+        startupMetrics.dequeued(startupMetrics.currentId());
+        startupMetrics.resolved(startupMetrics.currentId());
+        playbackManifestCache = null;
+        showLoadingState(getString(R.string.loading_retrying_source));
+        resetPlaybackBitrateMeter();
+        player.stop();
+        if (playbackChannel != null && currentPlaybackSource != null) {
+            MediaSource source = mediaSourceFor(playbackChannel, currentPlaybackSource);
+            if (hasResumePosition) {
+                player.setMediaSource(source, resumePositionMs);
+            } else {
+                player.setMediaSource(source);
+            }
+        } else if (hasResumePosition) {
+            player.setMediaItem(current, resumePositionMs);
+        } else {
+            player.setMediaItem(current);
+        }
+        prepareAndPlay();
     }
 
     private void retryCurrentPlayback(String expectedMediaId, long expectedGeneration) {

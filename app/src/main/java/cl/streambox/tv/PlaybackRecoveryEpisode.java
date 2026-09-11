@@ -11,6 +11,8 @@ final class PlaybackRecoveryEpisode {
     private boolean fallbackUsed;
     private int sameSourceRecoveries;
     private int sourceReloads;
+    private boolean avSoftResyncUsed;
+    private boolean avFullReloadUsed;
     private long playingSinceNanos = -1L;
     private boolean stableReported;
 
@@ -19,6 +21,8 @@ final class PlaybackRecoveryEpisode {
         fallbackUsed = false;
         sameSourceRecoveries = 0;
         sourceReloads = 0;
+        avSoftResyncUsed = false;
+        avFullReloadUsed = false;
         playingSinceNanos = -1L;
         stableReported = false;
     }
@@ -63,6 +67,20 @@ final class PlaybackRecoveryEpisode {
         return true;
     }
 
+    /** Allows one renderer-level resynchronization before a full source reload. */
+    boolean tryAvSoftResync() {
+        if (avSoftResyncUsed) return false;
+        avSoftResyncUsed = true;
+        return true;
+    }
+
+    /** Allows one bounded full reload after the soft A/V resynchronization. */
+    boolean tryAvFullReload() {
+        if (avFullReloadUsed) return false;
+        avFullReloadUsed = true;
+        return true;
+    }
+
     void resolutionFailed() {
         refreshUsed = true;
     }
@@ -77,6 +95,8 @@ final class PlaybackRecoveryEpisode {
         fallbackUsed = false;
         sameSourceRecoveries = 0;
         sourceReloads = 0;
+        avSoftResyncUsed = false;
+        avFullReloadUsed = false;
         return true;
     }
 }

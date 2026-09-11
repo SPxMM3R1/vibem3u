@@ -64,4 +64,17 @@ public final class PlaybackRecoveryEpisodeTest {
         assertTrue(episode.trySameSourceRecovery());
         assertFalse(episode.trySameSourceRecovery());
     }
+
+    @Test public void avRecoveryUsesOneSoftResyncBeforeOneFullReload() {
+        PlaybackRecoveryEpisode episode = new PlaybackRecoveryEpisode();
+        assertTrue(episode.tryAvSoftResync());
+        assertFalse(episode.tryAvSoftResync());
+        assertTrue(episode.tryAvFullReload());
+        assertFalse(episode.tryAvFullReload());
+
+        episode.onPlayingChanged(true, 0L);
+        assertTrue(episode.onPlayingChanged(false, TimeUnit.SECONDS.toNanos(16)));
+        assertTrue(episode.tryAvSoftResync());
+        assertTrue(episode.tryAvFullReload());
+    }
 }
