@@ -86,7 +86,6 @@ public final class MainActivity extends Activity {
     private static final String PLAYBACK_HEALTH_TAG = "VibeM3U-Playback";
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
     private static final long NO_RESOLUTION_REQUEST = -1L;
-    private static final int PREMIUM_STABLE_SOURCE_POSITION = 3;
     private static final int PREMIUM_EVENT_SOURCE_POSITION = 4;
     private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.42 (Android TV)";
 
@@ -498,9 +497,9 @@ public final class MainActivity extends Activity {
         List<PlaylistSource> sources = configuredSources == null
                 ? Collections.emptyList()
                 : new ArrayList<>(configuredSources);
-        boolean premiumConfigured = isHighflyPremiumConfigured();
+        boolean premiumEventsConfigured = isHighflyPremiumEventsConfigured();
         String sourceSignature = playlistSourceSignature(sources);
-        if (sources.isEmpty() && !premiumConfigured) {
+        if (sources.isEmpty() && !premiumEventsConfigured) {
             if (!settingsOpen) openSettings();
             return;
         }
@@ -538,7 +537,7 @@ public final class MainActivity extends Activity {
         loadFailed = false;
         if (!keepCurrentUi) {
             showLoadingState(getString(
-                    premiumConfigured && sources.isEmpty()
+                    premiumEventsConfigured && sources.isEmpty()
                             ? R.string.loading_premium_catalog
                             : R.string.loading_playlist
             ));
@@ -566,9 +565,8 @@ public final class MainActivity extends Activity {
         }
 
         final boolean networkAvailable = isNetworkAvailable();
-        final boolean premiumIncludeEvents = premiumConfigured
-                && HighflyPremiumPreferences.includeEvents(MainActivity.this);
-        final Set<String> selectedPremiumEventIds = premiumConfigured
+        final boolean premiumIncludeEvents = premiumEventsConfigured;
+        final Set<String> selectedPremiumEventIds = premiumIncludeEvents
                 ? HighflyPremiumPreferences.selectedEventIds(MainActivity.this)
                 : Collections.emptySet();
         PlaylistRefreshState refresh = new PlaylistRefreshState(
@@ -579,9 +577,8 @@ public final class MainActivity extends Activity {
         );
         // A disabled Premium account must not keep a previous in-memory event
         // list visible while the ordinary sources are refreshed.
-        if (!premiumConfigured || !premiumIncludeEvents) {
+        if (!premiumIncludeEvents) {
             refresh.latest.remove(PREMIUM_EVENT_SOURCE_POSITION);
-            if (!premiumConfigured) refresh.latest.remove(PREMIUM_STABLE_SOURCE_POSITION);
         }
         if (!networkAvailable) {
             refresh.pendingNetwork = 0;
@@ -1059,15 +1056,12 @@ public final class MainActivity extends Activity {
     }
 
     /**
-     * Flattens the configured sources and keeps the virtual Premium lists in
-     * their user-facing positions. Stable Premium entries from the public M3U
-     * replace an exact Highfly slot when the same resolver ID is exposed;
-     * selected temporary events are appended after every other source.
+     * Flattens the configured sources and appends the selected temporary
+     * events after every ordinary M3U source.
      */
     private List<Channel> buildOrderedChannelList(Map<Integer, Playlist> playlists) {
         return HighflyPremiumPlaylistMerger.merge(
                 playlists,
-                PREMIUM_STABLE_SOURCE_POSITION,
                 PREMIUM_EVENT_SOURCE_POSITION
         );
     }
@@ -2949,7 +2943,7 @@ public final class MainActivity extends Activity {
             playlistSourcesSnapshotBeforeSettings = "";
             List<PlaylistSource> sources = getPlaylistSources();
             if (resultCode == RESULT_OK
-                    && (!sources.isEmpty() || isHighflyPremiumConfigured())) {
+                    && (!sources.isEmpty() || isHighflyPremiumEventsConfigured())) {
                 applyPlaybackSettingsResult(data);
                 reloadResolverRegistry();
                 boolean resolverConfigurationChanged = AppStrings.isBlank(resolverSnapshotBefore)
@@ -2979,7 +2973,7 @@ public final class MainActivity extends Activity {
                     epgData = EpgData.empty();
                 }
                 refreshAfterSettings = true;
-            } else if (sources.isEmpty() && !isHighflyPremiumConfigured()) {
+            } else if (sources.isEmpty() && !isHighflyPremiumEventsConfigured()) {
                 openSettings();
             }
         }
@@ -3000,19 +2994,17 @@ public final class MainActivity extends Activity {
         if (enabled2 && url2 != null && !url2.trim().isEmpty()) {
             sources.add(new PlaylistSource(2, url2));
         }
-        if (isHighflyPremiumConfigured()) {
-            sources.add(new PlaylistSource(
-                    PREMIUM_STABLE_SOURCE_POSITION,
-                    HighflyPremiumPreferences.STABLE_PLAYLIST_URL
-            ));
-        }
         return sources;
     }
 
-    private boolean isHighflyPremiumConfigured() {
+    private boolean hasHighflyPremiumCredential() {
         return highflyPremiumCredentialStore != null
-                && highflyPremiumCredentialStore.hasCredential()
-                && HighflyPremiumPreferences.isEnabled(this);
+                && highflyPremiumCredentialStore.hasCredential();
+    }
+
+    private boolean isHighflyPremiumEventsConfigured() {
+        return hasHighflyPremiumCredential()
+                && HighflyPremiumPreferences.includeEvents(this);
     }
 
     private String playlistSourceSignature(List<PlaylistSource> sources) {
@@ -3209,7 +3201,7 @@ public final class MainActivity extends Activity {
         super.onStart();
         if (!settingsOpen && !refreshAfterSettings) {
             List<PlaylistSource> sources = getPlaylistSources();
-            if (sources.isEmpty() && !isHighflyPremiumConfigured()) {
+            if (sources.isEmpty() && !isHighflyPremiumEventsConfigured()) {
                 openSettings();
             } else {
                 refreshPlaylists(sources);

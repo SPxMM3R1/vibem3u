@@ -134,7 +134,6 @@ public final class SettingsActivity extends Activity {
     private final List<Button> qualityFocusButtons = new ArrayList<>();
     private HighflyPremiumCredentialStore highflyPremiumCredentialStore;
     private HighflyPremiumCatalogRepository highflyPremiumCatalogRepository;
-    private Switch highflyPremiumEnabled;
     private EditText highflyPremiumToken;
     private TextView highflyPremiumTokenFeedback;
     private Button highflyPremiumVerifyButton;
@@ -183,8 +182,7 @@ public final class SettingsActivity extends Activity {
         String existingUrl2 = prefs.getString(KEY_PLAYLIST_URL_2, "");
         hasExistingUrl = (existingUrl != null && !AppStrings.isBlank(existingUrl))
                 || (existingUrl2 != null && !AppStrings.isBlank(existingUrl2))
-                || (prefs.getBoolean(HighflyPremiumPreferences.KEY_ENABLED, false)
-                && highflyPremiumCredentialStore.hasCredential());
+                || highflyPremiumCredentialStore.hasCredential();
         if (Build.VERSION.SDK_INT >= 33) {
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
                     android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,
@@ -218,7 +216,6 @@ public final class SettingsActivity extends Activity {
         tvVooModeBoth = findViewById(R.id.tvvoo_mode_both);
         tvVooModeDirect = findViewById(R.id.tvvoo_mode_direct);
         tvVooModeExternal = findViewById(R.id.tvvoo_mode_external);
-        highflyPremiumEnabled = findViewById(R.id.highfly_premium_enabled);
         highflyPremiumToken = findViewById(R.id.highfly_premium_token);
         highflyPremiumTokenFeedback = findViewById(R.id.highfly_premium_token_feedback);
         highflyPremiumVerifyButton = findViewById(R.id.highfly_premium_verify_button);
@@ -474,9 +471,6 @@ public final class SettingsActivity extends Activity {
     }
 
     private void initializeHighflyPremiumOptions() {
-        highflyPremiumEnabled.setChecked(
-                HighflyPremiumPreferences.isEnabled(this)
-        );
         highflyPremiumIncludeEvents.setChecked(
                 HighflyPremiumPreferences.includeEvents(this)
         );
@@ -580,7 +574,6 @@ public final class SettingsActivity extends Activity {
                 highflyPremiumCredentialStore.recordVerification(account);
                 mainHandler.post(() -> {
                     highflyPremiumToken.setText("");
-                    highflyPremiumEnabled.setChecked(true);
                     renderHighflyPremiumStatus();
                     setPremiumTokenFeedback(
                             R.string.highfly_premium_token_feedback_verified,
@@ -728,7 +721,6 @@ public final class SettingsActivity extends Activity {
             highflyPremiumEventsContainer.setVisibility(View.GONE);
             highflyPremiumCatalogSummary.setText(getString(
                     R.string.highfly_premium_catalog_summary,
-                    catalog.count(HighflyPremiumCatalog.EntryType.STABLE_CHANNEL),
                     0,
                     catalog.count(HighflyPremiumCatalog.EntryType.UNSUPPORTED)
             ));
@@ -740,7 +732,6 @@ public final class SettingsActivity extends Activity {
             highflyPremiumRemoveButton.setNextFocusUpId(previous.getId());
             highflyPremiumCatalogSummary.setText(getString(
                     R.string.highfly_premium_catalog_summary,
-                    catalog.count(HighflyPremiumCatalog.EntryType.STABLE_CHANNEL),
                     catalog.count(HighflyPremiumCatalog.EntryType.TEMPORARY_EVENT),
                     catalog.count(HighflyPremiumCatalog.EntryType.UNSUPPORTED)
             ));
@@ -786,10 +777,8 @@ public final class SettingsActivity extends Activity {
         highflyPremiumCredentialStore.clearToken();
         HighflyPremiumPreferences.saveSelectedEventIds(this, Collections.emptySet());
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putBoolean(HighflyPremiumPreferences.KEY_ENABLED, false)
                 .putBoolean(HighflyPremiumPreferences.KEY_INCLUDE_EVENTS, false)
                 .apply();
-        highflyPremiumEnabled.setChecked(false);
         highflyPremiumIncludeEvents.setChecked(false);
         highflyPremiumToken.setText("");
         loadedHighflyPremiumCatalog = null;
@@ -1143,15 +1132,16 @@ public final class SettingsActivity extends Activity {
         String value2 = urlInput2.getText().toString().trim();
         boolean enabled1 = playlistOneEnabled.isChecked();
         boolean enabled2 = playlistTwoEnabled.isChecked();
-        boolean premiumEnabled = highflyPremiumEnabled.isChecked();
         boolean premiumConfigured = highflyPremiumCredentialStore.hasCredential();
-        if (!enabled1 && !enabled2 && !(premiumEnabled && premiumConfigured)) {
+        boolean includePremiumEvents = highflyPremiumIncludeEvents.isChecked();
+        if (!enabled1 && !enabled2 && !(includePremiumEvents && premiumConfigured)) {
             errorText.setText(R.string.playlist_source_required);
             errorText.setVisibility(View.VISIBLE);
-            (premiumEnabled ? highflyPremiumEnabled : playlistOneEnabled).requestFocus();
+            (includePremiumEvents ? highflyPremiumIncludeEvents : playlistOneEnabled)
+                    .requestFocus();
             return;
         }
-        if (premiumEnabled && !premiumConfigured) {
+        if (includePremiumEvents && !premiumConfigured) {
             boolean tokenWasEntered = !highflyPremiumToken.getText().toString().trim().isEmpty();
             errorText.setText(tokenWasEntered
                     ? R.string.highfly_premium_token_verify_required
@@ -1181,10 +1171,10 @@ public final class SettingsActivity extends Activity {
                 .putBoolean(KEY_PLAYLIST_ENABLED_2, enabled2)
                 .putBoolean(KEY_INVERT_CHANNEL_KEYS, invertChannelKeys.isChecked())
                 .putBoolean(KEY_NORMALIZE_VOLUME, normalizeVolume.isChecked())
-                .putBoolean(HighflyPremiumPreferences.KEY_ENABLED, premiumEnabled)
+                .remove("highfly_premium_enabled")
                 .putBoolean(
                         HighflyPremiumPreferences.KEY_INCLUDE_EVENTS,
-                        highflyPremiumIncludeEvents.isChecked()
+                        includePremiumEvents
                 )
                 .putString(
                         HighflyPremiumPreferences.KEY_REGION,

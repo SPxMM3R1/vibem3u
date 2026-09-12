@@ -33,14 +33,13 @@ public final class HighflyPremiumStableIdentityTest {
     }
 
     @Test
-    public void generatedStableMetadataStillUsesProtectedPlayback() {
+    public void publicStableMetadataStillUsesProtectedPlayback() {
         Map<String, String> attributes = new LinkedHashMap<>();
         attributes.put("tvg-id", "highfly-premium:now-sky-sports-f1-2");
         attributes.put("x-resolver", "highfly");
         attributes.put("x-resolver-id", "now-sky-sports-f1-2");
         attributes.put("x-highfly-premium-stable", "true");
         attributes.put("x-highfly-premium-kind", "estable");
-        attributes.put("x-highfly-premium-list", "3");
         attributes.put("x-highfly-premium-id", "leaf:now-sky-sports-f1-2");
         Channel channel = new Channel(
                 "Sky Sports F1 UHD",

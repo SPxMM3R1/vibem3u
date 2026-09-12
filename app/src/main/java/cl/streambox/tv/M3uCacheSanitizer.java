@@ -66,7 +66,7 @@ final class M3uCacheSanitizer {
                     && pendingPremiumStable) {
                 // A stable Premium list is allowed to carry only the public
                 // leaf fallback. Canonicalizing it here also protects older
-                // or compromised List 3 responses from leaving a signed path
+                // or compromised Premium responses from leaving a signed path
                 // in the persistent HTTP cache.
                 result.append(canonicalHighflyStableUrl(pendingResolverId));
                 pendingTvgId = "";

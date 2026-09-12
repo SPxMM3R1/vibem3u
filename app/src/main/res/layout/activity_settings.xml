@@ -564,7 +564,7 @@
                             android:imeOptions="actionDone"
                             android:inputType="textUri"
                             android:nextFocusUp="@id/playlist_2_enabled"
-                            android:nextFocusDown="@id/highfly_premium_enabled"
+                            android:nextFocusDown="@id/highfly_premium_token"
                             android:singleLine="true"
                             android:textColor="@color/white"
                             android:textColorHint="#78909C"
@@ -605,23 +605,6 @@
                             android:textColor="@color/muted"
                             android:textSize="@dimen/settings_body_text_size" />
 
-                        <Switch
-                            android:id="@+id/highfly_premium_enabled"
-                            android:layout_width="match_parent"
-                            android:layout_height="@dimen/settings_control_height"
-                            android:layout_marginTop="12dp"
-                            android:background="@drawable/settings_section_card"
-                            android:focusable="true"
-                            android:nextFocusUp="@id/playlist_url_2"
-                            android:nextFocusDown="@id/highfly_premium_token"
-                            android:paddingStart="12dp"
-                            android:paddingEnd="12dp"
-                            android:showText="false"
-                            android:text="@string/highfly_premium_enabled"
-                            android:textColor="@color/white"
-                            android:textSize="@dimen/settings_control_text_size"
-                            android:thumbTint="@color/cyan" />
-
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="@dimen/settings_control_height"
@@ -639,7 +622,7 @@
                                 android:hint="@string/highfly_premium_token_hint"
                                 android:imeOptions="actionDone"
                                 android:inputType="textPassword|textNoSuggestions"
-                                android:nextFocusUp="@id/highfly_premium_enabled"
+                                android:nextFocusUp="@id/playlist_url_2"
                                 android:nextFocusDown="@id/highfly_premium_verify_button"
                                 android:singleLine="true"
                                 android:textColor="@color/white"

@@ -201,7 +201,7 @@ public final class HighflyPremiumPayloadParserTest {
     }
 
     @Test
-    public void generatedPlaylistsSeparateStableChannelsAndSelectedEvents() {
+    public void eventPlaylistContainsOnlySelectedEvents() {
         HighflyPremiumCatalog.Entry stable = new HighflyPremiumCatalog.Entry(
                 "leaf:stable-channel",
                 "stable-channel",

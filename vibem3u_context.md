@@ -27,12 +27,12 @@ futura.
 En la fecha de este contexto:
 
     rama: main
-    head: 2065d98940c46b3bd879b14bdcb3d9386aecca98
-    commit: Bump version to 0.4.79
-    tag estable: v0.4.79
-    versionCode: 84
-    versionName: 0.4.79
-    origin/main: 2065d98940c46b3bd879b14bdcb3d9386aecca98
+    head: ad301c18c3758982459314cb066767f3c622efe8
+    commit: Keep Highfly stable channels in normal playlists
+    tag estable: v0.4.81
+    versionCode: 86
+    versionName: 0.4.81
+    origin/main: ad301c18c3758982459314cb066767f3c622efe8
 
 La versión v0.4.79 fue publicada con los siguientes artefactos verificados:
 
@@ -52,7 +52,7 @@ Al momento de crear este contexto, los elementos no rastreados conocidos eran:
 No se deben borrar, sobrescribir ni incorporar al commit los adjuntos del
 usuario sin una solicitud explícita.
 
-Corrección local posterior a la generación del contexto, todavía sin commit:
+Corrección incorporada en la versión 0.4.81:
 
 - se eliminó la reconstrucción de canales estables desde el catálogo Premium;
 - la fuente pública M3U es ahora la única fuente de metadatos y membresía
@@ -65,8 +65,16 @@ Corrección local posterior a la generación del contexto, todavía sin commit:
 - se actualizaron las pruebas y los textos de configuración para reflejar la
   separación.
 
-Estos cambios locales no están publicados, no cambian la versión y todavía no
-se han compilado en este equipo.
+La corrección elimina también la fuente estable Premium automática y su
+interruptor de configuración. La pertenencia y los metadatos de los canales
+estables dependen únicamente de las listas M3U normales; el token guardado
+continúa disponible para que HighflyStreamResolver solicite la fuente
+autorizada al abrir cada canal Premium. La app solo puede anexar al final los
+eventos temporales seleccionados desde el catálogo protegido.
+
+La compilación y publicación de esta versión se verifican en los workflows de
+GitHub Actions asociados al commit y al tag; no se presenta una compilación
+local porque el equipo no tiene Java configurado.
 
 ## reglas de compilación y publicación
 

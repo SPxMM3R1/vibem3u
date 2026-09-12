@@ -52,10 +52,9 @@
     <string name="exit">Salir</string>
     <string name="cancel">Cancelar</string>
     <string name="url_required">Ingresa una URL http:// o https:// válida.</string>
-    <string name="playlist_source_required">Activa al menos una lista M3U o configura Highfly Premium.</string>
+    <string name="playlist_source_required">Activa al menos una lista M3U o habilita eventos temporales.</string>
     <string name="highfly_premium_title">Highfly Premium</string>
-    <string name="highfly_premium_description">Los canales estables llegan desde la fuente pública mantenida por el flujo de listas. La app muestra su copia cacheada de inmediato y la actualiza en segundo plano; la credencial se conserva cifrada y el token de reproducción se renueva al abrir cada canal. Los eventos temporales seleccionados se agregan aparte.</string>
-    <string name="highfly_premium_enabled">Canales estables Premium</string>
+    <string name="highfly_premium_description">Los canales estables Premium llegan desde el flujo normal de listas. VibeM3U conserva la credencial para que el resolutor obtenga una fuente autorizada al reproducir y permite consultar eventos temporales por separado.</string>
     <string name="highfly_premium_token_hint">Token Premium · se oculta después de verificarlo</string>
     <string name="highfly_premium_token_saved_hint">Credencial Premium guardada · escribe solo para reemplazarla</string>
     <string name="highfly_premium_token_feedback_verified">✓ Verificado</string>
@@ -75,7 +74,7 @@
     <string name="highfly_premium_region_us2">US-2</string>
     <string name="highfly_premium_region_eu1">Europa</string>
     <string name="highfly_premium_include_events">Incluir eventos temporales seleccionados</string>
-    <string name="highfly_premium_events_description">Consulta el catálogo y marca los eventos que quieras agregar. Solo los seleccionados se anexan al final de todas las listas.</string>
+    <string name="highfly_premium_events_description">Consulta el catálogo y marca los eventos que quieras agregar. Solo los seleccionados se anexan al final de todas las fuentes.</string>
     <string name="highfly_premium_event_selection_title">Eventos temporales disponibles</string>
     <string name="highfly_premium_sort_title">Selección de fuente</string>
     <string name="highfly_premium_sort_default">Orden publicado por Highfly</string>
@@ -84,7 +83,7 @@
     <string name="highfly_premium_query_catalog">Consultar catálogo</string>
     <string name="highfly_premium_remove">Eliminar acceso</string>
     <string name="highfly_premium_catalog_querying">Consultando catálogo Premium…</string>
-    <string name="highfly_premium_catalog_summary">%1$d estables · %2$d eventos · %3$d no compatibles</string>
+    <string name="highfly_premium_catalog_summary">%1$d eventos temporales · %2$d no compatibles</string>
     <string name="highfly_premium_catalog_empty">Todavía no se ha consultado el catálogo.</string>
     <string name="highfly_premium_events_empty">No hay eventos temporales publicados ahora.</string>
     <string name="highfly_premium_token_required">Highfly Premium requiere un token verificado.</string>
