@@ -1,6 +1,6 @@
 # vibem3u — contexto actual
 
-ultima actualización: 2026-09-11
+ultima actualización: 2026-09-12
 
 Este archivo reemplaza al contexto anterior. Describe el estado real del
 proyecto Android TV VibeM3U al momento de esta actualización. Las versiones,
@@ -27,12 +27,12 @@ futura.
 En la fecha de este contexto:
 
     rama: main
-    head: ad301c18c3758982459314cb066767f3c622efe8
-    commit: Keep Highfly stable channels in normal playlists
-    tag estable: v0.4.81
-    versionCode: 86
-    versionName: 0.4.81
-    origin/main: ad301c18c3758982459314cb066767f3c622efe8
+    head: cf8d2783b5a5fbf6d3eff892067e23dcb2df2609
+    commit: Bump version to 0.4.82
+    tag estable: v0.4.82
+    versionCode: 87
+    versionName: 0.4.82
+    origin/main: cf8d2783b5a5fbf6d3eff892067e23dcb2df2609
 
 La versión v0.4.79 fue publicada con los siguientes artefactos verificados:
 
@@ -52,7 +52,7 @@ Al momento de crear este contexto, los elementos no rastreados conocidos eran:
 No se deben borrar, sobrescribir ni incorporar al commit los adjuntos del
 usuario sin una solicitud explícita.
 
-Corrección incorporada en la versión 0.4.81:
+Cambios incorporados en la versión 0.4.82:
 
 - se eliminó la reconstrucción de canales estables desde el catálogo Premium;
 - la fuente pública M3U es ahora la única fuente de metadatos y membresía
@@ -64,6 +64,9 @@ Corrección incorporada en la versión 0.4.81:
   reproducción no se modificaron;
 - se actualizaron las pruebas y los textos de configuración para reflejar la
   separación.
+- las recuperaciones de reproducción muestran el motivo en una línea y la
+  acción actual en otra, con los puntos animados en una vista independiente
+  que no altera el centrado de la acción.
 
 La corrección elimina también la fuente estable Premium automática y su
 interruptor de configuración. La pertenencia y los metadatos de los canales
