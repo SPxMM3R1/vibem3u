@@ -23,19 +23,59 @@
         android:background="@android:color/transparent"
         android:gravity="center">
 
-        <TextView
-            android:id="@+id/loading_text"
+        <LinearLayout
+            android:id="@+id/loading_content"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
-            android:ellipsize="end"
             android:gravity="center"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:text="@string/loading_playlist"
-            android:textColor="@color/white"
-            android:paddingHorizontal="32dp"
-            android:textSize="18sp" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/loading_context"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:paddingHorizontal="32dp"
+                android:textColor="@color/white"
+                android:textSize="18sp"
+                android:visibility="gone" />
+
+            <FrameLayout
+                android:id="@+id/loading_action_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/loading_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:text="@string/loading_playlist"
+                    android:textColor="@color/white"
+                    android:paddingHorizontal="32dp"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/loading_dots"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="start|center_vertical"
+                    android:includeFontPadding="false"
+                    android:textColor="@color/white"
+                    android:textSize="18sp"
+                    android:visibility="gone" />
+            </FrameLayout>
+        </LinearLayout>
     </FrameLayout>
 
     <TextView
