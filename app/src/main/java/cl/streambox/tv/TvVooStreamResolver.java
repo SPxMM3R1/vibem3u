@@ -358,6 +358,7 @@ public final class TvVooStreamResolver implements StreamResolver {
                             ResolvedPlaybackSource.dynamic(
                                     getId(),
                                     stableSourceId(channel),
+                                    playbackOptionId(alias),
                                     attempt.getAccepted(),
                                     playbackHeaders,
                                     PLAYBACK_USER_AGENT,
@@ -745,6 +746,7 @@ public final class TvVooStreamResolver implements StreamResolver {
                 )
         );
         LinkedHashSet<URI> globallySeenCandidates = new LinkedHashSet<>();
+        Map<URI, String> aliasByCandidate = new LinkedHashMap<>();
         int nextAlias = 0;
         int inFlightAliases = 0;
         int completedAliases = 0;
@@ -784,6 +786,7 @@ public final class TvVooStreamResolver implements StreamResolver {
                         return ResolvedPlaybackSource.dynamic(
                                 getId(),
                                 stableSourceId(channel),
+                                playbackOptionId(aliasByCandidate.get(candidateAttempt.getCandidate())),
                                 source,
                                 playbackHeaders,
                                 PLAYBACK_USER_AGENT,
@@ -819,6 +822,10 @@ public final class TvVooStreamResolver implements StreamResolver {
                     if (result.error != null) lastError = result.error;
                     for (URI candidate : result.candidates) {
                         if (globallySeenCandidates.add(candidate)) {
+                            String alias = result.index >= 0 && result.index < limitedAliases.size()
+                                    ? limitedAliases.get(result.index)
+                                    : "";
+                            aliasByCandidate.put(candidate, alias);
                             candidateRace.submit(candidate);
                             if (!candidateRace.hasCapacity()) break;
                         }
@@ -860,6 +867,7 @@ public final class TvVooStreamResolver implements StreamResolver {
                             return ResolvedPlaybackSource.dynamic(
                                     getId(),
                                     stableSourceId(channel),
+                                    playbackOptionId(aliasByCandidate.get(attempt.getCandidate())),
                                     source,
                                     playbackHeaders,
                                     PLAYBACK_USER_AGENT,
@@ -1288,6 +1296,10 @@ public final class TvVooStreamResolver implements StreamResolver {
         headers.put("Referer", "https://vavoo.to/");
         headers.put("Origin", "https://vavoo.to");
         return Collections.unmodifiableMap(headers);
+    }
+
+    private static String playbackOptionId(String alias) {
+        return AppStrings.isBlank(alias) ? "" : "tvvoo:" + alias.trim();
     }
 
     private static List<String> generatedAliases(Channel channel) {

@@ -2350,6 +2350,7 @@ public final class MainActivity extends Activity {
         sourceCandidateContext = null;
         sourceCandidates.clear();
         if (resolved != null) sourceCandidates.addAll(resolved);
+        addCurrentPlaybackSourceIfMissing();
         if (sourceCandidates.isEmpty()) {
             sourceSelectorStatus.setText(getString(R.string.source_selector_no_options));
             return;
@@ -2403,15 +2404,23 @@ public final class MainActivity extends Activity {
     private void renderSourceSelectorOptions() {
         sourceSelectorOptions.removeAllViews();
         sourceCandidateViews.clear();
+        int initialFocusIndex = -1;
         for (int index = 0; index < sourceCandidates.size(); index++) {
             final int candidateIndex = index;
             ResolvedPlaybackCandidate candidate = sourceCandidates.get(index);
+            boolean active = candidate.matches(currentPlaybackSource);
             TextView option = new TextView(this);
             String detail = candidate.getDetail();
-            option.setText(AppStrings.isBlank(detail)
-                    ? candidate.getLabel()
-                    : candidate.getLabel() + "\n" + detail);
-            option.setTextColor(getColor(R.color.white));
+            String label = active ? "✓ " + candidate.getLabel() : candidate.getLabel();
+            if (active && !AppStrings.isBlank(detail)
+                    && !detail.toLowerCase(Locale.ROOT).contains("reproduciendo")) {
+                detail = "Reproduciendo ahora · " + detail;
+            }
+            option.setText(AppStrings.isBlank(detail) ? label : label + "\n" + detail);
+            option.setTextColor(active ? getColor(R.color.cyan) : getColor(R.color.white));
+            option.setContentDescription(active
+                    ? label + " · reproduciendo ahora"
+                    : label);
             option.setTextSize(15f);
             option.setGravity(Gravity.CENTER_VERTICAL);
             option.setBackgroundResource(R.drawable.focus_button);
@@ -2420,6 +2429,9 @@ public final class MainActivity extends Activity {
             option.setMinHeight(dp(54));
             option.setOnFocusChangeListener((view, focused) -> {
                 if (focused) sourceCandidateFocusIndex = candidateIndex;
+                if (active) {
+                    option.setTextColor(getColor(focused ? R.color.panel : R.color.cyan));
+                }
             });
             option.setOnClickListener(view -> selectSourceCandidate(candidateIndex));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
@@ -2429,15 +2441,33 @@ public final class MainActivity extends Activity {
             params.setMargins(0, index == 0 ? 0 : dp(8), 0, 0);
             sourceSelectorOptions.addView(option, params);
             sourceCandidateViews.add(option);
+            if (active && initialFocusIndex < 0) initialFocusIndex = index;
         }
         sourceSelectorStatus.setText(getString(
                 R.string.source_selector_ready_count,
                 sourceCandidates.size()
         ));
         if (!sourceCandidateViews.isEmpty()) {
-            sourceCandidateFocusIndex = 0;
-            sourceCandidateViews.get(0).requestFocus();
+            sourceCandidateFocusIndex = initialFocusIndex < 0 ? 0 : initialFocusIndex;
+            sourceCandidateViews.get(sourceCandidateFocusIndex).requestFocus();
         }
+    }
+
+    private void addCurrentPlaybackSourceIfMissing() {
+        if (currentPlaybackSource == null
+                || !currentPlaybackSource.isDynamicallyResolved()
+                || currentPlaybackSource.isExpired(System.currentTimeMillis())
+                || !"tvvoo".equalsIgnoreCase(currentPlaybackSource.getResolverId())) {
+            return;
+        }
+        for (ResolvedPlaybackCandidate candidate : sourceCandidates) {
+            if (candidate.matches(currentPlaybackSource)) return;
+        }
+        sourceCandidates.add(0, new ResolvedPlaybackCandidate(
+                "Fuente actual",
+                "Reproduciendo ahora · enlace en uso",
+                currentPlaybackSource
+        ));
     }
 
     private void moveSourceSelectorFocus(int delta) {

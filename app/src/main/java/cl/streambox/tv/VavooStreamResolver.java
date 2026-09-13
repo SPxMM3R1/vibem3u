@@ -136,6 +136,7 @@ public final class VavooStreamResolver implements StreamResolver {
                                     ResolvedPlaybackSource.dynamic(
                                             getId(),
                                             stableIdentity,
+                                            playbackOptionId(stableIdentity),
                                             accepted,
                                             playbackHeaders,
                                             TvVooStreamResolver.PLAYBACK_USER_AGENT,
@@ -185,6 +186,7 @@ public final class VavooStreamResolver implements StreamResolver {
         Map<String, String> playbackHeaders = TvVooStreamResolver.playbackHeaders();
         boolean allowHttpFallback = definition.getBooleanConfig("allowHttpFallback", true);
         final URI[] accepted = new URI[1];
+        final String[] acceptedIdentity = new String[1];
         final IOException[] lastValidationError = new IOException[1];
         try {
             sessionClient.streamCandidates(
@@ -202,6 +204,7 @@ public final class VavooStreamResolver implements StreamResolver {
                                     true,
                                     progress
                             );
+                            acceptedIdentity[0] = stableIdentity;
                             return true;
                         } catch (IOException error) {
                             lastValidationError[0] = error;
@@ -222,6 +225,7 @@ public final class VavooStreamResolver implements StreamResolver {
             return ResolvedPlaybackSource.dynamic(
                     getId(),
                     stableSourceId(channel),
+                    playbackOptionId(acceptedIdentity[0]),
                     accepted[0],
                     playbackHeaders,
                     TvVooStreamResolver.PLAYBACK_USER_AGENT,
@@ -239,5 +243,9 @@ public final class VavooStreamResolver implements StreamResolver {
     private long expiresAt() {
         long ttl = cacheTtlMillis();
         return ttl <= 0L ? 0L : System.currentTimeMillis() + ttl;
+    }
+
+    private static String playbackOptionId(String stableIdentity) {
+        return AppStrings.isBlank(stableIdentity) ? "" : "vavoo:" + stableIdentity.trim();
     }
 }

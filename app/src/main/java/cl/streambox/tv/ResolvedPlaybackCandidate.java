@@ -2,6 +2,8 @@ package cl.streambox.tv;
 
 import android.os.SystemClock;
 
+import java.util.Objects;
+
 /**
  * A short-lived playback option exposed by a dynamic resolver.
  *
@@ -35,6 +37,21 @@ final class ResolvedPlaybackCandidate {
 
     ResolvedPlaybackSource getSource() {
         return source;
+    }
+
+    /**
+     * Provider URLs are ephemeral, so prefer the stable logical identity and
+     * only fall back to the URI when no identity was supplied.
+     */
+    boolean matches(ResolvedPlaybackSource activeSource) {
+        if (source == null || activeSource == null) return false;
+        String candidateOptionId = source.getPlaybackOptionId();
+        String activeOptionId = activeSource.getPlaybackOptionId();
+        if (!AppStrings.isBlank(candidateOptionId)
+                && !AppStrings.isBlank(activeOptionId)) {
+            return candidateOptionId.equals(activeOptionId);
+        }
+        return Objects.equals(source.getPlaybackUri(), activeSource.getPlaybackUri());
     }
 
     /** Candidate URLs are deliberately short-lived to avoid stale sessions. */
