@@ -35,12 +35,6 @@
     <string name="loading_reopening_source">Reabriendo fuente HLS…</string>
     <string name="loading_fallback_source">Probando respaldo…</string>
     <string name="loading_network_retry">Reintentando conexión…</string>
-    <string name="loading_recovery_interruption">Interrupción detectada</string>
-    <string name="loading_recovery_buffering">Carga intermitente detectada</string>
-    <string name="loading_recovery_video_stalled">Vídeo detenido</string>
-    <string name="loading_recovery_av_sync">Desincronización A/V detectada</string>
-    <string name="loading_recovery_authorization">Error de autorización</string>
-    <string name="loading_recovery_event">Evento temporal interrumpido</string>
     <string name="empty_playlist">La lista no contiene canales reproducibles.</string>
     <string name="playlist_error">No se pudo descargar la lista. Pulsa OK para reintentar.</string>
     <string name="settings_title">Opciones</string>

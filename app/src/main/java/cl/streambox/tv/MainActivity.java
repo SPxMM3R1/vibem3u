@@ -16,7 +16,10 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
@@ -119,10 +122,7 @@ public final class MainActivity extends Activity {
     private PlaybackDiagnosticsWorker playbackBitrateMeter;
     private View channelOverlay;
     private View loadingPanel;
-    private View loadingActionRow;
-    private TextView loadingContext;
     private TextView loadingText;
-    private TextView loadingDots;
     private TextView clock;
     private View lightEpgOverlay;
     private TextView lightEpgChannelNumber;
@@ -193,7 +193,6 @@ public final class MainActivity extends Activity {
     private boolean loadingMessageAnimating;
     private boolean loadingAnimationScheduled;
     private int loadingDotCount;
-    private boolean loadingRecoveryMode;
     private boolean startupSelectionPending;
     private String startupPreferredChannelIdentity = "";
     private String epgMergeInputSignature = "";
@@ -306,10 +305,7 @@ public final class MainActivity extends Activity {
         playerView = findViewById(R.id.player_view);
         channelOverlay = findViewById(R.id.channel_overlay);
         loadingPanel = findViewById(R.id.loading_panel);
-        loadingActionRow = findViewById(R.id.loading_action_row);
-        loadingContext = findViewById(R.id.loading_context);
         loadingText = findViewById(R.id.loading_text);
-        loadingDots = findViewById(R.id.loading_dots);
         clock = findViewById(R.id.clock);
         lightEpgOverlay = findViewById(R.id.light_epg_overlay);
         lightEpgChannelNumber = findViewById(R.id.light_epg_channel_number);
@@ -476,7 +472,6 @@ public final class MainActivity extends Activity {
                 }
                 MediaItem current = player == null ? null : player.getCurrentMediaItem();
                 if (current != null && playbackRecoveryPolicy.tryConsumeRetry(error.errorCode)) {
-                    beginRecoveryContext(getString(R.string.loading_recovery_interruption));
                     showLoadingState(getString(R.string.loading_network_retry));
                     schedulePlaybackRetry(current.mediaId, playbackGeneration);
                     return;
@@ -1073,7 +1068,6 @@ public final class MainActivity extends Activity {
 
     private void showPlaylistError(String detail) {
         loadFailed = true;
-        clearRecoveryContext();
         stopLoadingTextAnimation();
         loadingPanel.setVisibility(View.VISIBLE);
         String message = getString(R.string.playlist_error);
@@ -1083,30 +1077,8 @@ public final class MainActivity extends Activity {
         loadingText.setText(message);
     }
 
-    private void beginRecoveryContext(String context) {
-        if (loadingPanel == null || isFinishing()) return;
-        if (loadingRecoveryMode
-                && loadingContext != null
-                && loadingContext.getVisibility() == View.VISIBLE) {
-            return;
-        }
-        loadingRecoveryMode = true;
-        loadingPanel.setVisibility(View.VISIBLE);
-        if (loadingContext != null) {
-            loadingContext.setText(SafePlaybackText.detail(
-                    context == null ? "" : context.trim()
-            ));
-            loadingContext.setVisibility(View.VISIBLE);
-        }
-    }
-
     private void showLoadingState(String message) {
-        showLoadingState(message, loadingRecoveryMode);
-    }
-
-    private void showLoadingState(String message, boolean preserveRecoveryContext) {
         if (loadingPanel == null || isFinishing()) return;
-        if (!preserveRecoveryContext) clearRecoveryContext();
         loadingPanel.setVisibility(View.VISIBLE);
         String safeMessage = SafePlaybackText.detail(message == null ? "" : message.trim());
         boolean animate = safeMessage.endsWith("…") || safeMessage.endsWith("...");
@@ -1137,7 +1109,6 @@ public final class MainActivity extends Activity {
             mainHandler.postDelayed(animateLoadingText, 420L);
         } else {
             loadingText.setText(safeMessage);
-            hideLoadingDots();
         }
     }
 
@@ -1225,61 +1196,27 @@ public final class MainActivity extends Activity {
         loadingMessageAnimating = false;
         loadingMessageBase = "";
         loadingDotCount = 0;
-        hideLoadingDots();
     }
 
     /**
-     * The action text stays centered on its own. The animated dots are a
-     * separate view positioned after the centered phrase, so they never
-     * participate in the phrase's measured width or shift its center.
+     * Keep the three-dot slot in the text at all times. Only the dots change
+     * visibility, so the fixed stage label does not move as the animation
+     * advances while the TextView remains centered.
      */
     private void renderAnimatedLoadingText() {
         if (loadingText == null) return;
-        loadingText.setText(loadingMessageBase);
-        if (loadingDots == null) return;
-        int visibleDots = Math.min(Math.max(loadingDotCount, 0), 3);
-        loadingDots.setText("...".substring(0, visibleDots));
-        loadingDots.setVisibility(visibleDots == 0 ? View.INVISIBLE : View.VISIBLE);
-        positionLoadingDots();
-    }
-
-    private void hideLoadingDots() {
-        if (loadingDots == null) return;
-        loadingDots.setText("");
-        loadingDots.setTranslationX(0f);
-        loadingDots.setVisibility(View.GONE);
-    }
-
-    private void positionLoadingDots() {
-        if (loadingActionRow == null || loadingText == null || loadingDots == null
-                || loadingDots.getVisibility() == View.GONE) return;
-        loadingActionRow.post(() -> {
-            if (loadingActionRow.getWidth() <= 0
-                    || loadingDots.getVisibility() == View.GONE) return;
-            float phraseWidth = loadingText.getPaint().measureText(loadingMessageBase);
-            float center = loadingActionRow.getWidth() / 2f;
-            float gap = 4f * getResources().getDisplayMetrics().density;
-            loadingDots.setTranslationX(center + phraseWidth / 2f + gap);
-        });
-    }
-
-    private void clearRecoveryContext() {
-        loadingRecoveryMode = false;
-        if (loadingContext == null) return;
-        loadingContext.setText("");
-        loadingContext.setVisibility(View.GONE);
-    }
-
-    private void beginRecoveryContextForReason(String reason) {
-        if (reason != null && reason.contains("carga intermitente")) {
-            beginRecoveryContext(getString(R.string.loading_recovery_buffering));
-        } else if (reason != null && reason.contains("vídeo detenido")) {
-            beginRecoveryContext(getString(R.string.loading_recovery_video_stalled));
-        } else if (reason != null && reason.startsWith("desincronización")) {
-            beginRecoveryContext(getString(R.string.loading_recovery_av_sync));
-        } else {
-            beginRecoveryContext(getString(R.string.loading_recovery_interruption));
+        String dotSlot = "...";
+        SpannableString rendered = new SpannableString(loadingMessageBase + dotSlot);
+        int visibleDots = Math.min(Math.max(loadingDotCount, 0), dotSlot.length());
+        if (visibleDots < dotSlot.length()) {
+            rendered.setSpan(
+                    new ForegroundColorSpan(Color.TRANSPARENT),
+                    loadingMessageBase.length() + visibleDots,
+                    loadingMessageBase.length() + dotSlot.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
         }
+        loadingText.setText(rendered);
     }
 
     private static String stripTrailingEllipsis(String value) {
@@ -1291,7 +1228,6 @@ public final class MainActivity extends Activity {
 
     private void hideLoadingState() {
         stopLoadingTextAnimation();
-        clearRecoveryContext();
         if (loadingPanel != null) loadingPanel.setVisibility(View.GONE);
     }
 
@@ -1485,7 +1421,6 @@ public final class MainActivity extends Activity {
         long nowMs = SystemClock.elapsedRealtime();
         if (nowMs < playbackRecoveryCooldownUntilElapsedRealtime) return;
         playbackRecoveryCooldownUntilElapsedRealtime = nowMs + PLAYBACK_RECOVERY_COOLDOWN_MS;
-        beginRecoveryContextForReason(reason);
         Log.i(PLAYBACK_HEALTH_TAG, "recovery reason=" + reason);
         playbackLoadingSinceElapsedRealtime = nowMs;
         playbackAvSyncDetector.reset();
@@ -1508,7 +1443,6 @@ public final class MainActivity extends Activity {
         long nowMs = SystemClock.elapsedRealtime();
         if (nowMs < playbackRecoveryCooldownUntilElapsedRealtime) return;
         playbackRecoveryCooldownUntilElapsedRealtime = nowMs + PLAYBACK_RECOVERY_COOLDOWN_MS;
-        beginRecoveryContext(getString(R.string.loading_recovery_av_sync));
         Log.i(PLAYBACK_HEALTH_TAG, "recovery reason=" + reason);
         playbackLoadingSinceElapsedRealtime = nowMs;
         intermittentBufferingDetector.reset();
@@ -1538,14 +1472,13 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        beginRecoveryContext(getString(R.string.loading_recovery_interruption));
         Channel channel = playbackChannel;
         long expectedGeneration = playbackGeneration;
         playbackAutoRecoveryInFlight = true;
         beginStartupMeasurement(channel, PlaybackStartupMetrics.Reason.RETRY);
-            setStatus("RECONECTANDO", R.color.amber);
-            codecInfo.setText("Reabriendo fuente");
-            showLoadingState(getString(R.string.loading_reopening_source));
+        setStatus("RECONECTANDO", R.color.amber);
+        codecInfo.setText("Reabriendo fuente");
+        showLoadingState(getString(R.string.loading_reopening_source));
         cancelScheduledPlaybackRetry();
         cancelPlaybackResolution();
         discardCurrentPlaybackSource();
@@ -1824,7 +1757,6 @@ public final class MainActivity extends Activity {
         }
 
         if (temporaryEventRecoveryPolicy.tryConsume(eventId)) {
-            beginRecoveryContext(getString(R.string.loading_recovery_event));
             beginStartupMeasurement(channel, PlaybackStartupMetrics.Reason.REFRESH);
             int attempt = temporaryEventRecoveryPolicy.attemptsFor(eventId);
             setStatus("RECONECTANDO", R.color.amber);
@@ -1923,7 +1855,6 @@ public final class MainActivity extends Activity {
         long expectedGeneration = playbackGeneration;
         StreamResolver resolver = streamResolverRegistry.find(channel);
         if (playbackRecoveryEpisode.tryRefresh()) {
-            beginRecoveryContext(getString(R.string.loading_recovery_authorization));
             playbackAutoRecoveryInFlight = true;
             beginStartupMeasurement(channel, PlaybackStartupMetrics.Reason.REFRESH);
             setStatus("RENOVANDO", R.color.amber);
