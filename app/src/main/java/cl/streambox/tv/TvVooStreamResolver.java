@@ -420,10 +420,16 @@ public final class TvVooStreamResolver implements StreamResolver {
             }
             while (inFlight > 0) {
                 deadline.check();
-                Future<AliasResult> finished = completion.poll(
-                        Math.min(250L, Math.max(1L, deadline.remainingMillis())),
-                        TimeUnit.MILLISECONDS
-                );
+                Future<AliasResult> finished;
+                try {
+                    finished = completion.poll(
+                            Math.min(250L, Math.max(1L, deadline.remainingMillis())),
+                            TimeUnit.MILLISECONDS
+                    );
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Solicitud cancelada.", error);
+                }
                 if (finished == null) continue;
                 inFlight--;
                 try {
