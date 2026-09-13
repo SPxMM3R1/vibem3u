@@ -21,17 +21,9 @@ public final class HighflyStreamResolver implements StreamResolver {
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
     private final HlsStreamValidator validator;
-    private final HighflyPremiumCatalogRepository premiumCatalogRepository;
 
     public HighflyStreamResolver(ResolverDefinition definition) {
-        this(definition, new TokenHttpClient(), new HlsStreamValidator(), null);
-    }
-
-    HighflyStreamResolver(
-            ResolverDefinition definition,
-            HighflyPremiumCatalogRepository premiumCatalogRepository
-    ) {
-        this(definition, new TokenHttpClient(), new HlsStreamValidator(), premiumCatalogRepository);
+        this(definition, new TokenHttpClient(), new HlsStreamValidator());
     }
 
     HighflyStreamResolver(
@@ -39,19 +31,9 @@ public final class HighflyStreamResolver implements StreamResolver {
             TokenHttpClient httpClient,
             HlsStreamValidator validator
     ) {
-        this(definition, httpClient, validator, null);
-    }
-
-    HighflyStreamResolver(
-            ResolverDefinition definition,
-            TokenHttpClient httpClient,
-            HlsStreamValidator validator,
-            HighflyPremiumCatalogRepository premiumCatalogRepository
-    ) {
         this.definition = definition;
         this.httpClient = httpClient;
         this.validator = validator;
-        this.premiumCatalogRepository = premiumCatalogRepository;
     }
 
     @Override public String getId() { return definition.getId(); }
@@ -100,40 +82,6 @@ public final class HighflyStreamResolver implements StreamResolver {
         ResolutionProgressListener progress = listener == null
                 ? ResolutionProgressListener.NONE
                 : listener;
-
-        boolean premiumStable = premiumCatalogRepository != null
-                && premiumCatalogRepository.isPremiumStableChannel(channel);
-        boolean temporaryEvent = premiumCatalogRepository != null
-                && premiumCatalogRepository.isTemporaryEvent(channel);
-        if (premiumCatalogRepository != null && (premiumStable || temporaryEvent)) {
-            if (!premiumCatalogRepository.hasCredential() && temporaryEvent) {
-                throw new IOException("El evento Premium requiere una credencial.");
-            }
-            if (premiumCatalogRepository.hasCredential()) {
-                progress.onProgress(ResolutionProgress.of(
-                        temporaryEvent
-                                ? ResolutionStage.CATALOG_REQUEST
-                                : ResolutionStage.SOURCE_REQUEST,
-                        temporaryEvent
-                                ? "Consultando catálogo Premium · verificando evento"
-                                : "Solicitando fuente Premium · usando slug estable"
-                ));
-                try {
-                    return premiumCatalogRepository.resolve(channel, progress);
-                } catch (IOException error) {
-                    if (temporaryEvent) {
-                        throw new IOException("El evento Premium no está disponible.");
-                    }
-                    // Stable Premium entries deliberately retain the public
-                    // leaf URL as a one-channel fallback. A temporary event
-                    // never falls back to a fabricated placeholder.
-                    progress.onProgress(ResolutionProgress.of(
-                            ResolutionStage.SOURCE_CANDIDATE,
-                            "Fuente Premium no disponible · probando respaldo"
-                    ));
-                }
-            }
-        }
 
         String slug = slug(channel);
         if (AppStrings.isBlank(slug)) throw new IOException("Highfly no publicó un identificador estable.");
@@ -236,11 +184,6 @@ public final class HighflyStreamResolver implements StreamResolver {
             }
         }
         throw new IOException("Highfly no entregó una fuente reproducible.", lastError);
-    }
-
-    @Override
-    public void clearSensitiveState() {
-        if (premiumCatalogRepository != null) premiumCatalogRepository.clearSession();
     }
 
     private URI validateCandidate(URI candidate) throws IOException {

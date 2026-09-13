@@ -70,7 +70,6 @@ public final class PlaybackHttpInstrumentedTest {
         AtomicReference<SurfaceTexture> textureRef = new AtomicReference<>();
         AtomicInteger renewals = new AtomicInteger();
         PlaybackStartupMetrics metrics = new PlaybackStartupMetrics();
-        PlaybackRecoveryEpisode episode = new PlaybackRecoveryEpisode();
         String fresh = server.url("/fresh.mp4").toString();
         String initial = rejectFirstSource ? server.url("/expired.mp4").toString() : fresh;
         try {
@@ -99,8 +98,7 @@ public final class PlaybackHttpInstrumentedTest {
                 });
                 player.addListener(new Player.Listener() {
                     @Override public void onPlayerError(PlaybackException error) {
-                        if (rejectFirstSource && episode.tryRefresh()) {
-                            renewals.incrementAndGet();
+                        if (rejectFirstSource && renewals.compareAndSet(0, 1)) {
                             metrics.failed(metrics.currentId());
                             long attempt = metrics.begin("test", PlaybackStartupMetrics.Reason.REFRESH);
                             player.setMediaItem(item(fresh, attempt));

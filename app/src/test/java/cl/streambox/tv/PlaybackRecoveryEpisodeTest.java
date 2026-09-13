@@ -1,80 +1,50 @@
 package cl.streambox.tv;
 
-import org.junit.Test;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 import java.util.concurrent.TimeUnit;
-import static org.junit.Assert.*;
+
+import org.junit.Test;
 
 public final class PlaybackRecoveryEpisodeTest {
-    @Test public void aSecondExpiryCanRenewAfterSustainedPlayback() {
+    @Test
+    public void reportsStablePlaybackOnlyAfterTheFullWindow() {
         PlaybackRecoveryEpisode episode = new PlaybackRecoveryEpisode();
-        assertTrue(episode.tryRefresh());
-        assertFalse(episode.tryRefresh());
-        episode.onPlayingChanged(true, 0L);
-        assertTrue(episode.onPlayingChanged(false, TimeUnit.SECONDS.toNanos(16)));
-        assertTrue(episode.tryRefresh());
-        assertFalse(episode.tryRefresh());
+        long start = 1_000_000_000L;
+
+        assertFalse(episode.onPlayingChanged(true, start));
+        assertFalse(episode.onPlayingChanged(
+                true,
+                start + TimeUnit.SECONDS.toNanos(PlaybackRecoveryEpisode.STABLE_PLAYBACK_MS / 1000L - 1L)
+        ));
+        assertTrue(episode.onPlayingChanged(
+                true,
+                start + TimeUnit.MILLISECONDS.toNanos(PlaybackRecoveryEpisode.STABLE_PLAYBACK_MS)
+        ));
+        assertFalse(episode.onPlayingChanged(
+                true,
+                start + TimeUnit.MILLISECONDS.toNanos(PlaybackRecoveryEpisode.STABLE_PLAYBACK_MS + 1L)
+        ));
     }
 
-    @Test public void briefSuccessfulStartsCannotCreateAnInfiniteRefreshLoop() {
+    @Test
+    public void aPauseStartsASeparateStabilityWindow() {
         PlaybackRecoveryEpisode episode = new PlaybackRecoveryEpisode();
-        assertTrue(episode.tryRefresh());
-        for (int i = 0; i < 30; i++) {
-            episode.onPlayingChanged(true, TimeUnit.SECONDS.toNanos(i * 2L));
-            episode.onPlayingChanged(false, TimeUnit.SECONDS.toNanos(i * 2L + 1L));
-            assertFalse(episode.tryRefresh());
-        }
-        assertTrue(episode.tryFallback());
-        assertFalse(episode.tryFallback());
-    }
+        long start = 2_000_000_000L;
 
-    @Test public void failedResolutionHasOnlyOneFallbackUntilNewChannel() {
-        PlaybackRecoveryEpisode episode = new PlaybackRecoveryEpisode();
-        episode.resolutionFailed();
-        assertFalse(episode.tryRefresh());
-        assertTrue(episode.tryFallback());
-        assertFalse(episode.tryFallback());
-        episode.reset();
-        assertTrue(episode.tryRefresh());
-    }
-
-    @Test public void directSourceReloadsAreBoundedAndResetAfterStablePlayback() {
-        PlaybackRecoveryEpisode episode = new PlaybackRecoveryEpisode();
-        assertTrue(episode.trySourceReload());
-        assertTrue(episode.trySourceReload());
-        assertFalse(episode.trySourceReload());
-
-        episode.onPlayingChanged(true, 0L);
-        assertTrue(episode.onPlayingChanged(false, TimeUnit.SECONDS.toNanos(16)));
-
-        assertTrue(episode.trySourceReload());
-        assertTrue(episode.trySourceReload());
-        assertFalse(episode.trySourceReload());
-    }
-
-    @Test public void sameSourceRecoveriesAreBoundedAndResetAfterStablePlayback() {
-        PlaybackRecoveryEpisode episode = new PlaybackRecoveryEpisode();
-        assertTrue(episode.trySameSourceRecovery());
-        assertTrue(episode.trySameSourceRecovery());
-        assertFalse(episode.trySameSourceRecovery());
-
-        episode.onPlayingChanged(true, 0L);
-        assertTrue(episode.onPlayingChanged(false, TimeUnit.SECONDS.toNanos(16)));
-
-        assertTrue(episode.trySameSourceRecovery());
-        assertTrue(episode.trySameSourceRecovery());
-        assertFalse(episode.trySameSourceRecovery());
-    }
-
-    @Test public void avRecoveryUsesOneSoftResyncBeforeOneFullReload() {
-        PlaybackRecoveryEpisode episode = new PlaybackRecoveryEpisode();
-        assertTrue(episode.tryAvSoftResync());
-        assertFalse(episode.tryAvSoftResync());
-        assertTrue(episode.tryAvFullReload());
-        assertFalse(episode.tryAvFullReload());
-
-        episode.onPlayingChanged(true, 0L);
-        assertTrue(episode.onPlayingChanged(false, TimeUnit.SECONDS.toNanos(16)));
-        assertTrue(episode.tryAvSoftResync());
-        assertTrue(episode.tryAvFullReload());
+        episode.onPlayingChanged(true, start);
+        assertFalse(episode.onPlayingChanged(
+                false,
+                start + TimeUnit.SECONDS.toNanos(5)
+        ));
+        assertFalse(episode.onPlayingChanged(
+                true,
+                start + TimeUnit.SECONDS.toNanos(5)
+        ));
+        assertTrue(episode.onPlayingChanged(
+                true,
+                start + TimeUnit.MILLISECONDS.toNanos(5_000L + PlaybackRecoveryEpisode.STABLE_PLAYBACK_MS)
+        ));
     }
 }

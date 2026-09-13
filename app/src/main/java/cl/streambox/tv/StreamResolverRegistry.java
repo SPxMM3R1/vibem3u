@@ -14,20 +14,10 @@ public final class StreamResolverRegistry {
     private final Map<String, StreamResolver> resolversByProvider;
 
     public StreamResolverRegistry() {
-        this(null);
-    }
-
-    /** Fallback registry that can still resolve virtual Premium channels. */
-    public StreamResolverRegistry(HighflyPremiumCatalogRepository premiumCatalogRepository) {
         List<StreamResolver> configured = new ArrayList<>();
         configured.add(new TvnStreamResolver());
         configured.add(new MeganoticiasStreamResolver());
-        if (premiumCatalogRepository != null) {
-            configured.add(new HighflyStreamResolver(
-                    ResolverDefinition.fallbackHighfly(),
-                    premiumCatalogRepository
-            ));
-        }
+        configured.add(new HighflyStreamResolver(ResolverDefinition.fallbackHighfly()));
         resolvers = Collections.unmodifiableList(configured);
         catalog = null;
         preferences = null;
@@ -38,14 +28,6 @@ public final class StreamResolverRegistry {
             ResolverCatalog catalog,
             ResolverPreferences preferences
     ) {
-        this(catalog, preferences, null);
-    }
-
-    public StreamResolverRegistry(
-            ResolverCatalog catalog,
-            ResolverPreferences preferences,
-            HighflyPremiumCatalogRepository premiumCatalogRepository
-    ) {
         this.catalog = catalog;
         this.preferences = preferences;
         List<StreamResolver> configured = new ArrayList<>();
@@ -53,8 +35,7 @@ public final class StreamResolverRegistry {
         for (ResolverDefinition definition : catalog.getProviders()) {
             StreamResolver resolver = create(
                     definition,
-                    preferences,
-                    premiumCatalogRepository
+                    preferences
             );
             configured.add(resolver);
             byProvider.put(definition.getId(), resolver);
@@ -115,8 +96,7 @@ public final class StreamResolverRegistry {
 
     private static StreamResolver create(
             ResolverDefinition definition,
-            ResolverPreferences preferences,
-            HighflyPremiumCatalogRepository premiumCatalogRepository
+            ResolverPreferences preferences
     ) {
         return switch (definition.getEngine()) {
             case "tvn" -> new TvnStreamResolver(definition);
@@ -126,8 +106,7 @@ public final class StreamResolverRegistry {
                     preferences.getTvVooResolutionMode()
             );
             case "highfly" -> new HighflyStreamResolver(
-                    definition,
-                    premiumCatalogRepository
+                    definition
             );
             case "vavoo" -> {
                 if (!BuildConfig.ENABLE_EXPERIMENTAL_VAVOO) {

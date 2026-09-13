@@ -10,8 +10,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -28,19 +26,15 @@ import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
 
+import java.security.KeyStore;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Enumeration;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.io.IOException;
 
 public final class SettingsActivity extends Activity {
     private static final float SETTINGS_PANEL_ASPECT_RATIO = 16f / 10f;
@@ -132,22 +126,6 @@ public final class SettingsActivity extends Activity {
     private Button automaticQualityButton;
     private final List<Button> qualityOptionButtons = new ArrayList<>();
     private final List<Button> qualityFocusButtons = new ArrayList<>();
-    private HighflyPremiumCredentialStore highflyPremiumCredentialStore;
-    private HighflyPremiumCatalogRepository highflyPremiumCatalogRepository;
-    private EditText highflyPremiumToken;
-    private TextView highflyPremiumTokenFeedback;
-    private Button highflyPremiumVerifyButton;
-    private Button highflyPremiumQueryButton;
-    private Button highflyPremiumRemoveButton;
-    private TextView highflyPremiumStatus;
-    private RadioGroup highflyPremiumRegionGroup;
-    private RadioGroup highflyPremiumSortGroup;
-    private Switch highflyPremiumIncludeEvents;
-    private LinearLayout highflyPremiumEventsContainer;
-    private TextView highflyPremiumCatalogSummary;
-    private final Map<String, Switch> highflyPremiumEventSwitches = new LinkedHashMap<>();
-    private HighflyPremiumCatalog loadedHighflyPremiumCatalog;
-
     /**
      * Seeds only a completely unconfigured installation. Once the user has
      * saved or configured either playlist, their choice remains authoritative,
@@ -155,6 +133,8 @@ public final class SettingsActivity extends Activity {
      */
     public static void ensureDefaultPlaylistConfigured(Context context) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        removeObsoleteHighflyCredentialState(prefs);
+        removeObsoleteHighflyKeyMaterial();
         if (prefs.contains(KEY_PLAYLIST_URL)
                 || prefs.contains(KEY_PLAYLIST_URL_2)
                 || prefs.contains(KEY_PLAYLIST_ENABLED)
@@ -167,6 +147,45 @@ public final class SettingsActivity extends Activity {
                 .apply();
     }
 
+    /** Removes credential state written by versions that exposed this provider separately. */
+    private static void removeObsoleteHighflyCredentialState(SharedPreferences preferences) {
+        SharedPreferences.Editor editor = null;
+        for (String key : preferences.getAll().keySet()) {
+            String normalized = key == null ? "" : key.toLowerCase(Locale.ROOT);
+            boolean obsoleteCredential = normalized.contains("highfly")
+                    && (normalized.contains("token")
+                    || normalized.contains("credential")
+                    || normalized.contains("storage_mode")
+                    || normalized.endsWith("_status")
+                    || normalized.endsWith("_plan")
+                    || normalized.endsWith("_expires_at"));
+            if (!obsoleteCredential) continue;
+            if (editor == null) editor = preferences.edit();
+            editor.remove(key);
+        }
+        if (editor != null) editor.commit();
+    }
+
+    /** Removes inert Android Keystore entries left by the retired provider integration. */
+    private static void removeObsoleteHighflyKeyMaterial() {
+        try {
+            KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+            keyStore.load(null);
+            Enumeration<String> aliases = keyStore.aliases();
+            List<String> obsoleteAliases = new ArrayList<>();
+            while (aliases.hasMoreElements()) {
+                String alias = aliases.nextElement();
+                if (alias != null
+                        && alias.toLowerCase(Locale.ROOT).startsWith("vibem3u_highfly")) {
+                    obsoleteAliases.add(alias);
+                }
+            }
+            for (String alias : obsoleteAliases) keyStore.deleteEntry(alias);
+        } catch (Exception ignored) {
+            // A missing/unsupported keystore must not prevent the app from opening.
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -176,13 +195,10 @@ public final class SettingsActivity extends Activity {
 
         ensureDefaultPlaylistConfigured(this);
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-        highflyPremiumCredentialStore = HighflyPremiumCredentialStore.getInstance(this);
-        highflyPremiumCatalogRepository = new HighflyPremiumCatalogRepository(this);
         String existingUrl = prefs.getString(KEY_PLAYLIST_URL, "");
         String existingUrl2 = prefs.getString(KEY_PLAYLIST_URL_2, "");
         hasExistingUrl = (existingUrl != null && !AppStrings.isBlank(existingUrl))
-                || (existingUrl2 != null && !AppStrings.isBlank(existingUrl2))
-                || highflyPremiumCredentialStore.hasCredential();
+                || (existingUrl2 != null && !AppStrings.isBlank(existingUrl2));
         if (Build.VERSION.SDK_INT >= 33) {
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
                     android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,
@@ -216,17 +232,6 @@ public final class SettingsActivity extends Activity {
         tvVooModeBoth = findViewById(R.id.tvvoo_mode_both);
         tvVooModeDirect = findViewById(R.id.tvvoo_mode_direct);
         tvVooModeExternal = findViewById(R.id.tvvoo_mode_external);
-        highflyPremiumToken = findViewById(R.id.highfly_premium_token);
-        highflyPremiumTokenFeedback = findViewById(R.id.highfly_premium_token_feedback);
-        highflyPremiumVerifyButton = findViewById(R.id.highfly_premium_verify_button);
-        highflyPremiumQueryButton = findViewById(R.id.highfly_premium_query_button);
-        highflyPremiumRemoveButton = findViewById(R.id.highfly_premium_remove_button);
-        highflyPremiumStatus = findViewById(R.id.highfly_premium_status);
-        highflyPremiumRegionGroup = findViewById(R.id.highfly_premium_region_group);
-        highflyPremiumSortGroup = findViewById(R.id.highfly_premium_sort_group);
-        highflyPremiumIncludeEvents = findViewById(R.id.highfly_premium_include_events);
-        highflyPremiumEventsContainer = findViewById(R.id.highfly_premium_events_container);
-        highflyPremiumCatalogSummary = findViewById(R.id.highfly_premium_catalog_summary);
         tabs = new TextView[]{
                 findViewById(R.id.tab_general),
                 findViewById(R.id.tab_playback),
@@ -248,7 +253,6 @@ public final class SettingsActivity extends Activity {
         resolverCatalogRepository = new ResolverCatalogRepository(this);
         resolverPreferences = new ResolverPreferences(this);
         initializeTvVooResolutionMode();
-        initializeHighflyPremiumOptions();
         urlInput.setText(existingUrl);
         urlInput.setSelection(urlInput.length());
         urlInput2.setText(existingUrl2 == null ? "" : existingUrl2);
@@ -278,9 +282,6 @@ public final class SettingsActivity extends Activity {
             updateStatus.setVisibility(View.VISIBLE);
         }
         resolverUpdateButton.setOnClickListener(v -> checkResolverUpdates());
-        highflyPremiumVerifyButton.setOnClickListener(v -> verifyHighflyPremiumToken());
-        highflyPremiumQueryButton.setOnClickListener(v -> queryHighflyPremiumCatalog());
-        highflyPremiumRemoveButton.setOnClickListener(v -> removeHighflyPremiumAccess());
         for (int index = 0; index < tabs.length; index++) {
             final int tabIndex = index;
             tabs[index].setOnClickListener(v -> showTab(tabIndex, true));
@@ -292,28 +293,6 @@ public final class SettingsActivity extends Activity {
         urlInput2.setOnEditorActionListener((v, actionId, event) -> {
             save();
             return true;
-        });
-        highflyPremiumToken.setOnEditorActionListener((v, actionId, event) -> {
-            verifyHighflyPremiumToken();
-            return true;
-        });
-        highflyPremiumToken.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence text, int start, int count, int after) {
-                // No-op.
-            }
-
-            @Override
-            public void onTextChanged(CharSequence text, int start, int before, int count) {
-                if (text != null && text.length() > 0) {
-                    clearPremiumTokenFeedback();
-                }
-            }
-
-            @Override
-            public void afterTextChanged(Editable editable) {
-                // No-op.
-            }
         });
         focusVisibilityListener = (oldFocus, newFocus) -> {
             if (newFocus != null && settingsContent != null
@@ -470,349 +449,8 @@ public final class SettingsActivity extends Activity {
         }
     }
 
-    private void initializeHighflyPremiumOptions() {
-        highflyPremiumIncludeEvents.setChecked(
-                HighflyPremiumPreferences.includeEvents(this)
-        );
-
-        highflyPremiumRegionGroup.check(regionRadioId(
-                HighflyPremiumPreferences.region(this)
-        ));
-        highflyPremiumSortGroup.check(sortRadioId(
-                HighflyPremiumPreferences.streamSort(this)
-        ));
-        renderHighflyPremiumStatus();
-        highflyPremiumCatalogSummary.setText(R.string.highfly_premium_catalog_empty);
-        highflyPremiumEventsContainer.removeAllViews();
-        highflyPremiumEventsContainer.setVisibility(View.GONE);
-    }
-
-    private int regionRadioId(HighflyPremiumPreferences.Region region) {
-        if (region == HighflyPremiumPreferences.Region.US1) {
-            return R.id.highfly_premium_region_us1;
-        }
-        if (region == HighflyPremiumPreferences.Region.US2) {
-            return R.id.highfly_premium_region_us2;
-        }
-        if (region == HighflyPremiumPreferences.Region.EU1) {
-            return R.id.highfly_premium_region_eu1;
-        }
-        return R.id.highfly_premium_region_main;
-    }
-
-    private int sortRadioId(HighflyPremiumPreferences.StreamSort sort) {
-        if (sort == HighflyPremiumPreferences.StreamSort.DEFAULT) {
-            return R.id.highfly_premium_sort_default;
-        }
-        if (sort == HighflyPremiumPreferences.StreamSort.LOWEST_FIRST) {
-            return R.id.highfly_premium_sort_low;
-        }
-        return R.id.highfly_premium_sort_high;
-    }
-
-    private HighflyPremiumPreferences.Region selectedHighflyPremiumRegion() {
-        int checkedId = highflyPremiumRegionGroup.getCheckedRadioButtonId();
-        if (checkedId == R.id.highfly_premium_region_us1) {
-            return HighflyPremiumPreferences.Region.US1;
-        }
-        if (checkedId == R.id.highfly_premium_region_us2) {
-            return HighflyPremiumPreferences.Region.US2;
-        }
-        if (checkedId == R.id.highfly_premium_region_eu1) {
-            return HighflyPremiumPreferences.Region.EU1;
-        }
-        return HighflyPremiumPreferences.Region.MAIN;
-    }
-
-    private HighflyPremiumPreferences.StreamSort selectedPremiumStreamSort() {
-        int checkedId = highflyPremiumSortGroup.getCheckedRadioButtonId();
-        if (checkedId == R.id.highfly_premium_sort_default) {
-            return HighflyPremiumPreferences.StreamSort.DEFAULT;
-        }
-        if (checkedId == R.id.highfly_premium_sort_low) {
-            return HighflyPremiumPreferences.StreamSort.LOWEST_FIRST;
-        }
-        return HighflyPremiumPreferences.StreamSort.HIGHEST_FIRST;
-    }
-
-    private void verifyHighflyPremiumToken() {
-        String candidate = highflyPremiumToken.getText().toString().trim();
-        HighflyPremiumTokenRules.ParsedInput parsedInput;
-        try {
-            parsedInput = HighflyPremiumTokenRules.parseInput(candidate);
-        } catch (IOException error) {
-            highflyPremiumStatus.setText(R.string.highfly_premium_status_invalid);
-            setPremiumTokenFeedback(
-                    R.string.highfly_premium_token_feedback_invalid,
-                    R.color.red
-            );
-            return;
-        }
-
-        final String token = parsedInput.getToken();
-        final HighflyPremiumPreferences.Region region = parsedInput.getRegion() == null
-                ? selectedHighflyPremiumRegion()
-                : parsedInput.getRegion();
-        // A manifest copied from Highfly/Stremio carries the selected server
-        // in its host. Keep the UI and the later playback preference aligned
-        // with that host instead of silently verifying against Main.
-        if (parsedInput.getRegion() != null) {
-            highflyPremiumRegionGroup.check(regionRadioId(region));
-        }
-
-        setPremiumOperationEnabled(false);
-        highflyPremiumStatus.setText(R.string.highfly_premium_status_verifying);
-        setPremiumTokenFeedback(
-                R.string.highfly_premium_token_feedback_verifying,
-                R.color.amber
-        );
-        updateExecutor.submit(() -> {
-            try {
-                HighflyPremiumCatalogRepository.AccountInfo account =
-                        highflyPremiumCatalogRepository.verifyToken(token, region);
-                highflyPremiumCredentialStore.saveToken(token);
-                highflyPremiumCredentialStore.recordVerification(account);
-                mainHandler.post(() -> {
-                    highflyPremiumToken.setText("");
-                    renderHighflyPremiumStatus();
-                    setPremiumTokenFeedback(
-                            R.string.highfly_premium_token_feedback_verified,
-                            R.color.green
-                    );
-                    setPremiumOperationEnabled(true);
-                });
-            } catch (HighflyPremiumCatalogRepository.CredentialRejectedException error) {
-                mainHandler.post(() -> {
-                    highflyPremiumStatus.setText(R.string.highfly_premium_status_invalid);
-                    setPremiumTokenFeedback(
-                            R.string.highfly_premium_token_feedback_invalid,
-                            R.color.red
-                    );
-                    setPremiumOperationEnabled(true);
-                });
-            } catch (Exception error) {
-                mainHandler.post(() -> {
-                    highflyPremiumStatus.setText(R.string.highfly_premium_status_error);
-                    setPremiumTokenFeedback(
-                            R.string.highfly_premium_token_feedback_error,
-                            R.color.red
-                    );
-                    setPremiumOperationEnabled(true);
-                });
-            }
-        });
-    }
-
-    private void queryHighflyPremiumCatalog() {
-        if (!highflyPremiumCredentialStore.hasCredential()) {
-            highflyPremiumStatus.setText(R.string.highfly_premium_token_required);
-            clearPremiumTokenFeedback();
-            return;
-        }
-
-        setPremiumOperationEnabled(false);
-        highflyPremiumStatus.setText(R.string.highfly_premium_catalog_querying);
-        HighflyPremiumPreferences.Region region = selectedHighflyPremiumRegion();
-        updateExecutor.submit(() -> {
-            try {
-                HighflyPremiumCatalog catalog = highflyPremiumCatalogRepository.queryCatalog(
-                        region,
-                        true,
-                        true
-                );
-                mainHandler.post(() -> {
-                    loadedHighflyPremiumCatalog = catalog;
-                    renderHighflyPremiumCatalog(catalog);
-                    renderHighflyPremiumStatus();
-                    setPremiumOperationEnabled(true);
-                });
-            } catch (HighflyPremiumCatalogRepository.CredentialRejectedException error) {
-                highflyPremiumCredentialStore.recordInvalid();
-                mainHandler.post(() -> {
-                    highflyPremiumStatus.setText(R.string.highfly_premium_status_invalid);
-                    setPremiumTokenFeedback(
-                            R.string.highfly_premium_token_feedback_invalid,
-                            R.color.red
-                    );
-                    setPremiumOperationEnabled(true);
-                });
-            } catch (Exception error) {
-                mainHandler.post(() -> {
-                    highflyPremiumStatus.setText(R.string.highfly_premium_status_error);
-                    setPremiumOperationEnabled(true);
-                });
-            }
-        });
-    }
-
-    private void renderHighflyPremiumStatus() {
-        HighflyPremiumCredentialStore.TokenStatus tokenStatus =
-                highflyPremiumCredentialStore.tokenStatus();
-        highflyPremiumToken.setHint(highflyPremiumCredentialStore.hasCredential()
-                ? R.string.highfly_premium_token_saved_hint
-                : R.string.highfly_premium_token_hint);
-        switch (tokenStatus.getStatus()) {
-            case VALID:
-                highflyPremiumStatus.setText(getString(
-                        R.string.highfly_premium_status_valid,
-                        premiumAccountLabel(tokenStatus)
-                ));
-                setPremiumTokenFeedback(
-                        R.string.highfly_premium_token_feedback_verified,
-                        R.color.green
-                );
-                break;
-            case INVALID:
-            case EXPIRED:
-                highflyPremiumStatus.setText(R.string.highfly_premium_status_invalid);
-                setPremiumTokenFeedback(
-                        R.string.highfly_premium_token_feedback_invalid,
-                        R.color.red
-                );
-                break;
-            case UNKNOWN:
-                highflyPremiumStatus.setText(R.string.highfly_premium_status_verifying);
-                setPremiumTokenFeedback(
-                        R.string.highfly_premium_token_feedback_unverified,
-                        R.color.amber
-                );
-                break;
-            default:
-                highflyPremiumStatus.setText(R.string.highfly_premium_status_not_configured);
-                clearPremiumTokenFeedback();
-                break;
-        }
-    }
-
-    private String premiumAccountLabel(HighflyPremiumCredentialStore.TokenStatus status) {
-        String plan = safeString(status.getPlanName());
-        long expiresAt = status.getExpiresAtMillis();
-        if (expiresAt <= 0L) return AppStrings.isBlank(plan) ? "Premium" : plan;
-        String date = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                .format(new Date(expiresAt));
-        return (AppStrings.isBlank(plan) ? "Premium" : plan) + " · vence " + date;
-    }
-
-    private void renderHighflyPremiumCatalog(HighflyPremiumCatalog catalog) {
-        highflyPremiumEventSwitches.clear();
-        highflyPremiumEventsContainer.removeAllViews();
-        if (catalog == null) {
-            highflyPremiumCatalogSummary.setText(R.string.highfly_premium_catalog_empty);
-            highflyPremiumEventsContainer.setVisibility(View.GONE);
-            return;
-        }
-
-        Set<String> selected = HighflyPremiumPreferences.selectedEventIds(this);
-        View previous = findViewById(R.id.highfly_premium_sort_low);
-        int eventCount = 0;
-        for (HighflyPremiumCatalog.Entry entry : catalog.getEntries()) {
-            if (entry.getType() != HighflyPremiumCatalog.EntryType.TEMPORARY_EVENT) {
-                continue;
-            }
-            Switch eventSwitch = createPremiumEventSwitch(entry, selected.contains(entry.getId()));
-            highflyPremiumEventsContainer.addView(eventSwitch);
-            highflyPremiumEventSwitches.put(entry.getId(), eventSwitch);
-            previous.setNextFocusDownId(eventSwitch.getId());
-            eventSwitch.setNextFocusUpId(previous.getId());
-            previous = eventSwitch;
-            eventCount++;
-        }
-        if (eventCount == 0) {
-            highflyPremiumEventsContainer.setVisibility(View.GONE);
-            highflyPremiumCatalogSummary.setText(getString(
-                    R.string.highfly_premium_catalog_summary,
-                    0,
-                    catalog.count(HighflyPremiumCatalog.EntryType.UNSUPPORTED)
-            ));
-            previous.setNextFocusDownId(highflyPremiumRemoveButton.getId());
-            highflyPremiumRemoveButton.setNextFocusUpId(previous.getId());
-        } else {
-            highflyPremiumEventsContainer.setVisibility(View.VISIBLE);
-            previous.setNextFocusDownId(highflyPremiumRemoveButton.getId());
-            highflyPremiumRemoveButton.setNextFocusUpId(previous.getId());
-            highflyPremiumCatalogSummary.setText(getString(
-                    R.string.highfly_premium_catalog_summary,
-                    catalog.count(HighflyPremiumCatalog.EntryType.TEMPORARY_EVENT),
-                    catalog.count(HighflyPremiumCatalog.EntryType.UNSUPPORTED)
-            ));
-        }
-    }
-
-    private Switch createPremiumEventSwitch(
-            HighflyPremiumCatalog.Entry entry,
-            boolean selected
-    ) {
-        Switch eventSwitch = new Switch(this);
-        eventSwitch.setId(View.generateViewId());
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                getResources().getDimensionPixelSize(R.dimen.settings_control_height)
-        );
-        params.topMargin = dp(5);
-        eventSwitch.setLayoutParams(params);
-        eventSwitch.setBackgroundResource(R.drawable.settings_section_card);
-        eventSwitch.setFocusable(true);
-        eventSwitch.setGravity(Gravity.CENTER_VERTICAL);
-        eventSwitch.setPadding(dp(12), 0, dp(12), 0);
-        eventSwitch.setShowText(false);
-        eventSwitch.setText(entry.getName());
-        eventSwitch.setTextColor(getColor(R.color.white));
-        eventSwitch.setTextSize(
-                TypedValue.COMPLEX_UNIT_PX,
-                getResources().getDimension(R.dimen.settings_control_text_size)
-        );
-        eventSwitch.setChecked(selected);
-        eventSwitch.setThumbTintList(getColorStateList(R.color.cyan));
-        return eventSwitch;
-    }
-
-    private void setPremiumOperationEnabled(boolean enabled) {
-        if (isFinishing()) return;
-        highflyPremiumVerifyButton.setEnabled(enabled);
-        highflyPremiumQueryButton.setEnabled(enabled);
-        highflyPremiumRemoveButton.setEnabled(enabled);
-    }
-
-    private void removeHighflyPremiumAccess() {
-        highflyPremiumCredentialStore.clearToken();
-        HighflyPremiumPreferences.saveSelectedEventIds(this, Collections.emptySet());
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putBoolean(HighflyPremiumPreferences.KEY_INCLUDE_EVENTS, false)
-                .apply();
-        highflyPremiumIncludeEvents.setChecked(false);
-        highflyPremiumToken.setText("");
-        loadedHighflyPremiumCatalog = null;
-        highflyPremiumEventSwitches.clear();
-        highflyPremiumEventsContainer.removeAllViews();
-        highflyPremiumEventsContainer.setVisibility(View.GONE);
-        highflyPremiumCatalogSummary.setText(R.string.highfly_premium_catalog_empty);
-        renderHighflyPremiumStatus();
-    }
-
-    private void saveSelectedHighflyPremiumEvents() {
-        if (loadedHighflyPremiumCatalog == null) return;
-        LinkedHashSet<String> selected = new LinkedHashSet<>();
-        for (Map.Entry<String, Switch> entry : highflyPremiumEventSwitches.entrySet()) {
-            if (entry.getValue().isChecked()) selected.add(entry.getKey());
-        }
-        HighflyPremiumPreferences.saveSelectedEventIds(this, selected);
-    }
-
     private String safeString(String value) {
         return value == null ? "" : value;
-    }
-
-    private void setPremiumTokenFeedback(int textResId, int colorResId) {
-        if (highflyPremiumTokenFeedback == null) return;
-        highflyPremiumTokenFeedback.setText(textResId);
-        highflyPremiumTokenFeedback.setTextColor(getColor(colorResId));
-        highflyPremiumTokenFeedback.setVisibility(View.VISIBLE);
-    }
-
-    private void clearPremiumTokenFeedback() {
-        if (highflyPremiumTokenFeedback == null) return;
-        highflyPremiumTokenFeedback.setText("");
-        highflyPremiumTokenFeedback.setVisibility(View.GONE);
     }
 
     private int dp(int value) {
@@ -1132,22 +770,10 @@ public final class SettingsActivity extends Activity {
         String value2 = urlInput2.getText().toString().trim();
         boolean enabled1 = playlistOneEnabled.isChecked();
         boolean enabled2 = playlistTwoEnabled.isChecked();
-        boolean premiumConfigured = highflyPremiumCredentialStore.hasCredential();
-        boolean includePremiumEvents = highflyPremiumIncludeEvents.isChecked();
-        if (!enabled1 && !enabled2 && !(includePremiumEvents && premiumConfigured)) {
+        if (!enabled1 && !enabled2) {
             errorText.setText(R.string.playlist_source_required);
             errorText.setVisibility(View.VISIBLE);
-            (includePremiumEvents ? highflyPremiumIncludeEvents : playlistOneEnabled)
-                    .requestFocus();
-            return;
-        }
-        if (includePremiumEvents && !premiumConfigured) {
-            boolean tokenWasEntered = !highflyPremiumToken.getText().toString().trim().isEmpty();
-            errorText.setText(tokenWasEntered
-                    ? R.string.highfly_premium_token_verify_required
-                    : R.string.highfly_premium_token_required);
-            errorText.setVisibility(View.VISIBLE);
-            highflyPremiumToken.requestFocus();
+            playlistOneEnabled.requestFocus();
             return;
         }
         if (enabled1 && !isValidPlaylistUrl(value)) {
@@ -1171,21 +797,7 @@ public final class SettingsActivity extends Activity {
                 .putBoolean(KEY_PLAYLIST_ENABLED_2, enabled2)
                 .putBoolean(KEY_INVERT_CHANNEL_KEYS, invertChannelKeys.isChecked())
                 .putBoolean(KEY_NORMALIZE_VOLUME, normalizeVolume.isChecked())
-                .remove("highfly_premium_enabled")
-                .putBoolean(
-                        HighflyPremiumPreferences.KEY_INCLUDE_EVENTS,
-                        includePremiumEvents
-                )
-                .putString(
-                        HighflyPremiumPreferences.KEY_REGION,
-                        selectedHighflyPremiumRegion().getPreferenceValue()
-                )
-                .putString(
-                        HighflyPremiumPreferences.KEY_STREAM_SORT,
-                        selectedPremiumStreamSort().getPreferenceValue()
-                )
                 .apply();
-        saveSelectedHighflyPremiumEvents();
         for (Map.Entry<String, Switch> entry : resolverGroupSwitches.entrySet()) {
             ResolverDefinition definition = resolverCatalog == null
                     ? null
@@ -1255,8 +867,8 @@ public final class SettingsActivity extends Activity {
                     || event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_RIGHT;
             if (horizontalKey) {
                 // Left/right changes tabs only while the tab bar itself has focus.
-                // Content controls, especially Premium's horizontal radio groups,
-                // must receive the key and must never escape to the tab bar.
+                // Content controls must receive the key and must never escape
+                // to the tab bar.
                 if (isTabFocused()) {
                     moveTabFromRemote(
                             event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_LEFT
