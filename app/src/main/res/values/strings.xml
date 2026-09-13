@@ -35,6 +35,9 @@
     <string name="loading_reopening_source">Reabriendo fuente HLS…</string>
     <string name="loading_fallback_source">Probando respaldo…</string>
     <string name="loading_network_retry">Reintentando conexión…</string>
+    <string name="resource_warning_buffer">Buffer insuficiente · esperando segmentos…</string>
+    <string name="resource_warning_memory">Memoria baja · liberando buffer…</string>
+    <string name="resource_warning_memory_critical">Memoria crítica · reproducción en riesgo…</string>
     <string name="empty_playlist">La lista no contiene canales reproducibles.</string>
     <string name="playlist_error">No se pudo descargar la lista. Pulsa OK para reintentar.</string>
     <string name="settings_title">Opciones</string>

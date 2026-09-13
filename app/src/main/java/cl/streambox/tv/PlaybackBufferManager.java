@@ -101,6 +101,50 @@ final class PlaybackBufferManager implements AutoCloseable {
         record("memory_" + level, 0, 0, true);
     }
 
+    Snapshot snapshot() {
+        Runtime runtime = Runtime.getRuntime();
+        long heapUsed = runtime.totalMemory() - runtime.freeMemory();
+        return new Snapshot(
+                player == null ? 0L : player.getTotalBufferedDuration(),
+                allocator.getTotalBytesAllocated(),
+                targetBytes,
+                heapUsed,
+                runtime.maxMemory()
+        );
+    }
+
+    static final class Snapshot {
+        static final Snapshot EMPTY = new Snapshot(0L, 0L, 0L, 0L, 0L);
+
+        final long bufferedDurationMs;
+        final long allocatedBytes;
+        final long targetBytes;
+        final long heapUsedBytes;
+        final long heapMaxBytes;
+
+        Snapshot(
+                long bufferedDurationMs,
+                long allocatedBytes,
+                long targetBytes,
+                long heapUsedBytes,
+                long heapMaxBytes
+        ) {
+            this.bufferedDurationMs = bufferedDurationMs;
+            this.allocatedBytes = allocatedBytes;
+            this.targetBytes = targetBytes;
+            this.heapUsedBytes = heapUsedBytes;
+            this.heapMaxBytes = heapMaxBytes;
+        }
+
+        int heapPercent() {
+            return PlaybackResourceWarningPolicy.percentage(heapUsedBytes, heapMaxBytes);
+        }
+
+        int allocatorPercent() {
+            return PlaybackResourceWarningPolicy.percentage(allocatedBytes, targetBytes);
+        }
+    }
+
     private void record(String event, int error, int http, boolean dump) {
         if (player == null) return;
         Runtime runtime = Runtime.getRuntime();

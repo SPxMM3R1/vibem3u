@@ -82,7 +82,10 @@ public final class MainActivity extends Activity {
     private static final long PLAYBACK_FREEZE_TIMEOUT_MS = 5_000L;
     private static final long PLAYBACK_WATCHDOG_INTERVAL_MS = 1_000L;
     private static final long PLAYBACK_RECOVERY_COOLDOWN_MS = 4_000L;
+    private static final long RESOURCE_WARNING_VISIBLE_MS = 3_500L;
+    private static final long RESOURCE_WARNING_COOLDOWN_MS = 6_000L;
     private static final String PLAYBACK_HEALTH_TAG = "VibeM3U-Playback";
+    private static final String RESOURCE_HEALTH_TAG = "VibeM3U-Resource";
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
     private static final long NO_RESOLUTION_REQUEST = -1L;
     private static final String PLAYER_USER_AGENT = "VibeM3U/0.4.42 (Android TV)";
@@ -183,6 +186,13 @@ public final class MainActivity extends Activity {
     private boolean loadingMessageAnimating;
     private boolean loadingAnimationScheduled;
     private int loadingDotCount;
+    private boolean resourceWarningVisible;
+    private long resourceWarningUntilElapsedRealtime;
+    private long resourceWarningCooldownUntilElapsedRealtime;
+    private boolean bufferWarningConditionActive;
+    private int memoryWarningSamples;
+    private PlaybackResourceWarningPolicy.Type memoryWarningCondition =
+            PlaybackResourceWarningPolicy.Type.NONE;
     private boolean startupSelectionPending;
     private String startupPreferredChannelIdentity = "";
     private String epgMergeInputSignature = "";
@@ -246,6 +256,20 @@ public final class MainActivity extends Activity {
                 loadingAnimationScheduled = true;
                 mainHandler.postDelayed(this, 420L);
             }
+        }
+    };
+    private final Runnable hideResourceWarning = new Runnable() {
+        @Override public void run() {
+            if (!resourceWarningVisible) return;
+            long remaining = resourceWarningUntilElapsedRealtime
+                    - SystemClock.elapsedRealtime();
+            if (remaining > 0L) {
+                mainHandler.postDelayed(this, remaining);
+                return;
+            }
+            resourceWarningVisible = false;
+            resourceWarningUntilElapsedRealtime = 0L;
+            hideLoadingState();
         }
     };
 
@@ -372,13 +396,14 @@ public final class MainActivity extends Activity {
                     } else if (playbackLoadingSinceElapsedRealtime < 0L) {
                         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
                     }
-                    hideLoadingState();
+                    if (!resourceWarningVisible) hideLoadingState();
                 } else if (playbackState == Player.STATE_BUFFERING) {
                     if (playbackLoadingSinceElapsedRealtime < 0L) {
                         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
                     }
                     if (loadingPanel != null
-                            && loadingPanel.getVisibility() == View.VISIBLE) {
+                            && loadingPanel.getVisibility() == View.VISIBLE
+                            && !resourceWarningVisible) {
                         showLoadingState(getString(R.string.loading_validating_segment));
                     }
                 } else if (playbackState == Player.STATE_IDLE
@@ -916,6 +941,7 @@ public final class MainActivity extends Activity {
 
     private void showPlaylistError(String detail) {
         loadFailed = true;
+        clearResourceWarning();
         stopLoadingTextAnimation();
         loadingPanel.setVisibility(View.VISIBLE);
         String message = getString(R.string.playlist_error);
@@ -925,8 +951,164 @@ public final class MainActivity extends Activity {
         loadingText.setText(message);
     }
 
+    private void clearResourceWarning() {
+        mainHandler.removeCallbacks(hideResourceWarning);
+        resourceWarningVisible = false;
+        resourceWarningUntilElapsedRealtime = 0L;
+    }
+
+    private void resetResourceWarningState() {
+        clearResourceWarning();
+        resourceWarningCooldownUntilElapsedRealtime = 0L;
+        bufferWarningConditionActive = false;
+        memoryWarningSamples = 0;
+        memoryWarningCondition = PlaybackResourceWarningPolicy.Type.NONE;
+    }
+
+    private boolean showResourceWarning(
+            PlaybackResourceWarningPolicy.Type type,
+            PlaybackBufferManager.Snapshot snapshot,
+            int memoryPressureLevel
+    ) {
+        if (type == PlaybackResourceWarningPolicy.Type.NONE
+                || playbackChannel == null
+                || !playbackHasStarted
+                || settingsOpen
+                || loadFailed
+                || !hasWindowFocus()
+                || playbackAutoRecoveryInFlight
+                || playbackRecoveryFailed) {
+            return false;
+        }
+        long now = SystemClock.elapsedRealtime();
+        if (now < resourceWarningCooldownUntilElapsedRealtime) return false;
+
+        int messageId;
+        switch (type) {
+            case BUFFER:
+                messageId = R.string.resource_warning_buffer;
+                break;
+            case MEMORY_CRITICAL:
+                messageId = R.string.resource_warning_memory_critical;
+                break;
+            case MEMORY:
+                messageId = R.string.resource_warning_memory;
+                break;
+            default:
+                return false;
+        }
+
+        clearResourceWarning();
+        showLoadingState(getString(messageId));
+        resourceWarningVisible = true;
+        resourceWarningUntilElapsedRealtime = now + RESOURCE_WARNING_VISIBLE_MS;
+        resourceWarningCooldownUntilElapsedRealtime =
+                now + RESOURCE_WARNING_COOLDOWN_MS;
+        mainHandler.postDelayed(hideResourceWarning, RESOURCE_WARNING_VISIBLE_MS);
+
+        Log.w(
+                RESOURCE_HEALTH_TAG,
+                "warning type=" + type
+                        + " bufferedMs=" + snapshot.bufferedDurationMs
+                        + " heap=" + snapshot.heapPercent() + "%"
+                        + " allocator=" + snapshot.allocatorPercent() + "%"
+                        + " pressure=" + memoryPressureLevel
+        );
+        return true;
+    }
+
+    private void updateResourceWarnings(int playbackState) {
+        if (player == null || playbackChannel == null || settingsOpen || loadFailed
+                || !playbackHasStarted || playbackResolutionTask != null
+                || playbackAutoRecoveryInFlight || playbackRecoveryFailed) {
+            return;
+        }
+
+        long now = SystemClock.elapsedRealtime();
+        boolean userPaused = !player.getPlayWhenReady() && !player.isPlaying();
+        if (userPaused) {
+            bufferWarningConditionActive = false;
+            memoryWarningSamples = 0;
+            memoryWarningCondition = PlaybackResourceWarningPolicy.Type.NONE;
+            return;
+        }
+        boolean loading = playbackState == Player.STATE_BUFFERING
+                || playbackState == Player.STATE_IDLE
+                || (playbackState == Player.STATE_READY && player.isLoading());
+        PlaybackBufferManager.Snapshot snapshot = playbackBufferManager == null
+                ? PlaybackBufferManager.Snapshot.EMPTY : playbackBufferManager.snapshot();
+
+        boolean bufferWarning = PlaybackResourceWarningPolicy.isBufferWarning(
+                playbackHasStarted,
+                userPaused,
+                loading,
+                snapshot.bufferedDurationMs,
+                playbackLoadingSinceElapsedRealtime,
+                now
+        );
+        if (!bufferWarning) {
+            bufferWarningConditionActive = false;
+        } else if (!bufferWarningConditionActive
+                && showResourceWarning(
+                PlaybackResourceWarningPolicy.Type.BUFFER,
+                snapshot,
+                0
+        )) {
+            bufferWarningConditionActive = true;
+        }
+
+        PlaybackResourceWarningPolicy.Type memoryType =
+                PlaybackResourceWarningPolicy.memoryType(
+                        playbackHasStarted,
+                        0,
+                        snapshot.heapUsedBytes,
+                        snapshot.heapMaxBytes,
+                        snapshot.allocatedBytes,
+                        snapshot.targetBytes
+                );
+        if (memoryType == PlaybackResourceWarningPolicy.Type.NONE) {
+            memoryWarningSamples = 0;
+            memoryWarningCondition = PlaybackResourceWarningPolicy.Type.NONE;
+        } else {
+            memoryWarningSamples = Math.min(2, memoryWarningSamples + 1);
+        }
+        if (memoryType != PlaybackResourceWarningPolicy.Type.NONE
+                && memoryWarningSamples >= 2
+                && (memoryWarningCondition == PlaybackResourceWarningPolicy.Type.NONE
+                || (memoryType == PlaybackResourceWarningPolicy.Type.MEMORY_CRITICAL
+                && memoryWarningCondition != PlaybackResourceWarningPolicy.Type.MEMORY_CRITICAL))) {
+            if (showResourceWarning(memoryType, snapshot, 0)) {
+                memoryWarningCondition = memoryType;
+            }
+        }
+    }
+
+    private void handleMemoryPressure(int level) {
+        if (playbackBufferManager != null) playbackBufferManager.onMemoryPressure(level);
+        if (player == null || playbackChannel == null || !playbackHasStarted
+                || settingsOpen || loadFailed || !hasWindowFocus()) return;
+        if (!player.getPlayWhenReady() && !player.isPlaying()) return;
+
+        PlaybackBufferManager.Snapshot snapshot = playbackBufferManager == null
+                ? PlaybackBufferManager.Snapshot.EMPTY : playbackBufferManager.snapshot();
+        PlaybackResourceWarningPolicy.Type type = PlaybackResourceWarningPolicy.memoryType(
+                playbackHasStarted,
+                level,
+                snapshot.heapUsedBytes,
+                snapshot.heapMaxBytes,
+                snapshot.allocatedBytes,
+                snapshot.targetBytes
+        );
+        if (type == PlaybackResourceWarningPolicy.Type.NONE) return;
+        if (showResourceWarning(type, snapshot, level)) {
+            memoryWarningSamples = 2;
+            memoryWarningCondition = type;
+        }
+    }
+
     private void showLoadingState(String message) {
         if (loadingPanel == null || isFinishing()) return;
+        clearResourceWarning();
         loadingPanel.setVisibility(View.VISIBLE);
         String safeMessage = SafePlaybackText.detail(message == null ? "" : message.trim());
         boolean animate = safeMessage.endsWith("…") || safeMessage.endsWith("...");
@@ -1075,6 +1257,7 @@ public final class MainActivity extends Activity {
     }
 
     private void hideLoadingState() {
+        clearResourceWarning();
         stopLoadingTextAnimation();
         if (loadingPanel != null) loadingPanel.setVisibility(View.GONE);
     }
@@ -1104,6 +1287,7 @@ public final class MainActivity extends Activity {
         playbackAutoRecoveryInFlight = false;
         playbackFullRecoveryUsed = false;
         playbackRecoveryFailed = false;
+        resetResourceWarningState();
         resetPlaybackBitrateMeter();
         cancelPlaybackResolution();
         playbackChannel = channel;
@@ -1188,6 +1372,7 @@ public final class MainActivity extends Activity {
             }
             return;
         }
+        updateResourceWarnings(state);
         if (waitingWithoutFrames) {
             if (playbackLoadingSinceElapsedRealtime < 0L) {
                 playbackLoadingSinceElapsedRealtime = nowMs;
@@ -2675,6 +2860,7 @@ public final class MainActivity extends Activity {
     protected void onPause() {
         if (appUpdater != null) appUpdater.onHostPause();
         if (playbackBitrateMeter != null) playbackBitrateMeter.setNotificationsEnabled(false);
+        resetResourceWarningState();
         mainHandler.removeCallbacks(hideLightEpg);
         hideLightEpg.run();
         if (!settingsOpen) {
@@ -2702,12 +2888,12 @@ public final class MainActivity extends Activity {
 
     @Override public void onTrimMemory(int level) {
         super.onTrimMemory(level);
-        if (playbackBufferManager != null) playbackBufferManager.onMemoryPressure(level);
+        handleMemoryPressure(level);
     }
 
     @Override public void onLowMemory() {
         super.onLowMemory();
-        if (playbackBufferManager != null) playbackBufferManager.onMemoryPressure(80);
+        handleMemoryPressure(PlaybackResourceWarningPolicy.LOW_MEMORY_CALLBACK_LEVEL);
     }
 
     private static final class VideoTrackOption {
