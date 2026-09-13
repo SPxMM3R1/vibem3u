@@ -1,6 +1,6 @@
 # vibem3u — contexto actual
 
-ultima actualización: 2026-09-11
+ultima actualización: 2026-09-12
 
 Este archivo reemplaza al contexto anterior. Describe el estado real del
 proyecto Android TV VibeM3U al momento de esta actualización. Las versiones,
@@ -27,12 +27,12 @@ futura.
 En la fecha de este contexto:
 
     rama: main
-    head: ad301c18c3758982459314cb066767f3c622efe8
-    commit: Keep Highfly stable channels in normal playlists
-    tag estable: v0.4.81
-    versionCode: 86
-    versionName: 0.4.81
-    origin/main: ad301c18c3758982459314cb066767f3c622efe8
+    head: 954603644297551eb5733607e0bf8250f2a7c947
+    commit: Bump rollback release to 0.4.83
+    tag estable: v0.4.83
+    versionCode: 88
+    versionName: 0.4.83
+    origin/main: 954603644297551eb5733607e0bf8250f2a7c947
 
 La versión v0.4.79 fue publicada con los siguientes artefactos verificados:
 
@@ -52,7 +52,7 @@ Al momento de crear este contexto, los elementos no rastreados conocidos eran:
 No se deben borrar, sobrescribir ni incorporar al commit los adjuntos del
 usuario sin una solicitud explícita.
 
-Corrección incorporada en la versión 0.4.81:
+Estado funcional restaurado en la versión 0.4.83:
 
 - se eliminó la reconstrucción de canales estables desde el catálogo Premium;
 - la fuente pública M3U es ahora la única fuente de metadatos y membresía
@@ -75,6 +75,11 @@ eventos temporales seleccionados desde el catálogo protegido.
 La compilación y publicación de esta versión se verifican en los workflows de
 GitHub Actions asociados al commit y al tag; no se presenta una compilación
 local porque el equipo no tiene Java configurado.
+
+La versión 0.4.83 es una publicación de rollback: restaura el árbol funcional
+de v0.4.81 y no incluye el OSD de recuperación de v0.4.82. Se usa un número de
+versión superior para que Android pueda actualizar desde v0.4.82; los tags
+publicados no se reutilizan ni se reescriben.
 
 ## reglas de compilación y publicación
 
