@@ -2,6 +2,7 @@ package cl.streambox.tv;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.CertificateException;
@@ -149,6 +150,343 @@ public final class TvVooStreamResolver implements StreamResolver {
             return resolveExternal(channel, progress, deadline);
         }
         return resolveBoth(channel, progress, deadline);
+    }
+
+    @Override
+    public List<ResolvedPlaybackCandidate> resolvePlaybackCandidates(
+            Channel channel,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        ResolutionProgressListener progress = listener == null
+                ? ResolutionProgressListener.NONE
+                : listener;
+        ResolutionDeadline deadline = newResolutionDeadline();
+        ResolutionContext ambient = ResolutionContext.current();
+        if (ambient == null) {
+            ResolutionContext root = new ResolutionContext(deadline.remainingMillis());
+            try (ResolutionContext.Scope ignored = root.activate()) {
+                return resolvePlaybackCandidatesWithDeadline(channel, progress, deadline);
+            }
+        }
+        return resolvePlaybackCandidatesWithDeadline(channel, progress, deadline);
+    }
+
+    /**
+     * Resolves alternatives only when the user explicitly opens the source
+     * selector. The normal channel-open path keeps using the first-valid race
+     * above so it does not wait for every candidate.
+     */
+    private List<ResolvedPlaybackCandidate> resolvePlaybackCandidatesWithDeadline(
+            Channel channel,
+            ResolutionProgressListener progress,
+            ResolutionDeadline deadline
+    ) throws IOException {
+        if (!resolutionMode.usesExternalResolver()) {
+            return directPlaybackCandidates(channel, progress);
+        }
+
+        IOException externalError = null;
+        try {
+            List<ResolvedPlaybackCandidate> external = resolveExternalCandidates(
+                    channel,
+                    progress,
+                    deadline
+            );
+            if (!external.isEmpty() || !resolutionMode.usesDirectResolver()) {
+                return external;
+            }
+        } catch (IOException error) {
+            externalError = error;
+        }
+
+        if (resolutionMode.usesDirectResolver()) {
+            try {
+                List<ResolvedPlaybackCandidate> direct = directPlaybackCandidates(
+                        channel,
+                        progress
+                );
+                if (!direct.isEmpty()) return direct;
+            } catch (IOException directError) {
+                if (externalError != null) directError.addSuppressed(externalError);
+                throw directError;
+            }
+        }
+        throw new IOException(
+                "TvVoo no entregó fuentes alternativas reproducibles.",
+                externalError
+        );
+    }
+
+    private List<ResolvedPlaybackCandidate> directPlaybackCandidates(
+            Channel channel,
+            ResolutionProgressListener progress
+    ) throws IOException {
+        List<ResolvedPlaybackCandidate> result = directFallback.resolvePlaybackCandidates(
+                channel,
+                progress
+        );
+        return result == null ? Collections.emptyList() : result;
+    }
+
+    private List<ResolvedPlaybackCandidate> resolveExternalCandidates(
+            Channel channel,
+            ResolutionProgressListener progress,
+            ResolutionDeadline deadline
+    ) throws IOException {
+        String endpointBase = channel.getAttributes().get("x-resolver-endpoint");
+        if (endpointBase == null || AppStrings.isBlank(endpointBase)) {
+            endpointBase = definition.getConfig("endpointBase", DEFAULT_ENDPOINT);
+        }
+        endpointBase = validEndpoint(endpointBase);
+        String requestedRecipe = definition.requestedRecipe(channel);
+        boolean boundedPayloadRecipe = definition.usesRecipe(
+                channel,
+                BOUNDED_PAYLOAD_RECIPE
+        ) && MEDIA_SIGNATURE_VALIDATION.equals(
+                definition.getConfig("validationMode", "")
+        );
+        if (!AppStrings.isBlank(requestedRecipe) && !boundedPayloadRecipe) {
+            throw new IOException("La receta declarativa del canal no está autorizada.");
+        }
+
+        LinkedHashSet<String> aliases = new LinkedHashSet<>(definition.resolverAliases(channel));
+        if (aliases.isEmpty()) aliases.addAll(generatedAliases(channel));
+        int maxAliases = definition.getIntConfig(
+                "maxAliases",
+                DEFAULT_MAX_ALIASES,
+                1,
+                12
+        );
+        int maxCandidates = definition.getIntConfig(
+                "maxCandidates",
+                DEFAULT_MAX_CANDIDATES,
+                1,
+                32
+        );
+        boolean allowHttpFallback = definition.getBooleanConfig("allowHttpFallback", true);
+        int parallelAliases = definition.getIntConfig(
+                "parallelAliases",
+                DEFAULT_PARALLEL_ALIASES,
+                1,
+                3
+        );
+        int parallelCandidates = definition.getIntConfig(
+                "parallelCandidates",
+                DEFAULT_PARALLEL_CANDIDATES,
+                1,
+                4
+        );
+        List<String> limitedAliases = new ArrayList<>();
+        int aliasIndex = 0;
+        for (String alias : aliases) {
+            if (aliasIndex++ >= maxAliases) break;
+            limitedAliases.add(alias);
+        }
+        if (limitedAliases.isEmpty()) {
+            throw new IOException("El canal no tiene aliases TvVoo.");
+        }
+
+        List<AliasResult> aliasResults = queryAliasResults(
+                limitedAliases,
+                endpointBase,
+                Collections.singletonMap("Accept", "application/json"),
+                definition,
+                boundedPayloadRecipe,
+                parallelAliases,
+                progress,
+                deadline
+        );
+        LinkedHashMap<URI, String> candidatesByAlias = new LinkedHashMap<>();
+        IOException lastError = null;
+        for (AliasResult result : aliasResults) {
+            if (result.error != null) lastError = result.error;
+            String alias = result.index >= 0 && result.index < limitedAliases.size()
+                    ? limitedAliases.get(result.index)
+                    : "";
+            for (URI candidate : result.candidates) {
+                if (candidate != null && candidatesByAlias.size() < maxCandidates) {
+                    candidatesByAlias.putIfAbsent(candidate, alias);
+                }
+            }
+        }
+        if (candidatesByAlias.isEmpty()) {
+            throw new IOException("TvVoo no publicó URLs alternativas.", lastError);
+        }
+
+        Map<String, String> playbackHeaders = playbackHeaders();
+        List<ResolvedPlaybackCandidate> result = new ArrayList<>();
+        HlsCandidateRace.Streaming candidateRace = new HlsCandidateRace.Streaming(
+                candidatesByAlias.size(),
+                parallelCandidates,
+                deadline,
+                0,
+                candidatesByAlias.size(),
+                progress,
+                candidate -> validateCandidate(
+                        validator,
+                        candidate,
+                        allowHttpFallback,
+                        playbackHeaders,
+                        true,
+                        progress
+                )
+        );
+        try {
+            for (URI candidate : candidatesByAlias.keySet()) {
+                candidateRace.submit(candidate);
+            }
+            while (candidateRace.hasInFlight()) {
+                try {
+                    deadline.check();
+                } catch (IOException deadlineError) {
+                    if (result.isEmpty()) throw deadlineError;
+                    break;
+                }
+                HlsCandidateRace.Attempt attempt = candidateRace.poll(
+                        Math.min(250L, Math.max(1L, deadline.remainingMillis()))
+                );
+                if (attempt == null) continue;
+                if (attempt.getAccepted() != null) {
+                    String alias = candidatesByAlias.get(attempt.getCandidate());
+                    int ordinal = result.size() + 1;
+                    String qualityHint = aliasQualityHint(alias);
+                    String label = "Fuente " + ordinal + " · " + qualityHint;
+                    String detail = "TvVoo · HLS validada";
+                    result.add(new ResolvedPlaybackCandidate(
+                            label,
+                            detail,
+                            ResolvedPlaybackSource.dynamic(
+                                    getId(),
+                                    stableSourceId(channel),
+                                    attempt.getAccepted(),
+                                    playbackHeaders,
+                                    PLAYBACK_USER_AGENT,
+                                    expiresAt()
+                            )
+                    ));
+                } else if (attempt.getError() != null) {
+                    lastError = attempt.getError();
+                }
+            }
+        } finally {
+            candidateRace.close();
+        }
+        if (result.isEmpty()) {
+            throw new IOException(
+                    "TvVoo no validó ninguna fuente alternativa.",
+                    lastError
+            );
+        }
+        return Collections.unmodifiableList(result);
+    }
+
+    private List<AliasResult> queryAliasResults(
+            List<String> aliases,
+            String endpointBase,
+            Map<String, String> jsonHeaders,
+            ResolverDefinition definition,
+            boolean boundedPayloadRecipe,
+            int parallelAliases,
+            ResolutionProgressListener progress,
+            ResolutionDeadline deadline
+    ) throws IOException {
+        ExecutorService aliasExecutor = Executors.newFixedThreadPool(
+                parallelAliases,
+                new NamedDaemonThreadFactory("vibem3u-tvvoo-option-alias")
+        );
+        CompletionService<AliasResult> completion =
+                new ExecutorCompletionService<>(aliasExecutor);
+        List<AliasState> states = new ArrayList<>();
+        List<AliasResult> results = new ArrayList<>();
+        int nextAlias = 0;
+        int inFlight = 0;
+        try {
+            while (nextAlias < aliases.size() && inFlight < parallelAliases) {
+                states.add(submitAlias(
+                        aliases.get(nextAlias),
+                        nextAlias,
+                        aliases.size(),
+                        endpointBase,
+                        jsonHeaders,
+                        definition,
+                        boundedPayloadRecipe,
+                        httpClient,
+                        progress,
+                        deadline,
+                        completion
+                ));
+                nextAlias++;
+                inFlight++;
+            }
+            while (inFlight > 0) {
+                deadline.check();
+                Future<AliasResult> finished = completion.poll(
+                        Math.min(250L, Math.max(1L, deadline.remainingMillis())),
+                        TimeUnit.MILLISECONDS
+                );
+                if (finished == null) continue;
+                inFlight--;
+                try {
+                    results.add(finished.get());
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Solicitud cancelada.", error);
+                } catch (ExecutionException error) {
+                    Throwable cause = error.getCause();
+                    results.add(new AliasResult(
+                            -1,
+                            Collections.emptyList(),
+                            cause instanceof IOException
+                                    ? (IOException) cause
+                                    : new IOException("No se pudo consultar el alias.", cause)
+                    ));
+                }
+                while (nextAlias < aliases.size() && inFlight < parallelAliases) {
+                    states.add(submitAlias(
+                            aliases.get(nextAlias),
+                            nextAlias,
+                            aliases.size(),
+                            endpointBase,
+                            jsonHeaders,
+                            definition,
+                            boundedPayloadRecipe,
+                            httpClient,
+                            progress,
+                            deadline,
+                            completion
+                    ));
+                    nextAlias++;
+                    inFlight++;
+                }
+            }
+        } finally {
+            for (AliasState state : states) state.cancel();
+            aliasExecutor.shutdownNow();
+        }
+        return results;
+    }
+
+    private static String aliasQualityHint(String alias) {
+        if (alias == null || AppStrings.isBlank(alias)) return "alias";
+        String decoded = alias;
+        try {
+            int prefix = decoded.indexOf('_');
+            if (prefix >= 0 && prefix + 1 < decoded.length()) {
+                decoded = URLDecoder.decode(
+                        decoded.substring(prefix + 1),
+                        StandardCharsets.UTF_8.name()
+                );
+            }
+        } catch (Exception ignored) {
+            // Keep the generic label when an alias is not URL-decodable.
+        }
+        String normalized = decoded.toUpperCase(Locale.ROOT);
+        if (normalized.contains(" FHD") || normalized.contains(" UHD")) {
+            return "alias FHD/UHD";
+        }
+        if (normalized.contains(" HD")) return "alias HD";
+        if (normalized.contains(" SD")) return "alias SD";
+        return "alias estándar";
     }
 
     /**

@@ -23,12 +23,14 @@ import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.Gravity;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.window.OnBackInvokedDispatcher;
@@ -130,6 +132,11 @@ public final class MainActivity extends Activity {
     private TextView lightEpgCurrentTime;
     private TextView lightEpgNextTitle;
     private TextView lightEpgNextTime;
+    private View sourceSelectorOverlay;
+    private TextView sourceSelectorTitle;
+    private TextView sourceSelectorChannel;
+    private TextView sourceSelectorStatus;
+    private LinearLayout sourceSelectorOptions;
     private ImageView channelLogo;
     private TextView channelLogoFallback;
     private TextView channelNumber;
@@ -177,6 +184,12 @@ public final class MainActivity extends Activity {
     private boolean playbackRecoveryFailed;
     private Future<?> playbackResolutionTask;
     private ResolutionContext playbackResolutionContext;
+    private Future<?> sourceCandidateTask;
+    private ResolutionContext sourceCandidateContext;
+    private long sourceCandidateRequestId;
+    private final List<ResolvedPlaybackCandidate> sourceCandidates = new ArrayList<>();
+    private final List<View> sourceCandidateViews = new ArrayList<>();
+    private int sourceCandidateFocusIndex = -1;
     private ManifestHandoffCache playbackManifestCache;
     private long playbackResolutionRequestId;
     private long activePlaybackSourceRequestId = NO_RESOLUTION_REQUEST;
@@ -326,6 +339,11 @@ public final class MainActivity extends Activity {
         lightEpgCurrentTime = findViewById(R.id.light_epg_current_time);
         lightEpgNextTitle = findViewById(R.id.light_epg_next_title);
         lightEpgNextTime = findViewById(R.id.light_epg_next_time);
+        sourceSelectorOverlay = findViewById(R.id.source_selector_overlay);
+        sourceSelectorTitle = findViewById(R.id.source_selector_title);
+        sourceSelectorChannel = findViewById(R.id.source_selector_channel);
+        sourceSelectorStatus = findViewById(R.id.source_selector_status);
+        sourceSelectorOptions = findViewById(R.id.source_selector_options);
         channelLogo = findViewById(R.id.channel_logo);
         channelLogoFallback = findViewById(R.id.channel_logo_fallback);
         channelNumber = findViewById(R.id.channel_number);
@@ -1278,6 +1296,7 @@ public final class MainActivity extends Activity {
 
     private void playChannel(int requestedIndex, boolean revalidateLogo) {
         if (channels.isEmpty()) return;
+        closePlaybackSourceSelector();
         channelIndex = (requestedIndex % channels.size() + channels.size()) % channels.size();
         Channel channel = channels.get(channelIndex);
         playbackGeneration++;
@@ -2247,9 +2266,288 @@ public final class MainActivity extends Activity {
         mainHandler.postDelayed(hideLightEpg, LIGHT_EPG_TIMEOUT_MS);
     }
 
+    private boolean isSourceSelectorVisible() {
+        return sourceSelectorOverlay != null
+                && sourceSelectorOverlay.getVisibility() == View.VISIBLE;
+    }
+
+    /** Opens the explicit source chooser without disturbing the current player. */
+    private void openPlaybackSourceSelector() {
+        if (exiting || resourcesReleased || settingsOpen || player == null
+                || !hasWindowFocus() || playbackChannel == null
+                || playbackResolutionTask != null
+                || currentPlaybackSource == null
+                || streamResolverRegistry == null) return;
+        StreamResolver resolver = streamResolverRegistry.find(playbackChannel);
+        if (resolver == null || !"tvvoo".equalsIgnoreCase(resolver.getId())) return;
+        if (isSourceSelectorVisible() || sourceCandidateTask != null) return;
+
+        mainHandler.removeCallbacks(hideLightEpg);
+        hideLightEpg.run();
+        sourceSelectorTitle.setText(getString(R.string.source_selector_title));
+        sourceSelectorChannel.setText(playbackChannel.getName());
+        sourceSelectorOverlay.setVisibility(View.VISIBLE);
+        startSourceSelectorQuery(playbackChannel, resolver);
+    }
+
+    private void startSourceSelectorQuery(Channel channel, StreamResolver resolver) {
+        if (channel == null || resolver == null || !isSourceSelectorVisible()) return;
+        if (sourceCandidateContext != null) sourceCandidateContext.cancel();
+        if (sourceCandidateTask != null) sourceCandidateTask.cancel(true);
+        sourceCandidateTask = null;
+        sourceCandidateContext = null;
+        sourceCandidates.clear();
+        sourceCandidateViews.clear();
+        sourceCandidateFocusIndex = -1;
+        sourceSelectorOptions.removeAllViews();
+        sourceSelectorStatus.setText(getString(R.string.source_selector_consulting));
+
+        long requestId = ++sourceCandidateRequestId;
+        long expectedGeneration = playbackGeneration;
+        ResolutionContext context = new ResolutionContext(20_000L);
+        sourceCandidateContext = context;
+        ResolutionProgressListener listener = progress -> mainHandler.post(() -> {
+            if (requestId != sourceCandidateRequestId
+                    || !isSourceSelectorVisible()
+                    || !isCurrentPlayback(channel, expectedGeneration)) return;
+            sourceSelectorStatus.setText(sourceSelectorProgressText(progress));
+        });
+        sourceCandidateTask = playbackExecutor.submit(() -> {
+            try (ResolutionContext.Scope ignored = context.activate()) {
+                context.check();
+                List<ResolvedPlaybackCandidate> resolved = resolver.resolvePlaybackCandidates(
+                        channel,
+                        listener
+                );
+                context.check();
+                mainHandler.post(() -> finishSourceSelectorQuery(
+                        requestId,
+                        channel,
+                        expectedGeneration,
+                        resolved
+                ));
+            } catch (Exception error) {
+                if (Thread.currentThread().isInterrupted()) return;
+                mainHandler.post(() -> failSourceSelectorQuery(
+                        requestId,
+                        channel,
+                        expectedGeneration
+                ));
+            }
+        });
+    }
+
+    private void finishSourceSelectorQuery(
+            long requestId,
+            Channel channel,
+            long expectedGeneration,
+            List<ResolvedPlaybackCandidate> resolved
+    ) {
+        if (requestId != sourceCandidateRequestId
+                || !isSourceSelectorVisible()
+                || !isCurrentPlayback(channel, expectedGeneration)) return;
+        sourceCandidateTask = null;
+        sourceCandidateContext = null;
+        sourceCandidates.clear();
+        if (resolved != null) sourceCandidates.addAll(resolved);
+        if (sourceCandidates.isEmpty()) {
+            sourceSelectorStatus.setText(getString(R.string.source_selector_no_options));
+            return;
+        }
+        renderSourceSelectorOptions();
+    }
+
+    private void failSourceSelectorQuery(
+            long requestId,
+            Channel channel,
+            long expectedGeneration
+    ) {
+        if (requestId != sourceCandidateRequestId
+                || !isSourceSelectorVisible()
+                || !isCurrentPlayback(channel, expectedGeneration)) return;
+        sourceCandidateTask = null;
+        sourceCandidateContext = null;
+        sourceCandidates.clear();
+        sourceCandidateViews.clear();
+        sourceCandidateFocusIndex = -1;
+        sourceSelectorOptions.removeAllViews();
+        sourceSelectorStatus.setText(getString(R.string.source_selector_no_options));
+    }
+
+    private String sourceSelectorProgressText(ResolutionProgress progress) {
+        if (progress == null || progress.getStage() == null) {
+            return getString(R.string.source_selector_consulting);
+        }
+        int current = progress.getCurrent();
+        int total = progress.getTotal();
+        return switch (progress.getStage()) {
+            case ALIAS_ATTEMPT -> current > 0 && total > 1
+                    ? "Consultando aliases " + current + "/" + total + "…"
+                    : "Consultando aliases…";
+            case CATALOG_REQUEST, CATALOG_PAGE -> "Consultando catálogo TvVoo…";
+            case CATALOG_PARSED -> "Procesando fuentes publicadas…";
+            case SOURCE_REQUEST -> current > 0 && total > 1
+                    ? "Solicitando fuentes " + current + "/" + total + "…"
+                    : "Solicitando fuentes…";
+            case SOURCE_CANDIDATE -> current > 0 && total > 1
+                    ? "Validando fuentes " + current + "/" + total + "…"
+                    : getString(R.string.source_selector_validating);
+            case HLS_PLAYLIST -> "Validando playlist HLS…";
+            case HLS_VARIANT -> "Validando variante HLS…";
+            case HLS_SEGMENT -> "Validando segmento HLS…";
+            case SOURCE_FOUND -> getString(R.string.source_selector_ready);
+            default -> getString(R.string.source_selector_consulting);
+        };
+    }
+
+    private void renderSourceSelectorOptions() {
+        sourceSelectorOptions.removeAllViews();
+        sourceCandidateViews.clear();
+        for (int index = 0; index < sourceCandidates.size(); index++) {
+            final int candidateIndex = index;
+            ResolvedPlaybackCandidate candidate = sourceCandidates.get(index);
+            TextView option = new TextView(this);
+            String detail = candidate.getDetail();
+            option.setText(AppStrings.isBlank(detail)
+                    ? candidate.getLabel()
+                    : candidate.getLabel() + "\n" + detail);
+            option.setTextColor(getColor(R.color.white));
+            option.setTextSize(15f);
+            option.setGravity(Gravity.CENTER_VERTICAL);
+            option.setBackgroundResource(R.drawable.focus_button);
+            option.setFocusable(true);
+            option.setFocusableInTouchMode(true);
+            option.setMinHeight(dp(54));
+            option.setOnFocusChangeListener((view, focused) -> {
+                if (focused) sourceCandidateFocusIndex = candidateIndex;
+            });
+            option.setOnClickListener(view -> selectSourceCandidate(candidateIndex));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+            );
+            params.setMargins(0, index == 0 ? 0 : dp(8), 0, 0);
+            sourceSelectorOptions.addView(option, params);
+            sourceCandidateViews.add(option);
+        }
+        sourceSelectorStatus.setText(getString(
+                R.string.source_selector_ready_count,
+                sourceCandidates.size()
+        ));
+        if (!sourceCandidateViews.isEmpty()) {
+            sourceCandidateFocusIndex = 0;
+            sourceCandidateViews.get(0).requestFocus();
+        }
+    }
+
+    private void moveSourceSelectorFocus(int delta) {
+        if (!isSourceSelectorVisible() || sourceCandidateViews.isEmpty()) return;
+        int size = sourceCandidateViews.size();
+        int index = sourceCandidateFocusIndex < 0 ? 0 : sourceCandidateFocusIndex;
+        index = (index + delta % size + size) % size;
+        sourceCandidateFocusIndex = index;
+        sourceCandidateViews.get(index).requestFocus();
+    }
+
+    private void selectFocusedSource() {
+        if (sourceCandidateFocusIndex >= 0
+                && sourceCandidateFocusIndex < sourceCandidates.size()) {
+            selectSourceCandidate(sourceCandidateFocusIndex);
+        }
+    }
+
+    private void selectSourceCandidate(int index) {
+        if (sourceCandidateTask != null
+                || index < 0
+                || index >= sourceCandidates.size()
+                || playbackChannel == null
+                || player == null) return;
+        ResolvedPlaybackCandidate candidate = sourceCandidates.get(index);
+        if (candidate.isStale()
+                || candidate.getSource() == null
+                || candidate.getSource().isExpired(System.currentTimeMillis())) {
+            StreamResolver resolver = streamResolverRegistry.find(playbackChannel);
+            if (resolver != null) startSourceSelectorQuery(playbackChannel, resolver);
+            return;
+        }
+
+        Channel channel = playbackChannel;
+        ResolvedPlaybackSource source = candidate.getSource();
+        closePlaybackSourceSelector();
+        if (!isCurrentPlayback(channel, playbackGeneration)) return;
+
+        playbackHasStarted = false;
+        playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
+        playbackAutoRecoveryInFlight = false;
+        playbackRecoveryFailed = false;
+        resetPlaybackBitrateMeter();
+        player.stop();
+        player.clearMediaItems();
+        discardCurrentPlaybackSource();
+        long requestId = ++playbackResolutionRequestId;
+        setStatus("CARGANDO", R.color.amber);
+        showLoadingState(getString(R.string.source_selector_switching));
+        startResolvedPlayback(channel, source, playbackGeneration, requestId);
+    }
+
+    private void closePlaybackSourceSelector() {
+        sourceCandidateRequestId++;
+        if (sourceCandidateContext != null) sourceCandidateContext.cancel();
+        sourceCandidateContext = null;
+        if (sourceCandidateTask != null) sourceCandidateTask.cancel(true);
+        sourceCandidateTask = null;
+        sourceCandidates.clear();
+        sourceCandidateViews.clear();
+        sourceCandidateFocusIndex = -1;
+        if (sourceSelectorOptions != null) sourceSelectorOptions.removeAllViews();
+        if (sourceSelectorOverlay != null) sourceSelectorOverlay.setVisibility(View.GONE);
+    }
+
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
+        if (isSourceSelectorVisible()) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (keyCode == KeyEvent.KEYCODE_BACK
+                        && event.getRepeatCount() == 0) {
+                    closePlaybackSourceSelector();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP
+                        || keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
+                    moveSourceSelectorFocus(-1);
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                        || keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN) {
+                    moveSourceSelectorFocus(1);
+                    return true;
+                }
+                if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                        || keyCode == KeyEvent.KEYCODE_ENTER)
+                        && event.getRepeatCount() == 0) {
+                    selectFocusedSource();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    closePlaybackSourceSelector();
+                    return true;
+                }
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                    || keyCode == KeyEvent.KEYCODE_DPAD_UP
+                    || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                    || keyCode == KeyEvent.KEYCODE_CHANNEL_UP
+                    || keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN) {
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                    || keyCode == KeyEvent.KEYCODE_ENTER
+                    || keyCode == KeyEvent.KEYCODE_MENU
+                    || keyCode == KeyEvent.KEYCODE_SETTINGS) {
+                return true;
+            }
+        }
         if (isChannelNavigationKey(keyCode)) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 // Android TV remotes emit repeated ACTION_DOWN events while
@@ -2271,9 +2569,11 @@ public final class MainActivity extends Activity {
             return true;
         }
 
-        // Keep the right arrow inert during playback. The settings tabs are
-        // navigated only after the settings screen has been opened explicitly.
         if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN
+                    && event.getRepeatCount() == 0) {
+                openPlaybackSourceSelector();
+            }
             return true;
         }
 
@@ -2334,6 +2634,10 @@ public final class MainActivity extends Activity {
     }
 
     private void handleBackAction() {
+        if (isSourceSelectorVisible()) {
+            closePlaybackSourceSelector();
+            return;
+        }
         if (lightEpgOverlay.getVisibility() == View.VISIBLE) {
             mainHandler.removeCallbacks(hideLightEpg);
             hideLightEpg.run();
@@ -2389,6 +2693,7 @@ public final class MainActivity extends Activity {
     private void releaseAppResources() {
         if (resourcesReleased) return;
         resourcesReleased = true;
+        closePlaybackSourceSelector();
         if (playbackBufferManager != null) {
             playbackBufferManager.close();
             playbackBufferManager = null;
@@ -2860,6 +3165,7 @@ public final class MainActivity extends Activity {
     protected void onPause() {
         if (appUpdater != null) appUpdater.onHostPause();
         if (playbackBitrateMeter != null) playbackBitrateMeter.setNotificationsEnabled(false);
+        closePlaybackSourceSelector();
         resetResourceWarningState();
         mainHandler.removeCallbacks(hideLightEpg);
         hideLightEpg.run();

@@ -1,6 +1,8 @@
 package cl.streambox.tv;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
 
 /** Resolves a provider-specific stream immediately before playback. */
 public interface StreamResolver {
@@ -19,6 +21,24 @@ public interface StreamResolver {
             ResolutionProgressListener listener
     ) throws IOException {
         return resolve(channel);
+    }
+
+    /**
+     * Resolves a bounded list of short-lived alternatives for an explicit
+     * source selector. Normal playback must continue using {@link #resolve}
+     * so opening a channel does not wait for every alternative.
+     */
+    default List<ResolvedPlaybackCandidate> resolvePlaybackCandidates(
+            Channel channel,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        ResolvedPlaybackSource source = resolve(channel, listener);
+        if (source == null) return Collections.emptyList();
+        return Collections.singletonList(new ResolvedPlaybackCandidate(
+                "Fuente actual",
+                "Fuente HLS validada",
+                source
+        ));
     }
 
     default String stableSourceId(Channel channel) {

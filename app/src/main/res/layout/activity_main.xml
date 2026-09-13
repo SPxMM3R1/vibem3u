@@ -262,4 +262,6 @@
         </LinearLayout>
     </LinearLayout>
 
+    <include layout="@layout/source_selector_overlay" />
+
 </FrameLayout>

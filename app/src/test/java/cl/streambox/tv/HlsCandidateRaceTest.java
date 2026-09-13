@@ -108,6 +108,7 @@ public final class HlsCandidateRaceTest {
             assertTrue(slowStarted.await(1, TimeUnit.SECONDS));
             HlsCandidateRace.Attempt attempt = race.poll(1_000L);
             assertNotNull(attempt);
+            assertEquals(ready, attempt.getCandidate());
             assertEquals(ready, attempt.getAccepted());
         } finally {
             race.close();

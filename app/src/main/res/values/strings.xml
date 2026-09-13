@@ -131,6 +131,13 @@
     <string name="epg_no_information">Sin información disponible</string>
     <string name="epg_no_next_programme">No hay información siguiente</string>
     <string name="subtitles_waiting_for_text">No se han detectado subtítulos de texto en este stream.</string>
+    <string name="source_selector_title">Fuentes disponibles</string>
+    <string name="source_selector_consulting">Consultando fuentes HLS…</string>
+    <string name="source_selector_validating">Validando enlaces alternativos…</string>
+    <string name="source_selector_ready">Selecciona una fuente para reproducirla.</string>
+    <string name="source_selector_ready_count">%1$d fuentes HLS validadas. Selecciona una para reproducirla.</string>
+    <string name="source_selector_no_options">No hay fuentes alternativas disponibles.</string>
+    <string name="source_selector_switching">Cambiando a la fuente seleccionada…</string>
 
     <plurals name="resolver_group_channels">
         <item quantity="one">%1$s · %2$d canal</item>

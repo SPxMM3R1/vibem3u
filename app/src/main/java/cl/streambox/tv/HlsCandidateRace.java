@@ -192,9 +192,9 @@ final class HlsCandidateRace {
                 try (ResolutionContext.Scope ignored = candidateContext.activate()) {
                     deadline.check();
                     ResolutionContext.current().check();
-                    return new Attempt(validator.validate(candidate), null);
+                    return new Attempt(candidate, validator.validate(candidate), null);
                 } catch (IOException error) {
-                    return new Attempt(null, error);
+                    return new Attempt(candidate, null, error);
                 }
             };
             Future<Attempt> future = completion.submit(ResolutionContext.wrapCurrent(task));
@@ -227,12 +227,17 @@ final class HlsCandidateRace {
                 Throwable cause = error.getCause();
                 return new Attempt(
                         null,
+                        null,
                         cause instanceof IOException
                                 ? (IOException) cause
                                 : new IOException("No se pudo validar la fuente.", cause)
                 );
             } catch (CancellationException error) {
-                return new Attempt(null, new IOException("Solicitud cancelada.", error));
+                return new Attempt(
+                        null,
+                        null,
+                        new IOException("Solicitud cancelada.", error)
+                );
             }
         }
 
@@ -274,14 +279,17 @@ final class HlsCandidateRace {
     }
 
     static final class Attempt {
+        private final URI candidate;
         private final URI accepted;
         private final IOException error;
 
-        Attempt(URI accepted, IOException error) {
+        Attempt(URI candidate, URI accepted, IOException error) {
+            this.candidate = candidate;
             this.accepted = accepted;
             this.error = error;
         }
 
+        URI getCandidate() { return candidate; }
         URI getAccepted() { return accepted; }
         IOException getError() { return error; }
     }

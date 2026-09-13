@@ -70,6 +70,97 @@ public final class VavooStreamResolver implements StreamResolver {
         return resolve(channel, listener, deadline);
     }
 
+    @Override
+    public List<ResolvedPlaybackCandidate> resolvePlaybackCandidates(
+            Channel channel,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        ResolutionProgressListener progress = listener == null
+                ? ResolutionProgressListener.NONE
+                : listener;
+        ResolutionDeadline deadline = newResolutionDeadline();
+        ResolutionContext ambient = ResolutionContext.current();
+        if (ambient == null) {
+            ResolutionContext root = new ResolutionContext(deadline.remainingMillis());
+            try (ResolutionContext.Scope ignored = root.activate()) {
+                return resolvePlaybackCandidates(channel, progress, deadline);
+            }
+        }
+        return resolvePlaybackCandidates(channel, progress, deadline);
+    }
+
+    /** Resolves all bounded, currently valid Vavoo options for the selector. */
+    private List<ResolvedPlaybackCandidate> resolvePlaybackCandidates(
+            Channel channel,
+            ResolutionProgressListener listener,
+            ResolutionDeadline deadline
+    ) throws IOException {
+        ResolutionProgressListener progress = listener == null
+                ? ResolutionProgressListener.NONE
+                : listener;
+        deadline.check();
+        LinkedHashSet<String> aliases = new LinkedHashSet<>(definition.resolverAliases(channel));
+        Map<String, String> playbackHeaders = TvVooStreamResolver.playbackHeaders();
+        boolean allowHttpFallback = definition.getBooleanConfig("allowHttpFallback", true);
+        int maximum = definition.getIntConfig("maxResolveCandidates", 8, 1, 12);
+        List<ResolvedPlaybackCandidate> result = new ArrayList<>();
+        LinkedHashSet<URI> seen = new LinkedHashSet<>();
+        final IOException[] lastValidationError = new IOException[1];
+        try {
+            sessionClient.streamCandidates(
+                    channel,
+                    new ArrayList<>(aliases),
+                    progress,
+                    deadline,
+                    (candidate, stableIdentity) -> {
+                        if (result.size() >= maximum) return true;
+                        if (candidate == null || !seen.add(candidate)) return false;
+                        try {
+                            URI accepted = TvVooStreamResolver.validateCandidate(
+                                    validator,
+                                    candidate,
+                                    allowHttpFallback,
+                                    playbackHeaders,
+                                    true,
+                                    progress
+                            );
+                            int ordinal = result.size() + 1;
+                            String detail = "Vavoo · HLS validada";
+                            if (!AppStrings.isBlank(stableIdentity)) {
+                                detail += " · catálogo "
+                                        + SafePlaybackText.detail(stableIdentity);
+                            }
+                            result.add(new ResolvedPlaybackCandidate(
+                                    "Fuente " + ordinal + " · Vavoo",
+                                    detail,
+                                    ResolvedPlaybackSource.dynamic(
+                                            getId(),
+                                            stableIdentity,
+                                            accepted,
+                                            playbackHeaders,
+                                            TvVooStreamResolver.PLAYBACK_USER_AGENT,
+                                            expiresAt()
+                                    )
+                            ));
+                            return result.size() >= maximum;
+                        } catch (IOException error) {
+                            lastValidationError[0] = error;
+                            return false;
+                        }
+                    }
+            );
+        } catch (IOException error) {
+            if (result.isEmpty()) lastValidationError[0] = error;
+        }
+        if (result.isEmpty()) {
+            throw new IOException(
+                    "Vavoo no entregó fuentes alternativas.",
+                    lastValidationError[0]
+            );
+        }
+        return java.util.Collections.unmodifiableList(result);
+    }
+
     private ResolutionDeadline newResolutionDeadline() {
         return new ResolutionDeadline(
                 definition.getIntConfig(
