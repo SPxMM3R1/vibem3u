@@ -2436,12 +2436,12 @@ public final class MainActivity extends Activity {
                 : (qualitySelectorAutomaticVisible ? selectedOptionIndex + 1 : selectedOptionIndex);
 
         if (qualitySelectorAutomaticVisible) {
-            TextView automatic = createQualitySelectorOption(
+            TextView automaticOption = createQualitySelectorOption(
                     (automatic ? "✓ " : "") + getString(R.string.stream_quality_automatic),
                     automatic,
                     0
             );
-            addQualitySelectorOption(automatic, 0);
+            addQualitySelectorOption(automaticOption, 0);
         }
 
         for (int index = 0; index < qualitySelectorChoices.size(); index++) {
