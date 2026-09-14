@@ -54,6 +54,9 @@ public final class EpgGuideInstrumentedTest {
                         View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
                 view.layout(0, 0, width, height);
                 view.openGuide(0);
+                assertTrue(view.handleKey(new KeyEvent(0L, 0L, KeyEvent.ACTION_DOWN,
+                        KeyEvent.KEYCODE_DPAD_CENTER, 2)));
+                assertEquals(0, tuned[0]);
                 RectF pip = view.pipRect();
                 assertTrue(pip.left > width / 2f);
                 assertTrue(pip.right < width && pip.bottom < height / 3f);

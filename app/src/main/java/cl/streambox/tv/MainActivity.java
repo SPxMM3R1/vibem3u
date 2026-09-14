@@ -349,6 +349,10 @@ public final class MainActivity extends Activity {
         sourceSelectorStatus = findViewById(R.id.source_selector_status);
         sourceSelectorOptions = findViewById(R.id.source_selector_options);
         epgGuideView = findViewById(R.id.epg_guide_overlay);
+        epgGuideView.addOnLayoutChangeListener((view, left, top, right, bottom,
+                oldLeft, oldTop, oldRight, oldBottom) -> {
+            if (epgGuideView.isGuideOpen()) resizePlayerForGuide();
+        });
         epgGuideView.setListener(new EpgGuideView.Listener() {
             @Override public void onCloseGuide() {
                 closeGuideOverlay();
@@ -2315,7 +2319,7 @@ public final class MainActivity extends Activity {
     }
 
     private void resizePlayerForGuide() {
-        if (playerView == null || epgGuideView == null || playerResizedForGuide
+        if (playerView == null || epgGuideView == null
                 || epgGuideView.getWidth() <= 0 || epgGuideView.getHeight() <= 0) return;
         RectF pip = epgGuideView.pipRect();
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
