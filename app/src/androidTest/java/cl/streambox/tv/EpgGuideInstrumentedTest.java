@@ -64,7 +64,7 @@ public final class EpgGuideInstrumentedTest {
                 assertTrue(view.headerFocusedForTest()); // default action: Ahora
                 key(view, KeyEvent.KEYCODE_DPAD_CENTER);
                 assertTrue(Math.abs(view.focusedTimeForTest() - System.currentTimeMillis()) < 2000L);
-                key(view, KeyEvent.KEYCODE_DPAD_LEFT); // Pasado
+                key(view, KeyEvent.KEYCODE_DPAD_LEFT); // Pasado mañana
                 key(view, KeyEvent.KEYCODE_DPAD_CENTER);
                 assertTrue(view.focusedTimeForTest() > now + 24L * 3_600_000L);
                 assertVisible(view);

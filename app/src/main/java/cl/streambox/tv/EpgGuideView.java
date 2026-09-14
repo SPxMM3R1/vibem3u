@@ -69,7 +69,7 @@ public final class EpgGuideView extends View {
     private boolean open;
     private boolean headerFocused;
     private int headerIndex;
-    private static final String[] HEADER_ACTIONS = {"Grupos", "Hoy", "Mañana", "Pasado", "Ahora", "Favorito"};
+    private static final String[] HEADER_ACTIONS = {"Grupos", "Hoy", "Mañana", "Pasado mañana", "Ahora", "Favorito"};
 
     public EpgGuideView(Context context, AttributeSet attrs) {
         super(context, attrs);
