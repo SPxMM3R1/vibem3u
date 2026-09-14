@@ -99,6 +99,25 @@ public final class ResolvedPlaybackSource {
     public static ResolvedPlaybackSource dynamic(
             String resolverId,
             String stableSourceId,
+            URI playbackUri,
+            Map<String, String> requestHeaders,
+            String userAgent,
+            long expiresAtMillis
+    ) {
+        return dynamic(
+                resolverId,
+                stableSourceId,
+                "",
+                playbackUri,
+                requestHeaders,
+                userAgent,
+                expiresAtMillis
+        );
+    }
+
+    public static ResolvedPlaybackSource dynamic(
+            String resolverId,
+            String stableSourceId,
             String playbackOptionId,
             URI playbackUri,
             Map<String, String> requestHeaders,
