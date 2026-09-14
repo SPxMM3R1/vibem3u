@@ -76,12 +76,8 @@ public final class EpgParser {
         private long startMillis;
         private long stopMillis;
         private String title;
-        private String titleLanguage;
-        private String description;
-        private String descriptionLanguage;
         private StringBuilder text;
-        private String readingElement;
-        private String readingLanguage;
+        private boolean readingTitle;
 
         @Override
         public void startElement(String uri, String localName, String qName, Attributes attributes) {
@@ -90,81 +86,34 @@ public final class EpgParser {
                 startMillis = parseXmlTvTime(attributes.getValue("start"));
                 stopMillis = parseXmlTvTime(attributes.getValue("stop"));
                 title = null;
-                titleLanguage = null;
-                description = null;
-                descriptionLanguage = null;
-            } else if (channelId != null
-                    && ("title".equalsIgnoreCase(qName)
-                    || "desc".equalsIgnoreCase(qName))) {
-                readingElement = qName.toLowerCase(Locale.ROOT);
-                readingLanguage = attributes.getValue("lang");
+            } else if (channelId != null && "title".equalsIgnoreCase(qName) && title == null) {
+                readingTitle = true;
                 text = new StringBuilder();
             }
         }
 
         @Override
         public void characters(char[] chars, int start, int length) {
-            if (readingElement != null && text != null) text.append(chars, start, length);
+            if (readingTitle) text.append(chars, start, length);
         }
 
         @Override
         public void endElement(String uri, String localName, String qName) {
-            if ("title".equalsIgnoreCase(qName) && "title".equals(readingElement)) {
+            if ("title".equalsIgnoreCase(qName) && readingTitle) {
                 String candidate = text.toString().trim();
-                if (!candidate.isEmpty() && prefer(candidate, readingLanguage, titleLanguage)) {
-                    title = candidate;
-                    titleLanguage = readingLanguage;
-                }
-                readingElement = null;
-                readingLanguage = null;
-                text = null;
-            } else if ("desc".equalsIgnoreCase(qName) && "desc".equals(readingElement)) {
-                String candidate = text.toString().trim();
-                if (!candidate.isEmpty()
-                        && prefer(candidate, readingLanguage, descriptionLanguage)) {
-                    description = candidate;
-                    descriptionLanguage = readingLanguage;
-                }
-                readingElement = null;
-                readingLanguage = null;
+                if (!candidate.isEmpty()) title = candidate;
+                readingTitle = false;
                 text = null;
             } else if ("programme".equalsIgnoreCase(qName)) {
                 if (channelId != null && !AppStrings.isBlank(channelId) && title != null
                         && startMillis >= 0 && stopMillis > startMillis) {
-                    programmes.add(new EpgProgramme(
-                            channelId,
-                            title,
-                            description == null ? "" : description,
-                            startMillis,
-                            stopMillis
-                    ));
+                    programmes.add(new EpgProgramme(channelId, title, startMillis, stopMillis));
                 }
                 channelId = null;
                 title = null;
-                titleLanguage = null;
-                description = null;
-                descriptionLanguage = null;
-                readingElement = null;
-                readingLanguage = null;
+                readingTitle = false;
                 text = null;
             }
-        }
-
-        private static boolean prefer(
-                String candidate,
-                String candidateLanguage,
-                String currentLanguage
-        ) {
-            if (AppStrings.isBlank(candidate)) return false;
-            if (currentLanguage == null) return true;
-            return isSpanish(candidateLanguage) && !isSpanish(currentLanguage);
-        }
-
-        private static boolean isSpanish(String language) {
-            if (language == null) return false;
-            String normalized = language.trim().toLowerCase(Locale.ROOT);
-            return normalized.equals("es") || normalized.startsWith("es-")
-                    || normalized.startsWith("es_");
         }
     }
 }

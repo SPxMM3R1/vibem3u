@@ -59,7 +59,7 @@
     <string name="channel_controls_title">Cambio de canales</string>
     <string name="invert_channel_keys">Invertir botones arriba y abajo</string>
     <string name="invert_channel_keys_description">Activado: ↑ avanza al canal siguiente y ↓ vuelve al anterior.</string>
-    <string name="remote_help">Durante la reproducción: ↑/↓ cambia de canal · ← guía EPG · → calidad o fuentes · MENU opciones.</string>
+    <string name="remote_help">Durante la reproducción: ↑/↓ cambia de canal · OK muestra información · mantener OK configuración.</string>
     <string name="update_title">Actualización disponible</string>
     <string name="update_available">VibeM3U %1$s está lista para instalar.</string>
     <string name="update_later">Más tarde</string>
@@ -113,11 +113,16 @@
     <string name="resolver_update_up_to_date">Los resolutores ya están actualizados.</string>
     <string name="resolver_update_error">No se pudo obtener un catálogo válido. Se conserva la versión instalada.</string>
     <string name="resolver_catalog_load_error">No se pudo leer el catálogo. Se mantiene la compatibilidad integrada.</string>
+    <string name="tvvoo_resolution_mode_title">Ruta de reproducción TvVoo</string>
+    <string name="tvvoo_resolution_mode_description">Elige qué sistema obtiene una fuente nueva al abrir estos canales.</string>
+    <string name="tvvoo_mode_both">Automático · servicio externo y motor propio</string>
+    <string name="tvvoo_mode_direct">Solo motor propio · Vavoo directo</string>
+    <string name="tvvoo_mode_external">Solo servicio externo · TvVoo</string>
     <string name="resolver_groups_title">Grupos de canales</string>
     <string name="resolver_groups_description">Desactiva un proveedor para ocultar todos sus canales. Las fuentes directas y los demás grupos no cambian.</string>
     <string name="unknown_version">desconocida</string>
     <string name="settings_interface_heading">Interfaz</string>
-    <string name="settings_interface_description">Usa las flechas para navegar y OK para seleccionar. Mantén OK durante la reproducción para abrir la guía; MENU abre Opciones generales.</string>
+    <string name="settings_interface_description">Usa las flechas para navegar y OK para seleccionar. Mantén OK durante la reproducción para abrir Opciones generales; las pestañas se cambian con ◀ y ▶.</string>
     <string name="settings_updates_heading">Actualizaciones</string>
     <string name="settings_updates_description">Comprueba si existe una versión nueva de VibeM3U y conserva la configuración actual.</string>
     <string name="settings_remote_help">◀ ▶ Cambiar pestaña   ·   ▲ ▼ Navegar   ·   OK Seleccionar   ·   BACK Volver</string>
@@ -133,10 +138,6 @@
     <string name="source_selector_ready_count">%1$d fuentes HLS validadas. Selecciona una para reproducirla.</string>
     <string name="source_selector_no_options">No hay fuentes alternativas disponibles.</string>
     <string name="source_selector_switching">Cambiando a la fuente seleccionada…</string>
-    <string name="quality_selector_title">Calidad de video</string>
-    <string name="quality_selector_ready">Selecciona una calidad para reproducirla.</string>
-    <string name="quality_selector_no_options">Este canal no informa calidades alternativas.</string>
-    <string name="quality_selector_switching">Aplicando calidad seleccionada…</string>
 
     <plurals name="resolver_group_channels">
         <item quantity="one">%1$s · %2$d canal</item>

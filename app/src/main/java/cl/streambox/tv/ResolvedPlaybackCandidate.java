@@ -2,8 +2,6 @@ package cl.streambox.tv;
 
 import android.os.SystemClock;
 
-import java.util.Objects;
-
 /**
  * A short-lived playback option exposed by a dynamic resolver.
  *
@@ -24,7 +22,7 @@ final class ResolvedPlaybackCandidate {
         this.label = AppStrings.isBlank(label) ? "Fuente" : label.trim();
         this.detail = SafePlaybackText.detail(detail);
         this.source = source;
-        this.createdAtElapsedRealtime = monotonicNow();
+        this.createdAtElapsedRealtime = SystemClock.elapsedRealtime();
     }
 
     String getLabel() {
@@ -39,32 +37,8 @@ final class ResolvedPlaybackCandidate {
         return source;
     }
 
-    /**
-     * Provider URLs are ephemeral, so prefer the stable logical identity and
-     * only fall back to the URI when no identity was supplied.
-     */
-    boolean matches(ResolvedPlaybackSource activeSource) {
-        if (source == null || activeSource == null) return false;
-        String candidateOptionId = source.getPlaybackOptionId();
-        String activeOptionId = activeSource.getPlaybackOptionId();
-        if (!AppStrings.isBlank(candidateOptionId)
-                && !AppStrings.isBlank(activeOptionId)) {
-            return candidateOptionId.equals(activeOptionId);
-        }
-        return Objects.equals(source.getPlaybackUri(), activeSource.getPlaybackUri());
-    }
-
     /** Candidate URLs are deliberately short-lived to avoid stale sessions. */
     boolean isStale() {
-        return monotonicNow() - createdAtElapsedRealtime >= 20_000L;
-    }
-
-    private static long monotonicNow() {
-        try {
-            return SystemClock.elapsedRealtime();
-        } catch (RuntimeException ignored) {
-            // Plain JVM unit tests do not provide Android's SystemClock stub.
-            return System.nanoTime() / 1_000_000L;
-        }
+        return SystemClock.elapsedRealtime() - createdAtElapsedRealtime >= 20_000L;
     }
 }

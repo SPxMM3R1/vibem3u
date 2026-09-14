@@ -20,7 +20,7 @@ import java.util.Locale;
 /** Fast, persistent representation of an already parsed XMLTV document. */
 final class EpgSnapshotCache {
     private static final int MAGIC = 0x56455047; // VEPG
-    private static final int FORMAT_VERSION = 2;
+    private static final int FORMAT_VERSION = 1;
     private static final int MAX_SNAPSHOTS = 4;
     private static final int MAX_PROGRAMMES = 250_000;
     private static final int MAX_STRING_BYTES = 256 * 1024;
@@ -67,19 +67,12 @@ final class EpgSnapshotCache {
             for (int index = 0; index < count; index++) {
                 String channelId = readString(input);
                 String title = readString(input);
-                String description = readString(input);
                 long startMillis = input.readLong();
                 long stopMillis = input.readLong();
                 if (AppStrings.isBlank(channelId) || AppStrings.isBlank(title) || stopMillis <= startMillis) {
                     throw new IOException("La instantánea EPG no es válida.");
                 }
-                programmes.add(new EpgProgramme(
-                        channelId,
-                        title,
-                        description,
-                        startMillis,
-                        stopMillis
-                ));
+                programmes.add(new EpgProgramme(channelId, title, startMillis, stopMillis));
             }
             file.setLastModified(System.currentTimeMillis());
             return new EpgData(programmes);
@@ -107,7 +100,6 @@ final class EpgSnapshotCache {
             for (EpgProgramme programme : programmes) {
                 writeString(output, programme.getChannelId());
                 writeString(output, programme.getTitle());
-                writeString(output, programme.getDescription());
                 output.writeLong(programme.getStartMillis());
                 output.writeLong(programme.getStopMillis());
             }

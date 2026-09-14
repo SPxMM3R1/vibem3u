@@ -13,7 +13,6 @@ public final class ResolvedPlaybackSource {
     private final String userAgent;
     private final String resolverId;
     private final String stableSourceId;
-    private final String playbackOptionId;
     private final long expiresAtMillis;
     private final boolean dynamicallyResolved;
 
@@ -23,28 +22,6 @@ public final class ResolvedPlaybackSource {
             String userAgent,
             String resolverId,
             String stableSourceId,
-            long expiresAtMillis,
-            boolean dynamicallyResolved
-    ) {
-        this(
-                playbackUri,
-                requestHeaders,
-                userAgent,
-                resolverId,
-                stableSourceId,
-                null,
-                expiresAtMillis,
-                dynamicallyResolved
-        );
-    }
-
-    private ResolvedPlaybackSource(
-            URI playbackUri,
-            Map<String, String> requestHeaders,
-            String userAgent,
-            String resolverId,
-            String stableSourceId,
-            String playbackOptionId,
             long expiresAtMillis,
             boolean dynamicallyResolved
     ) {
@@ -59,9 +36,6 @@ public final class ResolvedPlaybackSource {
         this.stableSourceId = stableSourceId == null || AppStrings.isBlank(stableSourceId)
                 ? null
                 : stableSourceId;
-        this.playbackOptionId = playbackOptionId == null || AppStrings.isBlank(playbackOptionId)
-                ? null
-                : playbackOptionId.trim();
         this.expiresAtMillis = Math.max(0L, expiresAtMillis);
         this.dynamicallyResolved = dynamicallyResolved;
     }
@@ -104,33 +78,12 @@ public final class ResolvedPlaybackSource {
             String userAgent,
             long expiresAtMillis
     ) {
-        return dynamic(
-                resolverId,
-                stableSourceId,
-                "",
-                playbackUri,
-                requestHeaders,
-                userAgent,
-                expiresAtMillis
-        );
-    }
-
-    public static ResolvedPlaybackSource dynamic(
-            String resolverId,
-            String stableSourceId,
-            String playbackOptionId,
-            URI playbackUri,
-            Map<String, String> requestHeaders,
-            String userAgent,
-            long expiresAtMillis
-    ) {
         return new ResolvedPlaybackSource(
                 playbackUri,
                 requestHeaders,
                 userAgent,
                 resolverId,
                 stableSourceId,
-                playbackOptionId,
                 expiresAtMillis,
                 true
         );
@@ -175,11 +128,6 @@ public final class ResolvedPlaybackSource {
 
     public String getStableSourceId() {
         return stableSourceId == null ? "" : stableSourceId;
-    }
-
-    /** Stable identity of a logical source variant, without its short-lived URL. */
-    public String getPlaybackOptionId() {
-        return playbackOptionId == null ? "" : playbackOptionId;
     }
 
     public long getExpiresAtMillis() {

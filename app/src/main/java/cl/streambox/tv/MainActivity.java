@@ -3,7 +3,6 @@ package cl.streambox.tv;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.Dialog;
-import android.graphics.RectF;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.content.Intent;
@@ -30,7 +29,6 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.widget.Button;
-import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -135,16 +133,10 @@ public final class MainActivity extends Activity {
     private TextView lightEpgNextTitle;
     private TextView lightEpgNextTime;
     private View sourceSelectorOverlay;
-    private EpgGuideView epgGuideView;
     private TextView sourceSelectorTitle;
     private TextView sourceSelectorChannel;
     private TextView sourceSelectorStatus;
     private LinearLayout sourceSelectorOptions;
-    private View qualitySelectorOverlay;
-    private TextView qualitySelectorTitle;
-    private TextView qualitySelectorChannel;
-    private TextView qualitySelectorStatus;
-    private LinearLayout qualitySelectorOptions;
     private ImageView channelLogo;
     private TextView channelLogoFallback;
     private TextView channelNumber;
@@ -198,10 +190,6 @@ public final class MainActivity extends Activity {
     private final List<ResolvedPlaybackCandidate> sourceCandidates = new ArrayList<>();
     private final List<View> sourceCandidateViews = new ArrayList<>();
     private int sourceCandidateFocusIndex = -1;
-    private final List<View> qualityOptionViews = new ArrayList<>();
-    private List<VideoTrackOption> qualitySelectorChoices = Collections.emptyList();
-    private boolean qualitySelectorAutomaticVisible;
-    private int qualitySelectorFocusIndex = -1;
     private ManifestHandoffCache playbackManifestCache;
     private long playbackResolutionRequestId;
     private long activePlaybackSourceRequestId = NO_RESOLUTION_REQUEST;
@@ -223,7 +211,6 @@ public final class MainActivity extends Activity {
     private String epgMergeInputSignature = "";
     private long epgMergeGeneration;
     private boolean playbackDiagnosticsActive;
-    private boolean playerResizedForGuide;
     private final AtomicBoolean diagnosticsUpdateQueued = new AtomicBoolean();
     private final Runnable applyMeasuredDiagnostics = () -> {
         diagnosticsUpdateQueued.set(false);
@@ -357,28 +344,6 @@ public final class MainActivity extends Activity {
         sourceSelectorChannel = findViewById(R.id.source_selector_channel);
         sourceSelectorStatus = findViewById(R.id.source_selector_status);
         sourceSelectorOptions = findViewById(R.id.source_selector_options);
-        qualitySelectorOverlay = findViewById(R.id.quality_selector_overlay);
-        qualitySelectorTitle = findViewById(R.id.quality_selector_title);
-        qualitySelectorChannel = findViewById(R.id.quality_selector_channel);
-        qualitySelectorStatus = findViewById(R.id.quality_selector_status);
-        qualitySelectorOptions = findViewById(R.id.quality_selector_options);
-        epgGuideView = findViewById(R.id.epg_guide_overlay);
-        epgGuideView.addOnLayoutChangeListener((view, left, top, right, bottom,
-                oldLeft, oldTop, oldRight, oldBottom) -> {
-            if (epgGuideView.isGuideOpen()) resizePlayerForGuide();
-        });
-        epgGuideView.setListener(new EpgGuideView.Listener() {
-            @Override public void onCloseGuide() {
-                closeGuideOverlay();
-            }
-
-            @Override public void onPlayGuideChannel(int index) {
-                closeGuideOverlay();
-                if (index >= 0 && index < channels.size()) playChannel(index, true);
-            }
-        });
-        epgGuideView.setChannels(channels);
-        epgGuideView.setEpgData(epgData);
         channelLogo = findViewById(R.id.channel_logo);
         channelLogoFallback = findViewById(R.id.channel_logo_fallback);
         channelNumber = findViewById(R.id.channel_number);
@@ -823,7 +788,6 @@ public final class MainActivity extends Activity {
                         || mergeGeneration != epgMergeGeneration
                         || isFinishing()) return;
                 epgData = merged;
-                if (epgGuideView != null) epgGuideView.setEpgData(merged);
                 mainHandler.removeCallbacks(updateProgramme);
                 updateProgramme.run();
             });
@@ -862,7 +826,6 @@ public final class MainActivity extends Activity {
 
         channels.clear();
         channels.addAll(enabledChannels);
-        if (epgGuideView != null) epgGuideView.setChannels(channels);
         if (channels.isEmpty()) {
             showPlaylistError(getString(R.string.empty_playlist));
             return;
@@ -1334,7 +1297,6 @@ public final class MainActivity extends Activity {
     private void playChannel(int requestedIndex, boolean revalidateLogo) {
         if (channels.isEmpty()) return;
         closePlaybackSourceSelector();
-        closeQualitySelector();
         channelIndex = (requestedIndex % channels.size() + channels.size()) % channels.size();
         Channel channel = channels.get(channelIndex);
         playbackGeneration++;
@@ -2304,234 +2266,6 @@ public final class MainActivity extends Activity {
         mainHandler.postDelayed(hideLightEpg, LIGHT_EPG_TIMEOUT_MS);
     }
 
-    private void showGuide() {
-        if (exiting || resourcesReleased || settingsOpen || epgGuideView == null
-                || channels.isEmpty() || player == null) return;
-        closePlaybackSourceSelector();
-        closeQualitySelector();
-        mainHandler.removeCallbacks(hideLightEpg);
-        hideLightEpg.run();
-        mainHandler.removeCallbacks(hideOverlay);
-        hideOverlay.run();
-        epgGuideView.setChannels(channels);
-        epgGuideView.setEpgData(epgData);
-        epgGuideView.setPlayingChannelIndex(channelIndex);
-        epgGuideView.setVisibility(View.VISIBLE);
-        epgGuideView.openGuide(channelIndex);
-        epgGuideView.post(() -> {
-            if (epgGuideView != null && epgGuideView.isGuideOpen()) {
-                resizePlayerForGuide();
-                loadGuideLogos();
-            }
-        });
-    }
-
-    private void closeGuideOverlay() {
-        if (epgGuideView != null) {
-            epgGuideView.dismissGuide();
-            epgGuideView.setVisibility(View.GONE);
-        }
-        restorePlayerAfterGuide();
-    }
-
-    private void resizePlayerForGuide() {
-        if (playerView == null || epgGuideView == null
-                || epgGuideView.getWidth() <= 0 || epgGuideView.getHeight() <= 0) return;
-        RectF pip = epgGuideView.pipRect();
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                Math.max(1, Math.round(pip.width())),
-                Math.max(1, Math.round(pip.height()))
-        );
-        params.gravity = Gravity.TOP | Gravity.END;
-        params.leftMargin = Math.max(0, Math.round(pip.left));
-        params.topMargin = Math.max(0, Math.round(pip.top));
-        params.rightMargin = Math.max(0, epgGuideView.getWidth() - Math.round(pip.right));
-        playerView.setLayoutParams(params);
-        playerResizedForGuide = true;
-    }
-
-    private void restorePlayerAfterGuide() {
-        if (playerView == null || !playerResizedForGuide) return;
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-        );
-        playerView.setLayoutParams(params);
-        playerResizedForGuide = false;
-    }
-
-    private void loadGuideLogos() {
-        if (channelLogoCache == null || epgGuideView == null || channels.isEmpty()) return;
-        List<Channel> snapshot = new ArrayList<>(channels);
-        int width = dpToPx(50);
-        int height = dpToPx(34);
-        logoCacheExecutor.submit(() -> {
-            Map<String, android.graphics.Bitmap> cached = new LinkedHashMap<>();
-            for (Channel channel : snapshot) {
-                if (Thread.currentThread().isInterrupted()) return;
-                URI logo = channel.getLogoUri();
-                if (logo == null) continue;
-                android.graphics.Bitmap bitmap = channelLogoCache.loadCached(logo, width, height);
-                if (bitmap != null) cached.put(PlaybackPreferences.channelIdentity(channel), bitmap);
-            }
-            mainHandler.post(() -> {
-                if (epgGuideView != null && epgGuideView.isGuideOpen()) {
-                    epgGuideView.setLogos(cached);
-                }
-            });
-        });
-    }
-
-    private boolean isQualitySelectorVisible() {
-        return qualitySelectorOverlay != null
-                && qualitySelectorOverlay.getVisibility() == View.VISIBLE;
-    }
-
-    /** Opens a lightweight quality chooser without leaving the player. */
-    private void openQualitySelector() {
-        if (exiting || resourcesReleased || settingsOpen || player == null
-                || !hasWindowFocus() || playbackChannel == null
-                || playbackResolutionTask != null || isSourceSelectorVisible()) return;
-
-        qualitySelectorChoices = new ArrayList<>(collectVideoTrackOptions(player.getCurrentTracks()));
-        qualitySelectorTitle.setText(getString(R.string.quality_selector_title));
-        qualitySelectorChannel.setText(playbackChannel.getName());
-        qualitySelectorOverlay.setVisibility(View.VISIBLE);
-        renderQualitySelectorOptions();
-    }
-
-    private int selectedQualityOptionIndex(Channel channel, List<VideoTrackOption> options) {
-        if (options.isEmpty() || playbackPreferences.isAutomaticQuality(channel)) return -1;
-        PlaybackPreferences.QualityPreference preference = playbackPreferences.getQuality(channel);
-        if (preference != null) {
-            VideoTrackOption closest = findClosestQuality(options, preference);
-            if (closest != null) return options.indexOf(closest);
-        }
-        for (int index = 0; index < options.size(); index++) {
-            VideoTrackOption option = options.get(index);
-            if (option.group.isSelected() && option.group.isTrackSelected(option.trackIndex)) {
-                return index;
-            }
-        }
-        return 0;
-    }
-
-    private void renderQualitySelectorOptions() {
-        qualitySelectorOptions.removeAllViews();
-        qualityOptionViews.clear();
-        qualitySelectorAutomaticVisible = qualitySelectorChoices.size() > 1;
-        qualitySelectorFocusIndex = -1;
-
-        if (qualitySelectorChoices.isEmpty()) {
-            qualitySelectorStatus.setText(getString(R.string.quality_selector_no_options));
-            return;
-        }
-
-        Channel channel = playbackChannel;
-        boolean automatic = channel != null && playbackPreferences.isAutomaticQuality(channel);
-        int selectedOptionIndex = channel == null
-                ? 0 : selectedQualityOptionIndex(channel, qualitySelectorChoices);
-        int selectedViewIndex = qualitySelectorAutomaticVisible && automatic
-                ? 0
-                : (qualitySelectorAutomaticVisible ? selectedOptionIndex + 1 : selectedOptionIndex);
-
-        if (qualitySelectorAutomaticVisible) {
-            TextView automaticOption = createQualitySelectorOption(
-                    (automatic ? "✓ " : "") + getString(R.string.stream_quality_automatic),
-                    automatic,
-                    0
-            );
-            addQualitySelectorOption(automaticOption, 0);
-        }
-
-        for (int index = 0; index < qualitySelectorChoices.size(); index++) {
-            VideoTrackOption option = qualitySelectorChoices.get(index);
-            boolean active = !automatic && index == selectedOptionIndex;
-            int viewIndex = qualityOptionViews.size();
-            TextView view = createQualitySelectorOption(
-                    (active ? "✓ " : "") + option.label(),
-                    active,
-                    viewIndex
-            );
-            addQualitySelectorOption(view, viewIndex);
-        }
-
-        qualitySelectorStatus.setText(getString(R.string.quality_selector_ready));
-        if (!qualityOptionViews.isEmpty()) {
-            qualitySelectorFocusIndex = Math.max(0, Math.min(
-                    selectedViewIndex,
-                    qualityOptionViews.size() - 1
-            ));
-            qualityOptionViews.get(qualitySelectorFocusIndex).requestFocus();
-        }
-    }
-
-    private TextView createQualitySelectorOption(String label, boolean active, int viewIndex) {
-        TextView option = new TextView(this);
-        option.setText(label);
-        option.setTextColor(active ? getColor(R.color.cyan) : getColor(R.color.white));
-        option.setContentDescription(label);
-        option.setTextSize(15f);
-        option.setGravity(Gravity.CENTER_VERTICAL);
-        option.setBackgroundResource(R.drawable.focus_button);
-        option.setFocusable(true);
-        option.setFocusableInTouchMode(true);
-        option.setMinHeight(dp(54));
-        option.setOnFocusChangeListener((view, focused) -> {
-            if (focused) qualitySelectorFocusIndex = viewIndex;
-            if (active) option.setTextColor(getColor(focused ? R.color.panel : R.color.cyan));
-        });
-        option.setOnClickListener(view -> selectQualityOption(viewIndex));
-        return option;
-    }
-
-    private void addQualitySelectorOption(View option, int index) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        );
-        params.setMargins(0, index == 0 ? 0 : dp(8), 0, 0);
-        qualitySelectorOptions.addView(option, params);
-        qualityOptionViews.add(option);
-    }
-
-    private void moveQualitySelectorFocus(int delta) {
-        if (!isQualitySelectorVisible() || qualityOptionViews.isEmpty()) return;
-        int size = qualityOptionViews.size();
-        int index = qualitySelectorFocusIndex < 0 ? 0 : qualitySelectorFocusIndex;
-        index = (index + delta % size + size) % size;
-        qualitySelectorFocusIndex = index;
-        qualityOptionViews.get(index).requestFocus();
-    }
-
-    private void selectQualityOption(int viewIndex) {
-        if (viewIndex < 0 || viewIndex >= qualityOptionViews.size()
-                || playbackChannel == null || player == null) return;
-        Channel channel = playbackChannel;
-        if (qualitySelectorAutomaticVisible && viewIndex == 0) {
-            useAutomaticQuality(channel);
-        } else {
-            int optionIndex = qualitySelectorAutomaticVisible ? viewIndex - 1 : viewIndex;
-            if (optionIndex < 0 || optionIndex >= qualitySelectorChoices.size()) return;
-            applyFixedQuality(channel, qualitySelectorChoices.get(optionIndex), true);
-        }
-        closeQualitySelector();
-        showOverlay(false);
-    }
-
-    private void selectFocusedQuality() {
-        selectQualityOption(qualitySelectorFocusIndex);
-    }
-
-    private void closeQualitySelector() {
-        qualityOptionViews.clear();
-        qualitySelectorChoices = Collections.emptyList();
-        qualitySelectorAutomaticVisible = false;
-        qualitySelectorFocusIndex = -1;
-        if (qualitySelectorOptions != null) qualitySelectorOptions.removeAllViews();
-        if (qualitySelectorOverlay != null) qualitySelectorOverlay.setVisibility(View.GONE);
-    }
-
     private boolean isSourceSelectorVisible() {
         return sourceSelectorOverlay != null
                 && sourceSelectorOverlay.getVisibility() == View.VISIBLE;
@@ -2548,7 +2282,6 @@ public final class MainActivity extends Activity {
         if (resolver == null || !"tvvoo".equalsIgnoreCase(resolver.getId())) return;
         if (isSourceSelectorVisible() || sourceCandidateTask != null) return;
 
-        closeQualitySelector();
         mainHandler.removeCallbacks(hideLightEpg);
         hideLightEpg.run();
         sourceSelectorTitle.setText(getString(R.string.source_selector_title));
@@ -2617,7 +2350,6 @@ public final class MainActivity extends Activity {
         sourceCandidateContext = null;
         sourceCandidates.clear();
         if (resolved != null) sourceCandidates.addAll(resolved);
-        addCurrentPlaybackSourceIfMissing();
         if (sourceCandidates.isEmpty()) {
             sourceSelectorStatus.setText(getString(R.string.source_selector_no_options));
             return;
@@ -2671,23 +2403,15 @@ public final class MainActivity extends Activity {
     private void renderSourceSelectorOptions() {
         sourceSelectorOptions.removeAllViews();
         sourceCandidateViews.clear();
-        int initialFocusIndex = -1;
         for (int index = 0; index < sourceCandidates.size(); index++) {
             final int candidateIndex = index;
             ResolvedPlaybackCandidate candidate = sourceCandidates.get(index);
-            boolean active = candidate.matches(currentPlaybackSource);
             TextView option = new TextView(this);
             String detail = candidate.getDetail();
-            String label = active ? "✓ " + candidate.getLabel() : candidate.getLabel();
-            if (active && !AppStrings.isBlank(detail)
-                    && !detail.toLowerCase(Locale.ROOT).contains("reproduciendo")) {
-                detail = "Reproduciendo ahora · " + detail;
-            }
-            option.setText(AppStrings.isBlank(detail) ? label : label + "\n" + detail);
-            option.setTextColor(active ? getColor(R.color.cyan) : getColor(R.color.white));
-            option.setContentDescription(active
-                    ? label + " · reproduciendo ahora"
-                    : label);
+            option.setText(AppStrings.isBlank(detail)
+                    ? candidate.getLabel()
+                    : candidate.getLabel() + "\n" + detail);
+            option.setTextColor(getColor(R.color.white));
             option.setTextSize(15f);
             option.setGravity(Gravity.CENTER_VERTICAL);
             option.setBackgroundResource(R.drawable.focus_button);
@@ -2696,9 +2420,6 @@ public final class MainActivity extends Activity {
             option.setMinHeight(dp(54));
             option.setOnFocusChangeListener((view, focused) -> {
                 if (focused) sourceCandidateFocusIndex = candidateIndex;
-                if (active) {
-                    option.setTextColor(getColor(focused ? R.color.panel : R.color.cyan));
-                }
             });
             option.setOnClickListener(view -> selectSourceCandidate(candidateIndex));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
@@ -2708,33 +2429,15 @@ public final class MainActivity extends Activity {
             params.setMargins(0, index == 0 ? 0 : dp(8), 0, 0);
             sourceSelectorOptions.addView(option, params);
             sourceCandidateViews.add(option);
-            if (active && initialFocusIndex < 0) initialFocusIndex = index;
         }
         sourceSelectorStatus.setText(getString(
                 R.string.source_selector_ready_count,
                 sourceCandidates.size()
         ));
         if (!sourceCandidateViews.isEmpty()) {
-            sourceCandidateFocusIndex = initialFocusIndex < 0 ? 0 : initialFocusIndex;
-            sourceCandidateViews.get(sourceCandidateFocusIndex).requestFocus();
+            sourceCandidateFocusIndex = 0;
+            sourceCandidateViews.get(0).requestFocus();
         }
-    }
-
-    private void addCurrentPlaybackSourceIfMissing() {
-        if (currentPlaybackSource == null
-                || !currentPlaybackSource.isDynamicallyResolved()
-                || currentPlaybackSource.isExpired(System.currentTimeMillis())
-                || !"tvvoo".equalsIgnoreCase(currentPlaybackSource.getResolverId())) {
-            return;
-        }
-        for (ResolvedPlaybackCandidate candidate : sourceCandidates) {
-            if (candidate.matches(currentPlaybackSource)) return;
-        }
-        sourceCandidates.add(0, new ResolvedPlaybackCandidate(
-                "Fuente actual",
-                "Reproduciendo ahora · enlace en uso",
-                currentPlaybackSource
-        ));
     }
 
     private void moveSourceSelectorFocus(int delta) {
@@ -2803,10 +2506,6 @@ public final class MainActivity extends Activity {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
-        if (epgGuideView != null && epgGuideView.isGuideOpen()) {
-            epgGuideView.handleKey(event);
-            return true;
-        }
         if (isSourceSelectorVisible()) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 if (keyCode == KeyEvent.KEYCODE_BACK
@@ -2849,44 +2548,6 @@ public final class MainActivity extends Activity {
                 return true;
             }
         }
-        if (isQualitySelectorVisible()) {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (keyCode == KeyEvent.KEYCODE_BACK
-                        && event.getRepeatCount() == 0) {
-                    closeQualitySelector();
-                    return true;
-                }
-                if (keyCode == KeyEvent.KEYCODE_DPAD_UP
-                        || keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
-                    moveQualitySelectorFocus(-1);
-                    return true;
-                }
-                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN
-                        || keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN) {
-                    moveQualitySelectorFocus(1);
-                    return true;
-                }
-                if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER
-                        || keyCode == KeyEvent.KEYCODE_ENTER)
-                        && event.getRepeatCount() == 0) {
-                    selectFocusedQuality();
-                    return true;
-                }
-                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    closeQualitySelector();
-                    return true;
-                }
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
-                    || keyCode == KeyEvent.KEYCODE_DPAD_UP
-                    || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
-                    || keyCode == KeyEvent.KEYCODE_CHANNEL_UP
-                    || keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN
-                    || keyCode == KeyEvent.KEYCODE_DPAD_CENTER
-                    || keyCode == KeyEvent.KEYCODE_ENTER) {
-                return true;
-            }
-        }
         if (isChannelNavigationKey(keyCode)) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 // Android TV remotes emit repeated ACTION_DOWN events while
@@ -2903,7 +2564,7 @@ public final class MainActivity extends Activity {
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
             if (event.getAction() == KeyEvent.ACTION_DOWN
                     && event.getRepeatCount() == 0) {
-                showGuide();
+                showLightEpg();
             }
             return true;
         }
@@ -2911,13 +2572,7 @@ public final class MainActivity extends Activity {
         if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
             if (event.getAction() == KeyEvent.ACTION_DOWN
                     && event.getRepeatCount() == 0) {
-                StreamResolver resolver = playbackChannel == null || streamResolverRegistry == null
-                        ? null : streamResolverRegistry.find(playbackChannel);
-                if (resolver != null && "tvvoo".equalsIgnoreCase(resolver.getId())) {
-                    openPlaybackSourceSelector();
-                } else {
-                    openQualitySelector();
-                }
+                openPlaybackSourceSelector();
             }
             return true;
         }
@@ -2932,7 +2587,7 @@ public final class MainActivity extends Activity {
                 return true;
             }
             if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) && event.getRepeatCount() >= 1) {
-                showGuide();
+                openSettings();
                 return true;
             }
             if (event.getRepeatCount() == 0) {
@@ -2979,10 +2634,6 @@ public final class MainActivity extends Activity {
     }
 
     private void handleBackAction() {
-        if (epgGuideView != null && epgGuideView.isGuideOpen()) {
-            epgGuideView.closeGuide();
-            return;
-        }
         if (isSourceSelectorVisible()) {
             closePlaybackSourceSelector();
             return;
@@ -3042,10 +2693,6 @@ public final class MainActivity extends Activity {
     private void releaseAppResources() {
         if (resourcesReleased) return;
         resourcesReleased = true;
-        if (epgGuideView != null && epgGuideView.isGuideOpen()) {
-            epgGuideView.closeGuide();
-        }
-        closeGuideOverlay();
         closePlaybackSourceSelector();
         if (playbackBufferManager != null) {
             playbackBufferManager.close();
@@ -3352,6 +2999,10 @@ public final class MainActivity extends Activity {
         StringBuilder snapshot = new StringBuilder(
                 streamResolverRegistry.getCatalogVersion()
         );
+        if (resolverPreferences != null) {
+            snapshot.append("|tvvoo=")
+                    .append(resolverPreferences.getTvVooResolutionMode());
+        }
         for (ResolverDefinition definition : streamResolverRegistry.getDefinitions()) {
             snapshot.append('|')
                     .append(definition.getId())
@@ -3514,10 +3165,6 @@ public final class MainActivity extends Activity {
     protected void onPause() {
         if (appUpdater != null) appUpdater.onHostPause();
         if (playbackBitrateMeter != null) playbackBitrateMeter.setNotificationsEnabled(false);
-        if (epgGuideView != null && epgGuideView.isGuideOpen()) {
-            epgGuideView.closeGuide();
-        }
-        closeGuideOverlay();
         closePlaybackSourceSelector();
         resetResourceWarningState();
         mainHandler.removeCallbacks(hideLightEpg);

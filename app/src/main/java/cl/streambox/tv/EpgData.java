@@ -142,17 +142,11 @@ public final class EpgData {
 
     List<EpgProgramme> getProgrammes() { return programmes; }
 
-    List<EpgProgramme> getProgrammes(String channelId) {
-        List<EpgProgramme> result = programmesByChannel.get(channelId);
-        return result == null ? Collections.emptyList() : result;
-    }
-
     private static long signatureFor(List<EpgProgramme> programmes) {
         long result = 1125899906842597L;
         for (EpgProgramme programme : programmes) {
             result = 31L * result + safeHash(programme.getChannelId());
             result = 31L * result + safeHash(programme.getTitle());
-            result = 31L * result + safeHash(programme.getDescription());
             result = 31L * result + programme.getStartMillis();
             result = 31L * result + programme.getStopMillis();
         }

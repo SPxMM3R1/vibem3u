@@ -20,6 +20,8 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
@@ -101,6 +103,10 @@ public final class SettingsActivity extends Activity {
     private Button resolverUpdateButton;
     private TextView resolverUpdateStatus;
     private LinearLayout resolverGroupsContainer;
+    private RadioGroup tvVooResolutionModeGroup;
+    private RadioButton tvVooModeBoth;
+    private RadioButton tvVooModeDirect;
+    private RadioButton tvVooModeExternal;
     private ResolverCatalogRepository resolverCatalogRepository;
     private ResolverPreferences resolverPreferences;
     private ResolverCatalog resolverCatalog;
@@ -222,6 +228,10 @@ public final class SettingsActivity extends Activity {
         resolverUpdateButton = findViewById(R.id.update_resolvers_button);
         resolverUpdateStatus = findViewById(R.id.resolver_update_status);
         resolverGroupsContainer = findViewById(R.id.resolver_groups_container);
+        tvVooResolutionModeGroup = findViewById(R.id.tvvoo_resolution_mode_group);
+        tvVooModeBoth = findViewById(R.id.tvvoo_mode_both);
+        tvVooModeDirect = findViewById(R.id.tvvoo_mode_direct);
+        tvVooModeExternal = findViewById(R.id.tvvoo_mode_external);
         tabs = new TextView[]{
                 findViewById(R.id.tab_general),
                 findViewById(R.id.tab_playback),
@@ -242,6 +252,7 @@ public final class SettingsActivity extends Activity {
         appUpdater = new AppUpdater(this, updateExecutor, mainHandler);
         resolverCatalogRepository = new ResolverCatalogRepository(this);
         resolverPreferences = new ResolverPreferences(this);
+        initializeTvVooResolutionMode();
         urlInput.setText(existingUrl);
         urlInput.setSelection(urlInput.length());
         urlInput2.setText(existingUrl2 == null ? "" : existingUrl2);
@@ -537,6 +548,26 @@ public final class SettingsActivity extends Activity {
         }
     }
 
+    private void initializeTvVooResolutionMode() {
+        int checkedId = switch (resolverPreferences.getTvVooResolutionMode()) {
+            case DIRECT_ONLY -> R.id.tvvoo_mode_direct;
+            case EXTERNAL_ONLY -> R.id.tvvoo_mode_external;
+            default -> R.id.tvvoo_mode_both;
+        };
+        tvVooResolutionModeGroup.check(checkedId);
+    }
+
+    private TvVooResolutionMode selectedTvVooResolutionMode() {
+        int checkedId = tvVooResolutionModeGroup.getCheckedRadioButtonId();
+        if (checkedId == R.id.tvvoo_mode_direct) {
+            return TvVooResolutionMode.DIRECT_ONLY;
+        }
+        if (checkedId == R.id.tvvoo_mode_external) {
+            return TvVooResolutionMode.EXTERNAL_ONLY;
+        }
+        return TvVooResolutionMode.BOTH;
+    }
+
     private void renderResolverOptions() {
         if (resolverCatalog == null) return;
         resolverCatalogVersion.setText(getString(
@@ -546,7 +577,8 @@ public final class SettingsActivity extends Activity {
         resolverGroupsContainer.removeAllViews();
         resolverGroupSwitches.clear();
 
-        View previous = resolverUpdateButton;
+        resolverUpdateButton.setNextFocusDownId(tvVooModeBoth.getId());
+        View previous = tvVooModeExternal;
         for (ResolverDefinition definition : resolverCatalog.getProviders()) {
             Switch groupSwitch = createResolverGroupSwitch(definition);
             resolverGroupsContainer.addView(groupSwitch);
@@ -774,6 +806,7 @@ public final class SettingsActivity extends Activity {
                 resolverPreferences.setEnabled(definition, entry.getValue().isChecked());
             }
         }
+        resolverPreferences.setTvVooResolutionMode(selectedTvVooResolutionMode());
         Intent result = new Intent()
                 .putExtra(KEY_PLAYLIST_URL, value)
                 .putExtra(KEY_PLAYLIST_URL_2, value2)
