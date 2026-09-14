@@ -119,7 +119,8 @@ public final class EpgGuideView extends View {
         rebuildFilters();
         playingChannelIndex = Math.max(0, Math.min(currentChannelIndex, Math.max(0, channels.size() - 1)));
         focusedChannelPosition = positionForChannel(playingChannelIndex);
-        firstVisibleChannelPosition = Math.max(0, focusedChannelPosition - VISIBLE_ROWS / 2);
+        firstVisibleChannelPosition = Math.min(Math.max(0, filteredIndices.size() - VISIBLE_ROWS),
+                Math.max(0, focusedChannelPosition - VISIBLE_ROWS / 2));
         long now = System.currentTimeMillis();
         windowStartMillis = floorHalfHour(now);
         focusedTimeMillis = now;
@@ -260,7 +261,8 @@ public final class EpgGuideView extends View {
                     focusedChannelPosition,
                     Math.max(0, filteredIndices.size() - 1)
             ));
-            firstVisibleChannelPosition = Math.max(0, focusedChannelPosition - VISIBLE_ROWS / 2);
+            firstVisibleChannelPosition = Math.min(Math.max(0, filteredIndices.size() - VISIBLE_ROWS),
+                    Math.max(0, focusedChannelPosition - VISIBLE_ROWS / 2));
             sidePanelOpen = false;
             sideScrollOffset = 0;
             invalidate();
@@ -683,6 +685,7 @@ public final class EpgGuideView extends View {
     long windowStartForTest() { return windowStartMillis; }
     boolean headerFocusedForTest() { return headerFocused; }
     boolean sidePanelOpenForTest() { return sidePanelOpen; }
+    int firstVisibleChannelForTest() { return firstVisibleChannelPosition; }
 
     private static RectF pipRect(float width, float height, float scale) {
         float right = width - 34f * scale;

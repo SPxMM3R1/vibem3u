@@ -91,6 +91,10 @@ public final class EpgGuideInstrumentedTest {
                 view.openGuide(0);
                 key(view, KeyEvent.KEYCODE_BACK);
                 assertFalse(view.isGuideOpen());
+                view.openGuide(7);
+                assertEquals("Opening near the end must still display all eight rows", 0,
+                        view.firstVisibleChannelForTest());
+                view.dismissGuide();
             }
         });
     }
@@ -117,7 +121,8 @@ public final class EpgGuideInstrumentedTest {
                 + "' /data/local/tmp/vibem3u-epg-review/ && echo copied";
         try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(
                 new android.os.ParcelFileDescriptor.AutoCloseInputStream(
-                        InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(command))))) {
+                        InstrumentationRegistry.getInstrumentation().getUiAutomation()
+                                .executeShellCommand("sh -c \"" + command + "\""))))) {
             String line;
             boolean copied = false;
             while ((line = reader.readLine()) != null) if (line.contains("copied")) copied = true;
