@@ -15,7 +15,10 @@ public class EpgParserTest {
         String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<tv><channel id=\"0104\"><display-name>TVN</display-name></channel>"
                 + "<programme channel=\"0104\" start=\"20260719180000 -0400\" stop=\"20260719190000 -0400\">"
-                + "<title lang=\"es\">Noticias Central</title></programme>"
+                + "<title lang=\"en\">Central News</title>"
+                + "<title lang=\"es\">Noticias Central</title>"
+                + "<desc lang=\"en\">National headlines</desc>"
+                + "<desc lang=\"es\">Titulares nacionales</desc></programme>"
                 + "<programme channel=\"0104\" start=\"20260719190000 -0400\" stop=\"20260719200000 -0400\">"
                 + "<title lang=\"es\">Programa siguiente</title></programme></tv>";
 
@@ -26,6 +29,7 @@ public class EpgParserTest {
         EpgProgramme current = data.findCurrent("0104", currentTime);
         assertNotNull(current);
         assertEquals("Noticias Central", current.getTitle());
+        assertEquals("Titulares nacionales", current.getDescription());
         EpgProgramme next = data.findNext("0104", currentTime);
         assertNotNull(next);
         assertEquals("Programa siguiente", next.getTitle());

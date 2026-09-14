@@ -17,8 +17,6 @@ public final class ResolverCatalogRepository {
     public static final String REMOTE_CATALOG_URL =
             "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/resolver-catalog.json";
     private static final String ASSET_NAME = "resolver_catalog.json";
-    private static final String EXPERIMENTAL_OVERLAY_ASSET =
-            "resolver_vavoo_experimental.json";
     private static final String DIRECTORY_NAME = "resolver_catalog";
     private static final String INSTALLED_NAME = "resolver-catalog.json";
 
@@ -44,7 +42,7 @@ public final class ResolverCatalogRepository {
     public ResolverCatalog load() throws IOException {
         if (installedFile.getBaseFile().isFile()) {
             try (InputStream input = installedFile.openRead()) {
-                return applyBuildOverlay(ResolverCatalog.parse(readUtf8(input)));
+                return ResolverCatalog.parse(readUtf8(input));
             } catch (Exception ignored) {
                 // An interrupted or incompatible data update must never stop
                 // playback. The bundled catalogue remains the safe fallback.
@@ -52,7 +50,7 @@ public final class ResolverCatalogRepository {
             }
         }
         try (InputStream input = context.getAssets().open(ASSET_NAME)) {
-            return applyBuildOverlay(ResolverCatalog.parse(readUtf8(input)));
+            return ResolverCatalog.parse(readUtf8(input));
         }
     }
 
@@ -78,19 +76,7 @@ public final class ResolverCatalogRepository {
             if (output != null) installedFile.failWrite(output);
             throw error;
         }
-        return new UpdateResult(applyBuildOverlay(downloaded), true);
-    }
-
-    private ResolverCatalog applyBuildOverlay(ResolverCatalog catalog) throws IOException {
-        if (!BuildConfig.ENABLE_EXPERIMENTAL_VAVOO) return catalog;
-        try (InputStream input = context.getAssets().open(EXPERIMENTAL_OVERLAY_ASSET)) {
-            ResolverCatalog overlay = ResolverCatalog.parse(readUtf8(input));
-            ResolverDefinition provider = overlay.getById("tvvoo");
-            if (provider == null || !"vavoo".equals(provider.getEngine())) {
-                throw new IOException("Configuración Vavoo experimental inválida.");
-            }
-            return catalog.replacingProvider(provider);
-        }
+        return new UpdateResult(downloaded, true);
     }
 
     private static String readUtf8(InputStream input) throws IOException {

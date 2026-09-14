@@ -22,7 +22,7 @@ public class EpgSnapshotCacheTest {
         String url = "https://example.test/epg.xml";
         byte[] xml = "<tv>version-1</tv>".getBytes(StandardCharsets.UTF_8);
         EpgData data = new EpgData(List.of(
-                new EpgProgramme("0104", "Noticias", 1000L, 2000L),
+                new EpgProgramme("0104", "Noticias", "Resumen de la jornada", 1000L, 2000L),
                 new EpgProgramme("0104", "Siguiente", 2000L, 3000L)
         ));
 
@@ -35,6 +35,7 @@ public class EpgSnapshotCacheTest {
         assertNotNull(restored);
         assertEquals(2, restored.getProgrammeCount());
         assertEquals("Noticias", restored.findCurrent("0104", 1500L).getTitle());
+        assertEquals("Resumen de la jornada", restored.findCurrent("0104", 1500L).getDescription());
         assertNull(second.load(
                 url,
                 "<tv>version-2</tv>".getBytes(StandardCharsets.UTF_8)

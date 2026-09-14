@@ -30,9 +30,8 @@ android {
         minSdk = 29
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 92
-        versionName = "0.4.87"
-        buildConfigField("boolean", "ENABLE_EXPERIMENTAL_VAVOO", "false")
+        versionCode = 93
+        versionName = "0.4.88"
         buildConfigField("boolean", "ENABLE_APP_UPDATES", "true")
     }
 
@@ -46,7 +45,6 @@ android {
             applicationIdSuffix = ".experimental"
             versionNameSuffix = "-experimental"
             matchingFallbacks += listOf("debug")
-            buildConfigField("boolean", "ENABLE_EXPERIMENTAL_VAVOO", "true")
             buildConfigField("boolean", "ENABLE_APP_UPDATES", "false")
             ciSigningConfig?.let { signingConfig = it }
         }

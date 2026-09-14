@@ -33,12 +33,12 @@ public final class ResolverCatalog {
     private static final int MAX_ALIAS_LENGTH = 240;
     private static final Pattern SAFE_ID = Pattern.compile("[a-z0-9][a-z0-9_-]{0,31}");
     private static final Set<String> ENGINES = setOf(
-            "tvn", "meganoticias", "24horas", "tvvoo", "highfly", "vavoo"
+            "tvn", "meganoticias", "24horas", "tvvoo", "highfly"
     );
     /**
-     * Engines kept in the parser only so an older remote catalogue can be
-     * accepted and safely filtered instead of disabling all catalogue
-     * updates. They are never exposed to the registry.
+     * Retired engines are kept in the parser only so an older remote
+     * catalogue can be accepted and safely filtered instead of disabling all
+     * catalogue updates. They are never exposed to the registry.
      */
     private static final Set<String> RETIRED_ENGINES = setOf("24horas");
     private static final Set<String> RETIRED_PROVIDER_IDS = setOf("24horas");
@@ -62,22 +62,6 @@ public final class ResolverCatalog {
     public List<ResolverDefinition> getProviders() { return providers; }
     public ResolverDefinition getById(String id) {
         return id == null ? null : providersById.get(id.toLowerCase(Locale.ROOT));
-    }
-
-    ResolverCatalog replacingProvider(ResolverDefinition replacement) {
-        if (replacement == null) return this;
-        List<ResolverDefinition> result = new ArrayList<>();
-        boolean replaced = false;
-        for (ResolverDefinition provider : providers) {
-            if (provider.getId().equals(replacement.getId())) {
-                result.add(replacement);
-                replaced = true;
-            } else {
-                result.add(provider);
-            }
-        }
-        if (!replaced) result.add(replacement);
-        return new ResolverCatalog(version, result);
     }
 
     public ResolverDefinition find(Channel channel) {
@@ -144,8 +128,7 @@ public final class ResolverCatalog {
         if (!SAFE_ID.matcher(id).matches()) throw new IOException("ID de resolutor inválido.");
         String displayName = requiredString(object, "name", 64);
         String engine = requiredString(object, "engine", 32).toLowerCase(Locale.ROOT);
-        if (!ENGINES.contains(engine)
-                || ("vavoo".equals(engine) && !BuildConfig.ENABLE_EXPERIMENTAL_VAVOO)) {
+        if (!ENGINES.contains(engine)) {
             throw new IOException("Motor de resolutor desconocido.");
         }
         boolean enabled = object.optBoolean("enabledByDefault", true);
@@ -343,9 +326,6 @@ public final class ResolverCatalog {
         ));
         result.put("highfly", setOf(
                 "sports.highfly.dev", "leaf.highfly.dev", "raw.githubusercontent.com"
-        ));
-        result.put("vavoo", setOf(
-                "www.vavoo.tv", "www.vypn.net", "vavoo.to", "kool.to"
         ));
         return Collections.unmodifiableMap(result);
     }

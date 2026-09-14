@@ -3,6 +3,7 @@ package cl.streambox.tv;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.Dialog;
+import android.graphics.RectF;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.content.Intent;
@@ -29,6 +30,7 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -133,6 +135,7 @@ public final class MainActivity extends Activity {
     private TextView lightEpgNextTitle;
     private TextView lightEpgNextTime;
     private View sourceSelectorOverlay;
+    private EpgGuideView epgGuideView;
     private TextView sourceSelectorTitle;
     private TextView sourceSelectorChannel;
     private TextView sourceSelectorStatus;
@@ -211,6 +214,7 @@ public final class MainActivity extends Activity {
     private String epgMergeInputSignature = "";
     private long epgMergeGeneration;
     private boolean playbackDiagnosticsActive;
+    private boolean playerResizedForGuide;
     private final AtomicBoolean diagnosticsUpdateQueued = new AtomicBoolean();
     private final Runnable applyMeasuredDiagnostics = () -> {
         diagnosticsUpdateQueued.set(false);
@@ -344,6 +348,19 @@ public final class MainActivity extends Activity {
         sourceSelectorChannel = findViewById(R.id.source_selector_channel);
         sourceSelectorStatus = findViewById(R.id.source_selector_status);
         sourceSelectorOptions = findViewById(R.id.source_selector_options);
+        epgGuideView = findViewById(R.id.epg_guide_overlay);
+        epgGuideView.setListener(new EpgGuideView.Listener() {
+            @Override public void onCloseGuide() {
+                closeGuideOverlay();
+            }
+
+            @Override public void onPlayGuideChannel(int index) {
+                closeGuideOverlay();
+                if (index >= 0 && index < channels.size()) playChannel(index, true);
+            }
+        });
+        epgGuideView.setChannels(channels);
+        epgGuideView.setEpgData(epgData);
         channelLogo = findViewById(R.id.channel_logo);
         channelLogoFallback = findViewById(R.id.channel_logo_fallback);
         channelNumber = findViewById(R.id.channel_number);
@@ -788,6 +805,7 @@ public final class MainActivity extends Activity {
                         || mergeGeneration != epgMergeGeneration
                         || isFinishing()) return;
                 epgData = merged;
+                if (epgGuideView != null) epgGuideView.setEpgData(merged);
                 mainHandler.removeCallbacks(updateProgramme);
                 updateProgramme.run();
             });
@@ -826,6 +844,7 @@ public final class MainActivity extends Activity {
 
         channels.clear();
         channels.addAll(enabledChannels);
+        if (epgGuideView != null) epgGuideView.setChannels(channels);
         if (channels.isEmpty()) {
             showPlaylistError(getString(R.string.empty_playlist));
             return;
@@ -2266,6 +2285,83 @@ public final class MainActivity extends Activity {
         mainHandler.postDelayed(hideLightEpg, LIGHT_EPG_TIMEOUT_MS);
     }
 
+    private void showGuide() {
+        if (exiting || resourcesReleased || settingsOpen || epgGuideView == null
+                || channels.isEmpty() || player == null) return;
+        closePlaybackSourceSelector();
+        mainHandler.removeCallbacks(hideLightEpg);
+        hideLightEpg.run();
+        mainHandler.removeCallbacks(hideOverlay);
+        hideOverlay.run();
+        epgGuideView.setChannels(channels);
+        epgGuideView.setEpgData(epgData);
+        epgGuideView.setPlayingChannelIndex(channelIndex);
+        epgGuideView.setVisibility(View.VISIBLE);
+        epgGuideView.openGuide(channelIndex);
+        epgGuideView.post(() -> {
+            if (epgGuideView != null && epgGuideView.isGuideOpen()) {
+                resizePlayerForGuide();
+                loadGuideLogos();
+            }
+        });
+    }
+
+    private void closeGuideOverlay() {
+        if (epgGuideView != null) {
+            epgGuideView.dismissGuide();
+            epgGuideView.setVisibility(View.GONE);
+        }
+        restorePlayerAfterGuide();
+    }
+
+    private void resizePlayerForGuide() {
+        if (playerView == null || epgGuideView == null || playerResizedForGuide
+                || epgGuideView.getWidth() <= 0 || epgGuideView.getHeight() <= 0) return;
+        RectF pip = epgGuideView.pipRect();
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                Math.max(1, Math.round(pip.width())),
+                Math.max(1, Math.round(pip.height()))
+        );
+        params.gravity = Gravity.TOP | Gravity.END;
+        params.leftMargin = Math.max(0, Math.round(pip.left));
+        params.topMargin = Math.max(0, Math.round(pip.top));
+        params.rightMargin = Math.max(0, epgGuideView.getWidth() - Math.round(pip.right));
+        playerView.setLayoutParams(params);
+        playerResizedForGuide = true;
+    }
+
+    private void restorePlayerAfterGuide() {
+        if (playerView == null || !playerResizedForGuide) return;
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        );
+        playerView.setLayoutParams(params);
+        playerResizedForGuide = false;
+    }
+
+    private void loadGuideLogos() {
+        if (channelLogoCache == null || epgGuideView == null || channels.isEmpty()) return;
+        List<Channel> snapshot = new ArrayList<>(channels);
+        int width = dpToPx(50);
+        int height = dpToPx(34);
+        logoCacheExecutor.submit(() -> {
+            Map<String, android.graphics.Bitmap> cached = new LinkedHashMap<>();
+            for (Channel channel : snapshot) {
+                if (Thread.currentThread().isInterrupted()) return;
+                URI logo = channel.getLogoUri();
+                if (logo == null) continue;
+                android.graphics.Bitmap bitmap = channelLogoCache.loadCached(logo, width, height);
+                if (bitmap != null) cached.put(PlaybackPreferences.channelIdentity(channel), bitmap);
+            }
+            mainHandler.post(() -> {
+                if (epgGuideView != null && epgGuideView.isGuideOpen()) {
+                    epgGuideView.setLogos(cached);
+                }
+            });
+        });
+    }
+
     private boolean isSourceSelectorVisible() {
         return sourceSelectorOverlay != null
                 && sourceSelectorOverlay.getVisibility() == View.VISIBLE;
@@ -2536,6 +2632,10 @@ public final class MainActivity extends Activity {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
+        if (epgGuideView != null && epgGuideView.isGuideOpen()) {
+            epgGuideView.handleKey(event);
+            return true;
+        }
         if (isSourceSelectorVisible()) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 if (keyCode == KeyEvent.KEYCODE_BACK
@@ -2617,7 +2717,7 @@ public final class MainActivity extends Activity {
                 return true;
             }
             if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) && event.getRepeatCount() >= 1) {
-                openSettings();
+                showGuide();
                 return true;
             }
             if (event.getRepeatCount() == 0) {
@@ -2664,6 +2764,10 @@ public final class MainActivity extends Activity {
     }
 
     private void handleBackAction() {
+        if (epgGuideView != null && epgGuideView.isGuideOpen()) {
+            epgGuideView.closeGuide();
+            return;
+        }
         if (isSourceSelectorVisible()) {
             closePlaybackSourceSelector();
             return;
@@ -2723,6 +2827,10 @@ public final class MainActivity extends Activity {
     private void releaseAppResources() {
         if (resourcesReleased) return;
         resourcesReleased = true;
+        if (epgGuideView != null && epgGuideView.isGuideOpen()) {
+            epgGuideView.closeGuide();
+        }
+        closeGuideOverlay();
         closePlaybackSourceSelector();
         if (playbackBufferManager != null) {
             playbackBufferManager.close();
@@ -3029,10 +3137,6 @@ public final class MainActivity extends Activity {
         StringBuilder snapshot = new StringBuilder(
                 streamResolverRegistry.getCatalogVersion()
         );
-        if (resolverPreferences != null) {
-            snapshot.append("|tvvoo=")
-                    .append(resolverPreferences.getTvVooResolutionMode());
-        }
         for (ResolverDefinition definition : streamResolverRegistry.getDefinitions()) {
             snapshot.append('|')
                     .append(definition.getId())
@@ -3195,6 +3299,10 @@ public final class MainActivity extends Activity {
     protected void onPause() {
         if (appUpdater != null) appUpdater.onHostPause();
         if (playbackBitrateMeter != null) playbackBitrateMeter.setNotificationsEnabled(false);
+        if (epgGuideView != null && epgGuideView.isGuideOpen()) {
+            epgGuideView.closeGuide();
+        }
+        closeGuideOverlay();
         closePlaybackSourceSelector();
         resetResourceWarningState();
         mainHandler.removeCallbacks(hideLightEpg);

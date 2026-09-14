@@ -14,7 +14,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
@@ -34,7 +33,6 @@ public final class TvVooStreamResolver implements StreamResolver {
     private static final int DEFAULT_PARALLEL_ALIASES = 2;
     private static final int DEFAULT_PARALLEL_CANDIDATES = 3;
     private static final int DEFAULT_RESOLUTION_BUDGET_MS = 8_000;
-    private static final int DEFAULT_BOTH_START_DELAY_MS = 600;
     private static final int DEFAULT_MAX_ALIASES = 6;
     private static final int DEFAULT_MAX_CANDIDATES = 8;
     static final String BOUNDED_PAYLOAD_RECIPE = "bounded-payload-v1";
@@ -46,25 +44,11 @@ public final class TvVooStreamResolver implements StreamResolver {
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
     private final HlsStreamValidator validator;
-    private final StreamResolver directFallback;
-    private final TvVooResolutionMode resolutionMode;
-
     public TvVooStreamResolver(ResolverDefinition definition) {
-        this(definition, TvVooResolutionMode.BOTH);
-    }
-
-    public TvVooStreamResolver(
-            ResolverDefinition definition,
-            TvVooResolutionMode resolutionMode
-    ) {
         TokenHttpClient fastClient = new TokenHttpClient(4_000, 6_000);
         this.definition = definition;
         this.httpClient = fastClient;
         this.validator = new HlsStreamValidator(fastClient);
-        this.directFallback = new VavooStreamResolver(definition);
-        this.resolutionMode = resolutionMode == null
-                ? TvVooResolutionMode.BOTH
-                : resolutionMode;
     }
 
     TvVooStreamResolver(
@@ -72,29 +56,9 @@ public final class TvVooStreamResolver implements StreamResolver {
             TokenHttpClient httpClient,
             HlsStreamValidator validator
     ) {
-        this(
-                definition,
-                httpClient,
-                validator,
-                new VavooStreamResolver(definition),
-                TvVooResolutionMode.BOTH
-        );
-    }
-
-    TvVooStreamResolver(
-            ResolverDefinition definition,
-            TokenHttpClient httpClient,
-            HlsStreamValidator validator,
-            StreamResolver directFallback,
-            TvVooResolutionMode resolutionMode
-    ) {
         this.definition = definition;
         this.httpClient = httpClient;
         this.validator = validator;
-        this.directFallback = directFallback;
-        this.resolutionMode = resolutionMode == null
-                ? TvVooResolutionMode.BOTH
-                : resolutionMode;
     }
 
     @Override public String getId() { return definition.getId(); }
@@ -143,13 +107,7 @@ public final class TvVooStreamResolver implements StreamResolver {
             ResolutionProgressListener progress,
             ResolutionDeadline deadline
     ) throws IOException {
-        if (!resolutionMode.usesExternalResolver()) {
-            return resolveDirect(channel, null, progress, deadline);
-        }
-        if (!resolutionMode.usesDirectResolver()) {
-            return resolveExternal(channel, progress, deadline);
-        }
-        return resolveBoth(channel, progress, deadline);
+        return resolveExternal(channel, progress, deadline);
     }
 
     @Override
@@ -181,49 +139,10 @@ public final class TvVooStreamResolver implements StreamResolver {
             ResolutionProgressListener progress,
             ResolutionDeadline deadline
     ) throws IOException {
-        if (!resolutionMode.usesExternalResolver()) {
-            return directPlaybackCandidates(channel, progress);
-        }
-
-        IOException externalError = null;
-        try {
-            List<ResolvedPlaybackCandidate> external = resolveExternalCandidates(
-                    channel,
-                    progress,
-                    deadline
-            );
-            if (!external.isEmpty() || !resolutionMode.usesDirectResolver()) {
-                return external;
-            }
-        } catch (IOException error) {
-            externalError = error;
-        }
-
-        if (resolutionMode.usesDirectResolver()) {
-            try {
-                List<ResolvedPlaybackCandidate> direct = directPlaybackCandidates(
-                        channel,
-                        progress
-                );
-                if (!direct.isEmpty()) return direct;
-            } catch (IOException directError) {
-                if (externalError != null) directError.addSuppressed(externalError);
-                throw directError;
-            }
-        }
-        throw new IOException(
-                "TvVoo no entregó fuentes alternativas reproducibles.",
-                externalError
-        );
-    }
-
-    private List<ResolvedPlaybackCandidate> directPlaybackCandidates(
-            Channel channel,
-            ResolutionProgressListener progress
-    ) throws IOException {
-        List<ResolvedPlaybackCandidate> result = directFallback.resolvePlaybackCandidates(
+        List<ResolvedPlaybackCandidate> result = resolveExternalCandidates(
                 channel,
-                progress
+                progress,
+                deadline
         );
         return result == null ? Collections.emptyList() : result;
     }
@@ -496,163 +415,6 @@ public final class TvVooStreamResolver implements StreamResolver {
         return "alias estándar";
     }
 
-    /**
-     * Runs both engines inside one total resolution window. TvVoo starts first
-     * and the direct engine is started after a short configurable grace period
-     * when the first path is still pending. Each path owns a child context, so
-     * cancelling a losing path cannot cancel its sibling.
-     */
-    private ResolvedPlaybackSource resolveBoth(
-            Channel channel,
-            ResolutionProgressListener progress,
-            ResolutionDeadline deadline
-    ) throws IOException {
-        int delayMs = definition.getIntConfig(
-                "bothStartDelayMs",
-                definition.getIntConfig(
-                        "directFallbackDelayMs",
-                        DEFAULT_BOTH_START_DELAY_MS,
-                        0,
-                        3_000
-                ),
-                0,
-                3_000
-        );
-        ExecutorService executor = Executors.newFixedThreadPool(
-                2,
-                new NamedDaemonThreadFactory("vibem3u-tvvoo-path")
-        );
-        CompletionService<PathResult> completion = new ExecutorCompletionService<>(executor);
-        ResolutionContext parent = ResolutionContext.current();
-        if (parent == null) parent = new ResolutionContext(deadline.remainingMillis());
-        PathState external = submitPath(
-                completion,
-                parent,
-                deadline,
-                () -> resolveExternal(channel, progress, deadline)
-        );
-        PathState direct = null;
-        IOException externalError = null;
-        IOException directError = null;
-        long directStartNanos = System.nanoTime()
-                + TimeUnit.MILLISECONDS.toNanos(delayMs);
-        try {
-            while (true) {
-                deadline.check();
-                if (direct == null
-                        && !external.future.isDone()
-                        && System.nanoTime() >= directStartNanos) {
-                    direct = submitPath(
-                            completion,
-                            parent,
-                            deadline,
-                            () -> resolveDirect(channel, null, progress, deadline)
-                    );
-                }
-                if (external.future.isDone() && direct != null && direct.future.isDone()
-                        && directError != null && externalError != null) {
-                    throw combinedPathError(externalError, directError);
-                }
-
-                long waitMs = deadline.remainingMillis();
-                if (direct == null) {
-                    long untilDirect = Math.max(
-                            1L,
-                            TimeUnit.NANOSECONDS.toMillis(
-                                    directStartNanos - System.nanoTime()
-                            )
-                    );
-                    waitMs = Math.min(waitMs, untilDirect);
-                }
-                Future<PathResult> finished;
-                try {
-                    finished = completion.poll(waitMs, TimeUnit.MILLISECONDS);
-                } catch (InterruptedException error) {
-                    Thread.currentThread().interrupt();
-                    throw new IOException("Solicitud cancelada.", error);
-                }
-                if (finished == null) {
-                    deadline.check();
-                    continue;
-                }
-                PathResult result;
-                try {
-                    result = finished.get();
-                } catch (InterruptedException error) {
-                    Thread.currentThread().interrupt();
-                    throw new IOException("Solicitud cancelada.", error);
-                } catch (ExecutionException error) {
-                    Throwable cause = error.getCause();
-                    result = new PathResult(
-                            null,
-                            cause instanceof IOException
-                                    ? (IOException) cause
-                                    : new IOException("No se pudo resolver la fuente.", cause)
-                    );
-                }
-                if (result.source != null) return result.source;
-                if (finished == external.future) externalError = result.error;
-                if (direct != null && finished == direct.future) directError = result.error;
-                if (direct == null && externalError != null) {
-                    direct = submitPath(
-                            completion,
-                            parent,
-                            deadline,
-                            () -> resolveDirect(channel, null, progress, deadline)
-                    );
-                }
-                if (externalError != null
-                        && direct != null
-                        && directError != null) {
-                    throw combinedPathError(externalError, directError);
-                }
-            }
-        } finally {
-            external.cancel();
-            if (direct != null) direct.cancel();
-            executor.shutdownNow();
-        }
-    }
-
-    private static PathState submitPath(
-            CompletionService<PathResult> completion,
-            ResolutionContext parent,
-            ResolutionDeadline deadline,
-            Callable<ResolvedPlaybackSource> operation
-    ) {
-        ResolutionContext pathContext = parent.child(deadline.remainingMillis());
-        Callable<PathResult> task = () -> {
-            try (ResolutionContext.Scope ignored = pathContext.activate()) {
-                deadline.check();
-                ResolutionContext.current().check();
-                ResolvedPlaybackSource source = operation.call();
-                deadline.check();
-                return new PathResult(source, null);
-            } catch (IOException error) {
-                return new PathResult(null, error);
-            } catch (Throwable error) {
-                return new PathResult(
-                        null,
-                        new IOException("No se pudo resolver la fuente.", error)
-                );
-            }
-        };
-        Future<PathResult> future = completion.submit(ResolutionContext.wrapCurrent(task));
-        return new PathState(pathContext, future);
-    }
-
-    private static IOException combinedPathError(
-            IOException externalError,
-            IOException directError
-    ) {
-        IOException result = new IOException(
-                "TvVoo y Vavoo directo no entregaron una fuente reproducible.",
-                directError
-        );
-        if (externalError != null) result.addSuppressed(externalError);
-        return result;
-    }
-
     private ResolvedPlaybackSource resolveExternal(
             Channel channel,
             ResolutionProgressListener progress,
@@ -888,52 +650,6 @@ public final class TvVooStreamResolver implements StreamResolver {
             aliasExecutor.shutdownNow();
         }
         throw new IOException("TvVoo no entregó una fuente reproducible.", lastError);
-    }
-
-    private ResolvedPlaybackSource resolveDirect(
-            Channel channel,
-            IOException externalError
-    ) throws IOException {
-        return resolveDirect(
-                channel,
-                externalError,
-                ResolutionProgressListener.NONE,
-                newResolutionDeadline()
-        );
-    }
-
-    private ResolvedPlaybackSource resolveDirect(
-            Channel channel,
-            IOException externalError,
-            ResolutionProgressListener listener,
-            ResolutionDeadline deadline
-    ) throws IOException {
-        try {
-            if (directFallback instanceof VavooStreamResolver) {
-                ResolvedPlaybackSource source = ((VavooStreamResolver) directFallback).resolve(
-                        channel,
-                        listener,
-                        deadline
-                );
-                deadline.check();
-                return source;
-            }
-            deadline.check();
-            ResolvedPlaybackSource source = directFallback.resolve(channel, listener);
-            deadline.check();
-            return source;
-        } catch (IOException directError) {
-            if (externalError != null) directError.addSuppressed(externalError);
-            String message = resolutionMode == TvVooResolutionMode.DIRECT_ONLY
-                    ? "Vavoo directo no entregó una fuente reproducible."
-                    : "TvVoo y Vavoo directo no entregaron una fuente reproducible.";
-            throw new IOException(message, directError);
-        }
-    }
-
-    @Override
-    public void clearSensitiveState() {
-        directFallback.clearSensitiveState();
     }
 
     static URI validateCandidate(
@@ -1235,21 +951,6 @@ public final class TvVooStreamResolver implements StreamResolver {
         }
     }
 
-    private static final class PathState {
-        private final ResolutionContext context;
-        private final Future<PathResult> future;
-
-        PathState(ResolutionContext context, Future<PathResult> future) {
-            this.context = context;
-            this.future = future;
-        }
-
-        void cancel() {
-            context.cancel();
-            if (!future.isDone()) future.cancel(true);
-        }
-    }
-
     private static final class AliasState {
         private final ResolutionContext context;
         private final Future<AliasResult> future;
@@ -1262,16 +963,6 @@ public final class TvVooStreamResolver implements StreamResolver {
         void cancel() {
             context.cancel();
             if (!future.isDone()) future.cancel(true);
-        }
-    }
-
-    private static final class PathResult {
-        private final ResolvedPlaybackSource source;
-        private final IOException error;
-
-        PathResult(ResolvedPlaybackSource source, IOException error) {
-            this.source = source;
-            this.error = error;
         }
     }
 
