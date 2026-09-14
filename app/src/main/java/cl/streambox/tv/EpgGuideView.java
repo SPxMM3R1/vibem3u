@@ -38,9 +38,9 @@ public final class EpgGuideView extends View {
     private static final long GUIDE_WINDOW_MS = EpgGuideTimeline.GUIDE_WINDOW_MS;
     private static final long DAY_NAVIGATION_MS = 24L * 60L * 60L * 1000L;
     private static final int VISIBLE_ROWS = 8;
-    private static final int COLOR_PANEL = Color.rgb(18, 31, 48);
-    private static final int COLOR_PANEL_ALT = Color.rgb(14, 26, 41);
-    private static final int COLOR_SELECTED = Color.rgb(149, 193, 255);
+    private static final int COLOR_PANEL = Color.rgb(14, 27, 42);
+    private static final int COLOR_PANEL_ALT = Color.rgb(10, 21, 34);
+    private static final int COLOR_SELECTED = Color.rgb(22, 224, 245);
     private static final int COLOR_TEXT = Color.WHITE;
     private static final int COLOR_MUTED = Color.rgb(178, 197, 222);
     private static final int COLOR_ACCENT = Color.rgb(0, 203, 238);
@@ -362,14 +362,14 @@ public final class EpgGuideView extends View {
         float height = getHeight();
         RectF pip = pipRect(width, height, scale);
 
-        canvas.drawColor(Color.argb(232, 7, 14, 24));
+        canvas.drawColor(Color.argb(242, 5, 11, 19));
         // MainActivity resizes the existing PlayerView to this rectangle.
         // Clear only the PiP hole so that video remains visible while the
         // guide itself stays opaque everywhere else.
         canvas.drawRoundRect(pip, 8f * scale, 8f * scale, clearPaint);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(2f * scale);
-        paint.setColor(Color.argb(220, 112, 177, 255));
+        paint.setColor(Color.argb(235, 22, 224, 245));
         canvas.drawRoundRect(pip, 8f * scale, 8f * scale, paint);
         paint.setStyle(Paint.Style.FILL);
 
@@ -380,52 +380,93 @@ public final class EpgGuideView extends View {
     }
 
     private void drawHeader(Canvas canvas, float scale, RectF pip) {
-        float x = contentOffset(scale) + 42f * scale;
-        canvas.save();
-        canvas.clipRect(0f, 0f, Math.max(0f, pip.left - 24f * scale), 290f * scale);
-        paint.setColor(COLOR_MUTED);
-        drawText(canvas, "VibeM3U / Guía", x, 40f * scale, 16f * scale, false);
+        float x = contentOffset(scale) + 34f * scale;
+        drawText(canvas, "GUÍA", x, 27f * scale, 14f * scale, true, COLOR_ACCENT);
+        drawText(canvas, timeFormat.format(new Date(System.currentTimeMillis())),
+                getWidth() - 34f * scale, 27f * scale, 14f * scale, false, COLOR_MUTED, true);
+
+        // The live video remains in the existing Media3 PlayerView. The guide
+        // only clears its PiP rectangle and draws a lightweight frame around it.
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(1f * scale);
+        paint.setColor(Color.argb(170, 104, 144, 171));
+        canvas.drawRoundRect(pip, 8f * scale, 8f * scale, paint);
+        paint.setStyle(Paint.Style.FILL);
+
+        float detailLeft = pip.right + 24f * scale;
+        float detailRight = getWidth() - 34f * scale;
+        RectF detailPanel = new RectF(detailLeft, pip.top, detailRight, pip.bottom);
+        drawPanel(canvas, detailPanel, Color.argb(210, 12, 26, 41), 12f * scale, scale);
+
         EpgProgramme programme = focusedProgramme();
         Channel channel = focusedChannel();
-        String title = programme == null ? (channel == null ? "Guía" : channel.getName()) : programme.getTitle();
-        drawText(canvas, ellipsizeForWidth(title, Math.max(80f, pip.left - x - 24f * scale), 40f * scale),
-                x, 92f * scale, 40f * scale, true);
-        String metadata = channel == null ? "" : channel.getName() + "  ·  "
-                + (programme == null ? "" : formatRange(programme)) + "  ·  "
-                + (AppStrings.isBlank(channel.getGroup()) ? "" : channel.getGroup());
-        drawText(canvas, ellipsizeForWidth(metadata, Math.max(80f, pip.left - x - 24f * scale), 17f * scale),
-                x, 130f * scale, 17f * scale, false, COLOR_MUTED);
+        float detailWidth = Math.max(120f * scale, detailRight - detailLeft - 34f * scale);
+        drawText(canvas, "PROGRAMA SELECCIONADO", detailLeft + 22f * scale,
+                pip.top + 29f * scale, 12f * scale, true, COLOR_ACCENT);
+        String title = programme == null
+                ? (channel == null ? "Guía" : channel.getName())
+                : programme.getTitle();
+        drawText(canvas, ellipsizeForWidth(title, detailWidth, 30f * scale),
+                detailLeft + 22f * scale, pip.top + 72f * scale, 30f * scale, true);
+        String channelLabel = channel == null ? "" : channel.getName();
+        String range = programme == null ? "" : formatRange(programme);
+        drawText(canvas, ellipsizeForWidth(channelLabel + (range.isEmpty() ? "" : "  ·  " + range),
+                        detailWidth, 15f * scale),
+                detailLeft + 22f * scale, pip.top + 101f * scale, 15f * scale, false, COLOR_MUTED);
+        drawText(canvas, "En vivo", detailRight - 22f * scale, pip.top + 29f * scale,
+                13f * scale, true, COLOR_ACCENT, true);
+        if (programme != null) {
+            long duration = Math.max(1L, programme.getStopMillis() - programme.getStartMillis());
+            long elapsed = Math.max(0L, Math.min(duration,
+                    System.currentTimeMillis() - programme.getStartMillis()));
+            float progress = elapsed / (float) duration;
+            float barLeft = detailLeft + 22f * scale;
+            float barRight = detailRight - 22f * scale;
+            float barTop = pip.top + 121f * scale;
+            paint.setColor(Color.rgb(35, 57, 76));
+            canvas.drawRoundRect(barLeft, barTop, barRight, barTop + 5f * scale,
+                    3f * scale, 3f * scale, paint);
+            paint.setColor(COLOR_ACCENT);
+            canvas.drawRoundRect(barLeft, barTop, barLeft + (barRight - barLeft) * progress,
+                    barTop + 5f * scale, 3f * scale, 3f * scale, paint);
+        }
         if (programme != null && !AppStrings.isBlank(programme.getDescription())) {
-            String[] descriptionLines = descriptionLines(programme.getDescription(), pip.left - x - 24f * scale, 17f * scale);
-            drawText(canvas, descriptionLines[0], x, 163f * scale, 17f * scale, false, COLOR_MUTED);
+            String[] descriptionLines = descriptionLines(programme.getDescription(), detailWidth, 14f * scale);
+            drawText(canvas, descriptionLines[0], detailLeft + 22f * scale,
+                    pip.top + 158f * scale, 14f * scale, false, COLOR_MUTED);
             if (!AppStrings.isBlank(descriptionLines[1])) {
-                drawText(canvas, descriptionLines[1], x, 185f * scale, 17f * scale, false, COLOR_MUTED);
+                drawText(canvas, descriptionLines[1], detailLeft + 22f * scale,
+                        pip.top + 179f * scale, 14f * scale, false, COLOR_MUTED);
             }
         }
+
+        float dateTop = pip.bottom + 48f * scale;
+        drawText(canvas, "GUÍA", x, dateTop - 1f * scale, 18f * scale, true);
         for (int i = 0; i < HEADER_ACTIONS.length; i++) {
-            drawDayChip(canvas, x + i * 116f * scale, 225f * scale, 108f * scale,
+            drawDayChip(canvas, x + 82f * scale + i * 116f * scale, dateTop,
+                    108f * scale,
                     HEADER_ACTIONS[i], headerFocused && !sidePanelOpen && headerIndex == i, scale);
         }
-        drawText(canvas, dayFormat.format(new Date(focusedTimeMillis)), x, 272f * scale, 15f * scale, false, COLOR_MUTED);
-        canvas.restore();
-        drawText(canvas, timeFormat.format(new Date(System.currentTimeMillis())), pip.right - 62f * scale, 31f * scale, 18f * scale, false);
-        paint.setColor(Color.argb(200, 35, 53, 78));
-        canvas.drawRoundRect(pip.left, pip.bottom + 2f * scale, pip.right, pip.bottom + 34f * scale, 0, 0, paint);
-        drawText(canvas, "SIGUES VIENDO  ·  " + (playingChannelIndex < channels.size()
-                ? channels.get(playingChannelIndex).getName() : ""), pip.left + 14f * scale,
-                pip.bottom + 23f * scale, 13f * scale, true);
+        drawText(canvas, dayFormat.format(new Date(focusedTimeMillis)),
+                getWidth() - 34f * scale, dateTop - 1f * scale,
+                13f * scale, false, COLOR_MUTED, true);
     }
 
     private void drawGuideGrid(Canvas canvas, float scale, float width, float height) {
-        float gridTop = 370f * scale;
+        float gridTop = Math.max(370f * scale, pipBottom(scale) + 110f * scale);
         float channelLeft = contentOffset(scale) + 32f * scale;
-        float channelWidth = 286f * scale;
+        float channelWidth = 270f * scale;
         float timelineLeft = channelLeft + channelWidth;
         float timelineRight = width - 34f * scale;
         float timelineWidth = timelineRight - timelineLeft;
         float rowHeight = Math.min(66f * scale, (height - gridTop - 105f * scale) / VISIBLE_ROWS);
         rowHeight = Math.max(42f * scale, rowHeight);
-        drawText(canvas, "Canal", channelLeft + 10f * scale, gridTop - 18f * scale, 14f * scale, false, COLOR_MUTED);
+        drawPanel(canvas, new RectF(channelLeft, gridTop - 44f * scale,
+                timelineRight, Math.min(height - 82f * scale,
+                        gridTop + rowHeight * VISIBLE_ROWS + 4f * scale)),
+                Color.argb(174, 10, 22, 35), 12f * scale, scale);
+        drawText(canvas, "CANALES", channelLeft + 12f * scale, gridTop - 18f * scale,
+                12f * scale, true, COLOR_MUTED);
         for (int tick = 0; tick <= 6; tick++) {
             float x = timelineLeft + timelineWidth * tick / 6f;
             long time = windowStartMillis + tick * HALF_HOUR_MS;
@@ -440,6 +481,8 @@ public final class EpgGuideView extends View {
             paint.setColor(COLOR_ACCENT);
             canvas.drawRect(nowX - 1f * scale, gridTop - 30f * scale, nowX + 1f * scale,
                     gridTop + rowHeight * VISIBLE_ROWS, paint);
+            drawText(canvas, "AHORA", nowX + 7f * scale, gridTop - 31f * scale,
+                    11f * scale, true, COLOR_ACCENT);
         }
 
         for (int visible = 0; visible < VISIBLE_ROWS; visible++) {
@@ -449,7 +492,8 @@ public final class EpgGuideView extends View {
             Channel channel = channels.get(index);
             float top = gridTop + visible * rowHeight;
             boolean focused = !headerFocused && !sidePanelOpen && position == focusedChannelPosition;
-            paint.setColor(focused ? Color.rgb(32, 52, 78) : (visible % 2 == 0 ? COLOR_PANEL : COLOR_PANEL_ALT));
+            paint.setColor(focused ? Color.rgb(24, 50, 66)
+                    : (visible % 2 == 0 ? COLOR_PANEL : COLOR_PANEL_ALT));
             canvas.drawRect(channelLeft, top, timelineRight, top + rowHeight - 1f * scale, paint);
             if (index == playingChannelIndex) {
                 paint.setColor(COLOR_ACCENT);
@@ -464,6 +508,14 @@ public final class EpgGuideView extends View {
                     top + rowHeight * .58f, 14f * scale, false, COLOR_ACCENT);
 
             drawProgrammes(canvas, channel, top, timelineLeft, timelineWidth, rowHeight, scale, focused);
+            if (focused) {
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(1f * scale);
+                paint.setColor(Color.argb(170, 22, 224, 245));
+                canvas.drawRect(channelLeft + 1f * scale, top + 1f * scale,
+                        timelineRight - 1f * scale, top + rowHeight - 2f * scale, paint);
+                paint.setStyle(Paint.Style.FILL);
+            }
         }
         if (filteredIndices.isEmpty()) {
             drawText(canvas, "No hay canales en este grupo", timelineLeft,
@@ -492,8 +544,16 @@ public final class EpgGuideView extends View {
             }
             boolean selected = rowFocused && programme == focusedProgramme();
             paint.setColor(selected ? COLOR_SELECTED : Color.rgb(27, 43, 63));
-            canvas.drawRect(left + 1f * scale, top + 1f * scale, right - 1f * scale,
-                    top + rowHeight - 1f * scale, paint);
+            canvas.drawRoundRect(left + 1f * scale, top + 1f * scale, right - 1f * scale,
+                    top + rowHeight - 1f * scale, 5f * scale, 5f * scale, paint);
+            if (selected) {
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(1f * scale);
+                paint.setColor(Color.argb(230, 170, 250, 255));
+                canvas.drawRoundRect(left + 1f * scale, top + 1f * scale, right - 1f * scale,
+                        top + rowHeight - 1f * scale, 5f * scale, 5f * scale, paint);
+                paint.setStyle(Paint.Style.FILL);
+            }
             int textColor = selected ? Color.rgb(8, 22, 38) : COLOR_TEXT;
             canvas.save();
             canvas.clipRect(left + 7f * scale, top + 1f * scale,
@@ -591,11 +651,30 @@ public final class EpgGuideView extends View {
 
     private void drawDayChip(Canvas canvas, float left, float top, float width, String text,
                              boolean selected, float scale) {
-        paint.setColor(selected ? COLOR_SELECTED : Color.rgb(29, 46, 68));
+        paint.setColor(selected ? COLOR_SELECTED : Color.rgb(19, 38, 57));
         canvas.drawRoundRect(left, top - 25f * scale, left + width, top + 12f * scale,
                 18f * scale, 18f * scale, paint);
+        if (!selected) {
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(1f * scale);
+            paint.setColor(Color.rgb(53, 81, 105));
+            canvas.drawRoundRect(left, top - 25f * scale, left + width, top + 12f * scale,
+                    18f * scale, 18f * scale, paint);
+            paint.setStyle(Paint.Style.FILL);
+        }
         drawText(canvas, text, left + width / 2f, top - 1f * scale, 14f * scale, selected,
                 selected ? Color.rgb(8, 22, 38) : COLOR_TEXT, true);
+    }
+
+    private void drawPanel(Canvas canvas, RectF rect, int color, float radius, float scale) {
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(color);
+        canvas.drawRoundRect(rect, radius, radius, paint);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(Math.max(1f, scale));
+        paint.setColor(Color.argb(110, 93, 135, 164));
+        canvas.drawRoundRect(rect, radius, radius, paint);
+        paint.setStyle(Paint.Style.FILL);
     }
 
     private void drawText(Canvas canvas, String text, float x, float baseline, float size,
@@ -681,6 +760,10 @@ public final class EpgGuideView extends View {
 
     private float contentOffset(float scale) { return sidePanelOpen ? 252f * scale : 0f; }
 
+    private float pipBottom(float scale) {
+        return pipRect(getWidth(), getHeight(), scale).bottom;
+    }
+
     long focusedTimeForTest() { return focusedTimeMillis; }
     long windowStartForTest() { return windowStartMillis; }
     boolean headerFocusedForTest() { return headerFocused; }
@@ -688,8 +771,8 @@ public final class EpgGuideView extends View {
     int firstVisibleChannelForTest() { return firstVisibleChannelPosition; }
 
     private static RectF pipRect(float width, float height, float scale) {
-        float right = width - 34f * scale;
-        float left = right - 470f * scale;
+        float left = 34f * scale;
+        float right = left + 470f * scale;
         float top = 34f * scale;
         float bottom = Math.min(height * .30f, top + 264f * scale);
         return new RectF(left, top, right, bottom);

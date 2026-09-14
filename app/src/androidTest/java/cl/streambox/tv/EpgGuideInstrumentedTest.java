@@ -53,8 +53,8 @@ public final class EpgGuideInstrumentedTest {
                         KeyEvent.KEYCODE_DPAD_CENTER, 2)));
                 assertEquals(0, tuned[0]);
                 RectF pip = view.pipRect();
-                assertTrue(pip.left > width / 2f);
-                assertTrue(pip.right < width && pip.bottom < height / 3f);
+                assertTrue(pip.left < width / 3f);
+                assertTrue(pip.right < width / 2f && pip.bottom < height / 3f);
                 key(view, KeyEvent.KEYCODE_DPAD_RIGHT); // eight-hour programme
                 assertVisible(view);
                 key(view, KeyEvent.KEYCODE_DPAD_LEFT);
