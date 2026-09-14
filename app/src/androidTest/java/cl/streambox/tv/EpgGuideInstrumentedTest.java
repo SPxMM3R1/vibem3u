@@ -110,6 +110,19 @@ public final class EpgGuideInstrumentedTest {
         try (FileOutputStream output = new FileOutputStream(new File(dir, state + "-" + width + ".png"))) {
             assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output));
         } catch (java.io.IOException error) { throw new AssertionError(error); }
+        // Gradle uninstalls the APK after connected tests, removing its external-files
+        // directory. Preserve only these synthetic fixtures in shell-owned temp storage.
+        String source = new File(dir, state + "-" + width + ".png").getAbsolutePath();
+        String command = "mkdir -p /data/local/tmp/vibem3u-epg-review && cp '" + source
+                + "' /data/local/tmp/vibem3u-epg-review/ && echo copied";
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(
+                new android.os.ParcelFileDescriptor.AutoCloseInputStream(
+                        InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(command))))) {
+            String line;
+            boolean copied = false;
+            while ((line = reader.readLine()) != null) if (line.contains("copied")) copied = true;
+            assertTrue("Could not preserve synthetic guide screenshot", copied);
+        } catch (java.io.IOException error) { throw new AssertionError(error); }
         bitmap.recycle();
     }
 }

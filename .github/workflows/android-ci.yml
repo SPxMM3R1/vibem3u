@@ -205,7 +205,7 @@ jobs:
           script: |
             chmod +x gradlew
             ./gradlew --no-daemon connectedDebugAndroidTest
-            adb pull /sdcard/Android/data/cl.streambox.tv/files/epg-review app/build/epg-review
+            adb pull /data/local/tmp/vibem3u-epg-review app/build/epg-review
 
       - name: Publicar reportes instrumentados
         if: ${{ always() }}
