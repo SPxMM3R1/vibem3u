@@ -205,6 +205,7 @@ jobs:
           script: |
             chmod +x gradlew
             ./gradlew --no-daemon connectedDebugAndroidTest
+            adb pull /sdcard/Android/data/cl.streambox.tv/files/epg-review app/build/epg-review
 
       - name: Publicar reportes instrumentados
         if: ${{ always() }}
@@ -215,5 +216,6 @@ jobs:
             app/build/outputs/androidTest-results
             app/build/reports/androidTests
             app/build/outputs/logs
+            app/build/epg-review
           if-no-files-found: ignore
           retention-days: 30

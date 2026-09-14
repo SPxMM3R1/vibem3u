@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TimeZone;
 
 /**
  * Lightweight TV guide drawn in one surface. The guide never owns a player;
@@ -66,6 +67,9 @@ public final class EpgGuideView extends View {
     private String selectedGroup = "Todos";
     private boolean sidePanelOpen;
     private boolean open;
+    private boolean headerFocused;
+    private int headerIndex;
+    private static final String[] HEADER_ACTIONS = {"Grupos", "Hoy", "Mañana", "Pasado", "Ahora", "Favorito"};
 
     public EpgGuideView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -109,6 +113,8 @@ public final class EpgGuideView extends View {
         open = true;
         sidePanelOpen = false;
         sideScrollOffset = 0;
+        headerFocused = false;
+        headerIndex = 4;
         selectedGroup = "Todos";
         rebuildFilters();
         playingChannelIndex = Math.max(0, Math.min(currentChannelIndex, Math.max(0, channels.size() - 1)));
@@ -139,13 +145,19 @@ public final class EpgGuideView extends View {
     public boolean handleKey(KeyEvent event) {
         if (!open || event == null || event.getAction() != KeyEvent.ACTION_DOWN) return false;
         int keyCode = event.getKeyCode();
+        // The long OK that opens the guide must not immediately tune on its repeats.
+        if (event.getRepeatCount() > 0 && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                || keyCode == KeyEvent.KEYCODE_ENTER)) return true;
         if (sidePanelOpen) return handleSideKey(keyCode);
+        if (headerFocused) return handleHeaderKey(keyCode);
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             closeGuide();
             return true;
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
-            moveChannel(-1);
+            if (focusedChannelPosition == 0) headerFocused = true;
+            else moveChannel(-1);
+            invalidate();
             return true;
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN) {
@@ -153,12 +165,7 @@ public final class EpgGuideView extends View {
             return true;
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-            if (focusedTimeMillis <= windowStartMillis + 5L * 60L * 1000L) {
-                sidePanelOpen = true;
-                sideIndex = 0;
-            } else {
-                moveTime(-HALF_HOUR_MS);
-            }
+            moveTime(-HALF_HOUR_MS);
             invalidate();
             return true;
         }
@@ -189,6 +196,34 @@ public final class EpgGuideView extends View {
             return true;
         }
         return false;
+    }
+
+    private boolean handleHeaderKey(int keyCode) {
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) headerIndex = Math.max(0, headerIndex - 1);
+        else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) headerIndex = Math.min(HEADER_ACTIONS.length - 1, headerIndex + 1);
+        else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode == KeyEvent.KEYCODE_BACK) headerFocused = false;
+        else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+            if (headerIndex == 0) {
+                sidePanelOpen = true;
+                sideIndex = 0;
+                sideScrollOffset = 0;
+            } else if (headerIndex == 5) toggleFocusedFavorite();
+            else {
+                long target = headerIndex == 4 ? System.currentTimeMillis()
+                        : EpgGuideTimeline.dayOffset(navigationAnchorMillis, headerIndex - 1, TimeZone.getDefault());
+                setFocusedTime(target);
+            }
+        }
+        invalidate();
+        return true;
+    }
+
+    private void setFocusedTime(long target) {
+        long lower = navigationAnchorMillis - 2L * DAY_NAVIGATION_MS;
+        long upper = EpgGuideTimeline.dayOffset(navigationAnchorMillis, 3, TimeZone.getDefault()) - 1L;
+        focusedTimeMillis = Math.max(lower, Math.min(upper, target));
+        windowStartMillis = EpgGuideTimeline.visibleWindow(windowStartMillis, focusedTimeMillis);
+        invalidate();
     }
 
     private boolean handleSideKey(int keyCode) {
@@ -250,43 +285,9 @@ public final class EpgGuideView extends View {
 
     private void moveTime(long delta) {
         int direction = delta < 0L ? -1 : 1;
-        long target = nextGuideBoundary(direction);
-        if (target == focusedTimeMillis) target = focusedTimeMillis + delta;
-        focusedTimeMillis = target;
-        if (focusedTimeMillis < windowStartMillis + 10L * 60L * 1000L) {
-            windowStartMillis -= HALF_HOUR_MS;
-        } else if (focusedTimeMillis > windowStartMillis + GUIDE_WINDOW_MS - 10L * 60L * 1000L) {
-            windowStartMillis += HALF_HOUR_MS;
-        }
-        // Keep navigation bounded to two days around the opening point while
-        // still allowing the complete 24-hour programme range to be inspected.
-        long distance = focusedTimeMillis - navigationAnchorMillis;
-        if (Math.abs(distance) > DAY_NAVIGATION_MS * 2L) {
-            focusedTimeMillis = navigationAnchorMillis + (direction < 0
-                    ? -DAY_NAVIGATION_MS * 2L : DAY_NAVIGATION_MS * 2L);
-            windowStartMillis = floorHalfHour(focusedTimeMillis);
-        }
-        invalidate();
-    }
-
-    private long nextGuideBoundary(int direction) {
         Channel channel = focusedChannel();
-        if (channel == null) return focusedTimeMillis;
-        long best = focusedTimeMillis;
-        long distance = Long.MAX_VALUE;
-        for (EpgProgramme programme : epgData.getProgrammes(channel.getTvgId())) {
-            long[] boundaries = {programme.getStartMillis(), programme.getStopMillis()};
-            for (long boundary : boundaries) {
-                long difference = boundary - focusedTimeMillis;
-                if ((direction > 0 && difference > 60_000L
-                        || direction < 0 && difference < -60_000L)
-                        && Math.abs(difference) < distance) {
-                    distance = Math.abs(difference);
-                    best = boundary;
-                }
-            }
-        }
-        return best;
+        setFocusedTime(EpgGuideTimeline.adjacentTime(channel == null ? Collections.emptyList()
+                : epgData.getProgrammes(channel.getTvgId()), focusedTimeMillis, direction));
     }
 
     private void toggleFocusedFavorite() {
@@ -299,7 +300,7 @@ public final class EpgGuideView extends View {
     }
 
     private void ensureSideItemVisible() {
-        int visibleItems = Math.max(1, (getHeight() - 330) / 47);
+        int visibleItems = Math.max(1, (int) ((getHeight() / renderScale() - 210f) / 47f));
         if (sideIndex < sideScrollOffset) {
             sideScrollOffset = sideIndex;
         } else if (sideIndex >= sideScrollOffset + visibleItems) {
@@ -340,31 +341,21 @@ public final class EpgGuideView extends View {
             if (included) indices.add(i);
         }
         filteredIndices = Collections.unmodifiableList(indices);
+        focusedChannelPosition = Math.max(0, Math.min(focusedChannelPosition, indices.size() - 1));
+        firstVisibleChannelPosition = Math.max(0, Math.min(firstVisibleChannelPosition,
+                Math.max(0, indices.size() - VISIBLE_ROWS)));
     }
 
     private EpgProgramme focusedProgramme() {
         Channel channel = focusedChannel();
         if (channel == null) return null;
-        EpgProgramme current = epgData.findCurrent(channel.getTvgId(), focusedTimeMillis);
-        if (current != null) return current;
-        EpgProgramme nearest = null;
-        long distance = Long.MAX_VALUE;
-        for (EpgProgramme programme : epgData.getProgrammes(channel.getTvgId())) {
-            long value = focusedTimeMillis < programme.getStartMillis()
-                    ? programme.getStartMillis() - focusedTimeMillis
-                    : focusedTimeMillis - programme.getStopMillis();
-            if (value >= 0 && value < distance) {
-                distance = value;
-                nearest = programme;
-            }
-        }
-        return nearest;
+        return epgData.findCurrent(channel.getTvgId(), focusedTimeMillis);
     }
 
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         if (!open || channels.isEmpty()) return;
-        float scale = Math.max(0.75f, getWidth() / 1920f);
+        float scale = renderScale();
         float width = getWidth();
         float height = getHeight();
         RectF pip = pipRect(width, height, scale);
@@ -387,9 +378,9 @@ public final class EpgGuideView extends View {
     }
 
     private void drawHeader(Canvas canvas, float scale, RectF pip) {
-        float x = 42f * scale;
+        float x = contentOffset(scale) + 42f * scale;
         canvas.save();
-        canvas.clipRect(0f, 0f, Math.max(0f, pip.left - 24f * scale), 270f * scale);
+        canvas.clipRect(0f, 0f, Math.max(0f, pip.left - 24f * scale), 290f * scale);
         paint.setColor(COLOR_MUTED);
         drawText(canvas, "VibeM3U / Guía", x, 40f * scale, 16f * scale, false);
         EpgProgramme programme = focusedProgramme();
@@ -403,16 +394,17 @@ public final class EpgGuideView extends View {
         drawText(canvas, ellipsizeForWidth(metadata, Math.max(80f, pip.left - x - 24f * scale), 17f * scale),
                 x, 130f * scale, 17f * scale, false, COLOR_MUTED);
         if (programme != null && !AppStrings.isBlank(programme.getDescription())) {
-            String[] descriptionLines = descriptionLines(programme.getDescription(), 66);
+            String[] descriptionLines = descriptionLines(programme.getDescription(), pip.left - x - 24f * scale, 17f * scale);
             drawText(canvas, descriptionLines[0], x, 163f * scale, 17f * scale, false, COLOR_MUTED);
             if (!AppStrings.isBlank(descriptionLines[1])) {
                 drawText(canvas, descriptionLines[1], x, 185f * scale, 17f * scale, false, COLOR_MUTED);
             }
         }
-        drawDayChip(canvas, x, 225f * scale, 118f * scale, dayFormat.format(new Date(focusedTimeMillis)), true, scale);
-        drawDayChip(canvas, x + 130f * scale, 225f * scale, 94f * scale, "Mañana", false, scale);
-        drawDayChip(canvas, x + 236f * scale, 225f * scale, 94f * scale, "Pasado", false, scale);
-        drawText(canvas, "Ahora", x + 360f * scale, 249f * scale, 16f * scale, false, COLOR_MUTED);
+        for (int i = 0; i < HEADER_ACTIONS.length; i++) {
+            drawDayChip(canvas, x + i * 116f * scale, 225f * scale, 108f * scale,
+                    HEADER_ACTIONS[i], headerFocused && !sidePanelOpen && headerIndex == i, scale);
+        }
+        drawText(canvas, dayFormat.format(new Date(focusedTimeMillis)), x, 272f * scale, 15f * scale, false, COLOR_MUTED);
         canvas.restore();
         drawText(canvas, timeFormat.format(new Date(System.currentTimeMillis())), pip.right - 62f * scale, 31f * scale, 18f * scale, false);
         paint.setColor(Color.argb(200, 35, 53, 78));
@@ -423,8 +415,8 @@ public final class EpgGuideView extends View {
     }
 
     private void drawGuideGrid(Canvas canvas, float scale, float width, float height) {
-        float gridTop = 310f * scale;
-        float channelLeft = 32f * scale;
+        float gridTop = 370f * scale;
+        float channelLeft = contentOffset(scale) + 32f * scale;
         float channelWidth = 286f * scale;
         float timelineLeft = channelLeft + channelWidth;
         float timelineRight = width - 34f * scale;
@@ -454,7 +446,7 @@ public final class EpgGuideView extends View {
             int index = filteredIndices.get(position);
             Channel channel = channels.get(index);
             float top = gridTop + visible * rowHeight;
-            boolean focused = position == focusedChannelPosition;
+            boolean focused = !headerFocused && !sidePanelOpen && position == focusedChannelPosition;
             paint.setColor(focused ? Color.rgb(32, 52, 78) : (visible % 2 == 0 ? COLOR_PANEL : COLOR_PANEL_ALT));
             canvas.drawRect(channelLeft, top, timelineRight, top + rowHeight - 1f * scale, paint);
             if (index == playingChannelIndex) {
@@ -520,10 +512,8 @@ public final class EpgGuideView extends View {
         canvas.drawRect(0, 0, panelWidth, height, paint);
         drawText(canvas, "VibeM3U", 28f * scale, 70f * scale, 26f * scale, true);
         drawText(canvas, "Canales", 28f * scale, 123f * scale, 14f * scale, false, COLOR_MUTED);
-        drawSideItem(canvas, 0, "▦", "Todos", 172f * scale, scale);
-        drawSideItem(canvas, 1, "★", "Favoritos", 226f * scale, scale);
-        float top = 280f * scale;
-        int visibleItems = Math.max(1, (int) ((height / scale - 330f) / 47f));
+        float top = 172f * scale;
+        int visibleItems = Math.max(1, (int) ((height / scale - 210f) / 47f));
         int itemCount = groups.size() + 2;
         for (int item = sideScrollOffset;
              item < Math.min(itemCount, sideScrollOffset + visibleItems);
@@ -555,8 +545,15 @@ public final class EpgGuideView extends View {
         float right = getWidth() - 34f * scale;
         paint.setColor(Color.rgb(77, 103, 135));
         canvas.drawRect(left, height - 74f * scale, right, height - 73f * scale, paint);
-        long rangeStart = navigationAnchorMillis - DAY_NAVIGATION_MS;
-        long rangeEnd = navigationAnchorMillis + DAY_NAVIGATION_MS;
+        java.util.Calendar day = java.util.Calendar.getInstance();
+        day.setTimeInMillis(windowStartMillis);
+        day.set(java.util.Calendar.HOUR_OF_DAY, 0);
+        day.set(java.util.Calendar.MINUTE, 0);
+        day.set(java.util.Calendar.SECOND, 0);
+        day.set(java.util.Calendar.MILLISECOND, 0);
+        long rangeStart = day.getTimeInMillis();
+        day.add(java.util.Calendar.DATE, 1);
+        long rangeEnd = day.getTimeInMillis();
         float range = Math.max(1f, (float) (rangeEnd - rangeStart));
         float thumbStart = left + (right - left)
                 * Math.max(0f, Math.min(1f, (windowStartMillis - rangeStart) / range));
@@ -570,7 +567,7 @@ public final class EpgGuideView extends View {
                         + timeFormat.format(new Date(windowStartMillis + GUIDE_WINDOW_MS)),
                 left, height - 50f * scale, 11f * scale, false, COLOR_MUTED);
         drawText(canvas, "OK  Ver canal", 42f * scale, height - 16f * scale, 13f * scale, false, COLOR_MUTED);
-        drawText(canvas, "MENU  Grupos", 190f * scale, height - 16f * scale, 13f * scale, false, COLOR_MUTED);
+        drawText(canvas, "▲  Fechas y grupos", 190f * scale, height - 16f * scale, 13f * scale, false, COLOR_MUTED);
         drawText(canvas, "◀ ▶  Cambiar hora", 324f * scale, height - 16f * scale, 13f * scale, false, COLOR_MUTED);
         drawText(canvas, "★  Favorito", 510f * scale, height - 16f * scale, 13f * scale, false, COLOR_MUTED);
     }
@@ -653,14 +650,18 @@ public final class EpgGuideView extends View {
         return prefix + "…";
     }
 
-    private static String[] descriptionLines(String value, int maxCharsPerLine) {
+    private String[] descriptionLines(String value, float width, float size) {
         String normalized = value == null ? "" : value.replaceAll("\\s+", " ").trim();
+        paint.setTypeface(android.graphics.Typeface.DEFAULT);
+        paint.setTextSize(size);
+        int maxCharsPerLine = paint.breakText(normalized, true, Math.max(1f, width), null);
+        if (maxCharsPerLine == 0) return new String[]{"", ""};
         if (normalized.length() <= maxCharsPerLine) return new String[]{normalized, ""};
         int split = normalized.lastIndexOf(' ', maxCharsPerLine);
         if (split < 1) split = maxCharsPerLine;
         String first = normalized.substring(0, split).trim();
         String remaining = normalized.substring(split).trim();
-        return new String[]{first, ellipsize(remaining, maxCharsPerLine, 0f)};
+        return new String[]{first, ellipsizeForWidth(remaining, width, size)};
     }
 
     private static long floorHalfHour(long time) {
@@ -668,9 +669,20 @@ public final class EpgGuideView extends View {
     }
 
     public RectF pipRect() {
-        float scale = Math.max(0.75f, getWidth() / 1920f);
+        float scale = renderScale();
         return pipRect(getWidth(), getHeight(), scale);
     }
+
+    private float renderScale() {
+        return Math.max(0.01f, Math.min(getWidth() / 1920f, getHeight() / 1080f));
+    }
+
+    private float contentOffset(float scale) { return sidePanelOpen ? 252f * scale : 0f; }
+
+    long focusedTimeForTest() { return focusedTimeMillis; }
+    long windowStartForTest() { return windowStartMillis; }
+    boolean headerFocusedForTest() { return headerFocused; }
+    boolean sidePanelOpenForTest() { return sidePanelOpen; }
 
     private static RectF pipRect(float width, float height, float scale) {
         float right = width - 34f * scale;

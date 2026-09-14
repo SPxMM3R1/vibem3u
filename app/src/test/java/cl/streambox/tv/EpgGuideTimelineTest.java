@@ -7,6 +7,31 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 public final class EpgGuideTimelineTest {
+    @Test public void distantTargetsStayInsideViewportInBothDirections() {
+        for (long target : new long[]{-50_000_000L, 0L, 10_800_000L, 80_000_000L}) {
+            long start = EpgGuideTimeline.visibleWindow(0L, target);
+            assertTrue(target >= start);
+            assertTrue(target < start + EpgGuideTimeline.GUIDE_WINDOW_MS);
+        }
+    }
+
+    @Test public void shortProgramsAndGapsAreNotSkipped() {
+        java.util.List<EpgProgramme> items = java.util.Arrays.asList(
+                new EpgProgramme("x", "Corto", 0L, 10_000L),
+                new EpgProgramme("x", "Siguiente", 10_000L, 20_000L),
+                new EpgProgramme("x", "Tras hueco", 30_000L, 40_000L));
+        assertEquals(10_000L, EpgGuideTimeline.adjacentTime(items, 1L, 1));
+        assertEquals(9_999L, EpgGuideTimeline.adjacentTime(items, 10_000L, -1));
+        assertEquals(30_000L, EpgGuideTimeline.adjacentTime(items, 20_000L, 1));
+        assertEquals(19_999L, EpgGuideTimeline.adjacentTime(items, 25_000L, -1));
+    }
+
+    @Test public void calendarDayPreservesHourAcrossDst() {
+        java.util.TimeZone zone = java.util.TimeZone.getTimeZone("America/New_York");
+        long anchor = EpgParser.parseXmlTvTime("20260307120000 -0500");
+        assertEquals(EpgParser.parseXmlTvTime("20260308120000 -0400"),
+                EpgGuideTimeline.dayOffset(anchor, 1, zone));
+    }
     @Test
     public void floorsAcrossMidnightWithoutUsingLocalCalendarState() {
         long beforeMidnight = EpgParser.parseXmlTvTime("20260714235900 -0400");
