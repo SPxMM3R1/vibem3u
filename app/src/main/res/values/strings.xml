@@ -59,7 +59,7 @@
     <string name="channel_controls_title">Cambio de canales</string>
     <string name="invert_channel_keys">Invertir botones arriba y abajo</string>
     <string name="invert_channel_keys_description">Activado: ↑ avanza al canal siguiente y ↓ vuelve al anterior.</string>
-    <string name="remote_help">Durante la reproducción: ↑/↓ cambia de canal · OK muestra información · mantener OK configuración.</string>
+    <string name="remote_help">Durante la reproducción: ↑/↓ cambia de canal · ← guía EPG · → calidad o fuentes · MENU opciones.</string>
     <string name="update_title">Actualización disponible</string>
     <string name="update_available">VibeM3U %1$s está lista para instalar.</string>
     <string name="update_later">Más tarde</string>
@@ -133,6 +133,10 @@
     <string name="source_selector_ready_count">%1$d fuentes HLS validadas. Selecciona una para reproducirla.</string>
     <string name="source_selector_no_options">No hay fuentes alternativas disponibles.</string>
     <string name="source_selector_switching">Cambiando a la fuente seleccionada…</string>
+    <string name="quality_selector_title">Calidad de video</string>
+    <string name="quality_selector_ready">Selecciona una calidad para reproducirla.</string>
+    <string name="quality_selector_no_options">Este canal no informa calidades alternativas.</string>
+    <string name="quality_selector_switching">Aplicando calidad seleccionada…</string>
 
     <plurals name="resolver_group_channels">
         <item quantity="one">%1$s · %2$d canal</item>

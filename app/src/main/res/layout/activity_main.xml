@@ -264,6 +264,8 @@
 
     <include layout="@layout/source_selector_overlay" />
 
+    <include layout="@layout/quality_selector_overlay" />
+
     <cl.streambox.tv.EpgGuideView
         android:id="@+id/epg_guide_overlay"
         android:layout_width="match_parent"

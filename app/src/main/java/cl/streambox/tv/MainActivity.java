@@ -140,6 +140,11 @@ public final class MainActivity extends Activity {
     private TextView sourceSelectorChannel;
     private TextView sourceSelectorStatus;
     private LinearLayout sourceSelectorOptions;
+    private View qualitySelectorOverlay;
+    private TextView qualitySelectorTitle;
+    private TextView qualitySelectorChannel;
+    private TextView qualitySelectorStatus;
+    private LinearLayout qualitySelectorOptions;
     private ImageView channelLogo;
     private TextView channelLogoFallback;
     private TextView channelNumber;
@@ -193,6 +198,10 @@ public final class MainActivity extends Activity {
     private final List<ResolvedPlaybackCandidate> sourceCandidates = new ArrayList<>();
     private final List<View> sourceCandidateViews = new ArrayList<>();
     private int sourceCandidateFocusIndex = -1;
+    private final List<View> qualityOptionViews = new ArrayList<>();
+    private List<VideoTrackOption> qualitySelectorChoices = Collections.emptyList();
+    private boolean qualitySelectorAutomaticVisible;
+    private int qualitySelectorFocusIndex = -1;
     private ManifestHandoffCache playbackManifestCache;
     private long playbackResolutionRequestId;
     private long activePlaybackSourceRequestId = NO_RESOLUTION_REQUEST;
@@ -348,6 +357,11 @@ public final class MainActivity extends Activity {
         sourceSelectorChannel = findViewById(R.id.source_selector_channel);
         sourceSelectorStatus = findViewById(R.id.source_selector_status);
         sourceSelectorOptions = findViewById(R.id.source_selector_options);
+        qualitySelectorOverlay = findViewById(R.id.quality_selector_overlay);
+        qualitySelectorTitle = findViewById(R.id.quality_selector_title);
+        qualitySelectorChannel = findViewById(R.id.quality_selector_channel);
+        qualitySelectorStatus = findViewById(R.id.quality_selector_status);
+        qualitySelectorOptions = findViewById(R.id.quality_selector_options);
         epgGuideView = findViewById(R.id.epg_guide_overlay);
         epgGuideView.addOnLayoutChangeListener((view, left, top, right, bottom,
                 oldLeft, oldTop, oldRight, oldBottom) -> {
@@ -1320,6 +1334,7 @@ public final class MainActivity extends Activity {
     private void playChannel(int requestedIndex, boolean revalidateLogo) {
         if (channels.isEmpty()) return;
         closePlaybackSourceSelector();
+        closeQualitySelector();
         channelIndex = (requestedIndex % channels.size() + channels.size()) % channels.size();
         Channel channel = channels.get(channelIndex);
         playbackGeneration++;
@@ -2293,6 +2308,7 @@ public final class MainActivity extends Activity {
         if (exiting || resourcesReleased || settingsOpen || epgGuideView == null
                 || channels.isEmpty() || player == null) return;
         closePlaybackSourceSelector();
+        closeQualitySelector();
         mainHandler.removeCallbacks(hideLightEpg);
         hideLightEpg.run();
         mainHandler.removeCallbacks(hideOverlay);
@@ -2366,6 +2382,156 @@ public final class MainActivity extends Activity {
         });
     }
 
+    private boolean isQualitySelectorVisible() {
+        return qualitySelectorOverlay != null
+                && qualitySelectorOverlay.getVisibility() == View.VISIBLE;
+    }
+
+    /** Opens a lightweight quality chooser without leaving the player. */
+    private void openQualitySelector() {
+        if (exiting || resourcesReleased || settingsOpen || player == null
+                || !hasWindowFocus() || playbackChannel == null
+                || playbackResolutionTask != null || isSourceSelectorVisible()) return;
+
+        qualitySelectorChoices = new ArrayList<>(collectVideoTrackOptions(player.getCurrentTracks()));
+        qualitySelectorTitle.setText(getString(R.string.quality_selector_title));
+        qualitySelectorChannel.setText(playbackChannel.getName());
+        qualitySelectorOverlay.setVisibility(View.VISIBLE);
+        renderQualitySelectorOptions();
+    }
+
+    private int selectedQualityOptionIndex(Channel channel, List<VideoTrackOption> options) {
+        if (options.isEmpty() || playbackPreferences.isAutomaticQuality(channel)) return -1;
+        PlaybackPreferences.QualityPreference preference = playbackPreferences.getQuality(channel);
+        if (preference != null) {
+            VideoTrackOption closest = findClosestQuality(options, preference);
+            if (closest != null) return options.indexOf(closest);
+        }
+        for (int index = 0; index < options.size(); index++) {
+            VideoTrackOption option = options.get(index);
+            if (option.group.isSelected() && option.group.isTrackSelected(option.trackIndex)) {
+                return index;
+            }
+        }
+        return 0;
+    }
+
+    private void renderQualitySelectorOptions() {
+        qualitySelectorOptions.removeAllViews();
+        qualityOptionViews.clear();
+        qualitySelectorAutomaticVisible = qualitySelectorChoices.size() > 1;
+        qualitySelectorFocusIndex = -1;
+
+        if (qualitySelectorChoices.isEmpty()) {
+            qualitySelectorStatus.setText(getString(R.string.quality_selector_no_options));
+            return;
+        }
+
+        Channel channel = playbackChannel;
+        boolean automatic = channel != null && playbackPreferences.isAutomaticQuality(channel);
+        int selectedOptionIndex = channel == null
+                ? 0 : selectedQualityOptionIndex(channel, qualitySelectorChoices);
+        int selectedViewIndex = qualitySelectorAutomaticVisible && automatic
+                ? 0
+                : (qualitySelectorAutomaticVisible ? selectedOptionIndex + 1 : selectedOptionIndex);
+
+        if (qualitySelectorAutomaticVisible) {
+            TextView automatic = createQualitySelectorOption(
+                    (automatic ? "✓ " : "") + getString(R.string.stream_quality_automatic),
+                    automatic,
+                    0
+            );
+            addQualitySelectorOption(automatic, 0);
+        }
+
+        for (int index = 0; index < qualitySelectorChoices.size(); index++) {
+            VideoTrackOption option = qualitySelectorChoices.get(index);
+            boolean active = !automatic && index == selectedOptionIndex;
+            int viewIndex = qualityOptionViews.size();
+            TextView view = createQualitySelectorOption(
+                    (active ? "✓ " : "") + option.label(),
+                    active,
+                    viewIndex
+            );
+            addQualitySelectorOption(view, viewIndex);
+        }
+
+        qualitySelectorStatus.setText(getString(R.string.quality_selector_ready));
+        if (!qualityOptionViews.isEmpty()) {
+            qualitySelectorFocusIndex = Math.max(0, Math.min(
+                    selectedViewIndex,
+                    qualityOptionViews.size() - 1
+            ));
+            qualityOptionViews.get(qualitySelectorFocusIndex).requestFocus();
+        }
+    }
+
+    private TextView createQualitySelectorOption(String label, boolean active, int viewIndex) {
+        TextView option = new TextView(this);
+        option.setText(label);
+        option.setTextColor(active ? getColor(R.color.cyan) : getColor(R.color.white));
+        option.setContentDescription(label);
+        option.setTextSize(15f);
+        option.setGravity(Gravity.CENTER_VERTICAL);
+        option.setBackgroundResource(R.drawable.focus_button);
+        option.setFocusable(true);
+        option.setFocusableInTouchMode(true);
+        option.setMinHeight(dp(54));
+        option.setOnFocusChangeListener((view, focused) -> {
+            if (focused) qualitySelectorFocusIndex = viewIndex;
+            if (active) option.setTextColor(getColor(focused ? R.color.panel : R.color.cyan));
+        });
+        option.setOnClickListener(view -> selectQualityOption(viewIndex));
+        return option;
+    }
+
+    private void addQualitySelectorOption(View option, int index) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        params.setMargins(0, index == 0 ? 0 : dp(8), 0, 0);
+        qualitySelectorOptions.addView(option, params);
+        qualityOptionViews.add(option);
+    }
+
+    private void moveQualitySelectorFocus(int delta) {
+        if (!isQualitySelectorVisible() || qualityOptionViews.isEmpty()) return;
+        int size = qualityOptionViews.size();
+        int index = qualitySelectorFocusIndex < 0 ? 0 : qualitySelectorFocusIndex;
+        index = (index + delta % size + size) % size;
+        qualitySelectorFocusIndex = index;
+        qualityOptionViews.get(index).requestFocus();
+    }
+
+    private void selectQualityOption(int viewIndex) {
+        if (viewIndex < 0 || viewIndex >= qualityOptionViews.size()
+                || playbackChannel == null || player == null) return;
+        Channel channel = playbackChannel;
+        if (qualitySelectorAutomaticVisible && viewIndex == 0) {
+            useAutomaticQuality(channel);
+        } else {
+            int optionIndex = qualitySelectorAutomaticVisible ? viewIndex - 1 : viewIndex;
+            if (optionIndex < 0 || optionIndex >= qualitySelectorChoices.size()) return;
+            applyFixedQuality(channel, qualitySelectorChoices.get(optionIndex), true);
+        }
+        closeQualitySelector();
+        showOverlay(false);
+    }
+
+    private void selectFocusedQuality() {
+        selectQualityOption(qualitySelectorFocusIndex);
+    }
+
+    private void closeQualitySelector() {
+        qualityOptionViews.clear();
+        qualitySelectorChoices = Collections.emptyList();
+        qualitySelectorAutomaticVisible = false;
+        qualitySelectorFocusIndex = -1;
+        if (qualitySelectorOptions != null) qualitySelectorOptions.removeAllViews();
+        if (qualitySelectorOverlay != null) qualitySelectorOverlay.setVisibility(View.GONE);
+    }
+
     private boolean isSourceSelectorVisible() {
         return sourceSelectorOverlay != null
                 && sourceSelectorOverlay.getVisibility() == View.VISIBLE;
@@ -2382,6 +2548,7 @@ public final class MainActivity extends Activity {
         if (resolver == null || !"tvvoo".equalsIgnoreCase(resolver.getId())) return;
         if (isSourceSelectorVisible() || sourceCandidateTask != null) return;
 
+        closeQualitySelector();
         mainHandler.removeCallbacks(hideLightEpg);
         hideLightEpg.run();
         sourceSelectorTitle.setText(getString(R.string.source_selector_title));
@@ -2682,6 +2849,44 @@ public final class MainActivity extends Activity {
                 return true;
             }
         }
+        if (isQualitySelectorVisible()) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (keyCode == KeyEvent.KEYCODE_BACK
+                        && event.getRepeatCount() == 0) {
+                    closeQualitySelector();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP
+                        || keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
+                    moveQualitySelectorFocus(-1);
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                        || keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN) {
+                    moveQualitySelectorFocus(1);
+                    return true;
+                }
+                if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                        || keyCode == KeyEvent.KEYCODE_ENTER)
+                        && event.getRepeatCount() == 0) {
+                    selectFocusedQuality();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    closeQualitySelector();
+                    return true;
+                }
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                    || keyCode == KeyEvent.KEYCODE_DPAD_UP
+                    || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                    || keyCode == KeyEvent.KEYCODE_CHANNEL_UP
+                    || keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN
+                    || keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                    || keyCode == KeyEvent.KEYCODE_ENTER) {
+                return true;
+            }
+        }
         if (isChannelNavigationKey(keyCode)) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 // Android TV remotes emit repeated ACTION_DOWN events while
@@ -2698,7 +2903,7 @@ public final class MainActivity extends Activity {
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
             if (event.getAction() == KeyEvent.ACTION_DOWN
                     && event.getRepeatCount() == 0) {
-                showLightEpg();
+                showGuide();
             }
             return true;
         }
@@ -2706,7 +2911,13 @@ public final class MainActivity extends Activity {
         if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
             if (event.getAction() == KeyEvent.ACTION_DOWN
                     && event.getRepeatCount() == 0) {
-                openPlaybackSourceSelector();
+                StreamResolver resolver = playbackChannel == null || streamResolverRegistry == null
+                        ? null : streamResolverRegistry.find(playbackChannel);
+                if (resolver != null && "tvvoo".equalsIgnoreCase(resolver.getId())) {
+                    openPlaybackSourceSelector();
+                } else {
+                    openQualitySelector();
+                }
             }
             return true;
         }
