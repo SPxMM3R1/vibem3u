@@ -24,7 +24,7 @@ final class ResolvedPlaybackCandidate {
         this.label = AppStrings.isBlank(label) ? "Fuente" : label.trim();
         this.detail = SafePlaybackText.detail(detail);
         this.source = source;
-        this.createdAtElapsedRealtime = SystemClock.elapsedRealtime();
+        this.createdAtElapsedRealtime = monotonicNow();
     }
 
     String getLabel() {
@@ -56,6 +56,15 @@ final class ResolvedPlaybackCandidate {
 
     /** Candidate URLs are deliberately short-lived to avoid stale sessions. */
     boolean isStale() {
-        return SystemClock.elapsedRealtime() - createdAtElapsedRealtime >= 20_000L;
+        return monotonicNow() - createdAtElapsedRealtime >= 20_000L;
+    }
+
+    private static long monotonicNow() {
+        try {
+            return SystemClock.elapsedRealtime();
+        } catch (RuntimeException ignored) {
+            // Plain JVM unit tests do not provide Android's SystemClock stub.
+            return System.nanoTime() / 1_000_000L;
+        }
     }
 }
