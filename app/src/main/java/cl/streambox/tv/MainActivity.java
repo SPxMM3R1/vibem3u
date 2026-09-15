@@ -182,6 +182,7 @@ public final class MainActivity extends Activity {
     private boolean playbackAutoRecoveryInFlight;
     private boolean playbackFullRecoveryUsed;
     private boolean playbackRecoveryFailed;
+    private int lastPlaybackDiagnosticCode;
     private Future<?> playbackResolutionTask;
     private ResolutionContext playbackResolutionContext;
     private Future<?> sourceCandidateTask;
@@ -462,6 +463,11 @@ public final class MainActivity extends Activity {
                 settlePlaybackEpisode(false);
                 startupMetrics.failed(startupMetrics.currentId());
                 playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
+                lastPlaybackDiagnosticCode = PlaybackDiagnosticCode.forPlaybackError(
+                        error,
+                        ResolvedSourceRefreshPolicy.isManifest(failedRequestUri(error))
+                );
+                Log.i(PLAYBACK_HEALTH_TAG, "diagnostic code=" + lastPlaybackDiagnosticCode);
                 setStatus("ERROR", R.color.red);
                 codecInfo.setText(shortMessage(error));
                 overlayAwaitingPlayback = true;
@@ -1306,6 +1312,7 @@ public final class MainActivity extends Activity {
         playbackAutoRecoveryInFlight = false;
         playbackFullRecoveryUsed = false;
         playbackRecoveryFailed = false;
+        lastPlaybackDiagnosticCode = 0;
         resetResourceWarningState();
         resetPlaybackBitrateMeter();
         cancelPlaybackResolution();
@@ -1430,7 +1437,13 @@ public final class MainActivity extends Activity {
         if (playbackAutoRecoveryInFlight || playbackChannel == null) return;
         long nowMs = SystemClock.elapsedRealtime();
         if (nowMs < playbackRecoveryCooldownUntilElapsedRealtime) return;
+        if (reason != null && !"error de reproducción".equals(reason)) {
+            lastPlaybackDiagnosticCode = PlaybackDiagnosticCode.forWatchdog(reason);
+        }
         if (playbackFullRecoveryUsed) {
+            if (lastPlaybackDiagnosticCode <= 0) {
+                lastPlaybackDiagnosticCode = PlaybackDiagnosticCode.recoveryExhausted();
+            }
             showPlaybackFailure();
             return;
         }
@@ -1441,6 +1454,7 @@ public final class MainActivity extends Activity {
         playbackLoadingSinceElapsedRealtime = nowMs;
 
         Channel channel = playbackChannel;
+        int diagnosticCodeBeforeRecovery = lastPlaybackDiagnosticCode;
         String identity = PlaybackPreferences.channelIdentity(channel);
         int targetIndex = findChannelIndexByIdentity(channels, identity);
         setStatus("RECONECTANDO", R.color.amber);
@@ -1460,6 +1474,7 @@ public final class MainActivity extends Activity {
 
         createPlayer();
         playChannel(targetIndex, false);
+        lastPlaybackDiagnosticCode = diagnosticCodeBeforeRecovery;
         // playChannel resets episode-local state. Keep the bounded recovery
         // budget consumed until playback has been stable for a full episode.
         playbackFullRecoveryUsed = true;
@@ -1587,7 +1602,7 @@ public final class MainActivity extends Activity {
                     playbackResolutionContext = null;
                     startupMetrics.failed(measurementId);
                     resolutionContext.cancel();
-                    handleResolutionFailure(channel, resolver, expectedGeneration);
+                    handleResolutionFailure(channel, resolver, expectedGeneration, error);
                 });
             }
         });
@@ -1596,8 +1611,11 @@ public final class MainActivity extends Activity {
     private void handleResolutionFailure(
             Channel channel,
             StreamResolver resolver,
-            long expectedGeneration
+            long expectedGeneration,
+            Throwable error
     ) {
+        lastPlaybackDiagnosticCode = PlaybackDiagnosticCode.forResolverFailure(error);
+        Log.i(PLAYBACK_HEALTH_TAG, "diagnostic code=" + lastPlaybackDiagnosticCode);
         showPlaybackFailure();
     }
 
@@ -1692,9 +1710,12 @@ public final class MainActivity extends Activity {
         playbackAutoRecoveryInFlight = false;
         playbackRecoveryFailed = true;
         playbackLoadingSinceElapsedRealtime = -1L;
+        if (lastPlaybackDiagnosticCode <= 0) {
+            lastPlaybackDiagnosticCode = PlaybackDiagnosticCode.recoveryExhausted();
+        }
         startupMetrics.failed(startupMetrics.currentId());
         setStatus("ERROR", R.color.red);
-        codecInfo.setText("Canal no disponible");
+        codecInfo.setText(PlaybackDiagnosticCode.display(lastPlaybackDiagnosticCode));
         hideLoadingState();
         overlayAwaitingPlayback = true;
         showOverlay(true);
