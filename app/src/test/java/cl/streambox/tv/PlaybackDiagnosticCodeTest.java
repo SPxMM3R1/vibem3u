@@ -30,7 +30,7 @@ public final class PlaybackDiagnosticCodeTest {
     public void genericErrorsRemainNumericAndStable() {
         assertEquals("4005001", PlaybackDiagnosticCode.display(
                 PlaybackDiagnosticCode.forPlaybackError(new IOException("x"), false)));
-        assertEquals("5001001", PlaybackDiagnosticCode.display(
+        assertEquals("5010001", PlaybackDiagnosticCode.display(
                 PlaybackDiagnosticCode.recoveryExhausted()));
     }
 }
