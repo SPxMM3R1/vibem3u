@@ -465,9 +465,11 @@ public final class MainActivity extends Activity {
                 playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
                 lastPlaybackDiagnosticCode = PlaybackDiagnosticCode.forPlaybackError(
                         error,
+                        error.errorCode,
                         ResolvedSourceRefreshPolicy.isManifest(failedRequestUri(error))
                 );
-                Log.i(PLAYBACK_HEALTH_TAG, "diagnostic code=" + lastPlaybackDiagnosticCode);
+                Log.i(PLAYBACK_HEALTH_TAG, "diagnostic code=" + lastPlaybackDiagnosticCode
+                        + " media3=" + error.errorCode);
                 setStatus("ERROR", R.color.red);
                 codecInfo.setText(shortMessage(error));
                 overlayAwaitingPlayback = true;

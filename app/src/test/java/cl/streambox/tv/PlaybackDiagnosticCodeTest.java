@@ -1,5 +1,7 @@
 package cl.streambox.tv;
 
+import androidx.media3.common.PlaybackException;
+
 import org.junit.Test;
 
 import java.io.IOException;
@@ -17,7 +19,30 @@ public final class PlaybackDiagnosticCodeTest {
     @Test
     public void keepsPlaybackTimeoutAtTheHlsStage() {
         assertEquals(3005408,
-                PlaybackDiagnosticCode.forPlaybackError(new SocketTimeoutException(), false));
+                PlaybackDiagnosticCode.forPlaybackError(
+                        new SocketTimeoutException(),
+                        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+                        false
+                ));
+    }
+
+    @Test
+    public void classifiesMedia3NetworkAndFormatErrors() {
+        assertEquals(3005002, PlaybackDiagnosticCode.forPlaybackError(
+                new IllegalStateException(),
+                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+                false
+        ));
+        assertEquals(4007001, PlaybackDiagnosticCode.forPlaybackError(
+                new IllegalStateException(),
+                PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+                false
+        ));
+        assertEquals(4006001, PlaybackDiagnosticCode.forPlaybackError(
+                new IllegalStateException(),
+                PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+                false
+        ));
     }
 
     @Test
