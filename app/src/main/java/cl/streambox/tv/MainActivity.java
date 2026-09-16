@@ -182,7 +182,7 @@ public final class MainActivity extends Activity {
     private boolean playbackAutoRecoveryInFlight;
     private boolean playbackFullRecoveryUsed;
     private boolean playbackRecoveryFailed;
-    private int lastPlaybackDiagnosticCode;
+    private long lastPlaybackDiagnosticCode;
     private Future<?> playbackResolutionTask;
     private ResolutionContext playbackResolutionContext;
     private Future<?> sourceCandidateTask;
@@ -1456,7 +1456,7 @@ public final class MainActivity extends Activity {
         playbackLoadingSinceElapsedRealtime = nowMs;
 
         Channel channel = playbackChannel;
-        int diagnosticCodeBeforeRecovery = lastPlaybackDiagnosticCode;
+        long diagnosticCodeBeforeRecovery = lastPlaybackDiagnosticCode;
         String identity = PlaybackPreferences.channelIdentity(channel);
         int targetIndex = findChannelIndexByIdentity(channels, identity);
         setStatus("RECONECTANDO", R.color.amber);

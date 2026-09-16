@@ -46,6 +46,19 @@ public final class PlaybackDiagnosticCodeTest {
     }
 
     @Test
+    public void preservesUnknownMedia3CodeAndRootCauseFamily() {
+        long expected = 40L * 100_000_000L
+                + 5L * 1_000_000L
+                + Math.min(PlaybackException.ERROR_CODE_UNSPECIFIED, 9_999L) * 100L
+                + 8L;
+        assertEquals(expected, PlaybackDiagnosticCode.forPlaybackError(
+                new IllegalStateException(),
+                PlaybackException.ERROR_CODE_UNSPECIFIED,
+                false
+        ));
+    }
+
+    @Test
     public void separatesWatchdogReasons() {
         assertEquals(5009001, PlaybackDiagnosticCode.forWatchdog("vídeo detenido"));
         assertEquals(5009002, PlaybackDiagnosticCode.forWatchdog("carga prolongada"));

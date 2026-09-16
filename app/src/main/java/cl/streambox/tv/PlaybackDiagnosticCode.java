@@ -25,11 +25,11 @@ final class PlaybackDiagnosticCode {
     private PlaybackDiagnosticCode() {
     }
 
-    static int forPlaybackError(Throwable error, boolean manifestRequest) {
-        return forPlaybackError(error, PlaybackException.ERROR_CODE_UNSPECIFIED, manifestRequest);
+    static long forPlaybackError(Throwable error, boolean manifestRequest) {
+        return forPlaybackError(error, -1, manifestRequest);
     }
 
-    static int forPlaybackError(
+    static long forPlaybackError(
             Throwable error,
             int media3ErrorCode,
             boolean manifestRequest
@@ -38,7 +38,7 @@ final class PlaybackDiagnosticCode {
         if (responseCode >= 100 && responseCode <= 999) {
             return encode(SUBSYSTEM_HLS, manifestRequest ? 4 : 5, responseCode);
         }
-        int media3Code = forMedia3Error(media3ErrorCode, manifestRequest);
+        long media3Code = forMedia3Error(media3ErrorCode, manifestRequest);
         if (media3Code > 0) return media3Code;
         if (containsType(error, "DecoderInitializationException")) {
             return encode(SUBSYSTEM_MEDIA3, 6, 1);
@@ -56,10 +56,17 @@ final class PlaybackDiagnosticCode {
         if (containsType(error, "EOFException")) {
             return encode(SUBSYSTEM_HLS, manifestRequest ? 4 : 5, 499);
         }
+        if (media3ErrorCode > 0) {
+            return encodeUnknownMedia3Error(
+                    manifestRequest ? 4 : 5,
+                    media3ErrorCode,
+                    error
+            );
+        }
         return encode(SUBSYSTEM_MEDIA3, manifestRequest ? 4 : 5, 1);
     }
 
-    private static int forMedia3Error(int errorCode, boolean manifestRequest) {
+    private static long forMedia3Error(int errorCode, boolean manifestRequest) {
         int hlsStage = manifestRequest ? 4 : 5;
         if (errorCode == PlaybackException.ERROR_CODE_TIMEOUT
                 || errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT) {
@@ -113,7 +120,7 @@ final class PlaybackDiagnosticCode {
         return 0;
     }
 
-    static int forResolverFailure(Throwable error) {
+    static long forResolverFailure(Throwable error) {
         int responseCode = httpResponseCode(error);
         if (responseCode >= 100 && responseCode <= 999) {
             return encode(SUBSYSTEM_RESOLVER, 2, responseCode);
@@ -132,7 +139,7 @@ final class PlaybackDiagnosticCode {
         return encode(SUBSYSTEM_RESOLVER, 9, 1);
     }
 
-    static int forWatchdog(String reason) {
+    static long forWatchdog(String reason) {
         String normalized = reason == null ? "" : reason.toLowerCase(Locale.ROOT);
         if (normalized.contains("carga")) {
             return encode(SUBSYSTEM_RECOVERY, 9, 2);
@@ -143,20 +150,55 @@ final class PlaybackDiagnosticCode {
         return encode(SUBSYSTEM_RECOVERY, 9, 1);
     }
 
-    static int recoveryExhausted() {
+    static long recoveryExhausted() {
         return encode(SUBSYSTEM_RECOVERY, 10, 1);
     }
 
-    static int resourceFailure() {
+    static long resourceFailure() {
         return encode(SUBSYSTEM_RESOURCES, 8, 1);
     }
 
-    static String display(int code) {
+    static String display(long code) {
         return code <= 0 ? "" : String.valueOf(code);
     }
 
-    private static int encode(int subsystem, int stage, int cause) {
-        return subsystem * 100_000 + stage * 1_000 + Math.max(0, Math.min(cause, 999));
+    private static long encode(int subsystem, int stage, int cause) {
+        return subsystem * 100_000L + stage * 1_000L + Math.max(0, Math.min(cause, 999));
+    }
+
+    /**
+     * Extended fallback: PP SS EEEE RR. It preserves the raw Media3 error
+     * code and a stable root-cause family when the error is not in the known
+     * mapping above. It intentionally uses long because the value can exceed
+     * the signed 32-bit integer range.
+     */
+    private static long encodeUnknownMedia3Error(
+            int stage,
+            int media3ErrorCode,
+            Throwable error
+    ) {
+        long rawCode = Math.max(0L, Math.min(media3ErrorCode, 9_999L));
+        return 40L * 100_000_000L
+                + stage * 1_000_000L
+                + rawCode * 100L
+                + rootCauseFamily(error);
+    }
+
+    private static int rootCauseFamily(Throwable error) {
+        Throwable current = error;
+        for (int depth = 0; current != null && depth < 20; depth++, current = current.getCause()) {
+            String type = current.getClass().getName();
+            if (type.contains("SocketTimeout") || type.contains("Timeout")) return 3;
+            if (type.contains("EOFException")) return 2;
+            if (type.contains("ParserException")) return 4;
+            if (type.contains("HttpDataSource")) return 5;
+            if (type.contains("Decoder") || type.contains("MediaCodec")) return 6;
+            if (type.contains("AudioTrack")) return 7;
+            if (type.contains("IllegalStateException")) return 8;
+            if (type.contains("PlaybackException")) return 9;
+            if (type.contains("IOException")) return 1;
+        }
+        return 99;
     }
 
     private static boolean isTimeout(Throwable error) {
