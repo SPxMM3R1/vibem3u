@@ -13,7 +13,10 @@ import java.util.Locale;
 public final class HighflyStreamResolver implements StreamResolver {
     private static final String DEFAULT_TEMPLATE =
             "https://papacito.cfd/m3u/{id}/live.m3u8";
-    private static final String PLAYBACK_USER_AGENT = "VAVOO/2.6";
+    // Highfly is independent from VAVOO. Use the existing normal browser
+    // identity used by the official-provider resolvers; VAVOO/2.6 is reserved
+    // for TvVoo/Vavoo playback only.
+    private static final String PLAYBACK_USER_AGENT = TokenHttpClient.BROWSER_USER_AGENT;
     private static final long DEFAULT_RESOLUTION_BUDGET_MILLIS = 12_000L;
 
     private final ResolverDefinition definition;

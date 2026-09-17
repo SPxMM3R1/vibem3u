@@ -1692,7 +1692,9 @@ public final class MainActivity extends Activity {
                 : source.getUserAgent();
         OkHttpDataSource.Factory dataSourceFactory =
                 new OkHttpDataSource.Factory(SharedHttpClient.get()).setUserAgent(userAgent);
-        Map<String, String> headers = source.getRequestHeaders();
+        Map<String, String> headers = PlaybackRequestHeaders.withoutUserAgent(
+                source.getRequestHeaders()
+        );
         if (!headers.isEmpty()) {
             dataSourceFactory.setDefaultRequestProperties(headers);
         }
