@@ -122,21 +122,29 @@ public final class SettingsActivity extends Activity {
     private final List<Button> qualityOptionButtons = new ArrayList<>();
     private final List<Button> qualityFocusButtons = new ArrayList<>();
     /**
-     * Seeds only a completely unconfigured installation. Once the user has
-     * saved or configured either playlist, their choice remains authoritative,
-     * including an intentionally disabled or empty Lista 1.
+     * Seeds a completely unconfigured installation and fills only a missing
+     * Lista 2 URL. Existing playlist choices remain authoritative, including
+     * an intentionally disabled or empty source.
      */
     public static void ensureDefaultPlaylistConfigured(Context context) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         removeObsoleteHighflyCredentialState(prefs);
         removeObsoleteHighflyKeyMaterial();
-        if (prefs.contains(KEY_PLAYLIST_URL)
+        boolean hasPlaylistPreferences = prefs.contains(KEY_PLAYLIST_URL)
                 || prefs.contains(KEY_PLAYLIST_URL_2)
                 || prefs.contains(KEY_PLAYLIST_ENABLED)
-                || prefs.contains(KEY_PLAYLIST_ENABLED_2)) {
+                || prefs.contains(KEY_PLAYLIST_ENABLED_2);
+        SharedPreferences.Editor editor = null;
+        if (!prefs.contains(KEY_PLAYLIST_URL_2)) {
+            editor = prefs.edit()
+                    .putString(KEY_PLAYLIST_URL_2, DEFAULT_PLAYLIST_URL_2);
+        }
+        if (hasPlaylistPreferences) {
+            if (editor != null) editor.apply();
             return;
         }
-        prefs.edit()
+        if (editor == null) editor = prefs.edit();
+        editor
                 .putString(KEY_PLAYLIST_URL, DEFAULT_PLAYLIST_URL)
                 .putBoolean(KEY_PLAYLIST_ENABLED, true)
                 .apply();

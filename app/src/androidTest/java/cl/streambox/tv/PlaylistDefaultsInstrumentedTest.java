@@ -16,7 +16,7 @@ import static org.junit.Assert.assertTrue;
 @RunWith(AndroidJUnit4.class)
 public final class PlaylistDefaultsInstrumentedTest {
     @Test
-    public void unconfiguredPreferencesSeedEnabledListOneOnly() {
+    public void unconfiguredPreferencesSeedListTwoWithoutEnablingIt() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         SharedPreferences preferences = context.getSharedPreferences(
                 SettingsActivity.PREFS,
@@ -39,7 +39,10 @@ public final class PlaylistDefaultsInstrumentedTest {
             );
             assertTrue(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED, false));
             assertFalse(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, false));
-            assertEquals("", preferences.getString(SettingsActivity.KEY_PLAYLIST_URL_2, ""));
+            assertEquals(
+                    SettingsActivity.DEFAULT_PLAYLIST_URL_2,
+                    preferences.getString(SettingsActivity.KEY_PLAYLIST_URL_2, "")
+            );
         } finally {
             snapshot.restore(preferences);
         }
@@ -65,6 +68,11 @@ public final class PlaylistDefaultsInstrumentedTest {
 
             assertEquals("", preferences.getString(SettingsActivity.KEY_PLAYLIST_URL, ""));
             assertFalse(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED, true));
+            assertEquals(
+                    SettingsActivity.DEFAULT_PLAYLIST_URL_2,
+                    preferences.getString(SettingsActivity.KEY_PLAYLIST_URL_2, "")
+            );
+            assertFalse(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, true));
         } finally {
             snapshot.restore(preferences);
         }
