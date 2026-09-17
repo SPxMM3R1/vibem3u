@@ -5,6 +5,12 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
+    <!-- Opaque full-bleed base: the round icon must not expose transparent
+         corners on launchers that do not apply their own circular mask. -->
+    <path
+        android:fillColor="#081018"
+        android:pathData="M0,0h108v108H0z" />
+
     <!-- Full-bleed dark circle for launchers that honor android:roundIcon. -->
     <path
         android:fillColor="#081018"
