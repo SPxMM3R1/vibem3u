@@ -19,7 +19,7 @@ public final class ResolverCatalogTest {
         ResolverCatalog catalog = ResolverCatalog.parse(catalogJson());
         Channel channel = channel(
                 "0104",
-                "https://leaf.highfly.dev/m3u/test/live.m3u8",
+                "https://papacito.cfd/m3u/test/live.m3u8",
                 attributes("x-resolver", "tvvoo")
         );
 
@@ -37,7 +37,7 @@ public final class ResolverCatalogTest {
                 "Sport.uk@TvVoo", "https://example.org/sport.m3u8", attributes()
         )).getId());
         assertEquals("highfly", catalog.find(channel(
-                "direct", "https://leaf.highfly.dev/m3u/test/live.m3u8", attributes()
+                "direct", "https://papacito.cfd/m3u/test/live.m3u8", attributes()
         )).getId());
         assertNull(catalog.find(channel(
                 "direct", "https://example.org/direct.m3u8", attributes()
@@ -69,7 +69,7 @@ public final class ResolverCatalogTest {
         ResolverCatalog catalog = ResolverCatalog.parse(catalogJson());
         assertNull(catalog.find(channel(
                 "0104",
-                "https://leaf.highfly.dev/m3u/test/live.m3u8",
+                "https://papacito.cfd/m3u/test/live.m3u8",
                 attributes("x-resolver", "unknown")
         )));
     }
@@ -250,9 +250,9 @@ public final class ResolverCatalogTest {
                 + "\"match\":{\"tvgIdSuffixes\":[\"@TvVoo\"]},"
                 + "\"config\":{\"endpointBase\":\"https://tvvoo.hayd.uk/stream/tv\"}},"
                 + "{\"id\":\"highfly\",\"name\":\"Highfly\",\"engine\":\"highfly\","
-                + "\"match\":{\"hosts\":[\"leaf.highfly.dev\"]},"
+                + "\"match\":{\"hosts\":[\"papacito.cfd\"]},"
                 + "\"config\":{\"directTemplate\":"
-                + "\"https://leaf.highfly.dev/m3u/{id}/live.m3u8\"}}]}";
+                + "\"https://papacito.cfd/m3u/{id}/live.m3u8\"}}]}";
     }
 
     private static String catalogWithAliases(int channelCount, int aliasesPerChannel) {

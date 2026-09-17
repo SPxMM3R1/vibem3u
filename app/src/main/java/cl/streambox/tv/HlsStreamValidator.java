@@ -270,9 +270,21 @@ public final class HlsStreamValidator {
         );
         check(context);
         PublicStreamPolicy.requirePublicHttp(response.getFinalUri());
-        // The Mega adapter's numeric representation is decoded before this
-        // handoff is captured, so Media3 receives ordinary #EXTM3U bytes.
-        byte[] playlistBody = MeganoticiasHlsDecoder.decodeIfNeeded(response.getBody());
+        // Only the providers that document this transport encoding may be
+        // decoded. Treating arbitrary numeric responses as HLS would hide a
+        // provider error and could make an unrelated source look valid.
+        String responseHost = response.getFinalUri() == null
+                ? ""
+                : response.getFinalUri().getHost();
+        byte[] playlistBody;
+        if ("papacito.cfd".equalsIgnoreCase(responseHost)) {
+            playlistBody = HighflyHlsDecoder.decodeIfNeeded(response.getBody());
+        } else if ("mdstrm.com".equalsIgnoreCase(responseHost)
+                || "cdn1tlinkgo.tlink.cl".equalsIgnoreCase(responseHost)) {
+            playlistBody = MeganoticiasHlsDecoder.decodeIfNeeded(response.getBody());
+        } else {
+            playlistBody = response.getBody();
+        }
         String content = new String(playlistBody, StandardCharsets.UTF_8)
                 .replace("\uFEFF", "")
                 .trim();

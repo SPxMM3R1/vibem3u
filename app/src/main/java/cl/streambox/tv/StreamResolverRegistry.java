@@ -102,18 +102,11 @@ public final class StreamResolverRegistry {
             case "tvn" -> new TvnStreamResolver(definition);
             case "meganoticias" -> new MeganoticiasStreamResolver(definition);
             case "tvvoo" -> new TvVooStreamResolver(
-                    definition,
-                    preferences.getTvVooResolutionMode()
+                    definition
             );
             case "highfly" -> new HighflyStreamResolver(
                     definition
             );
-            case "vavoo" -> {
-                if (!BuildConfig.ENABLE_EXPERIMENTAL_VAVOO) {
-                    throw new IllegalArgumentException("Motor Vavoo no disponible.");
-                }
-                yield new VavooStreamResolver(definition);
-            }
             default -> throw new IllegalArgumentException("Motor de resolutor desconocido.");
         };
     }

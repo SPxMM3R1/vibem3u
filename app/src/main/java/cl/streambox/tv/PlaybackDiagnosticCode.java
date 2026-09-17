@@ -63,7 +63,10 @@ final class PlaybackDiagnosticCode {
                     error
             );
         }
-        return encode(SUBSYSTEM_MEDIA3, manifestRequest ? 4 : 5, 1);
+        return encodeUnknownPlaybackFailure(
+                manifestRequest ? 4 : 5,
+                error
+        );
     }
 
     private static long forMedia3Error(int errorCode, boolean manifestRequest) {
@@ -136,11 +139,23 @@ final class PlaybackDiagnosticCode {
         if (error instanceof UnknownHostException || containsType(error, "ConnectException")) {
             return encode(SUBSYSTEM_RESOLVER, 2, 0);
         }
-        return encode(SUBSYSTEM_RESOLVER, 9, 1);
+        return encodeUnknownResolverFailure(error);
     }
 
     static long forWatchdog(String reason) {
         String normalized = reason == null ? "" : reason.toLowerCase(Locale.ROOT);
+        if (normalized.contains("audio y vídeo") || normalized.contains("audio y video")) {
+            return encode(SUBSYSTEM_RECOVERY, 9, 3);
+        }
+        if (normalized.contains("decoder")) {
+            return encode(SUBSYSTEM_RECOVERY, 9, 5);
+        }
+        if (normalized.contains("audio detenido")) {
+            return encode(SUBSYSTEM_RECOVERY, 9, 4);
+        }
+        if (normalized.contains("playlist") || normalized.contains("segmento")) {
+            return encode(SUBSYSTEM_HLS, 9, 1);
+        }
         if (normalized.contains("carga")) {
             return encode(SUBSYSTEM_RECOVERY, 9, 2);
         }
@@ -181,6 +196,18 @@ final class PlaybackDiagnosticCode {
         return 40L * 100_000_000L
                 + stage * 1_000_000L
                 + rawCode * 100L
+                + rootCauseFamily(error);
+    }
+
+    private static long encodeUnknownPlaybackFailure(int stage, Throwable error) {
+        return 40L * 100_000_000L
+                + stage * 1_000_000L
+                + rootCauseFamily(error);
+    }
+
+    private static long encodeUnknownResolverFailure(Throwable error) {
+        return 20L * 100_000_000L
+                + 9L * 1_000_000L
                 + rootCauseFamily(error);
     }
 

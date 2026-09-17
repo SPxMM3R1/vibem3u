@@ -33,13 +33,9 @@ public final class ResolverCatalog {
     private static final int MAX_ALIAS_LENGTH = 240;
     private static final Pattern SAFE_ID = Pattern.compile("[a-z0-9][a-z0-9_-]{0,31}");
     private static final Set<String> ENGINES = setOf(
-            "tvn", "meganoticias", "24horas", "tvvoo", "highfly", "vavoo"
+            "tvn", "meganoticias", "24horas", "tvvoo", "highfly"
     );
-    /**
-     * Engines kept in the parser only so an older remote catalogue can be
-     * accepted and safely filtered instead of disabling all catalogue
-     * updates. They are never exposed to the registry.
-     */
+    /** Retired provider entries are ignored if an old persisted catalogue is encountered. */
     private static final Set<String> RETIRED_ENGINES = setOf("24horas");
     private static final Set<String> RETIRED_PROVIDER_IDS = setOf("24horas");
     private static final Set<String> SAFE_RECIPE_IDS = setOf("bounded-payload-v1");
@@ -144,8 +140,7 @@ public final class ResolverCatalog {
         if (!SAFE_ID.matcher(id).matches()) throw new IOException("ID de resolutor inválido.");
         String displayName = requiredString(object, "name", 64);
         String engine = requiredString(object, "engine", 32).toLowerCase(Locale.ROOT);
-        if (!ENGINES.contains(engine)
-                || ("vavoo".equals(engine) && !BuildConfig.ENABLE_EXPERIMENTAL_VAVOO)) {
+        if (!ENGINES.contains(engine)) {
             throw new IOException("Motor de resolutor desconocido.");
         }
         boolean enabled = object.optBoolean("enabledByDefault", true);
@@ -308,7 +303,7 @@ public final class ResolverCatalog {
 
     private static void validatePattern(String value) throws IOException {
         if (value.length() > 512) throw new IOException("Patrón demasiado largo.");
-        // The remote catalogue is data-only. Disallow constructs most often
+        // The catalogue is data-only. Disallow constructs most often
         // used for catastrophic backtracking or non-local regex behaviour.
         if (value.contains("(?")
                 || value.matches(".*\\\\[1-9].*")
@@ -342,10 +337,7 @@ public final class ResolverCatalog {
                 "tvvoo.hayd.uk", "www.vavoo.tv", "www.vypn.net", "vavoo.to", "kool.to"
         ));
         result.put("highfly", setOf(
-                "sports.highfly.dev", "leaf.highfly.dev", "raw.githubusercontent.com"
-        ));
-        result.put("vavoo", setOf(
-                "www.vavoo.tv", "www.vypn.net", "vavoo.to", "kool.to"
+                "sports.highfly.to", "papacito.cfd", "raw.githubusercontent.com"
         ));
         return Collections.unmodifiableMap(result);
     }

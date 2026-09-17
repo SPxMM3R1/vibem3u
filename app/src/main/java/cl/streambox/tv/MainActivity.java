@@ -82,6 +82,8 @@ public final class MainActivity extends Activity {
     private static final long OVERLAY_TIMEOUT_MS = 4_500;
     private static final long LIGHT_EPG_TIMEOUT_MS = 6_500;
     private static final long PLAYBACK_FREEZE_TIMEOUT_MS = 5_000L;
+    private static final long PLAYBACK_DIAGNOSTIC_STALL_TIMEOUT_NS =
+            PLAYBACK_FREEZE_TIMEOUT_MS * 1_000_000L;
     private static final long PLAYBACK_WATCHDOG_INTERVAL_MS = 1_000L;
     private static final long PLAYBACK_RECOVERY_COOLDOWN_MS = 4_000L;
     private static final long RESOURCE_WARNING_VISIBLE_MS = 3_500L;
@@ -158,6 +160,7 @@ public final class MainActivity extends Activity {
     private int channelIndex;
     private boolean loadFailed;
     private boolean settingsOpen;
+    private boolean restartPlaybackAfterFocusLoss;
     private String resolverSettingsSnapshotBeforeSettings = "";
     private String playlistSourcesSnapshotBeforeSettings = "";
     private boolean refreshAfterSettings;
@@ -1414,7 +1417,10 @@ public final class MainActivity extends Activity {
                     nowMs,
                     PLAYBACK_FREEZE_TIMEOUT_MS
             )) {
-                requestFullPlaybackRecovery("carga prolongada");
+                PlaybackDiagnosticsWorker.Snapshot measurements = playbackBitrateMeter == null
+                        ? PlaybackDiagnosticsWorker.Snapshot.EMPTY
+                        : playbackBitrateMeter.snapshot();
+                requestFullPlaybackRecovery(classifyPlaybackStall(measurements));
             }
             return;
         } else if (state == Player.STATE_READY && renderedFrame) {
@@ -1430,8 +1436,24 @@ public final class MainActivity extends Activity {
         if (measurements.hasRenderedVideoFrame
                 && lastFrameNs != androidx.media3.common.C.TIME_UNSET
                 && nowNs - lastFrameNs >= PLAYBACK_FREEZE_TIMEOUT_MS * 1_000_000L) {
-            requestFullPlaybackRecovery("vídeo detenido");
+            requestFullPlaybackRecovery(classifyPlaybackStall(measurements));
         }
+    }
+
+    private String classifyPlaybackStall(PlaybackDiagnosticsWorker.Snapshot measurements) {
+        long nowNs = System.nanoTime();
+        boolean mediaStopped = measurements.lastMediaLoadRealtimeNs <= 0L
+                || nowNs - measurements.lastMediaLoadRealtimeNs
+                >= PLAYBACK_DIAGNOSTIC_STALL_TIMEOUT_NS;
+        boolean audioUnderrun = measurements.lastAudioUnderrunRealtimeNs > 0L
+                && nowNs - measurements.lastAudioUnderrunRealtimeNs
+                < PLAYBACK_DIAGNOSTIC_STALL_TIMEOUT_NS;
+        long bufferedMs = player == null ? 0L : Math.max(0L, player.getTotalBufferedDuration());
+
+        if (mediaStopped && bufferedMs <= 500L) return "audio y vídeo detenidos";
+        if (audioUnderrun && bufferedMs <= 500L) return "audio detenido";
+        if (!mediaStopped || bufferedMs > 500L) return "decoder detenido";
+        return "vídeo detenido";
     }
 
     /** Performs one bounded full player restart for the current playback episode. */
@@ -1684,6 +1706,11 @@ public final class MainActivity extends Activity {
                     playbackDataSourceFactory
             );
         }
+        if ("highfly".equalsIgnoreCase(source.getResolverId())) {
+            playbackDataSourceFactory = new HighflyPlaylistDataSource.Factory(
+                    playbackDataSourceFactory
+            );
+        }
         return new DefaultMediaSourceFactory(playbackDataSourceFactory)
                 .setLoadErrorHandlingPolicy(new PlaybackLoadErrorPolicy(source.isDynamicallyResolved()))
                 .createMediaSource(mediaItemFor(channel, source.getPlaybackUri()).buildUpon()
@@ -1730,6 +1757,37 @@ public final class MainActivity extends Activity {
             return;
         }
         player.play();
+    }
+
+    /** Stops the active session when the activity is no longer visible. */
+    private void stopPlaybackForFocusLoss() {
+        boolean hasPlaybackSession = playbackChannel != null
+                || currentPlaybackSource != null
+                || (player != null && player.getCurrentMediaItem() != null);
+        if (!hasPlaybackSession) return;
+        restartPlaybackAfterFocusLoss = true;
+        cancelPlaybackResolution();
+        resolverCoordinator.clear();
+        playbackGeneration++;
+        playbackHasStarted = false;
+        playbackLoadingSinceElapsedRealtime = -1L;
+        playbackAutoRecoveryInFlight = false;
+        playbackRecoveryFailed = false;
+        playbackFullRecoveryUsed = false;
+        discardCurrentPlaybackSource();
+        playbackChannel = null;
+        if (player != null) {
+            player.stop();
+            player.clearMediaItems();
+        }
+    }
+
+    /** Reopens the previously selected channel with a fresh source/session. */
+    private void restartCurrentPlaybackAfterFocusLoss() {
+        if (resourcesReleased || settingsOpen || channels.isEmpty()) return;
+        int safeIndex = Math.max(0, Math.min(channelIndex, channels.size() - 1));
+        if (player == null) createPlayer();
+        playChannel(safeIndex, false);
     }
 
     private static MediaItem mediaItemFor(Channel channel, URI playbackUri) {
@@ -3022,10 +3080,6 @@ public final class MainActivity extends Activity {
         StringBuilder snapshot = new StringBuilder(
                 streamResolverRegistry.getCatalogVersion()
         );
-        if (resolverPreferences != null) {
-            snapshot.append("|tvvoo=")
-                    .append(resolverPreferences.getTvVooResolutionMode());
-        }
         for (ResolverDefinition definition : streamResolverRegistry.getDefinitions()) {
             snapshot.append('|')
                     .append(definition.getId())
@@ -3151,6 +3205,15 @@ public final class MainActivity extends Activity {
     @Override
     protected void onStart() {
         super.onStart();
+        if (restartPlaybackAfterFocusLoss) {
+            restartPlaybackAfterFocusLoss = false;
+            if (channels.isEmpty()) {
+                refreshPlaylists(getPlaylistSources());
+            } else {
+                restartCurrentPlaybackAfterFocusLoss();
+            }
+            return;
+        }
         if (!settingsOpen && !refreshAfterSettings) {
             List<PlaylistSource> sources = getPlaylistSources();
             if (sources.isEmpty()) {
@@ -3193,20 +3256,17 @@ public final class MainActivity extends Activity {
         mainHandler.removeCallbacks(hideLightEpg);
         hideLightEpg.run();
         if (!settingsOpen) {
-            if (playbackChannel != null && streamResolverRegistry.find(playbackChannel) != null) {
-                // Leaving the activity ends this resolver session. Resuming it
-                // will obtain a new token instead of reviving a stale MediaItem.
-                cancelPlaybackResolution();
-                discardCurrentPlaybackSource();
-                if (player != null) {
-                    player.stop();
-                    player.clearMediaItems();
-                }
-            } else if (player != null) {
-                player.pause();
-            }
+            stopPlaybackForFocusLoss();
         }
         super.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        if (!settingsOpen && !isFinishing() && !resourcesReleased) {
+            stopPlaybackForFocusLoss();
+        }
+        super.onStop();
     }
 
     @Override

@@ -20,8 +20,6 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
@@ -100,13 +98,7 @@ public final class SettingsActivity extends Activity {
     private Switch subtitlesSwitch;
     private TextView subtitlesStatus;
     private TextView resolverCatalogVersion;
-    private Button resolverUpdateButton;
-    private TextView resolverUpdateStatus;
     private LinearLayout resolverGroupsContainer;
-    private RadioGroup tvVooResolutionModeGroup;
-    private RadioButton tvVooModeBoth;
-    private RadioButton tvVooModeDirect;
-    private RadioButton tvVooModeExternal;
     private ResolverCatalogRepository resolverCatalogRepository;
     private ResolverPreferences resolverPreferences;
     private ResolverCatalog resolverCatalog;
@@ -225,13 +217,7 @@ public final class SettingsActivity extends Activity {
         subtitlesSwitch = findViewById(R.id.settings_subtitles_switch);
         subtitlesStatus = findViewById(R.id.settings_subtitles_status);
         resolverCatalogVersion = findViewById(R.id.resolver_catalog_version);
-        resolverUpdateButton = findViewById(R.id.update_resolvers_button);
-        resolverUpdateStatus = findViewById(R.id.resolver_update_status);
         resolverGroupsContainer = findViewById(R.id.resolver_groups_container);
-        tvVooResolutionModeGroup = findViewById(R.id.tvvoo_resolution_mode_group);
-        tvVooModeBoth = findViewById(R.id.tvvoo_mode_both);
-        tvVooModeDirect = findViewById(R.id.tvvoo_mode_direct);
-        tvVooModeExternal = findViewById(R.id.tvvoo_mode_external);
         tabs = new TextView[]{
                 findViewById(R.id.tab_general),
                 findViewById(R.id.tab_playback),
@@ -252,7 +238,6 @@ public final class SettingsActivity extends Activity {
         appUpdater = new AppUpdater(this, updateExecutor, mainHandler);
         resolverCatalogRepository = new ResolverCatalogRepository(this);
         resolverPreferences = new ResolverPreferences(this);
-        initializeTvVooResolutionMode();
         urlInput.setText(existingUrl);
         urlInput.setSelection(urlInput.length());
         urlInput2.setText(existingUrl2 == null ? "" : existingUrl2);
@@ -281,7 +266,6 @@ public final class SettingsActivity extends Activity {
             updateStatus.setText(R.string.experimental_updates_disabled);
             updateStatus.setVisibility(View.VISIBLE);
         }
-        resolverUpdateButton.setOnClickListener(v -> checkResolverUpdates());
         for (int index = 0; index < tabs.length; index++) {
             final int tabIndex = index;
             tabs[index].setOnClickListener(v -> showTab(tabIndex, true));
@@ -306,7 +290,7 @@ public final class SettingsActivity extends Activity {
         int defaultTab = hasExistingUrl ? TAB_GENERAL : TAB_SOURCE;
         int initialTab = getIntent().getIntExtra(EXTRA_INITIAL_TAB, defaultTab);
         showTab(initialTab, false);
-        firstFocusForTab(selectedTabIndex).requestFocus();
+        tabs[selectedTabIndex].requestFocus();
     }
 
     private void initializeCurrentChannelOptions(Intent intent) {
@@ -497,10 +481,7 @@ public final class SettingsActivity extends Activity {
             tabs[index].setTextColor(getColor(selected ? R.color.black : R.color.white));
             tabPages[index].setVisibility(selected ? View.VISIBLE : View.GONE);
         }
-        if (requestFocus) {
-            View focusTarget = firstFocusForTab(safeIndex);
-            focusTarget.requestFocus();
-        }
+        if (requestFocus) tabs[safeIndex].requestFocus();
     }
 
     private View firstFocusForTab(int tabIndex) {
@@ -510,7 +491,9 @@ public final class SettingsActivity extends Activity {
             case 2:
                 return playlistOneEnabled;
             case 3:
-                return resolverUpdateButton;
+                return resolverGroupSwitches.isEmpty()
+                        ? tabs[TAB_RESOLVERS]
+                        : resolverGroupSwitches.values().iterator().next();
             case 4:
                 return findViewById(R.id.interface_info);
             case 5:
@@ -543,29 +526,10 @@ public final class SettingsActivity extends Activity {
                     R.string.resolver_catalog_version,
                     AppStrings.isBlank(fallbackVersion) ? getString(R.string.unknown_version) : fallbackVersion
             ));
-            resolverUpdateStatus.setText(R.string.resolver_catalog_load_error);
-            resolverUpdateStatus.setVisibility(View.VISIBLE);
+            // The catalogue is bundled with the APK. A parse failure is
+            // reported by the version label; there is no remote resolver
+            // update path to fall back to.
         }
-    }
-
-    private void initializeTvVooResolutionMode() {
-        int checkedId = switch (resolverPreferences.getTvVooResolutionMode()) {
-            case DIRECT_ONLY -> R.id.tvvoo_mode_direct;
-            case EXTERNAL_ONLY -> R.id.tvvoo_mode_external;
-            default -> R.id.tvvoo_mode_both;
-        };
-        tvVooResolutionModeGroup.check(checkedId);
-    }
-
-    private TvVooResolutionMode selectedTvVooResolutionMode() {
-        int checkedId = tvVooResolutionModeGroup.getCheckedRadioButtonId();
-        if (checkedId == R.id.tvvoo_mode_direct) {
-            return TvVooResolutionMode.DIRECT_ONLY;
-        }
-        if (checkedId == R.id.tvvoo_mode_external) {
-            return TvVooResolutionMode.EXTERNAL_ONLY;
-        }
-        return TvVooResolutionMode.BOTH;
     }
 
     private void renderResolverOptions() {
@@ -577,8 +541,7 @@ public final class SettingsActivity extends Activity {
         resolverGroupsContainer.removeAllViews();
         resolverGroupSwitches.clear();
 
-        resolverUpdateButton.setNextFocusDownId(tvVooModeBoth.getId());
-        View previous = tvVooModeExternal;
+        View previous = tabs[TAB_RESOLVERS];
         for (ResolverDefinition definition : resolverCatalog.getProviders()) {
             Switch groupSwitch = createResolverGroupSwitch(definition);
             resolverGroupsContainer.addView(groupSwitch);
@@ -629,34 +592,6 @@ public final class SettingsActivity extends Activity {
         groupSwitch.setChecked(resolverPreferences.isEnabled(definition));
         groupSwitch.setThumbTintList(getColorStateList(R.color.cyan));
         return groupSwitch;
-    }
-
-    private void checkResolverUpdates() {
-        resolverUpdateButton.setEnabled(false);
-        resolverUpdateStatus.setText(R.string.resolver_update_checking);
-        resolverUpdateStatus.setVisibility(View.VISIBLE);
-        updateExecutor.submit(() -> {
-            try {
-                ResolverCatalogRepository.UpdateResult update =
-                        resolverCatalogRepository.downloadAndInstall();
-                mainHandler.post(() -> {
-                    resolverUpdateButton.setEnabled(true);
-                    resolverCatalog = update.getCatalog();
-                    renderResolverOptions();
-                    resolverUpdateStatus.setText(update.isChanged()
-                            ? getString(
-                                    R.string.resolver_update_installed,
-                                    resolverCatalog.getVersion()
-                            )
-                            : getString(R.string.resolver_update_up_to_date));
-                });
-            } catch (Exception error) {
-                mainHandler.post(() -> {
-                    resolverUpdateButton.setEnabled(true);
-                    resolverUpdateStatus.setText(R.string.resolver_update_error);
-                });
-            }
-        });
     }
 
     private void moveTabFromRemote(int delta) {
@@ -806,7 +741,6 @@ public final class SettingsActivity extends Activity {
                 resolverPreferences.setEnabled(definition, entry.getValue().isChecked());
             }
         }
-        resolverPreferences.setTvVooResolutionMode(selectedTvVooResolutionMode());
         Intent result = new Intent()
                 .putExtra(KEY_PLAYLIST_URL, value)
                 .putExtra(KEY_PLAYLIST_URL_2, value2)

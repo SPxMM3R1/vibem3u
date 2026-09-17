@@ -62,11 +62,15 @@ public final class PlaybackDiagnosticCodeTest {
     public void separatesWatchdogReasons() {
         assertEquals(5009001, PlaybackDiagnosticCode.forWatchdog("vídeo detenido"));
         assertEquals(5009002, PlaybackDiagnosticCode.forWatchdog("carga prolongada"));
+        assertEquals(5009003, PlaybackDiagnosticCode.forWatchdog("audio y vídeo detenidos"));
+        assertEquals(5009004, PlaybackDiagnosticCode.forWatchdog("audio detenido"));
+        assertEquals(5009005, PlaybackDiagnosticCode.forWatchdog("decoder detenido"));
+        assertEquals(3009001, PlaybackDiagnosticCode.forWatchdog("playlist sin avance"));
     }
 
     @Test
     public void genericErrorsRemainNumericAndStable() {
-        assertEquals("4005001", PlaybackDiagnosticCode.display(
+        assertEquals("4005000001", PlaybackDiagnosticCode.display(
                 PlaybackDiagnosticCode.forPlaybackError(new IOException("x"), false)));
         assertEquals("5010001", PlaybackDiagnosticCode.display(
                 PlaybackDiagnosticCode.recoveryExhausted()));

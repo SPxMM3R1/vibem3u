@@ -39,11 +39,11 @@ public final class ResolverPayloadParsersTest {
     public void readsHighflyBySlugWithoutDependingOnOneManifestShape() throws Exception {
         URI uri = ResolverPayloadParsers.parseHighflyManifest(
                 "{\"channels\":[{\"slug\":\"now-sky-sports-f1-free\","
-                        + "\"source\":{\"hls\":\"https://leaf.highfly.dev/m3u/f1/live.m3u8\"}}]}",
+                        + "\"source\":{\"hls\":\"https://papacito.cfd/m3u/f1/live.m3u8\"}}]}",
                 Arrays.asList("now-sky-sports-f1-free", "SkySportsF1.uk")
         );
 
-        assertEquals("https://leaf.highfly.dev/m3u/f1/live.m3u8", uri.toString());
+        assertEquals("https://papacito.cfd/m3u/f1/live.m3u8", uri.toString());
     }
 
     @Test

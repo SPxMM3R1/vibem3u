@@ -47,7 +47,7 @@ final class PlaybackDiagnosticsWorker implements AnalyticsListener, VideoFrameMe
     static final class Snapshot {
         static final Snapshot EMPTY = new Snapshot(
                 0f, 0L, 0L, 0L, false, false, -1L,
-                false, false, 0L
+                false, false, 0L, -1L, -1L, -1L
         );
 
         final float measuredFrameRate;
@@ -61,11 +61,16 @@ final class PlaybackDiagnosticsWorker implements AnalyticsListener, VideoFrameMe
         final boolean audioEnabled;
         final boolean audioPositionAdvancingObserved;
         final long audioUnderrunCount;
+        final long lastMediaLoadRealtimeNs;
+        final long lastAudioAdvanceRealtimeNs;
+        final long lastAudioUnderrunRealtimeNs;
 
         Snapshot(float measuredFrameRate, long videoBitrate, long audioBitrate, long streamBitrate,
                 boolean muxedStream, boolean hasRenderedVideoFrame,
                 long lastRenderedVideoFrameRealtimeNs, boolean audioEnabled,
-                boolean audioPositionAdvancingObserved, long audioUnderrunCount) {
+                boolean audioPositionAdvancingObserved, long audioUnderrunCount,
+                long lastMediaLoadRealtimeNs, long lastAudioAdvanceRealtimeNs,
+                long lastAudioUnderrunRealtimeNs) {
             this.measuredFrameRate = measuredFrameRate;
             this.displayFrameRate = PlaybackBitrateMeter.normalizeFrameRate(measuredFrameRate);
             this.videoBitrate = videoBitrate;
@@ -77,6 +82,9 @@ final class PlaybackDiagnosticsWorker implements AnalyticsListener, VideoFrameMe
             this.audioEnabled = audioEnabled;
             this.audioPositionAdvancingObserved = audioPositionAdvancingObserved;
             this.audioUnderrunCount = audioUnderrunCount;
+            this.lastMediaLoadRealtimeNs = lastMediaLoadRealtimeNs;
+            this.lastAudioAdvanceRealtimeNs = lastAudioAdvanceRealtimeNs;
+            this.lastAudioUnderrunRealtimeNs = lastAudioUnderrunRealtimeNs;
         }
 
         boolean sameValues(Snapshot other) {
@@ -87,7 +95,10 @@ final class PlaybackDiagnosticsWorker implements AnalyticsListener, VideoFrameMe
                     && lastRenderedVideoFrameRealtimeNs == other.lastRenderedVideoFrameRealtimeNs
                     && audioEnabled == other.audioEnabled
                     && audioPositionAdvancingObserved == other.audioPositionAdvancingObserved
-                    && audioUnderrunCount == other.audioUnderrunCount;
+                    && audioUnderrunCount == other.audioUnderrunCount
+                    && lastMediaLoadRealtimeNs == other.lastMediaLoadRealtimeNs
+                    && lastAudioAdvanceRealtimeNs == other.lastAudioAdvanceRealtimeNs
+                    && lastAudioUnderrunRealtimeNs == other.lastAudioUnderrunRealtimeNs;
         }
     }
 
@@ -97,6 +108,9 @@ final class PlaybackDiagnosticsWorker implements AnalyticsListener, VideoFrameMe
         boolean audioEnabled;
         boolean audioPositionAdvancingObserved;
         long audioUnderrunCount;
+        long lastMediaLoadRealtimeNs = -1L;
+        long lastAudioAdvanceRealtimeNs = -1L;
+        long lastAudioUnderrunRealtimeNs = -1L;
         volatile Snapshot snapshot = Snapshot.EMPTY;
         // Only the diagnostics worker accesses notification state.
         Snapshot lastNotified = Snapshot.EMPTY;
@@ -163,7 +177,13 @@ final class PlaybackDiagnosticsWorker implements AnalyticsListener, VideoFrameMe
         long startMs = mediaLoadData.mediaStartTimeMs;
         long endMs = mediaLoadData.mediaEndTimeMs;
         if (startMs == C.TIME_UNSET || endMs == C.TIME_UNSET) return;
-        recordMediaSample(mediaLoadData.trackType, loadEventInfo.bytesLoaded, startMs, endMs);
+        long nowNs = System.nanoTime();
+        submit(current -> {
+            current.lastMediaLoadRealtimeNs = nowNs;
+            current.meter.recordMediaSample(
+                    mediaLoadData.trackType, loadEventInfo.bytesLoaded, startMs, endMs
+            );
+        });
     }
 
     void recordMediaSample(int trackType, long bytes, long startMs, long endMs) {
@@ -188,12 +208,20 @@ final class PlaybackDiagnosticsWorker implements AnalyticsListener, VideoFrameMe
 
     @Override public void onAudioPositionAdvancing(EventTime eventTime,
             long playoutStartSystemTimeMs) {
-        submit(current -> current.audioPositionAdvancingObserved = true);
+        long nowNs = System.nanoTime();
+        submit(current -> {
+            current.audioPositionAdvancingObserved = true;
+            current.lastAudioAdvanceRealtimeNs = nowNs;
+        });
     }
 
     @Override public void onAudioUnderrun(EventTime eventTime, int bufferSize, long bufferSizeMs,
             long elapsedSinceLastFeedMs) {
-        submit(current -> current.audioUnderrunCount++);
+        long nowNs = System.nanoTime();
+        submit(current -> {
+            current.audioUnderrunCount++;
+            current.lastAudioUnderrunRealtimeNs = nowNs;
+        });
     }
 
     @Override public void onVideoFrameProcessingOffset(EventTime eventTime,
@@ -247,7 +275,8 @@ final class PlaybackDiagnosticsWorker implements AnalyticsListener, VideoFrameMe
                 meter.getAudioBitrate(), meter.getStreamBitrate(), meter.isMuxedStream(),
                 meter.hasRenderedVideoFrame(), meter.getLastRenderedVideoFrameRealtimeNs(),
                 expected.audioEnabled, expected.audioPositionAdvancingObserved,
-                expected.audioUnderrunCount);
+                expected.audioUnderrunCount, expected.lastMediaLoadRealtimeNs,
+                expected.lastAudioAdvanceRealtimeNs, expected.lastAudioUnderrunRealtimeNs);
         if (!measured.sameValues(expected.snapshot)) expected.snapshot = measured;
         if (!notificationsEnabled || listener == null || measured.sameValues(expected.lastNotified)) return;
         long nowNs = nanoTime.now();

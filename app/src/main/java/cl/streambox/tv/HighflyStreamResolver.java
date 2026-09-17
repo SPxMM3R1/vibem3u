@@ -2,20 +2,18 @@ package cl.streambox.tv;
 
 import java.io.IOException;
 import java.net.URI;
-import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 
-import javax.net.ssl.SSLHandshakeException;
-import javax.net.ssl.SSLPeerUnverifiedException;
 
 /** Resolves Highfly from a configured manifest or its stable channel slug. */
 public final class HighflyStreamResolver implements StreamResolver {
     private static final String DEFAULT_TEMPLATE =
-            "https://leaf.highfly.dev/m3u/{id}/live.m3u8";
+            "https://papacito.cfd/m3u/{id}/live.m3u8";
+    private static final String PLAYBACK_USER_AGENT = "VAVOO/2.6";
     private static final long DEFAULT_RESOLUTION_BUDGET_MILLIS = 12_000L;
 
     private final ResolverDefinition definition;
@@ -90,10 +88,12 @@ public final class HighflyStreamResolver implements StreamResolver {
         // recovery catalogue and should not add a network round trip to every
         // channel open while the direct source is healthy.
         LinkedHashSet<URI> candidates = new LinkedHashSet<>();
-        String directTemplate = definition.getConfig("directTemplate", DEFAULT_TEMPLATE);
+        String directTemplate = canonicalDirectTemplate(
+                definition.getConfig("directTemplate", DEFAULT_TEMPLATE)
+        );
         candidates.add(URI.create(directTemplate.replace("{id}", encodeSlug(slug))));
         if (channel != null && channel.getStreamUri() != null
-                && "leaf.highfly.dev".equalsIgnoreCase(channel.getStreamUri().getHost())) {
+                && "papacito.cfd".equalsIgnoreCase(channel.getStreamUri().getHost())) {
             candidates.add(channel.getStreamUri());
         }
 
@@ -118,8 +118,8 @@ public final class HighflyStreamResolver implements StreamResolver {
                         getId(),
                         stableSourceId(channel),
                         accepted,
-                        Collections.emptyMap(),
-                        TokenHttpClient.BROWSER_USER_AGENT,
+                        highflyHeaders("*/*"),
+                        PLAYBACK_USER_AGENT,
                         expiresAt()
                 );
             } catch (IOException error) {
@@ -138,7 +138,7 @@ public final class HighflyStreamResolver implements StreamResolver {
                 ));
                 String manifest = httpClient.getText(
                         manifestUri.toString(),
-                        Collections.singletonMap("Accept", "application/json")
+                        highflyHeaders("application/json")
                 );
                 List<String> identifiers = new ArrayList<>();
                 identifiers.add(slug);
@@ -171,8 +171,8 @@ public final class HighflyStreamResolver implements StreamResolver {
                                 getId(),
                                 stableSourceId(channel),
                                 accepted,
-                                Collections.emptyMap(),
-                                TokenHttpClient.BROWSER_USER_AGENT,
+                                highflyHeaders("*/*"),
+                                PLAYBACK_USER_AGENT,
                                 expiresAt()
                         );
                     } catch (IOException error) {
@@ -197,27 +197,14 @@ public final class HighflyStreamResolver implements StreamResolver {
         if (candidate == null || candidate.getHost() == null) {
             throw new IOException("Highfly publicó una URL inválida.");
         }
-        if ("https".equalsIgnoreCase(candidate.getScheme())) {
+        if ("https".equalsIgnoreCase(candidate.getScheme())
+                && "papacito.cfd".equalsIgnoreCase(candidate.getHost())) {
             try {
-                validator.validateForPlayback(candidate, Collections.emptyMap(), listener);
+                validator.validateForPlayback(candidate, highflyHeaders("*/*"), listener);
                 return candidate;
             } catch (IOException error) {
-                if (!definition.getBooleanConfig("allowHttpFallback", false)
-                        || !"leaf.highfly.dev".equalsIgnoreCase(candidate.getHost())
-                        || !isCertificateFailure(error)) throw error;
-                URI fallback = URI.create(candidate.toString().replaceFirst("^https://", "http://"));
-                listener.onProgress(ResolutionProgress.of(
-                        ResolutionStage.SOURCE_CANDIDATE,
-                        "TLS rechazado · probando HTTP " + SafePlaybackText.url(fallback)
-                ));
-                validator.validateForPlayback(fallback, Collections.emptyMap(), listener);
-                return fallback;
+                throw error;
             }
-        }
-        if ("http".equalsIgnoreCase(candidate.getScheme())
-                && "leaf.highfly.dev".equalsIgnoreCase(candidate.getHost())) {
-            validator.validateForPlayback(candidate, Collections.emptyMap(), listener);
-            return candidate;
         }
         throw new IOException("Esquema Highfly no permitido.");
     }
@@ -226,8 +213,7 @@ public final class HighflyStreamResolver implements StreamResolver {
         try {
             URI uri = URI.create(value.trim());
             String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
-            boolean allowedHost = "sports.highfly.dev".equals(host)
-                    || "leaf.highfly.dev".equals(host)
+            boolean allowedHost = "sports.highfly.to".equals(host)
                     || ("raw.githubusercontent.com".equals(host)
                     && uri.getPath().startsWith("/SPxMM3R1/lista-m3u/"));
             if (!"https".equalsIgnoreCase(uri.getScheme()) || !allowedHost) {
@@ -262,16 +248,22 @@ public final class HighflyStreamResolver implements StreamResolver {
         return slug;
     }
 
-    private static boolean isCertificateFailure(Throwable error) {
-        Throwable current = error;
-        int depth = 0;
-        while (current != null && depth++ < 12) {
-            if (current instanceof SSLHandshakeException
-                    || current instanceof SSLPeerUnverifiedException
-                    || current instanceof CertificateException) return true;
-            current = current.getCause();
-        }
-        return false;
+    private static java.util.Map<String, String> highflyHeaders(String accept) {
+        java.util.LinkedHashMap<String, String> headers = new java.util.LinkedHashMap<>();
+        headers.put("User-Agent", PLAYBACK_USER_AGENT);
+        headers.put("Referer", "https://sports.highfly.to/");
+        headers.put("Origin", "https://sports.highfly.to");
+        if (!AppStrings.isBlank(accept)) headers.put("Accept", accept);
+        return Collections.unmodifiableMap(headers);
+    }
+
+    private static String canonicalDirectTemplate(String configured) {
+        if (configured == null || AppStrings.isBlank(configured)) return DEFAULT_TEMPLATE;
+        String value = configured.trim();
+        if (value.startsWith("https://papacito.cfd/m3u/")
+                && value.endsWith("/live.m3u8")
+                && value.contains("{id}")) return value;
+        return DEFAULT_TEMPLATE;
     }
 
     private long expiresAt() {

@@ -14,7 +14,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
@@ -46,25 +45,16 @@ public final class TvVooStreamResolver implements StreamResolver {
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
     private final HlsStreamValidator validator;
+    /** Retained only for binary/source compatibility with old test fixtures;
+     * no production path invokes the retired direct Vavoo engine. */
     private final StreamResolver directFallback;
-    private final TvVooResolutionMode resolutionMode;
 
     public TvVooStreamResolver(ResolverDefinition definition) {
-        this(definition, TvVooResolutionMode.BOTH);
-    }
-
-    public TvVooStreamResolver(
-            ResolverDefinition definition,
-            TvVooResolutionMode resolutionMode
-    ) {
         TokenHttpClient fastClient = new TokenHttpClient(4_000, 6_000);
         this.definition = definition;
         this.httpClient = fastClient;
         this.validator = new HlsStreamValidator(fastClient);
-        this.directFallback = new VavooStreamResolver(definition);
-        this.resolutionMode = resolutionMode == null
-                ? TvVooResolutionMode.BOTH
-                : resolutionMode;
+        this.directFallback = null;
     }
 
     TvVooStreamResolver(
@@ -72,29 +62,10 @@ public final class TvVooStreamResolver implements StreamResolver {
             TokenHttpClient httpClient,
             HlsStreamValidator validator
     ) {
-        this(
-                definition,
-                httpClient,
-                validator,
-                new VavooStreamResolver(definition),
-                TvVooResolutionMode.BOTH
-        );
-    }
-
-    TvVooStreamResolver(
-            ResolverDefinition definition,
-            TokenHttpClient httpClient,
-            HlsStreamValidator validator,
-            StreamResolver directFallback,
-            TvVooResolutionMode resolutionMode
-    ) {
         this.definition = definition;
         this.httpClient = httpClient;
         this.validator = validator;
-        this.directFallback = directFallback;
-        this.resolutionMode = resolutionMode == null
-                ? TvVooResolutionMode.BOTH
-                : resolutionMode;
+        this.directFallback = null;
     }
 
     @Override public String getId() { return definition.getId(); }
@@ -143,13 +114,7 @@ public final class TvVooStreamResolver implements StreamResolver {
             ResolutionProgressListener progress,
             ResolutionDeadline deadline
     ) throws IOException {
-        if (!resolutionMode.usesExternalResolver()) {
-            return resolveDirect(channel, null, progress, deadline);
-        }
-        if (!resolutionMode.usesDirectResolver()) {
-            return resolveExternal(channel, progress, deadline);
-        }
-        return resolveBoth(channel, progress, deadline);
+        return resolveExternal(channel, progress, deadline);
     }
 
     @Override
@@ -181,51 +146,7 @@ public final class TvVooStreamResolver implements StreamResolver {
             ResolutionProgressListener progress,
             ResolutionDeadline deadline
     ) throws IOException {
-        if (!resolutionMode.usesExternalResolver()) {
-            return directPlaybackCandidates(channel, progress);
-        }
-
-        IOException externalError = null;
-        try {
-            List<ResolvedPlaybackCandidate> external = resolveExternalCandidates(
-                    channel,
-                    progress,
-                    deadline
-            );
-            if (!external.isEmpty() || !resolutionMode.usesDirectResolver()) {
-                return external;
-            }
-        } catch (IOException error) {
-            externalError = error;
-        }
-
-        if (resolutionMode.usesDirectResolver()) {
-            try {
-                List<ResolvedPlaybackCandidate> direct = directPlaybackCandidates(
-                        channel,
-                        progress
-                );
-                if (!direct.isEmpty()) return direct;
-            } catch (IOException directError) {
-                if (externalError != null) directError.addSuppressed(externalError);
-                throw directError;
-            }
-        }
-        throw new IOException(
-                "TvVoo no entregó fuentes alternativas reproducibles.",
-                externalError
-        );
-    }
-
-    private List<ResolvedPlaybackCandidate> directPlaybackCandidates(
-            Channel channel,
-            ResolutionProgressListener progress
-    ) throws IOException {
-        List<ResolvedPlaybackCandidate> result = directFallback.resolvePlaybackCandidates(
-                channel,
-                progress
-        );
-        return result == null ? Collections.emptyList() : result;
+        return resolveExternalCandidates(channel, progress, deadline);
     }
 
     private List<ResolvedPlaybackCandidate> resolveExternalCandidates(
@@ -645,7 +566,7 @@ public final class TvVooStreamResolver implements StreamResolver {
             IOException directError
     ) {
         IOException result = new IOException(
-                "TvVoo y Vavoo directo no entregaron una fuente reproducible.",
+                "TvVoo no entregó una fuente reproducible.",
                 directError
         );
         if (externalError != null) result.addSuppressed(externalError);
@@ -916,16 +837,14 @@ public final class TvVooStreamResolver implements StreamResolver {
             return source;
         } catch (IOException directError) {
             if (externalError != null) directError.addSuppressed(externalError);
-            String message = resolutionMode == TvVooResolutionMode.DIRECT_ONLY
-                    ? "Vavoo directo no entregó una fuente reproducible."
-                    : "TvVoo y Vavoo directo no entregaron una fuente reproducible.";
+            String message = "TvVoo no entregó una fuente reproducible.";
             throw new IOException(message, directError);
         }
     }
 
     @Override
     public void clearSensitiveState() {
-        directFallback.clearSensitiveState();
+        if (directFallback != null) directFallback.clearSensitiveState();
     }
 
     static URI validateCandidate(

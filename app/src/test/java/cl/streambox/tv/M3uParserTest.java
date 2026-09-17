@@ -97,7 +97,7 @@ public class M3uParserTest {
                 + "#EXTINF:-1 tvg-id=\"SkySportsF1.uk\" "
                 + "x-resolver=\"highfly\" "
                 + "x-resolver-id=\"now-sky-sports-f1-free\",Sky Sports F1\n"
-                + "https://leaf.highfly.dev/m3u/now-sky-sports-f1-free/live.m3u8\n";
+                + "https://papacito.cfd/m3u/now-sky-sports-f1-free/live.m3u8\n";
 
         Channel channel = M3uParser.parse(
                 playlist,
