@@ -5,37 +5,51 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Opaque full-bleed base: the launcher icon must not expose transparent
-         corners on Google TV launchers that apply their own mask differently. -->
+    <!-- Opaque full-bleed base for launchers that do not apply their own mask. -->
     <path
-        android:fillColor="#07183F"
+        android:fillColor="#04142F"
         android:pathData="M0,0h108v108H0z" />
 
-    <!-- Solid circular plate keeps the simplified mark legible at launcher size. -->
+    <!-- Blue circular plate keeps the wordmark legible at launcher size. -->
     <path
-        android:fillColor="#102B58"
-        android:pathData="M54,3A51,51 0,1 0,54 105A51,51 0,1 0,54 3" />
+        android:fillColor="#0A3278"
+        android:pathData="M54,2A52,52 0,1 0,54 106A52,52 0,1 0,54 2" />
     <path
-        android:fillColor="#16396F"
+        android:fillColor="#1468B8"
         android:pathData="M54,8A46,46 0,1 0,54 100A46,46 0,1 0,54 8" />
     <path
+        android:fillColor="#1B83D2"
+        android:pathData="M54,15A39,39 0,1 0,54 93A39,39 0,1 0,54 15" />
+    <path
         android:fillColor="@android:color/transparent"
-        android:strokeColor="#2CC9EA"
-        android:strokeWidth="2"
+        android:strokeColor="#2DD6F4"
+        android:strokeWidth="2.5"
         android:pathData="M54,5A49,49 0,1 0,54 103A49,49 0,1 0,54 5" />
 
-    <!-- Simplified play-and-lines mark from the proposed launcher logo. -->
+    <!-- Vibe in black, matching the requested wordmark. -->
     <path
-        android:fillColor="#F7FBFD"
-        android:pathData="M25,28C21,26 17,29 17,34v40c0,5 5,8 9,5l31,-21c5,-3 5,-9 0,-12z" />
+        android:fillColor="#050A12"
+        android:pathData="M8,42h3l3,15 3,-15h3l-4,24h-4z" />
+    <path
+        android:fillColor="#050A12"
+        android:pathData="M21,42h3v3h-3zM21,48h3v18h-3z" />
+    <path
+        android:fillColor="#050A12"
+        android:fillType="evenOdd"
+        android:pathData="M26,39h4v10c1,-2 2,-3 5,-3 4,0 7,4 7,10s-3,10 -7,10c-3,0 -4,-1 -5,-3v3h-4zM30,52v8c1,1 2,2 4,2s4,-2 4,-6 -2,-6 -4,-6 -3,1 -4,2z" />
+    <path
+        android:fillColor="#050A12"
+        android:fillType="evenOdd"
+        android:pathData="M41,58c0,-7 3,-11 8,-11s8,4 8,10v2H45c0,3 2,5 5,5 2,0 3,-1 5,-2l2,3c-2,2 -4,3 -7,3 -6,0 -9,-4 -9,-10zM45,55h8c0,-2 -1,-4 -4,-4s-4,2 -4,4z" />
 
-    <path
-        android:fillColor="#F7FBFD"
-        android:pathData="M62,30h25a5,5 0,0 1,5 5v2a5,5 0,0 1,-5 5H62a5,5 0,0 1,-5 -5v-2a5,5 0,0 1,5 -5z" />
+    <!-- M3U in the app turquoise. -->
     <path
         android:fillColor="#2DD6F4"
-        android:pathData="M62,50h29a5,5 0,0 1,5 5v2a5,5 0,0 1,-5 5H62a5,5 0,0 1,-5 -5v-2a5,5 0,0 1,5 -5z" />
+        android:pathData="M58,66V42h3l4,8 4,-8h3v24h-4V50l-3,7h-2l-3,-7v16z" />
     <path
-        android:fillColor="#F7FBFD"
-        android:pathData="M62,70h25a5,5 0,0 1,5 5v2a5,5 0,0 1,-5 5H62a5,5 0,0 1,-5 -5v-2a5,5 0,0 1,5 -5z" />
+        android:fillColor="#2DD6F4"
+        android:pathData="M76,43c2,-2 4,-3 6,-3 4,0 7,2 7,6 0,3 -2,5 -4,6 3,1 5,3 5,7 0,5 -4,8 -9,8 -3,0 -6,-1 -8,-3l2,-3c2,1 3,2 5,2 3,0 5,-1 5,-4 0,-3 -2,-4 -6,-4v-4c3,0 5,-1 5,-3 0,-2 -1,-3 -3,-3 -1,0 -3,1 -4,2z" />
+    <path
+        android:fillColor="#2DD6F4"
+        android:pathData="M93,42h4v14c0,4 1,6 4,6s4,-2 4,-6V42h4v14c0,7 -3,11 -8,11s-8,-4 -8,-11z" />
 </vector>
