@@ -46,6 +46,9 @@ public final class SettingsActivity extends Activity {
     /** Public Lista 1 used on a new installation. */
     public static final String DEFAULT_PLAYLIST_URL =
             "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/m3u.m3u";
+    /** Public Lista 2 shown in the second source field on a new installation. */
+    public static final String DEFAULT_PLAYLIST_URL_2 =
+            "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/m3u-externa.m3u";
     public static final String KEY_PLAYLIST_URL = "playlist_url";
     public static final String KEY_PLAYLIST_URL_2 = "playlist_url_2";
     public static final String KEY_PLAYLIST_ENABLED = "playlist_enabled";
@@ -240,7 +243,10 @@ public final class SettingsActivity extends Activity {
         resolverPreferences = new ResolverPreferences(this);
         urlInput.setText(existingUrl);
         urlInput.setSelection(urlInput.length());
-        urlInput2.setText(existingUrl2 == null ? "" : existingUrl2);
+        String initialUrl2 = prefs.contains(KEY_PLAYLIST_URL_2)
+                ? existingUrl2
+                : DEFAULT_PLAYLIST_URL_2;
+        urlInput2.setText(initialUrl2 == null ? "" : initialUrl2);
         boolean firstPlaylistEnabled = prefs.contains(KEY_PLAYLIST_ENABLED)
                 ? prefs.getBoolean(KEY_PLAYLIST_ENABLED, true)
                 : existingUrl != null && !AppStrings.isBlank(existingUrl);
