@@ -32,7 +32,9 @@ final class HighflyHlsDecoder {
             if (current >= '0' && current <= '9') {
                 inNumber = true;
                 value = value * 10 + current - '0';
-                if (value > 255) return body;
+                if (value > 255) {
+                    throw new IOException("Byte decimal Highfly fuera de rango.");
+                }
                 continue;
             }
             if (!Character.isWhitespace(current)) return body;

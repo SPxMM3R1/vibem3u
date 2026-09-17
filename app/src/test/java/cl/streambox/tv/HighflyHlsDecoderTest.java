@@ -16,7 +16,7 @@ public final class HighflyHlsDecoderTest {
 
     @Test
     public void decodesDecimalBytesSeparatedByLines() throws Exception {
-        byte[] encoded = "35\n69\n88\n84\n45\n88\n45\n86\n69\n82\n83\n73\n79\n78\n58\n51\n10\n"
+        byte[] encoded = "35\n69\n88\n84\n77\n51\n85\n10\n35\n69\n88\n84\n45\n88\n45\n86\n69\n82\n83\n73\n79\n78\n58\n51\n10\n"
                 .getBytes(StandardCharsets.UTF_8);
         assertArrayEquals(
                 "#EXTM3U\n#EXT-X-VERSION:3\n".getBytes(StandardCharsets.UTF_8),
