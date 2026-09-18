@@ -5,48 +5,51 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!--
-        Clean VibeM3U mark. Everything is kept inside the 66dp adaptive-icon
-        safe zone (x/y 21..87) so Google TV can apply its own mask without
-        clipping the play mark or the stream bars.
-    -->
-    <path
-        android:fillColor="#F7FBFF"
-        android:pathData="M31,31
-            C28.239,31 26,33.239 26,36
-            L26,72
-            C26,74.761 28.239,77 31,77
-            C32.048,77 33.075,76.671 33.927,76.064
-            L56.707,59.84
-            C60.351,57.249 60.351,51.751 56.707,49.16
-            L33.927,32.936
-            C33.075,32.329 32.048,31 31,31 Z" />
+    <!-- The active mark is intentionally half-size; the adaptive canvas and
+        background remain full-size so the launcher has generous visual air. -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.5"
+        android:scaleY="0.5">
+        <path
+            android:fillColor="#F7FBFF"
+            android:pathData="M31,31
+                C28.239,31 26,33.239 26,36
+                L26,72
+                C26,74.761 28.239,77 31,77
+                C32.048,77 33.075,76.671 33.927,76.064
+                L56.707,59.84
+                C60.351,57.249 60.351,51.751 56.707,49.16
+                L33.927,32.936
+                C33.075,32.329 32.048,31 31,31 Z" />
 
-    <path
-        android:fillColor="#29D9E8"
-        android:pathData="M68,33
-            H81
-            C83.209,33 85,34.791 85,37
-            C85,39.209 83.209,41 81,41
-            H68
-            C65.791,41 64,39.209 64,37
-            C64,34.791 65.791,33 68,33 Z" />
-    <path
-        android:fillColor="#29D9E8"
-        android:pathData="M68,50
-            H81
-            C83.209,50 85,51.791 85,54
-            C85,56.209 83.209,58 81,58
-            H68
-            C65.791,58 64,56.209 64,54
-            C64,51.791 65.791,50 68,50 Z" />
-    <path
-        android:fillColor="#29D9E8"
-        android:pathData="M68,67
-            H81
-            C83.209,67 85,68.791 85,71
-            C85,73.209 83.209,75 81,75
-            H68
-            C65.791,75 64,73.209 64,71
-            C64,68.791 65.791,67 68,67 Z" />
+        <path
+            android:fillColor="#29D9E8"
+            android:pathData="M68,33
+                H81
+                C83.209,33 85,34.791 85,37
+                C85,39.209 83.209,41 81,41
+                H68
+                C65.791,41 64,39.209 64,37
+                C64,34.791 65.791,33 68,33 Z" />
+        <path
+            android:fillColor="#29D9E8"
+            android:pathData="M68,50
+                H81
+                C83.209,50 85,51.791 85,54
+                C85,56.209 83.209,58 81,58
+                H68
+                C65.791,58 64,56.209 64,54
+                C64,51.791 65.791,50 68,50 Z" />
+        <path
+            android:fillColor="#29D9E8"
+            android:pathData="M68,67
+                H81
+                C83.209,67 85,68.791 85,71
+                C85,73.209 83.209,75 81,75
+                H68
+                C65.791,75 64,73.209 64,71
+                C64,68.791 65.791,67 68,67 Z" />
+    </group>
 </vector>
