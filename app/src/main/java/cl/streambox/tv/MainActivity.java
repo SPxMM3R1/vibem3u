@@ -2362,7 +2362,7 @@ public final class MainActivity extends Activity {
                 || currentPlaybackSource == null
                 || streamResolverRegistry == null) return;
         StreamResolver resolver = streamResolverRegistry.find(playbackChannel);
-        if (resolver == null || !"tvvoo".equalsIgnoreCase(resolver.getId())) return;
+        if (resolver == null || !supportsSourceSelector(resolver)) return;
         if (isSourceSelectorVisible() || sourceCandidateTask != null) return;
 
         mainHandler.removeCallbacks(hideLightEpg);
@@ -2371,6 +2371,12 @@ public final class MainActivity extends Activity {
         sourceSelectorChannel.setText(playbackChannel.getName());
         sourceSelectorOverlay.setVisibility(View.VISIBLE);
         startSourceSelectorQuery(playbackChannel, resolver);
+    }
+
+    private static boolean supportsSourceSelector(StreamResolver resolver) {
+        if (resolver == null || AppStrings.isBlank(resolver.getId())) return false;
+        String id = resolver.getId();
+        return "tvvoo".equalsIgnoreCase(id) || "highfly".equalsIgnoreCase(id);
     }
 
     private void startSourceSelectorQuery(Channel channel, StreamResolver resolver) {

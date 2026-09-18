@@ -45,6 +45,45 @@ public final class HighflyStreamResolverTest {
     }
 
     @Test
+    public void exposesAllValidatedStreamsToTheSourceSelectorInQualityOrder() throws Exception {
+        StubHttpClient http = new StubHttpClient(
+                "{\"streams\":["
+                        + "{\"title\":\"1920x1080 · ~3.8 Mbps\","
+                        + "\"url\":\"https://leaf.highfly.dev/low.m3u8\"},"
+                        + "{\"title\":\"1920x1080 · ~4.9 Mbps\","
+                        + "\"url\":\"https://papacito.cfd/high.m3u8\"}]}"
+        );
+        List<URI> attempts = java.util.Collections.synchronizedList(
+                new java.util.ArrayList<>()
+        );
+        HighflyStreamResolver resolver = new HighflyStreamResolver(
+                definition(Collections.emptyMap()),
+                http,
+                (uri, headers, listener) -> attempts.add(uri)
+        );
+
+        List<ResolvedPlaybackCandidate> candidates = resolver.resolvePlaybackCandidates(
+                channel(),
+                ResolutionProgressListener.NONE
+        );
+
+        assertEquals(2, candidates.size());
+        assertEquals("1920x1080 · ~4.9 Mbps", candidates.get(0).getLabel());
+        assertEquals("1920x1080 · ~3.8 Mbps", candidates.get(1).getLabel());
+        assertEquals(
+                "https://papacito.cfd/high.m3u8",
+                candidates.get(0).getSource().getPlaybackUri().toString()
+        );
+        assertEquals(
+                "https://leaf.highfly.dev/low.m3u8",
+                candidates.get(1).getSource().getPlaybackUri().toString()
+        );
+        assertEquals(2, attempts.size());
+        assertTrue(candidates.get(0).getSource().isDynamicallyResolved());
+        assertTrue(candidates.get(1).getSource().isDynamicallyResolved());
+    }
+
+    @Test
     public void triesTheNextCandidateAndThenFallsBackToTheM3uUrl() throws Exception {
         StubHttpClient http = new StubHttpClient(
                 "{\"streams\":["

@@ -1,7 +1,5 @@
 package cl.streambox.tv;
 
-import android.os.SystemClock;
-
 /**
  * A short-lived playback option exposed by a dynamic resolver.
  *
@@ -9,10 +7,11 @@ import android.os.SystemClock;
  * the safe label/detail fields and must not stringify the source URI.</p>
  */
 final class ResolvedPlaybackCandidate {
+    private static final long STALE_AFTER_NANOS = 20_000_000_000L;
     private final String label;
     private final String detail;
     private final ResolvedPlaybackSource source;
-    private final long createdAtElapsedRealtime;
+    private final long createdAtNanos;
 
     ResolvedPlaybackCandidate(
             String label,
@@ -22,7 +21,7 @@ final class ResolvedPlaybackCandidate {
         this.label = AppStrings.isBlank(label) ? "Fuente" : label.trim();
         this.detail = SafePlaybackText.detail(detail);
         this.source = source;
-        this.createdAtElapsedRealtime = SystemClock.elapsedRealtime();
+        this.createdAtNanos = System.nanoTime();
     }
 
     String getLabel() {
@@ -39,6 +38,6 @@ final class ResolvedPlaybackCandidate {
 
     /** Candidate URLs are deliberately short-lived to avoid stale sessions. */
     boolean isStale() {
-        return SystemClock.elapsedRealtime() - createdAtElapsedRealtime >= 20_000L;
+        return System.nanoTime() - createdAtNanos >= STALE_AFTER_NANOS;
     }
 }
