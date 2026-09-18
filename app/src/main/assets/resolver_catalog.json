@@ -461,17 +461,23 @@
         "tvgIds": [
           "SkySportsF1.uk",
           "ESPN.us",
+          "MarqueeSportsNetwork.us",
           "SkySportsPremierLeague.uk",
           "SkySport1.nz",
-          "SkySportsTennis.uk"
+          "SkySportsTennis.uk",
+          "SkySportsGolf.uk"
         ],
         "hosts": [
+          "leaf.highfly.dev",
           "papacito.cfd"
         ]
       },
       "config": {
-        "directTemplate": "https://papacito.cfd/m3u/{id}/live.m3u8",
-        "manifestUrl": "https://sports.highfly.to/eyJvbmx5TGl2ZSI6dHJ1ZX0/manifest.json"
+        "streamApiTemplate": "https://sports.highfly.to/stream/sport/leaf:{slug}.json",
+        "streamArrayPath": "streams",
+        "maxStreams": 16,
+        "maxPayloadBytes": 262144,
+        "resolutionBudgetMs": 12000
       }
     }
   ]

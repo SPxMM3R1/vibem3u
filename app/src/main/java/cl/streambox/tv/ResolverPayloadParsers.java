@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.Iterator;
@@ -27,9 +28,20 @@ final class ResolverPayloadParsers {
     private static final int MAX_MANIFEST_NODES = 4096;
     private static final int MAX_MANIFEST_DEPTH = 10;
     private static final int MAX_DISCOVERY_VALUE_LENGTH = 8192;
+    private static final int MAX_HIGHFLY_STREAMS = 32;
+    private static final int MAX_HIGHFLY_PAYLOAD_BYTES = 512 * 1024;
+    private static final int MAX_HIGHFLY_METADATA_LENGTH = 160;
     private static final Pattern EMBEDDED_URL = Pattern.compile(
             "(?i)(https?://[^\\s\\\"'<>\\\\]+|(?:/|\\./|\\.\\./)"
                     + "[^\\s\\\"'<>\\\\]*?\\.m3u8(?:\\?[^\\s\\\"'<>\\\\]*)?)"
+    );
+    private static final Pattern BITRATE = Pattern.compile(
+            "(?i)(\\d+(?:[\\.,]\\d+)?)\\s*"
+                    + "(gbps|gbit/s|gbit|mbps|mb/s|mbit/s|mbit|"
+                    + "kbps|kb/s|kbit/s|kbit|bps|bit/s|bit)"
+    );
+    private static final Pattern DIMENSIONS = Pattern.compile(
+            "(?<!\\d)(\\d{3,5})\\s*[xX×]\\s*(\\d{3,5})(?!\\d)"
     );
 
     private ResolverPayloadParsers() {}
@@ -288,6 +300,303 @@ final class ResolverPayloadParsers {
             if (current == null || current == JSONObject.NULL) return null;
         }
         return current;
+    }
+
+    /**
+     * Parses the public Highfly stream-api response without retaining any
+     * provider URL outside the current resolution attempt.
+     *
+     * <p>The endpoint follows the Stremio-style {@code streams} envelope, but
+     * the advertised quality can be exposed either in numeric fields or in the
+     * human-readable title/name. The parser accepts both forms, applies hard
+     * stream/payload limits, and keeps the API order for equal or unknown
+     * bitrates.</p>
+     */
+    static List<HighflyCandidate> parseHighflyCandidates(
+            String json,
+            String streamsPath,
+            int maximumStreams
+    ) throws IOException {
+        if (json == null || AppStrings.isBlank(json)) return Collections.emptyList();
+        if (json.getBytes(StandardCharsets.UTF_8).length > MAX_HIGHFLY_PAYLOAD_BYTES) {
+            throw new IOException("Respuesta Highfly demasiado grande.");
+        }
+        int streamLimit = Math.max(1, Math.min(MAX_HIGHFLY_STREAMS, maximumStreams));
+        try {
+            String trimmed = json.trim();
+            Object root = trimmed.startsWith("[")
+                    ? new JSONArray(trimmed)
+                    : new JSONObject(trimmed);
+            Object streamsValue = root instanceof JSONArray
+                    ? root
+                    : jsonValueAtPath((JSONObject) root, streamsPath);
+            if (!(streamsValue instanceof JSONArray)) return Collections.emptyList();
+
+            JSONArray streams = (JSONArray) streamsValue;
+            List<HighflyCandidate> candidates = new ArrayList<>();
+            LinkedHashSet<String> seenUris = new LinkedHashSet<>();
+            for (int index = 0; index < streams.length() && index < streamLimit; index++) {
+                Object raw = streams.opt(index);
+                HighflyCandidate candidate = raw instanceof JSONObject
+                        ? parseHighflyCandidate((JSONObject) raw, index)
+                        : parseHighflyStringCandidate(raw, index);
+                if (candidate == null || !seenUris.add(candidate.uri.toString())) continue;
+                candidates.add(candidate);
+            }
+            candidates.sort(new Comparator<HighflyCandidate>() {
+                @Override
+                public int compare(HighflyCandidate left, HighflyCandidate right) {
+                    int bitrate = Long.compare(
+                            right.advertisedBitrateBitsPerSecond,
+                            left.advertisedBitrateBitsPerSecond
+                    );
+                    return bitrate != 0
+                            ? bitrate
+                            : Integer.compare(left.order, right.order);
+                }
+            });
+            return Collections.unmodifiableList(candidates);
+        } catch (JSONException error) {
+            throw new IOException("Highfly devolvió JSON inválido.", error);
+        }
+    }
+
+    private static HighflyCandidate parseHighflyCandidate(JSONObject object, int order) {
+        URI uri = firstHlsUri(object);
+        if (uri == null) return null;
+        CandidateMetadata metadata = new CandidateMetadata();
+        collectHighflyMetadata(object, metadata, 0);
+        return new HighflyCandidate(
+                uri,
+                metadata.bitrateBitsPerSecond,
+                metadata.width,
+                metadata.height,
+                metadata.name,
+                metadata.title,
+                order
+        );
+    }
+
+    private static HighflyCandidate parseHighflyStringCandidate(Object raw, int order) {
+        if (!(raw instanceof String)) return null;
+        URI uri = httpUri((String) raw);
+        return uri == null
+                ? null
+                : new HighflyCandidate(uri, 0L, 0, 0, "", "", order);
+    }
+
+    private static URI firstHlsUri(JSONObject object) {
+        return firstHlsUri(object, 0);
+    }
+
+    private static URI firstHlsUri(JSONObject object, int depth) {
+        if (depth > 3) return null;
+        if (object == null) return null;
+        for (String field : new String[]{
+                "url", "hls", "streamUrl", "stream_url", "stream"
+        }) {
+            URI direct = hlsUri(object.opt(field), depth);
+            if (direct != null) return direct;
+        }
+        for (String field : new String[]{"source", "streamInfo", "playback"}) {
+            Object nested = object.opt(field);
+            if (nested instanceof JSONObject) {
+                URI value = firstHlsUri((JSONObject) nested, depth + 1);
+                if (value != null) return value;
+            }
+        }
+        return null;
+    }
+
+    private static URI hlsUri(Object value, int depth) {
+        if (value instanceof String) return httpUri((String) value);
+        if (value instanceof JSONObject) return firstHlsUri((JSONObject) value, depth + 1);
+        return null;
+    }
+
+    private static void collectHighflyMetadata(
+            JSONObject object,
+            CandidateMetadata metadata,
+            int depth
+    ) {
+        if (object == null || metadata == null || depth > 2) return;
+        for (String field : new String[]{
+                "bitrate", "bitrateBps", "bitrateKbps", "bandwidth", "bandwidthBps",
+                "bandwidthKbps", "kbps", "mbps"
+        }) {
+            metadata.bitrateBitsPerSecond = Math.max(
+                    metadata.bitrateBitsPerSecond,
+                    parseBitrate(object.opt(field), field)
+            );
+        }
+        for (String field : new String[]{"width", "videoWidth"}) {
+            metadata.width = Math.max(metadata.width, positiveInt(object.opt(field)));
+        }
+        for (String field : new String[]{"height", "videoHeight"}) {
+            metadata.height = Math.max(metadata.height, positiveInt(object.opt(field)));
+        }
+        for (String field : new String[]{"name", "title", "label", "description", "quality"}) {
+            Object value = object.opt(field);
+            if (!(value instanceof String)) continue;
+            String text = ((String) value).trim();
+            if (AppStrings.isBlank(text)) continue;
+            if (text.length() > MAX_HIGHFLY_METADATA_LENGTH) {
+                text = text.substring(0, MAX_HIGHFLY_METADATA_LENGTH);
+            }
+            if ("name".equals(field) && AppStrings.isBlank(metadata.name)) {
+                metadata.name = text;
+            }
+            if ("title".equals(field) && AppStrings.isBlank(metadata.title)) {
+                metadata.title = text;
+            }
+            metadata.bitrateBitsPerSecond = Math.max(
+                    metadata.bitrateBitsPerSecond,
+                    parseBitrate(text, field)
+            );
+            Matcher dimensions = DIMENSIONS.matcher(text);
+            if (dimensions.find()) {
+                metadata.width = Math.max(metadata.width, parseInt(dimensions.group(1)));
+                metadata.height = Math.max(metadata.height, parseInt(dimensions.group(2)));
+            }
+        }
+        for (String field : new String[]{"quality", "video", "streamInfo", "metadata"}) {
+            Object nested = object.opt(field);
+            if (nested instanceof JSONObject) {
+                collectHighflyMetadata((JSONObject) nested, metadata, depth + 1);
+            }
+        }
+    }
+
+    private static long parseBitrate(Object value, String field) {
+        if (value == null || value == JSONObject.NULL) return 0L;
+        if (value instanceof Number) {
+            return normalizeNumericBitrate(((Number) value).doubleValue(), field);
+        }
+        if (!(value instanceof String)) return 0L;
+        String text = ((String) value).trim();
+        Matcher matcher = BITRATE.matcher(text);
+        if (matcher.find()) {
+            double number = parseDouble(matcher.group(1));
+            String unit = matcher.group(2).toLowerCase(Locale.ROOT);
+            double multiplier = unit.startsWith("g")
+                    ? 1_000_000_000d
+                    : unit.startsWith("m")
+                    ? 1_000_000d
+                    : unit.startsWith("k")
+                    ? 1_000d
+                    : 1d;
+            return boundedBitrate(number * multiplier);
+        }
+        try {
+            return normalizeNumericBitrate(Double.parseDouble(text), field);
+        } catch (NumberFormatException ignored) {
+            return 0L;
+        }
+    }
+
+    private static long normalizeNumericBitrate(double value, String field) {
+        if (Double.isNaN(value) || Double.isInfinite(value) || value <= 0d) return 0L;
+        String lower = field == null ? "" : field.toLowerCase(Locale.ROOT);
+        double multiplier = lower.contains("gb")
+                ? 1_000_000_000d
+                : lower.contains("mb")
+                ? 1_000_000d
+                : lower.contains("kb")
+                ? 1_000d
+                : (lower.contains("bitrate") && value < 100_000d)
+                ? 1_000d
+                : 1d;
+        return boundedBitrate(value * multiplier);
+    }
+
+    private static long boundedBitrate(double value) {
+        if (value <= 0d || Double.isNaN(value) || Double.isInfinite(value)) return 0L;
+        return Math.min(100_000_000_000L, Math.round(value));
+    }
+
+    private static int positiveInt(Object value) {
+        if (value instanceof Number) return Math.max(0, ((Number) value).intValue());
+        if (value instanceof String) return parseInt((String) value);
+        return 0;
+    }
+
+    private static int parseInt(String value) {
+        try {
+            return Math.max(0, Integer.parseInt(value.trim()));
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    private static double parseDouble(String value) {
+        try {
+            return Double.parseDouble(value.replace(',', '.'));
+        } catch (Exception ignored) {
+            return 0d;
+        }
+    }
+
+    static final class HighflyCandidate {
+        private final URI uri;
+        private final long advertisedBitrateBitsPerSecond;
+        private final int width;
+        private final int height;
+        private final String name;
+        private final String title;
+        private final int order;
+
+        HighflyCandidate(
+                URI uri,
+                long advertisedBitrateBitsPerSecond,
+                int width,
+                int height,
+                String name,
+                String title,
+                int order
+        ) {
+            this.uri = uri;
+            this.advertisedBitrateBitsPerSecond = advertisedBitrateBitsPerSecond;
+            this.width = width;
+            this.height = height;
+            this.name = name == null ? "" : name;
+            this.title = title == null ? "" : title;
+            this.order = order;
+        }
+
+        URI getUri() { return uri; }
+        long getAdvertisedBitrateBitsPerSecond() { return advertisedBitrateBitsPerSecond; }
+        int getWidth() { return width; }
+        int getHeight() { return height; }
+
+        String displayLabel() {
+            if (!AppStrings.isBlank(title)) return title;
+            if (!AppStrings.isBlank(name)) return name;
+            return "Fuente Highfly";
+        }
+
+        String displayDetail() {
+            StringBuilder detail = new StringBuilder();
+            if (width > 0 && height > 0) {
+                detail.append(width).append('x').append(height);
+            }
+            if (advertisedBitrateBitsPerSecond > 0L) {
+                if (detail.length() > 0) detail.append(" · ");
+                detail.append(String.format(
+                        Locale.ROOT,
+                        "~%.1f Mbps",
+                        advertisedBitrateBitsPerSecond / 1_000_000d
+                ));
+            }
+            return detail.toString();
+        }
+    }
+
+    private static final class CandidateMetadata {
+        long bitrateBitsPerSecond;
+        int width;
+        int height;
+        String name = "";
+        String title = "";
     }
 
     static URI parseHighflyManifest(String json, List<String> identifiers)

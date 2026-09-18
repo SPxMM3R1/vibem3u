@@ -110,6 +110,21 @@ public final class ResolverCatalogTest {
     }
 
     @Test
+    public void restrictsHighflyStreamApiTemplateAndResolutionLimits() {
+        String invalidTemplate = catalogJson().replace(
+                "https://sports.highfly.to/stream/sport/leaf:{slug}.json",
+                "https://attacker.invalid/stream/sport/leaf:{slug}.json"
+        );
+        assertThrows(IOException.class, () -> ResolverCatalog.parse(invalidTemplate));
+
+        String invalidLimit = catalogJson().replace(
+                "\"maxStreams\":16",
+                "\"maxStreams\":33"
+        );
+        assertThrows(IOException.class, () -> ResolverCatalog.parse(invalidLimit));
+    }
+
+    @Test
     public void acceptsOnlyKnownDirectVavooHostsForTvVooFallback() throws Exception {
         String valid = catalogJson().replace(
                 "\"endpointBase\":\"https://tvvoo.hayd.uk/stream/tv\"",
@@ -250,9 +265,11 @@ public final class ResolverCatalogTest {
                 + "\"match\":{\"tvgIdSuffixes\":[\"@TvVoo\"]},"
                 + "\"config\":{\"endpointBase\":\"https://tvvoo.hayd.uk/stream/tv\"}},"
                 + "{\"id\":\"highfly\",\"name\":\"Highfly\",\"engine\":\"highfly\","
-                + "\"match\":{\"hosts\":[\"papacito.cfd\"]},"
-                + "\"config\":{\"directTemplate\":"
-                + "\"https://papacito.cfd/m3u/{id}/live.m3u8\"}}]}";
+                + "\"match\":{\"hosts\":[\"leaf.highfly.dev\",\"papacito.cfd\"]},"
+                + "\"config\":{\"streamApiTemplate\":"
+                + "\"https://sports.highfly.to/stream/sport/leaf:{slug}.json\","
+                + "\"streamArrayPath\":\"streams\",\"maxStreams\":16,"
+                + "\"maxPayloadBytes\":262144,\"resolutionBudgetMs\":12000}}]}";
     }
 
     private static String catalogWithAliases(int channelCount, int aliasesPerChannel) {

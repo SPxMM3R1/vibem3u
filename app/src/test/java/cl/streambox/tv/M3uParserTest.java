@@ -96,7 +96,8 @@ public class M3uParserTest {
         String playlist = "#EXTM3U x-tvg-url=\"https://example.org/epg.xml\"\n"
                 + "#EXTINF:-1 tvg-id=\"SkySportsF1.uk\" "
                 + "x-resolver=\"highfly\" "
-                + "x-resolver-id=\"now-sky-sports-f1-free\",Sky Sports F1\n"
+                + "x-resolver-id=\"now-sky-sports-f1-free\" "
+                + "x-resolver-refresh=\"on_play\",Sky Sports F1\n"
                 + "https://papacito.cfd/m3u/now-sky-sports-f1-free/live.m3u8\n";
 
         Channel channel = M3uParser.parse(
@@ -104,7 +105,9 @@ public class M3uParserTest {
                 URI.create("https://example.org/3.m3u")
         ).get(0);
 
+        assertEquals("highfly", channel.getAttributes().get("x-resolver"));
         assertEquals("now-sky-sports-f1-free", channel.getAttributes().get("x-resolver-id"));
+        assertEquals("on_play", channel.getAttributes().get("x-resolver-refresh"));
         assertFalse(channel.getStreamUri().toString().contains("token"));
     }
 }

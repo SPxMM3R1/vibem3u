@@ -261,6 +261,7 @@ public final class ResolverCatalog {
         if (recipeId != null && validationMode == null) {
             throw new IOException("La receta declarativa no define su validación.");
         }
+        if ("highfly".equals(engine)) validateHighflyConfig(config);
         Set<String> allowedHosts = ALLOWED_CONFIG_HOSTS.get(engine);
         if (allowedHosts == null) allowedHosts = Collections.emptySet();
         for (Map.Entry<String, String> entry : config.entrySet()) {
@@ -282,6 +283,7 @@ public final class ResolverCatalog {
             if (!networkValue || AppStrings.isBlank(value)) continue;
             String sample = value
                     .replace("{id}", "sample")
+                    .replace("{slug}", "sample")
                     .replace("{alias}", "sample")
                     .replace("{streamId}", "sample");
             URI uri;
@@ -298,6 +300,42 @@ public final class ResolverCatalog {
                     && !uri.getPath().startsWith("/SPxMM3R1/lista-m3u/")) {
                 throw new IOException("Ruta de catálogo no permitida.");
             }
+        }
+    }
+
+    private static void validateHighflyConfig(Map<String, String> config) throws IOException {
+        String template = config.get("streamApiTemplate");
+        if (template != null && !template.equals(
+                "https://sports.highfly.to/stream/sport/leaf:{slug}.json"
+        )) {
+            throw new IOException("Plantilla de streams Highfly no permitida.");
+        }
+        String path = config.get("streamArrayPath");
+        if (path != null && !path.matches(
+                "[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+){0,7}"
+        )) {
+            throw new IOException("Ruta de streams Highfly no permitida.");
+        }
+        boundedConfigInt(config, "maxStreams", 1, 32);
+        boundedConfigInt(config, "maxPayloadBytes", 16 * 1024, 512 * 1024);
+        boundedConfigInt(config, "resolutionBudgetMs", 1_000, 20_000);
+    }
+
+    private static void boundedConfigInt(
+            Map<String, String> config,
+            String key,
+            int minimum,
+            int maximum
+    ) throws IOException {
+        String value = config.get(key);
+        if (value == null) return;
+        try {
+            int parsed = Integer.parseInt(value);
+            if (parsed < minimum || parsed > maximum) {
+                throw new IOException("Límite Highfly fuera de rango.");
+            }
+        } catch (NumberFormatException error) {
+            throw new IOException("Límite Highfly inválido.", error);
         }
     }
 

@@ -9,6 +9,7 @@ import java.util.Base64;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public final class ResolverPayloadParsersTest {
     @Test
@@ -44,6 +45,60 @@ public final class ResolverPayloadParsersTest {
         );
 
         assertEquals("https://papacito.cfd/m3u/f1/live.m3u8", uri.toString());
+    }
+
+    @Test
+    public void ordersHighflyCandidatesByAdvertisedBitrateAndReadsStremioMetadata()
+            throws Exception {
+        List<ResolverPayloadParsers.HighflyCandidate> candidates =
+                ResolverPayloadParsers.parseHighflyCandidates(
+                        "{\"streams\":["
+                                + "{\"name\":\"Leaf low\","
+                                + "\"title\":\"1920x1080 · Stereo · ~3.8 Mbps\","
+                                + "\"url\":\"https://leaf.highfly.dev/low.m3u8\"},"
+                                + "{\"name\":\"Leaf high\","
+                                + "\"title\":\"1920x1080 · Stereo · ~4.9 Mbps\","
+                                + "\"url\":\"https://papacito.cfd/high.m3u8\"},"
+                                + "{\"name\":\"No bitrate\","
+                                + "\"url\":\"https://leaf.highfly.dev/unknown.m3u8\"}]}" ,
+                        "streams",
+                        16
+                );
+
+        assertEquals(3, candidates.size());
+        assertEquals(
+                "https://papacito.cfd/high.m3u8",
+                candidates.get(0).getUri().toString()
+        );
+        assertEquals(4_900_000L, candidates.get(0)
+                .getAdvertisedBitrateBitsPerSecond());
+        assertEquals(1920, candidates.get(0).getWidth());
+        assertEquals(1080, candidates.get(0).getHeight());
+        assertTrue(candidates.get(0).displayDetail().contains("4.9 Mbps"));
+        assertEquals(
+                "https://leaf.highfly.dev/low.m3u8",
+                candidates.get(1).getUri().toString()
+        );
+        assertEquals(0L, candidates.get(2).getAdvertisedBitrateBitsPerSecond());
+    }
+
+    @Test
+    public void ignoresNonHlsHighflyStreamsAndHonorsTheStreamLimit() throws Exception {
+        List<ResolverPayloadParsers.HighflyCandidate> candidates =
+                ResolverPayloadParsers.parseHighflyCandidates(
+                        "{\"streams\":["
+                                + "{\"url\":\"https://www.google.com/\"},"
+                                + "{\"url\":\"https://leaf.highfly.dev/one.m3u8\"},"
+                                + "{\"url\":\"https://leaf.highfly.dev/two.m3u8\"}]}" ,
+                        "streams",
+                        2
+                );
+
+        assertEquals(1, candidates.size());
+        assertEquals(
+                "https://leaf.highfly.dev/one.m3u8",
+                candidates.get(0).getUri().toString()
+        );
     }
 
     @Test

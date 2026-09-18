@@ -2,26 +2,30 @@ package cl.streambox.tv;
 
 import java.io.IOException;
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
-
-/** Resolves Highfly from a configured manifest or its stable channel slug. */
+/** Resolves a short-lived Highfly stream immediately before playback. */
 public final class HighflyStreamResolver implements StreamResolver {
-    private static final String DEFAULT_TEMPLATE =
-            "https://papacito.cfd/m3u/{id}/live.m3u8";
-    // Highfly is independent from VAVOO. Use the existing normal browser
-    // identity used by the official-provider resolvers; VAVOO/2.6 is reserved
-    // for TvVoo/Vavoo playback only.
-    private static final String PLAYBACK_USER_AGENT = TokenHttpClient.BROWSER_USER_AGENT;
+    static final String DEFAULT_STREAM_API_TEMPLATE =
+            "https://sports.highfly.to/stream/sport/leaf:{slug}.json";
+    private static final String DEFAULT_STREAM_ARRAY_PATH = "streams";
+    private static final int DEFAULT_MAX_STREAMS = 16;
+    private static final int DEFAULT_MAX_PAYLOAD_BYTES = 256 * 1024;
     private static final long DEFAULT_RESOLUTION_BUDGET_MILLIS = 12_000L;
+    private static final String PLAYBACK_USER_AGENT = TokenHttpClient.BROWSER_USER_AGENT;
+    private static final Set<String> STREAM_API_HOSTS = Collections.singleton(
+            "sports.highfly.to"
+    );
+    private static final Set<String> STREAM_HOSTS = streamHosts();
 
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
-    private final HlsStreamValidator validator;
+    private final HlsCandidateValidator validator;
 
     public HighflyStreamResolver(ResolverDefinition definition) {
         this(definition, new TokenHttpClient(), new HlsStreamValidator());
@@ -32,6 +36,21 @@ public final class HighflyStreamResolver implements StreamResolver {
             TokenHttpClient httpClient,
             HlsStreamValidator validator
     ) {
+        this(
+                definition,
+                httpClient,
+                (uri, headers, listener) -> validator.validate(uri, headers, listener)
+        );
+    }
+
+    HighflyStreamResolver(
+            ResolverDefinition definition,
+            TokenHttpClient httpClient,
+            HlsCandidateValidator validator
+    ) {
+        if (definition == null) throw new NullPointerException("definition");
+        if (httpClient == null) throw new NullPointerException("httpClient");
+        if (validator == null) throw new NullPointerException("validator");
         this.definition = definition;
         this.httpClient = httpClient;
         this.validator = validator;
@@ -46,13 +65,15 @@ public final class HighflyStreamResolver implements StreamResolver {
                 || definition.matchesHost(channel);
     }
 
-    @Override public String stableSourceId(Channel channel) {
-        String slug = slug(channel);
+    @Override
+    public String stableSourceId(Channel channel) {
+        String slug = stableSlug(channel);
         return AppStrings.isBlank(slug) ? definition.stableSourceId(channel) : slug;
     }
 
     @Override public long cacheTtlMillis() { return definition.getCacheTtlMillis(); }
 
+    /** Highfly URLs are signed/short-lived and are never reused by the coordinator. */
     @Override public boolean cacheResolvedSource() { return false; }
 
     @Override
@@ -83,44 +104,78 @@ public final class HighflyStreamResolver implements StreamResolver {
         ResolutionProgressListener progress = listener == null
                 ? ResolutionProgressListener.NONE
                 : listener;
-
-        String slug = slug(channel);
-        if (AppStrings.isBlank(slug)) throw new IOException("Highfly no publicó un identificador estable.");
-
-        // The configured leaf URL is the normal fast path. The manifest is a
-        // recovery catalogue and should not add a network round trip to every
-        // channel open while the direct source is healthy.
-        LinkedHashSet<URI> candidates = new LinkedHashSet<>();
-        String directTemplate = canonicalDirectTemplate(
-                definition.getConfig("directTemplate", DEFAULT_TEMPLATE)
-        );
-        candidates.add(URI.create(directTemplate.replace("{id}", encodeSlug(slug))));
-        if (channel != null && channel.getStreamUri() != null
-                && "papacito.cfd".equalsIgnoreCase(channel.getStreamUri().getHost())) {
-            candidates.add(channel.getStreamUri());
+        String slug = stableSlug(channel);
+        if (AppStrings.isBlank(slug)) {
+            return fallbackSource(channel, progress, null);
         }
 
+        URI apiUri;
+        try {
+            apiUri = streamApiUri(slug);
+        } catch (IOException error) {
+            return fallbackSource(channel, progress, error);
+        }
+
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.PAGE_REQUEST,
+                "GET " + SafePlaybackText.url(apiUri) + " · JSON de streams Highfly"
+        ));
+
+        String payload;
+        try {
+            TokenHttpClient.Response response = httpClient.getPublicOnHosts(
+                    apiUri.toString(),
+                    highflyHeaders("application/json"),
+                    maximumPayloadBytes(),
+                    null,
+                    STREAM_API_HOSTS
+            );
+            payload = new String(response.getBody(), java.nio.charset.StandardCharsets.UTF_8);
+            progress.onProgress(ResolutionProgress.of(
+                    ResolutionStage.PAGE_PARSED,
+                    "HTTP " + response.getStatusCode() + " · JSON de streams recibido"
+            ));
+        } catch (IOException error) {
+            return fallbackSource(channel, progress, error);
+        }
+
+        List<ResolverPayloadParsers.HighflyCandidate> candidates;
+        try {
+            candidates = ResolverPayloadParsers.parseHighflyCandidates(
+                    payload,
+                    streamArrayPath(),
+                    maximumStreams()
+            );
+        } catch (IOException error) {
+            return fallbackSource(channel, progress, error);
+        }
+        if (candidates.isEmpty()) return fallbackSource(channel, progress, null);
+
         IOException lastError = null;
-        int candidateNumber = 0;
-        for (URI candidate : candidates) {
+        for (int index = 0; index < candidates.size(); index++) {
+            ResolverPayloadParsers.HighflyCandidate candidate = candidates.get(index);
             progress.onProgress(ResolutionProgress.counted(
                     ResolutionStage.SOURCE_CANDIDATE,
-                    ++candidateNumber,
+                    index + 1,
                     candidates.size(),
-                    "GET " + SafePlaybackText.url(candidate)
-                            + " · playlist HLS · candidato configurado"
+                    candidateDetail(candidate)
             ));
             try {
-                URI accepted = validateCandidate(candidate, progress);
+                URI playbackUri = validateCandidateUri(candidate.getUri());
+                // Strict validation deliberately walks the HLS playlist, a
+                // selected child playlist and a recent media segment before
+                // handing the signed URL to Media3. A failed candidate does
+                // not enter the handoff cache, so the next one is independent.
+                validator.validate(playbackUri, highflyHeaders("*/*"), progress);
                 progress.onProgress(ResolutionProgress.of(
                         ResolutionStage.SOURCE_FOUND,
-                        "Playlist HLS válida · GET " + SafePlaybackText.url(accepted)
-                                + " · Media3 validará variante/segmento"
+                        "HLS Highfly válido · candidato " + (index + 1)
+                                + " · " + candidateDetail(candidate)
                 ));
                 return ResolvedPlaybackSource.dynamic(
                         getId(),
                         stableSourceId(channel),
-                        accepted,
+                        playbackUri,
                         highflyHeaders("*/*"),
                         PLAYBACK_USER_AGENT,
                         expiresAt()
@@ -130,128 +185,90 @@ public final class HighflyStreamResolver implements StreamResolver {
             }
         }
 
-        String manifestUrl = definition.channelManifestUrl(channel);
-        if (!AppStrings.isBlank(manifestUrl)) {
-            try {
-                URI manifestUri = validManifestUri(manifestUrl);
-                progress.onProgress(ResolutionProgress.of(
-                        ResolutionStage.PAGE_REQUEST,
-                        "GET " + SafePlaybackText.url(manifestUri)
-                                + " · JSON · manifiesto de recuperación"
-                ));
-                String manifest = httpClient.getText(
-                        manifestUri.toString(),
-                        highflyHeaders("application/json")
-                );
-                List<String> identifiers = new ArrayList<>();
-                identifiers.add(slug);
-                identifiers.add(channel.getTvgId());
-                identifiers.add(channel.getName());
-                progress.onProgress(ResolutionProgress.of(
-                        ResolutionStage.PAGE_PARSED,
-                        "JSON válido · buscando slug/tvg-id/nombre"
-                ));
-                URI manifestCandidate = ResolverPayloadParsers.parseHighflyManifest(
-                        manifest,
-                        identifiers
-                );
-                if (manifestCandidate != null && candidates.add(manifestCandidate)) {
-                    progress.onProgress(ResolutionProgress.counted(
-                            ResolutionStage.SOURCE_CANDIDATE,
-                            ++candidateNumber,
-                            candidateNumber,
-                            "GET " + SafePlaybackText.url(manifestCandidate)
-                                    + " · playlist HLS · manifiesto"
-                    ));
-                    try {
-                        URI accepted = validateCandidate(manifestCandidate, progress);
-                        progress.onProgress(ResolutionProgress.of(
-                                ResolutionStage.SOURCE_FOUND,
-                                "Playlist HLS válida · GET " + SafePlaybackText.url(accepted)
-                                        + " · Media3 validará variante/segmento"
-                        ));
-                        return ResolvedPlaybackSource.dynamic(
-                                getId(),
-                                stableSourceId(channel),
-                                accepted,
-                                highflyHeaders("*/*"),
-                                PLAYBACK_USER_AGENT,
-                                expiresAt()
-                        );
-                    } catch (IOException error) {
-                        lastError = error;
-                    }
-                }
-            } catch (IOException error) {
-                lastError = error;
-            }
-        }
-        throw new IOException("Highfly no entregó una fuente reproducible.", lastError);
+        return fallbackSource(channel, progress, lastError);
     }
 
-    private URI validateCandidate(URI candidate) throws IOException {
-        return validateCandidate(candidate, ResolutionProgressListener.NONE);
-    }
-
-    private URI validateCandidate(
-            URI candidate,
-            ResolutionProgressListener listener
+    private ResolvedPlaybackSource fallbackSource(
+            Channel channel,
+            ResolutionProgressListener progress,
+            IOException cause
     ) throws IOException {
-        if (candidate == null || candidate.getHost() == null) {
-            throw new IOException("Highfly publicó una URL inválida.");
+        if (channel == null || channel.getStreamUri() == null) {
+            throw cause == null
+                    ? new IOException("Highfly no tiene una URL HLS de respaldo.")
+                    : new IOException("Highfly no entregó una fuente reproducible.", cause);
         }
-        if ("https".equalsIgnoreCase(candidate.getScheme())
-                && "papacito.cfd".equalsIgnoreCase(candidate.getHost())) {
-            try {
-                validator.validateForPlayback(candidate, highflyHeaders("*/*"), listener);
-                return candidate;
-            } catch (IOException error) {
-                throw error;
-            }
-        }
-        throw new IOException("Esquema Highfly no permitido.");
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.SOURCE_BUILDING,
+                "Highfly usa la URL HLS de respaldo de la M3U"
+        ));
+        return ResolvedPlaybackSource.fallback(channel, getId(), PLAYBACK_USER_AGENT);
     }
 
-    private static URI validManifestUri(String value) throws IOException {
-        try {
-            URI uri = URI.create(value.trim());
-            String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
-            boolean allowedHost = "sports.highfly.to".equals(host)
-                    || ("raw.githubusercontent.com".equals(host)
-                    && uri.getPath().startsWith("/SPxMM3R1/lista-m3u/"));
-            if (!"https".equalsIgnoreCase(uri.getScheme()) || !allowedHost) {
-                throw new IOException("Manifiesto Highfly no permitido.");
-            }
-            return uri;
-        } catch (IllegalArgumentException error) {
-            throw new IOException("Manifiesto Highfly inválido.", error);
-        }
-    }
-
-    private static String slug(Channel channel) {
-        if (channel == null) return "";
-        String configured = channel.getAttributes().get("x-resolver-id");
-        if (configured != null && configured.matches("[A-Za-z0-9_-]{2,128}")) return configured;
-        URI stream = channel.getStreamUri();
-        if (stream == null || stream.getPath() == null) return "";
-        String[] parts = stream.getPath().split("/");
-        for (int index = 0; index + 1 < parts.length; index++) {
-            if ("m3u".equalsIgnoreCase(parts[index])
-                    && parts[index + 1].matches("[A-Za-z0-9_-]{2,128}")) {
-                return parts[index + 1];
-            }
-        }
-        return "";
-    }
-
-    private static String encodeSlug(String slug) throws IOException {
+    private URI streamApiUri(String slug) throws IOException {
         if (!slug.matches("[A-Za-z0-9_-]{2,128}")) {
             throw new IOException("Slug Highfly inválido.");
         }
-        return slug;
+        String template = definition.getConfig(
+                "streamApiTemplate",
+                DEFAULT_STREAM_API_TEMPLATE
+        ).trim();
+        // The endpoint is intentionally exact. A catalogue entry cannot turn
+        // the M3U slug into an arbitrary URL or redirect the API request to a
+        // host outside the Highfly allowlist.
+        if (!DEFAULT_STREAM_API_TEMPLATE.equals(template)) {
+            throw new IOException("Plantilla de streams Highfly no permitida.");
+        }
+        try {
+            URI uri = URI.create(template.replace("{slug}", slug));
+            if (!"https".equalsIgnoreCase(uri.getScheme())
+                    || !"sports.highfly.to".equalsIgnoreCase(uri.getHost())
+                    || uri.getPort() != -1
+                    || uri.getRawQuery() != null
+                    || uri.getRawFragment() != null
+                    || !uri.getRawPath().equals("/stream/sport/leaf:" + slug + ".json")) {
+                throw new IOException("Endpoint de streams Highfly no permitido.");
+            }
+            return uri;
+        } catch (IllegalArgumentException error) {
+            throw new IOException("Endpoint de streams Highfly inválido.", error);
+        }
     }
 
-    private static java.util.Map<String, String> highflyHeaders(String accept) {
+    private URI validateCandidateUri(URI candidate) throws IOException {
+        if (candidate == null || candidate.getHost() == null
+                || candidate.getUserInfo() != null
+                || candidate.getPort() != -1
+                || !"https".equalsIgnoreCase(candidate.getScheme())) {
+            throw new IOException("Highfly publicó una URL HLS no permitida.");
+        }
+        String host = candidate.getHost().toLowerCase(Locale.ROOT);
+        if (!STREAM_HOSTS.contains(host)) {
+            throw new IOException("Highfly publicó un host HLS no permitido.");
+        }
+        String path = candidate.getPath();
+        if (path == null || !path.toLowerCase(Locale.ROOT).contains(".m3u8")) {
+            throw new IOException("Highfly publicó una URL que no es HLS.");
+        }
+        return candidate;
+    }
+
+    private static String stableSlug(Channel channel) {
+        if (channel == null || channel.getAttributes() == null) return "";
+        String configured = channel.getAttributes().get("x-resolver-id");
+        return configured != null && configured.matches("[A-Za-z0-9_-]{2,128}")
+                ? configured
+                : "";
+    }
+
+    private static String candidateDetail(ResolverPayloadParsers.HighflyCandidate candidate) {
+        String label = candidate == null ? "Fuente Highfly" : candidate.displayLabel();
+        String detail = candidate == null ? "" : candidate.displayDetail();
+        if (AppStrings.isBlank(detail)) return label;
+        return label + " · " + detail;
+    }
+
+    private static Map<String, String> highflyHeaders(String accept) {
         java.util.LinkedHashMap<String, String> headers = new java.util.LinkedHashMap<>();
         headers.put("User-Agent", PLAYBACK_USER_AGENT);
         headers.put("Referer", "https://sports.highfly.to/");
@@ -260,13 +277,25 @@ public final class HighflyStreamResolver implements StreamResolver {
         return Collections.unmodifiableMap(headers);
     }
 
-    private static String canonicalDirectTemplate(String configured) {
-        if (configured == null || AppStrings.isBlank(configured)) return DEFAULT_TEMPLATE;
-        String value = configured.trim();
-        if (value.startsWith("https://papacito.cfd/m3u/")
-                && value.endsWith("/live.m3u8")
-                && value.contains("{id}")) return value;
-        return DEFAULT_TEMPLATE;
+    private String streamArrayPath() throws IOException {
+        String path = definition.getConfig("streamArrayPath", DEFAULT_STREAM_ARRAY_PATH).trim();
+        if (!path.matches("[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+){0,7}")) {
+            throw new IOException("Ruta de streams Highfly no permitida.");
+        }
+        return path;
+    }
+
+    private int maximumStreams() {
+        return definition.getIntConfig("maxStreams", DEFAULT_MAX_STREAMS, 1, 32);
+    }
+
+    private int maximumPayloadBytes() {
+        return definition.getIntConfig(
+                "maxPayloadBytes",
+                DEFAULT_MAX_PAYLOAD_BYTES,
+                16 * 1024,
+                512 * 1024
+        );
     }
 
     private long expiresAt() {
@@ -275,12 +304,27 @@ public final class HighflyStreamResolver implements StreamResolver {
     }
 
     private long resolutionBudgetMillis() {
-        if (definition == null) return DEFAULT_RESOLUTION_BUDGET_MILLIS;
         return definition.getIntConfig(
                 "resolutionBudgetMs",
                 (int) DEFAULT_RESOLUTION_BUDGET_MILLIS,
                 1_000,
                 20_000
         );
+    }
+
+    private static Set<String> streamHosts() {
+        LinkedHashSet<String> hosts = new LinkedHashSet<>();
+        hosts.add("leaf.highfly.dev");
+        hosts.add("papacito.cfd");
+        return Collections.unmodifiableSet(hosts);
+    }
+
+    @FunctionalInterface
+    interface HlsCandidateValidator {
+        void validate(
+                URI playbackUri,
+                Map<String, String> headers,
+                ResolutionProgressListener listener
+        ) throws IOException;
     }
 }

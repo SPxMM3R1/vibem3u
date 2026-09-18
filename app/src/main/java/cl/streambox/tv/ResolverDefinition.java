@@ -68,15 +68,23 @@ public final class ResolverDefinition {
     /** Minimal safe definition used only if the bundled catalogue is unavailable. */
     static ResolverDefinition fallbackHighfly() {
         Map<String, String> config = new LinkedHashMap<>();
-        config.put("directTemplate", "https://papacito.cfd/m3u/{id}/live.m3u8");
+        config.put(
+                "streamApiTemplate",
+                "https://sports.highfly.to/stream/sport/leaf:{slug}.json"
+        );
+        config.put("streamArrayPath", "streams");
+        config.put("maxStreams", "16");
+        config.put("maxPayloadBytes", "262144");
+        config.put("resolutionBudgetMs", "12000");
         LinkedHashSet<String> hosts = new LinkedHashSet<>();
+        hosts.add("leaf.highfly.dev");
         hosts.add("papacito.cfd");
         return new ResolverDefinition(
                 "highfly",
                 "Highfly",
                 "highfly",
                 true,
-                0L,
+                300_000L,
                 Collections.emptySet(),
                 Collections.emptyList(),
                 hosts,
