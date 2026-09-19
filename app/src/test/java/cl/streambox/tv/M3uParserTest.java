@@ -110,4 +110,22 @@ public class M3uParserTest {
         assertEquals("on_play", channel.getAttributes().get("x-resolver-refresh"));
         assertFalse(channel.getStreamUri().toString().contains("token"));
     }
+
+    @Test
+    public void acceptsOnlyContractTvVooReferences() throws Exception {
+        String stableId = "unitedkingdom|vavoo_SKY%201%7Cgroup%3Auk";
+        String encoded = java.net.URLEncoder.encode(
+                stableId,
+                java.nio.charset.StandardCharsets.UTF_8.name()
+        ).replace("+", "%20");
+        String valid = "#EXTM3U\n"
+                + "#EXTINF:-1 tvg-id=\"" + stableId + "@TvVoo\",Sky 1\n"
+                + "tvvoo://channel/" + encoded + "\n";
+        assertEquals(1, M3uParser.parse(valid, URI.create("https://example.org/list.m3u")).size());
+
+        String invalid = "#EXTM3U\n"
+                + "#EXTINF:-1 tvg-id=\"legacy@TvVoo\",Legacy\n"
+                + "tvvoo://channel/legacy@TvVoo\n";
+        assertEquals(0, M3uParser.parse(invalid, URI.create("https://example.org/list.m3u")).size());
+    }
 }

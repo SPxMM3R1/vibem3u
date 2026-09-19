@@ -1,5 +1,6 @@
 package cl.streambox.tv;
 
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.regex.Matcher;
@@ -118,6 +119,7 @@ final class M3uCacheSanitizer {
             String resolverAliases
     ) {
         if (isSafeTvVooReference(originalLine)) return originalLine;
+        if (!TvVooCatalogChannel.isStableId(tvgId)) return TVVOO_PLACEHOLDER;
         boolean hasSafeAlias = TvVooSourceHistory.isSafeAlias(resolverId);
         if (!hasSafeAlias && !AppStrings.isBlank(resolverAliases)) {
             for (String alias : resolverAliases.split(";")) {
@@ -154,9 +156,21 @@ final class M3uCacheSanitizer {
                     && path != null
                     && path.startsWith("/")
                     && path.length() > 1
-                    && path.indexOf('/', 1) < 0;
+                    && path.indexOf('/', 1) < 0
+                    && TvVooCatalogChannel.isStableId(decodeOnce(path.substring(1)));
         } catch (IllegalArgumentException ignored) {
             return false;
+        }
+    }
+
+    private static String decodeOnce(String value) {
+        try {
+            return URLDecoder.decode(
+                    value.replace("+", "%2B"),
+                    StandardCharsets.UTF_8.name()
+            );
+        } catch (Exception ignored) {
+            return value == null ? "" : value;
         }
     }
 

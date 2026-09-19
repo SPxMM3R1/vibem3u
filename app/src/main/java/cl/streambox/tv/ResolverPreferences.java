@@ -27,7 +27,7 @@ public final class ResolverPreferences {
 
     /** MediaFlow is an explicit opt-in and is off on fresh installs. */
     public boolean isMediaFlowEnabled() {
-        return mediaFlow.isEnabled();
+        return mediaFlow.isEnabled() && mediaFlow.isConfigurationValid();
     }
 
     public void setMediaFlowEnabled(boolean enabled) {

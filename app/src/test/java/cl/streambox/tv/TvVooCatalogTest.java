@@ -54,6 +54,27 @@ public final class TvVooCatalogTest {
     }
 
     @Test
+    public void stableIdIsAlwaysDerivedFromCountryAndCanonicalAlias() {
+        TvVooCatalogChannel channel = new TvVooCatalogChannel(
+                "stale-id-from-cache",
+                "vavoo_SKY%201|group:uk",
+                "SKY 1",
+                "uk",
+                "Sports",
+                "Sport",
+                "",
+                java.util.Collections.emptyList()
+        );
+
+        assertEquals(
+                "unitedkingdom|vavoo_SKY%201%7Cgroup%3Auk",
+                channel.getStableId()
+        );
+        assertTrue(TvVooCatalogChannel.isStableId(channel.getStableId()));
+        assertFalse(TvVooCatalogChannel.isStableId("stale-id-from-cache"));
+    }
+
+    @Test
     public void catalogParsesGenresSearchesAndPagesWithoutLosingOrder() throws Exception {
         TvVooCatalog catalog = TvVooCatalog.parse(
                 "{\"metas\":["

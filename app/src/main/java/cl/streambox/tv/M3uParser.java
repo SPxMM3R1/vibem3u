@@ -187,7 +187,11 @@ public final class M3uParser {
 
         String stableId = decodeOnce(rawPath.substring(1));
         if (AppStrings.isBlank(stableId) || stableId.length() > 256
-                || hasUnsafeIdentityCharacters(stableId)) return false;
+                || hasUnsafeIdentityCharacters(stableId)
+                || !TvVooCatalogChannel.isStableId(stableId)) return false;
+        String declaredTvgId = attributes.get("tvg-id");
+        if (!AppStrings.isBlank(declaredTvgId)
+                && !declaredTvgId.equals(stableId + "@TvVoo")) return false;
         String explicitId = attributes.get("x-resolver-id");
         if (AppStrings.isBlank(explicitId)) {
             attributes.put("x-resolver-id", stableId);
@@ -196,6 +200,8 @@ public final class M3uParser {
             attributes.put("tvg-id", stableId + "@TvVoo");
         }
         attributes.put("x-resolver", "tvvoo");
+        attributes.put("x-resolver-stable-id", stableId);
+        attributes.put("x-resolver-country", stableId.substring(0, stableId.indexOf('|')));
 
         LinkedHashSet<String> aliases = new LinkedHashSet<>();
         addAliases(attributes.get("x-resolver-ids"), aliases);

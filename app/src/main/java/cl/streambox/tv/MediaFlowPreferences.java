@@ -37,6 +37,11 @@ public final class MediaFlowPreferences {
         return preferences.getBoolean(KEY_ENABLED, false);
     }
 
+    /** True only when the opt-in flag and both required secrets are usable. */
+    public boolean isConfigurationValid() {
+        return getOriginUri() != null && !AppStrings.isBlank(getApiPassword());
+    }
+
     /** Disabling leaves the encrypted origin/password intact for later re-enable. */
     public void setEnabled(boolean enabled) {
         preferences.edit().putBoolean(KEY_ENABLED, enabled).apply();

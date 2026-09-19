@@ -63,15 +63,23 @@ public final class MediaFlowSettingsActivity extends Activity {
     private boolean saveConfiguration(boolean shouldEnable) {
         String originText = origin.getText() == null ? "" : origin.getText().toString().trim();
         try {
+            // Disabling is always allowed and must not be blocked by an
+            // invalid value currently typed into the origin field. Keep the
+            // stored origin and encrypted password for a later re-enable.
+            if (!shouldEnable) {
+                preferences.setEnabled(false);
+                updateDisabledStatus();
+                return true;
+            }
             if (!originText.isEmpty()) preferences.setOrigin(originText);
-            if (shouldEnable && preferences.getOriginUri() == null) {
+            if (preferences.getOriginUri() == null) {
                 status.setText(R.string.mediaflow_status_invalid);
                 return false;
             }
             String typedPassword = password.getText() == null
                     ? "" : password.getText().toString();
             if (!typedPassword.isEmpty()) preferences.setApiPassword(typedPassword);
-            if (shouldEnable && !preferences.hasApiPassword()) {
+            if (!preferences.hasApiPassword()) {
                 status.setText(R.string.mediaflow_status_invalid);
                 return false;
             }

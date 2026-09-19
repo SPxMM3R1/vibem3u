@@ -73,11 +73,11 @@ public final class TvVooCatalogChannel {
             List<String> genres,
             List<String> resolverAliases
     ) {
-        this.alias = clean(alias);
-        if (this.alias.isEmpty()) throw new IllegalArgumentException("alias");
-        this.name = nonBlank(name, this.alias);
         this.country = clean(country);
         this.countryKey = countryKey(this.country);
+        this.alias = canonicalAlias(alias, this.countryKey);
+        if (this.alias.isEmpty()) throw new IllegalArgumentException("alias");
+        this.name = nonBlank(name, this.alias);
         this.group = nonBlank(group, this.country);
         this.category = clean(category);
         this.logoUrl = safeHttpUrl(logoUrl);
@@ -98,16 +98,20 @@ public final class TvVooCatalogChannel {
         aliases.add(this.alias);
         if (resolverAliases != null) {
             for (String value : resolverAliases) {
-                String candidate = clean(value);
-                if (!candidate.isEmpty()) aliases.add(candidate);
+                try {
+                    String candidate = canonicalAlias(value, this.countryKey);
+                    if (!candidate.isEmpty()) aliases.add(candidate);
+                } catch (IllegalArgumentException ignored) {
+                    // Ignore stale or malformed aliases from an older cache.
+                }
             }
         }
         this.resolverAliases = Collections.unmodifiableList(new ArrayList<>(aliases));
 
-        String requestedId = clean(stableId);
-        this.stableId = requestedId.isEmpty()
-                ? buildStableId(this.countryKey, this.alias)
-                : requestedId;
+        // The identity is derived, never trusted from persisted or remote
+        // input. This prevents a stale stableId from separating one logical
+        // channel into two rows during the M3U/local-selection merge.
+        this.stableId = buildStableId(this.countryKey, this.alias);
     }
 
     public TvVooCatalogChannel(
@@ -312,9 +316,24 @@ public final class TvVooCatalogChannel {
 
     public static String buildStableId(String country, String alias) {
         String normalizedCountry = countryKey(country);
-        String normalizedAlias = clean(alias);
         if (normalizedCountry.isEmpty()) normalizedCountry = "unknown";
+        String normalizedAlias = canonicalAlias(alias, normalizedCountry);
         return normalizedCountry + "|" + normalizedAlias;
+    }
+
+    /** Returns true only for the exact countryKey|canonicalAlias contract. */
+    public static boolean isStableId(String value) {
+        String candidate = clean(value);
+        int separator = candidate.indexOf('|');
+        if (separator <= 0 || separator >= candidate.length() - 1
+                || candidate.indexOf('|', separator + 1) >= 0) return false;
+        String country = candidate.substring(0, separator);
+        String alias = candidate.substring(separator + 1);
+        try {
+            return candidate.equals(buildStableId(country, alias));
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
     }
 
     /** Country key used only for exact identity and local filtering. */
