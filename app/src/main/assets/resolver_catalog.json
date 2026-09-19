@@ -47,7 +47,7 @@
       "name": "TvVoo externo",
       "engine": "tvvoo",
       "enabledByDefault": true,
-      "cacheTtlSeconds": 900,
+      "cacheTtlSeconds": 1500,
       "match": {
         "tvgIds": [
           "PremierSports1.ie",

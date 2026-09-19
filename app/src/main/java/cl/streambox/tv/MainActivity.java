@@ -1644,7 +1644,11 @@ public final class MainActivity extends Activity {
         showLoadingState(getString(R.string.loading_reopening_source));
 
         cancelPlaybackResolution();
-        resolverCoordinator.clear();
+        // A watchdog/decoder recovery recreates ExoPlayer, but it does not
+        // prove that the resolver output is expired. Keep the validated
+        // TvVoo/MediaFlow source in the process-only coordinator cache so the
+        // new player can attach to it immediately. HTTP 401/403/410 and HLS
+        // source errors already take the explicit invalidate() path above.
         discardCurrentPlaybackSource();
         playbackChannel = null;
         playbackGeneration++;

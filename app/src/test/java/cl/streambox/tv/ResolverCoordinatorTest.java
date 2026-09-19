@@ -149,6 +149,17 @@ public final class ResolverCoordinatorTest {
     }
 
     @Test
+    public void tvvooResolverKeepsValidatedSourceInProcessForConfiguredTtl() {
+        ResolverDefinition definition = definition(
+                "tvvoo", "tvvoo", 25L * 60L * 1000L, Collections.emptyMap()
+        );
+        TvVooStreamResolver resolver = new TvVooStreamResolver(definition);
+
+        assertTrue(resolver.cacheResolvedSource());
+        assertEquals(25L * 60L * 1000L, resolver.cacheTtlMillis());
+    }
+
+    @Test
     public void legacyZeroTtlCatalogDoesNotDisableOfficialTokenCache() {
         TvnStreamResolver tvn = new TvnStreamResolver(definition("tvn", "tvn", 0L,
                 Collections.emptyMap()));

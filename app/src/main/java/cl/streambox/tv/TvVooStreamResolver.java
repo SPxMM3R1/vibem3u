@@ -84,7 +84,12 @@ public final class TvVooStreamResolver implements StreamResolver {
 
     @Override public long cacheTtlMillis() { return definition.getCacheTtlMillis(); }
 
-    @Override public boolean cacheResolvedSource() { return false; }
+    /**
+     * Keep the validated source in process memory for the bounded catalogue
+     * TTL. Tokens/session URLs never enter preferences, the M3U or logs. A
+     * real HTTP rejection still invalidates this entry through MainActivity.
+     */
+    @Override public boolean cacheResolvedSource() { return true; }
 
     @Override
     public ResolvedPlaybackSource resolve(Channel channel) throws IOException {

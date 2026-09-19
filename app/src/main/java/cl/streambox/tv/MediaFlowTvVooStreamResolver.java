@@ -60,7 +60,9 @@ public final class MediaFlowTvVooStreamResolver implements StreamResolver {
         return definition.getCacheTtlMillis();
     }
 
-    @Override public boolean cacheResolvedSource() { return false; }
+    /** MediaFlow playback output is also session-only and may be reused until
+     * the configured resolver TTL or an explicit playback rejection. */
+    @Override public boolean cacheResolvedSource() { return true; }
 
     @Override
     public ResolvedPlaybackSource resolve(Channel channel) throws IOException {
