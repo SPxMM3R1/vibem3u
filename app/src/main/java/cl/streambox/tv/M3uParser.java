@@ -1,9 +1,11 @@
 package cl.streambox.tv;
 
 import java.net.URI;
+import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -54,6 +56,18 @@ public final class M3uParser {
 
             URI streamUri = resolveUri(playlistUri, line);
             if (streamUri == null || streamUri.getScheme() == null) {
+                resetPending(pendingAttributes);
+                pendingName = null;
+                pendingLogo = null;
+                pendingGroup = "";
+                continue;
+            }
+
+            if ("tvvoo".equalsIgnoreCase(streamUri.getScheme())
+                    && !normalizeTvVooEntry(streamUri, pendingAttributes)) {
+                // A TvVoo reference without a stable identity and alias is
+                // unsafe to hand to Media3. Drop the row instead of allowing
+                // a placeholder or an old session URL to play directly.
                 resetPending(pendingAttributes);
                 pendingName = null;
                 pendingLogo = null;
@@ -148,6 +162,102 @@ public final class M3uParser {
     private static boolean containsWhitespace(String value) {
         for (int i = 0; i < value.length(); i++) {
             if (Character.isWhitespace(value.charAt(i))) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Normalizes the tokenless TvVoo M3U contract in-place. The URI carries
+     * only the stable row identity; all resolver aliases remain explicit
+     * metadata so the resolver can renew the actual stream later.
+     */
+    private static boolean normalizeTvVooEntry(
+            URI streamUri,
+            Map<String, String> attributes
+    ) {
+        if (streamUri == null || attributes == null
+                || !"channel".equalsIgnoreCase(streamUri.getHost())
+                || streamUri.getUserInfo() != null
+                || streamUri.getPort() != -1
+                || streamUri.getRawQuery() != null
+                || streamUri.getRawFragment() != null) return false;
+        String rawPath = streamUri.getRawPath();
+        if (rawPath == null || !rawPath.startsWith("/")
+                || rawPath.length() <= 1 || rawPath.indexOf('/', 1) >= 0) return false;
+
+        String stableId = decodeOnce(rawPath.substring(1));
+        if (AppStrings.isBlank(stableId) || stableId.length() > 256
+                || hasUnsafeIdentityCharacters(stableId)) return false;
+        String explicitId = attributes.get("x-resolver-id");
+        if (AppStrings.isBlank(explicitId)) {
+            attributes.put("x-resolver-id", stableId);
+        }
+        if (AppStrings.isBlank(attributes.get("tvg-id"))) {
+            attributes.put("tvg-id", stableId + "@TvVoo");
+        }
+        attributes.put("x-resolver", "tvvoo");
+
+        LinkedHashSet<String> aliases = new LinkedHashSet<>();
+        addAliases(attributes.get("x-resolver-ids"), aliases);
+        addAliases(attributes.get("x-tvvoo-alias"), aliases);
+        addAliasFromIdentity(explicitId, aliases);
+        addAliasFromIdentity(stableId, aliases);
+        if (aliases.isEmpty()) return false;
+
+        StringBuilder serialized = new StringBuilder();
+        for (String alias : aliases) {
+            if (serialized.length() > 0) serialized.append(';');
+            serialized.append(alias);
+        }
+        attributes.put("x-resolver-ids", serialized.toString());
+        return true;
+    }
+
+    private static void addAliases(String value, LinkedHashSet<String> result) {
+        if (AppStrings.isBlank(value)) return;
+        for (String candidate : value.split(";")) {
+            String canonical = TvVooSourceHistory.canonicalAlias(candidate);
+            if (!canonical.isEmpty()) result.add(canonical);
+        }
+    }
+
+    private static void addAliasFromIdentity(String identity, LinkedHashSet<String> result) {
+        if (AppStrings.isBlank(identity)) return;
+        String value = identity.trim();
+        String direct = TvVooSourceHistory.canonicalAlias(value);
+        if (!direct.isEmpty()) {
+            result.add(direct);
+            return;
+        }
+        // Catalog stable ids commonly use country|alias. Only the exact
+        // alias component is considered; display names never participate.
+        String decoded = decodeOnce(value);
+        int aliasStart = decoded.indexOf("vavoo_");
+        if (aliasStart >= 0) {
+            String canonical = TvVooSourceHistory.canonicalAlias(
+                    decoded.substring(aliasStart)
+            );
+            if (!canonical.isEmpty()) result.add(canonical);
+        }
+    }
+
+    private static String decodeOnce(String value) {
+        try {
+            return URLDecoder.decode(
+                    value.replace("+", "%2B"),
+                    java.nio.charset.StandardCharsets.UTF_8.name()
+            );
+        } catch (Exception ignored) {
+            return value;
+        }
+    }
+
+    private static boolean hasUnsafeIdentityCharacters(String value) {
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if (character < 0x20 || character == 0x7f
+                    || character == '/' || character == '\\'
+                    || character == '?' || character == '#') return true;
         }
         return false;
     }

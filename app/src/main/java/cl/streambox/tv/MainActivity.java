@@ -58,6 +58,8 @@ import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.exoplayer.video.MediaCodecVideoRenderer;
 import androidx.media3.ui.PlayerView;
 
+import okhttp3.OkHttpClient;
+
 import java.net.URI;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -110,6 +112,7 @@ public final class MainActivity extends Activity {
     private final ResolverCoordinator resolverCoordinator = new ResolverCoordinator();
     private ResolverCatalogRepository resolverCatalogRepository;
     private ResolverPreferences resolverPreferences;
+    private TvVooSelectionStore tvVooSelectionStore;
     private StreamResolverRegistry streamResolverRegistry;
     private Map<String, Integer> resolverChannelCounts = Collections.emptyMap();
     private final List<Channel> channels = new ArrayList<>();
@@ -185,6 +188,10 @@ public final class MainActivity extends Activity {
     private boolean playbackAutoRecoveryInFlight;
     private boolean playbackFullRecoveryUsed;
     private boolean playbackRecoveryFailed;
+    private int playbackSourceRecoveryAttempts;
+    private boolean playbackSourceRecoveryInFlight;
+    private long playbackSourceStabilityToken;
+    private String playbackSourceStabilityScheduledFor = "";
     private long lastPlaybackDiagnosticCode;
     private Future<?> playbackResolutionTask;
     private ResolutionContext playbackResolutionContext;
@@ -301,6 +308,10 @@ public final class MainActivity extends Activity {
         playbackPreferences = new PlaybackPreferences(this);
         resolverCatalogRepository = new ResolverCatalogRepository(this);
         resolverPreferences = new ResolverPreferences(this);
+        tvVooSelectionStore = new TvVooSelectionStore(this);
+        // Install the process-local alias learning store before any resolver
+        // can be used. It persists aliases only, never resolved URLs/tokens.
+        new TvVooSourceHistory(this);
         reloadResolverRegistry();
         bindViews();
         registerBackCallback();
@@ -405,6 +416,7 @@ public final class MainActivity extends Activity {
         player.addListener(new Player.Listener() {
             @Override public void onIsPlayingChanged(boolean isPlaying) {
                 settlePlaybackEpisode(isPlaying);
+                if (isPlaying) maybeSchedulePlaybackSourceStability();
             }
 
             @Override public void onPlaybackStateChanged(int playbackState) {
@@ -415,6 +427,7 @@ public final class MainActivity extends Activity {
                     if (hasRenderedVideoFrame()) {
                         playbackHasStarted = true;
                         playbackLoadingSinceElapsedRealtime = -1L;
+                        maybeSchedulePlaybackSourceStability();
                     } else if (playbackLoadingSinceElapsedRealtime < 0L) {
                         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
                     }
@@ -477,7 +490,16 @@ public final class MainActivity extends Activity {
                 codecInfo.setText(shortMessage(error));
                 overlayAwaitingPlayback = true;
                 showOverlay(true);
-                requestFullPlaybackRecovery("error de reproducción");
+                if (!requestPlaybackSourceRecovery(error)) {
+                    if (isDecoderFailure(error)) {
+                        requestFullPlaybackRecovery("error de decodificador");
+                    } else {
+                        // Media3's bounded load policy owns transient I/O
+                        // retries. Recreating ExoPlayer is reserved for a
+                        // decoder/watchdog failure.
+                        showPlaybackFailure();
+                    }
+                }
             }
         });
         schedulePlaybackWatchdog();
@@ -488,7 +510,7 @@ public final class MainActivity extends Activity {
                 ? Collections.emptyList()
                 : new ArrayList<>(configuredSources);
         String sourceSignature = playlistSourceSignature(sources);
-        if (sources.isEmpty()) {
+        if (sources.isEmpty() && !hasSelectedTvVooChannels()) {
             if (!settingsOpen) openSettings();
             return;
         }
@@ -554,6 +576,17 @@ public final class MainActivity extends Activity {
                 visiblePlaylists,
                 sources
         );
+        // The selection store is local and available synchronously. Publish
+        // it immediately so startup remains usable when M3U is offline or
+        // still waiting for its cache/network callback.
+        if (hasSelectedTvVooChannels()) {
+            applyPlaylists(
+                    visiblePlaylists,
+                    sourceSignature,
+                    generation,
+                    false
+            );
+        }
         if (!networkAvailable) {
             refresh.pendingNetwork = 0;
         }
@@ -965,7 +998,18 @@ public final class MainActivity extends Activity {
             Playlist playlist = entry.getValue();
             if (playlist != null) result.addAll(playlist.getChannels());
         }
-        return result;
+        if (!hasSelectedTvVooChannels()) return result;
+        return new ArrayList<>(TvVooChannelMerge.merge(
+                result,
+                tvVooSelectionStore.getSelectedChannels(),
+                true
+        ));
+    }
+
+    private boolean hasSelectedTvVooChannels() {
+        return tvVooSelectionStore != null
+                && tvVooSelectionStore.isEnabled()
+                && !tvVooSelectionStore.getSelectedChannels().isEmpty();
     }
 
     private void showPlaylistError(String detail) {
@@ -1317,6 +1361,9 @@ public final class MainActivity extends Activity {
         playbackAutoRecoveryInFlight = false;
         playbackFullRecoveryUsed = false;
         playbackRecoveryFailed = false;
+        playbackSourceRecoveryAttempts = 0;
+        playbackSourceRecoveryInFlight = false;
+        cancelPlaybackSourceStability();
         lastPlaybackDiagnosticCode = 0;
         resetResourceWarningState();
         resetPlaybackBitrateMeter();
@@ -1373,6 +1420,51 @@ public final class MainActivity extends Activity {
                 && playbackBitrateMeter.snapshot().hasRenderedVideoFrame;
     }
 
+    private void maybeSchedulePlaybackSourceStability() {
+        if (!playbackHasStarted || currentPlaybackSource == null
+                || !"tvvoo".equalsIgnoreCase(currentPlaybackSource.getResolverId())) {
+            return;
+        }
+        if (player == null || player.getPlaybackState() != Player.STATE_READY
+                || !player.isPlaying() || !hasRenderedVideoFrame()) return;
+        String variant = currentPlaybackSource.getVariantId();
+        if (AppStrings.isBlank(variant)) return;
+        String sourceKey = PlaybackPreferences.channelIdentity(playbackChannel)
+                + "|" + variant;
+        if (sourceKey.equals(playbackSourceStabilityScheduledFor)) return;
+        playbackSourceStabilityScheduledFor = sourceKey;
+        long token = ++playbackSourceStabilityToken;
+        long generation = playbackGeneration;
+        mainHandler.postDelayed(() -> {
+            if (token != playbackSourceStabilityToken
+                    || generation != playbackGeneration
+                    || playbackChannel == null
+                    || currentPlaybackSource == null
+                    || !sourceKey.equals(
+                    PlaybackPreferences.channelIdentity(playbackChannel)
+                            + "|" + currentPlaybackSource.getVariantId())
+                    || player == null) return;
+            if (player.getPlaybackState() != Player.STATE_READY
+                    || !player.isPlaying()
+                    || !hasRenderedVideoFrame()) {
+                // Buffering time does not count toward source stability. The
+                // next READY/playing callback starts a fresh quiet interval.
+                playbackSourceStabilityScheduledFor = "";
+                return;
+            }
+            TvVooSourceHistory.recordSuccess(
+                    currentPlaybackSource.getStableSourceId(),
+                    currentPlaybackSource.getVariantId()
+            );
+            playbackSourceRecoveryAttempts = 0;
+        }, PlaybackRecoveryEpisode.STABLE_PLAYBACK_MS);
+    }
+
+    private void cancelPlaybackSourceStability() {
+        playbackSourceStabilityToken++;
+        playbackSourceStabilityScheduledFor = "";
+    }
+
     /**
      * Checks the playback boundary rather than network throughput. A stream
      * can keep downloading bytes while its decoder is no longer receiving
@@ -1387,7 +1479,10 @@ public final class MainActivity extends Activity {
         if (nowMs < playbackRecoveryCooldownUntilElapsedRealtime) return;
         int state = player.getPlaybackState();
         boolean renderedFrame = hasRenderedVideoFrame();
-        if (renderedFrame) playbackHasStarted = true;
+        if (renderedFrame) {
+            playbackHasStarted = true;
+            maybeSchedulePlaybackSourceStability();
+        }
         boolean waitingWithoutFrames = state == Player.STATE_IDLE
                 || state == Player.STATE_BUFFERING
                 || (state == Player.STATE_READY
@@ -1454,6 +1549,69 @@ public final class MainActivity extends Activity {
         if (audioUnderrun && bufferedMs <= 500L) return "audio detenido";
         if (!mediaStopped || bufferedMs > 500L) return "decoder detenido";
         return "vídeo detenido";
+    }
+
+    /**
+     * Renews one expired/damaged resolver source while retaining ExoPlayer.
+     * The attempt is deliberately bounded; a second source failure falls
+     * through to the existing decoder-level full recovery path.
+     */
+    private boolean requestPlaybackSourceRecovery(PlaybackException error) {
+        if (playbackSourceRecoveryInFlight
+                || playbackSourceRecoveryAttempts >= 1
+                || playbackChannel == null
+                || currentPlaybackSource == null
+                || !currentPlaybackSource.isDynamicallyResolved()) return false;
+        StreamResolver resolver = streamResolverRegistry == null
+                ? null
+                : streamResolverRegistry.find(playbackChannel);
+        if (resolver == null) return false;
+        int responseCode = httpResponseCode(error);
+        URI failedUri = failedRequestUri(error);
+        if (!ResolvedSourceRefreshPolicy.shouldRefresh(
+                responseCode,
+                failedUri,
+                error == null ? 0 : error.errorCode
+        )) return false;
+
+        playbackSourceRecoveryAttempts++;
+        playbackSourceRecoveryInFlight = true;
+        playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
+        playbackHasStarted = false;
+        playbackAutoRecoveryInFlight = false;
+        setStatus("RENOVANDO", R.color.amber);
+        showLoadingState(getString(R.string.loading_reopening_source));
+        cancelPlaybackSourceStability();
+        resolverCoordinator.invalidate(playbackChannel, resolver);
+        if (currentPlaybackSource != null
+                && "tvvoo".equalsIgnoreCase(currentPlaybackSource.getResolverId())
+                && !AppStrings.isBlank(currentPlaybackSource.getVariantId())) {
+            TvVooSourceHistory.recordPlaybackFailure(
+                    currentPlaybackSource.getStableSourceId(),
+                    currentPlaybackSource.getVariantId()
+            );
+        }
+        discardCurrentPlaybackSource();
+        if (player != null) {
+            player.stop();
+            player.clearMediaItems();
+        }
+        resolveAndPlay(playbackChannel, playbackGeneration, true);
+        return true;
+    }
+
+    private static boolean isDecoderFailure(PlaybackException error) {
+        if (error == null) return false;
+        int code = error.errorCode;
+        return code == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED
+                || code == PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED
+                || code == PlaybackException.ERROR_CODE_DECODING_FAILED
+                || code == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED
+                || code == PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES
+                || code == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED
+                || code == PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED
+                || code == PlaybackException.ERROR_CODE_AUDIO_TRACK_OFFLOAD_INIT_FAILED
+                || code == PlaybackException.ERROR_CODE_AUDIO_TRACK_OFFLOAD_WRITE_FAILED;
     }
 
     /** Performs one bounded full player restart for the current playback episode. */
@@ -1638,6 +1796,7 @@ public final class MainActivity extends Activity {
             long expectedGeneration,
             Throwable error
     ) {
+        playbackSourceRecoveryInFlight = false;
         lastPlaybackDiagnosticCode = PlaybackDiagnosticCode.forResolverFailure(error);
         Log.i(PLAYBACK_HEALTH_TAG, "diagnostic code=" + lastPlaybackDiagnosticCode);
         showPlaybackFailure();
@@ -1665,16 +1824,35 @@ public final class MainActivity extends Activity {
                 ? expectedResolutionRequestId
                 : NO_RESOLUTION_REQUEST;
         currentPlaybackSource = source;
+        playbackSourceRecoveryInFlight = false;
+        playbackSourceStabilityScheduledFor = "";
         if (playbackManifestCache != null) {
             ManifestHandoffCache handoff = playbackManifestCache;
             mainHandler.postDelayed(handoff::clear, ManifestHandoffCache.DEFAULT_TTL_MILLIS);
         }
-        player.setMediaSource(mediaSourceFor(channel, source));
+        final MediaSource mediaSource;
+        try {
+            mediaSource = mediaSourceFor(channel, source);
+        } catch (java.io.IOException error) {
+            // A bad MediaFlow origin/configuration must fail this source
+            // cleanly; never hand an unguarded URL to Media3.
+            currentPlaybackSource = null;
+            activePlaybackSourceRequestId = NO_RESOLUTION_REQUEST;
+            handleResolutionFailure(
+                    channel,
+                    streamResolverRegistry.find(channel),
+                    expectedGeneration,
+                    error
+            );
+            return;
+        }
+        player.setMediaSource(mediaSource);
         showLoadingState(getString(R.string.loading_starting_playback));
         prepareAndPlay();
     }
 
     private void discardCurrentPlaybackSource() {
+        cancelPlaybackSourceStability();
         currentPlaybackSource = null;
         if (playbackManifestCache != null) playbackManifestCache.clear();
         playbackManifestCache = null;
@@ -1686,12 +1864,14 @@ public final class MainActivity extends Activity {
         if (playbackBitrateMeter != null) playbackBitrateMeter.reset();
     }
 
-    private MediaSource mediaSourceFor(Channel channel, ResolvedPlaybackSource source) {
+    private MediaSource mediaSourceFor(Channel channel, ResolvedPlaybackSource source)
+            throws java.io.IOException {
         String userAgent = AppStrings.isBlank(source.getUserAgent())
                 ? PLAYER_USER_AGENT
                 : source.getUserAgent();
+        OkHttpClient playbackClient = MediaFlowPlaybackClient.forSource(source);
         OkHttpDataSource.Factory dataSourceFactory =
-                new OkHttpDataSource.Factory(SharedHttpClient.get()).setUserAgent(userAgent);
+                new OkHttpDataSource.Factory(playbackClient).setUserAgent(userAgent);
         Map<String, String> headers = PlaybackRequestHeaders.withoutUserAgent(
                 source.getRequestHeaders()
         );
@@ -1713,9 +1893,11 @@ public final class MainActivity extends Activity {
                     playbackDataSourceFactory
             );
         }
+        MediaItem.Builder itemBuilder = mediaItemFor(channel, source.getPlaybackUri()).buildUpon();
+        if (source.hasMimeType()) itemBuilder.setMimeType(source.getMimeType());
         return new DefaultMediaSourceFactory(playbackDataSourceFactory)
                 .setLoadErrorHandlingPolicy(new PlaybackLoadErrorPolicy(source.isDynamicallyResolved()))
-                .createMediaSource(mediaItemFor(channel, source.getPlaybackUri()).buildUpon()
+                .createMediaSource(itemBuilder
                         .setTag(Long.valueOf(startupMetrics.currentId())).build());
     }
 
@@ -3054,7 +3236,7 @@ public final class MainActivity extends Activity {
                     epgData = EpgData.empty();
                 }
                 refreshAfterSettings = true;
-            } else if (sources.isEmpty()) {
+            } else if (sources.isEmpty() && !hasSelectedTvVooChannels()) {
                 openSettings();
             }
         }
@@ -3096,6 +3278,14 @@ public final class MainActivity extends Activity {
                     .append('=')
                     .append(resolverPreferences == null
                             || resolverPreferences.isEnabled(definition));
+        }
+        if (tvVooSelectionStore != null) {
+            snapshot.append("|tvvoo-selection=")
+                    .append(tvVooSelectionStore.signature());
+        }
+        if (resolverPreferences != null && resolverPreferences.mediaFlowPreferences() != null) {
+            snapshot.append("|mediaflow=")
+                    .append(resolverPreferences.mediaFlowPreferences().signature());
         }
         return snapshot.toString();
     }
@@ -3224,7 +3414,7 @@ public final class MainActivity extends Activity {
         }
         if (!settingsOpen && !refreshAfterSettings) {
             List<PlaylistSource> sources = getPlaylistSources();
-            if (sources.isEmpty()) {
+            if (sources.isEmpty() && !hasSelectedTvVooChannels()) {
                 openSettings();
             } else {
                 refreshPlaylists(sources);

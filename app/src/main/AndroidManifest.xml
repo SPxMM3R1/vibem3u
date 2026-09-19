@@ -38,6 +38,18 @@
             android:screenOrientation="landscape" />
 
         <activity
+            android:name=".TvVooCatalogActivity"
+            android:exported="false"
+            android:theme="@style/Theme.VibeM3U.Settings"
+            android:screenOrientation="landscape" />
+
+        <activity
+            android:name=".MediaFlowSettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.VibeM3U.Settings"
+            android:screenOrientation="landscape" />
+
+        <activity
             android:name=".MainActivity"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize"
             android:exported="true"

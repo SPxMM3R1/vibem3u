@@ -82,6 +82,11 @@ public final class SettingsActivity extends Activity {
     private TextView errorText;
     private Switch playlistOneEnabled;
     private Switch playlistTwoEnabled;
+    private Switch tvvooSourceEnabled;
+    private Button tvvooCatalogButton;
+    private Button mediaFlowSettingsButton;
+    private TextView tvvooSelectionStatus;
+    private TvVooSelectionStore tvvooSelectionStore;
     private Switch invertChannelKeys;
     private Switch normalizeVolume;
     private Button updateButton;
@@ -215,6 +220,10 @@ public final class SettingsActivity extends Activity {
         errorText = findViewById(R.id.url_error);
         playlistOneEnabled = findViewById(R.id.playlist_1_enabled);
         playlistTwoEnabled = findViewById(R.id.playlist_2_enabled);
+        tvvooSourceEnabled = findViewById(R.id.tvvoo_source_enabled);
+        tvvooCatalogButton = findViewById(R.id.tvvoo_catalog_button);
+        mediaFlowSettingsButton = findViewById(R.id.mediaflow_settings_button);
+        tvvooSelectionStatus = findViewById(R.id.tvvoo_selection_status);
         invertChannelKeys = findViewById(R.id.invert_channel_keys);
         normalizeVolume = findViewById(R.id.normalize_volume);
         updateButton = findViewById(R.id.check_updates_button);
@@ -249,6 +258,7 @@ public final class SettingsActivity extends Activity {
         appUpdater = new AppUpdater(this, updateExecutor, mainHandler);
         resolverCatalogRepository = new ResolverCatalogRepository(this);
         resolverPreferences = new ResolverPreferences(this);
+        tvvooSelectionStore = new TvVooSelectionStore(this);
         urlInput.setText(existingUrl);
         urlInput.setSelection(urlInput.length());
         String initialUrl2 = prefs.contains(KEY_PLAYLIST_URL_2)
@@ -263,12 +273,28 @@ public final class SettingsActivity extends Activity {
                 KEY_PLAYLIST_ENABLED_2,
                 false
         ));
+        tvvooSourceEnabled.setChecked(tvvooSelectionStore.isEnabled());
+        updateTvVooSelectionStatus();
         invertChannelKeys.setChecked(prefs.getBoolean(KEY_INVERT_CHANNEL_KEYS, false));
         normalizeVolume.setChecked(prefs.getBoolean(KEY_NORMALIZE_VOLUME, false));
         TextView versionText = findViewById(R.id.current_version);
         versionText.setText(getString(R.string.current_version, BuildConfig.VERSION_NAME));
         initializeCurrentChannelOptions(getIntent());
         initializeResolverOptions(getIntent());
+
+        tvvooSourceEnabled.setOnCheckedChangeListener((button, checked) -> {
+            // A selected TvVoo source must have its resolver engine available;
+            // turning the source off leaves the user's resolver preference intact.
+            if (checked) {
+                Switch tvvooResolver = resolverGroupSwitches.get("tvvoo");
+                if (tvvooResolver != null) tvvooResolver.setChecked(true);
+            }
+            updateTvVooSelectionStatus();
+        });
+        tvvooCatalogButton.setOnClickListener(view ->
+                startActivity(new Intent(this, TvVooCatalogActivity.class)));
+        mediaFlowSettingsButton.setOnClickListener(view ->
+                startActivity(new Intent(this, MediaFlowSettingsActivity.class)));
 
         cancelButton.setVisibility(hasExistingUrl ? View.VISIBLE : View.GONE);
         cancelButton.setOnClickListener(v -> finish());
@@ -346,6 +372,15 @@ public final class SettingsActivity extends Activity {
                     updateSubtitleSwitchLabel());
         }
         updatePlaybackFirstFocus();
+    }
+
+    private void updateTvVooSelectionStatus() {
+        if (tvvooSelectionStore == null || tvvooSelectionStatus == null) return;
+        int count = tvvooSelectionStore.getSelectedCatalogChannels().size();
+        String state = tvvooSourceEnabled != null && tvvooSourceEnabled.isChecked()
+                ? getString(R.string.tvvoo_source_enabled)
+                : getString(R.string.tvvoo_source_disabled);
+        tvvooSelectionStatus.setText(getString(R.string.tvvoo_selection_status, state, count));
     }
 
     private void renderQualityOptions() {
@@ -719,10 +754,18 @@ public final class SettingsActivity extends Activity {
         String value2 = urlInput2.getText().toString().trim();
         boolean enabled1 = playlistOneEnabled.isChecked();
         boolean enabled2 = playlistTwoEnabled.isChecked();
-        if (!enabled1 && !enabled2) {
+        boolean tvvooEnabled = tvvooSourceEnabled.isChecked();
+        boolean tvvooHasSelection = !tvvooSelectionStore.getSelectedCatalogChannels().isEmpty();
+        if (!enabled1 && !enabled2 && !tvvooEnabled) {
             errorText.setText(R.string.playlist_source_required);
             errorText.setVisibility(View.VISIBLE);
             playlistOneEnabled.requestFocus();
+            return;
+        }
+        if (tvvooEnabled && !tvvooHasSelection) {
+            errorText.setText(R.string.tvvoo_selection_required);
+            errorText.setVisibility(View.VISIBLE);
+            tvvooCatalogButton.requestFocus();
             return;
         }
         if (enabled1 && !isValidPlaylistUrl(value)) {
@@ -747,6 +790,14 @@ public final class SettingsActivity extends Activity {
                 .putBoolean(KEY_INVERT_CHANNEL_KEYS, invertChannelKeys.isChecked())
                 .putBoolean(KEY_NORMALIZE_VOLUME, normalizeVolume.isChecked())
                 .apply();
+        tvvooSelectionStore.setEnabled(tvvooEnabled);
+        if (tvvooEnabled) {
+            // The source toggle is the user-facing opt-in. Keep the TvVoo
+            // resolver engine enabled so a valid selection cannot become a
+            // silently empty list after editing resolver settings.
+            Switch tvvooResolver = resolverGroupSwitches.get("tvvoo");
+            if (tvvooResolver != null) tvvooResolver.setChecked(true);
+        }
         for (Map.Entry<String, Switch> entry : resolverGroupSwitches.entrySet()) {
             ResolverDefinition definition = resolverCatalog == null
                     ? null
@@ -852,6 +903,7 @@ public final class SettingsActivity extends Activity {
     protected void onResume() {
         super.onResume();
         enterImmersiveMode();
+        updateTvVooSelectionStatus();
         if (appUpdater != null) appUpdater.onHostResume();
     }
 

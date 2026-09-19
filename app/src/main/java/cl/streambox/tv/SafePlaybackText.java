@@ -25,7 +25,8 @@ final class SafePlaybackText {
     );
     private static final Pattern SENSITIVE_ASSIGNMENT_PATTERN = Pattern.compile(
             "(?i)(\\b(?:access[_-]?token|server[_-]?key|token|key|signature|sig|"
-                    + "auth(?:orization)?|hdnea|hdnts|session(?:id)?|jwt|ua)\\s*[=:]\\s*)"
+                    + "auth(?:orization)?|hdnea|hdnts|session(?:id)?|jwt|ua|"
+                    + "api[_-]?password|password|d)\\s*[=:]\\s*)"
                     + "([^&\\s,;]+)"
     );
     private static final Set<String> SENSITIVE_QUERY_KEYS = sensitiveQueryKeys();
@@ -134,6 +135,7 @@ final class SafePlaybackText {
 
     private static boolean isSensitiveQueryKey(String rawKey) {
         String key = rawKey == null ? "" : rawKey.toLowerCase(Locale.ROOT);
+        if (key.startsWith("h_")) return true;
         if (SENSITIVE_QUERY_KEYS.contains(key)) return true;
         try {
             String decoded = URLDecoder.decode(rawKey, StandardCharsets.UTF_8.name())
@@ -209,6 +211,10 @@ final class SafePlaybackText {
                 "sessionid",
                 "jwt",
                 "ua",
+                "api_password",
+                "api-password",
+                "password",
+                "d",
                 "url",
                 "source",
                 "stream",

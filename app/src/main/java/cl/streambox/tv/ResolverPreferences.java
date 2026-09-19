@@ -7,9 +7,11 @@ import android.content.SharedPreferences;
 public final class ResolverPreferences {
     private static final String KEY_PREFIX = "resolver_group_enabled_";
     private final SharedPreferences preferences;
+    private final MediaFlowPreferences mediaFlow;
 
     public ResolverPreferences(Context context) {
         preferences = context.getSharedPreferences(SettingsActivity.PREFS, Context.MODE_PRIVATE);
+        mediaFlow = new MediaFlowPreferences(context);
     }
 
     public boolean isEnabled(ResolverDefinition definition) {
@@ -21,6 +23,19 @@ public final class ResolverPreferences {
 
     public void setEnabled(ResolverDefinition definition, boolean enabled) {
         preferences.edit().putBoolean(KEY_PREFIX + definition.getId(), enabled).apply();
+    }
+
+    /** MediaFlow is an explicit opt-in and is off on fresh installs. */
+    public boolean isMediaFlowEnabled() {
+        return mediaFlow.isEnabled();
+    }
+
+    public void setMediaFlowEnabled(boolean enabled) {
+        mediaFlow.setEnabled(enabled);
+    }
+
+    public MediaFlowPreferences mediaFlowPreferences() {
+        return mediaFlow;
     }
 
 }

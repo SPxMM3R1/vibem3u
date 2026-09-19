@@ -101,9 +101,12 @@ public final class StreamResolverRegistry {
         return switch (definition.getEngine()) {
             case "tvn" -> new TvnStreamResolver(definition);
             case "meganoticias" -> new MeganoticiasStreamResolver(definition);
-            case "tvvoo" -> new TvVooStreamResolver(
-                    definition
-            );
+            case "tvvoo" -> preferences != null && preferences.isMediaFlowEnabled()
+                    ? new MediaFlowTvVooStreamResolver(
+                            definition,
+                            preferences.mediaFlowPreferences()
+                    )
+                    : new TvVooStreamResolver(definition);
             case "highfly" -> new HighflyStreamResolver(
                     definition
             );

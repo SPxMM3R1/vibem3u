@@ -13,6 +13,10 @@ public final class ResolvedPlaybackSource {
     private final String userAgent;
     private final String resolverId;
     private final String stableSourceId;
+    /** Non-secret provider variant, for example the TvVoo alias that won. */
+    private final String variantId;
+    private final String mimeType;
+    private final URI mediaFlowOrigin;
     private final long expiresAtMillis;
     private final boolean dynamicallyResolved;
 
@@ -22,6 +26,9 @@ public final class ResolvedPlaybackSource {
             String userAgent,
             String resolverId,
             String stableSourceId,
+            String variantId,
+            String mimeType,
+            URI mediaFlowOrigin,
             long expiresAtMillis,
             boolean dynamicallyResolved
     ) {
@@ -36,6 +43,13 @@ public final class ResolvedPlaybackSource {
         this.stableSourceId = stableSourceId == null || AppStrings.isBlank(stableSourceId)
                 ? null
                 : stableSourceId;
+        this.variantId = variantId == null || AppStrings.isBlank(variantId)
+                ? null
+                : variantId;
+        this.mimeType = mimeType == null || AppStrings.isBlank(mimeType)
+                ? null
+                : mimeType.trim();
+        this.mediaFlowOrigin = mediaFlowOrigin;
         this.expiresAtMillis = Math.max(0L, expiresAtMillis);
         this.dynamicallyResolved = dynamicallyResolved;
     }
@@ -46,6 +60,9 @@ public final class ResolvedPlaybackSource {
                 channel.getStreamUri(),
                 ChannelRequestHeaders.from(channel),
                 ChannelRequestHeaders.userAgent(channel, userAgent),
+                null,
+                null,
+                null,
                 null,
                 null,
                 0L,
@@ -65,6 +82,9 @@ public final class ResolvedPlaybackSource {
                 userAgent,
                 resolverId,
                 null,
+                null,
+                null,
+                null,
                 0L,
                 true
         );
@@ -78,12 +98,61 @@ public final class ResolvedPlaybackSource {
             String userAgent,
             long expiresAtMillis
     ) {
+        return dynamic(
+                resolverId,
+                stableSourceId,
+                playbackUri,
+                requestHeaders,
+                userAgent,
+                expiresAtMillis,
+                null
+        );
+    }
+
+    public static ResolvedPlaybackSource dynamic(
+            String resolverId,
+            String stableSourceId,
+            URI playbackUri,
+            Map<String, String> requestHeaders,
+            String userAgent,
+            long expiresAtMillis,
+            String variantId
+    ) {
         return new ResolvedPlaybackSource(
                 playbackUri,
                 requestHeaders,
                 userAgent,
                 resolverId,
                 stableSourceId,
+                variantId,
+                null,
+                null,
+                expiresAtMillis,
+                true
+        );
+    }
+
+    /** Dynamic source with explicit MIME and a trusted MediaFlow origin. */
+    public static ResolvedPlaybackSource dynamic(
+            String resolverId,
+            String stableSourceId,
+            URI playbackUri,
+            Map<String, String> requestHeaders,
+            String userAgent,
+            long expiresAtMillis,
+            String variantId,
+            String mimeType,
+            URI mediaFlowOrigin
+    ) {
+        return new ResolvedPlaybackSource(
+                playbackUri,
+                requestHeaders,
+                userAgent,
+                resolverId,
+                stableSourceId,
+                variantId,
+                mimeType,
+                mediaFlowOrigin,
                 expiresAtMillis,
                 true
         );
@@ -100,6 +169,9 @@ public final class ResolvedPlaybackSource {
                 ChannelRequestHeaders.from(channel),
                 ChannelRequestHeaders.userAgent(channel, userAgent),
                 resolverId,
+                null,
+                null,
+                null,
                 null,
                 0L,
                 false
@@ -128,6 +200,36 @@ public final class ResolvedPlaybackSource {
 
     public String getStableSourceId() {
         return stableSourceId == null ? "" : stableSourceId;
+    }
+
+    /**
+     * Returns a safe, provider-specific variant identifier. It is never a URL
+     * and may be persisted by an alias-learning store when appropriate.
+     */
+    public String getVariantId() {
+        return variantId == null ? "" : variantId;
+    }
+
+    /** Explicit media type, for example application/x-mpegURL or video/mp2t. */
+    public String getMimeType() {
+        return mimeType == null ? "" : mimeType;
+    }
+
+    public boolean hasMimeType() {
+        return mimeType != null;
+    }
+
+    /** Trusted origin used by MediaFlow extraction and playback policy. */
+    public URI getMediaFlowOriginUri() {
+        return mediaFlowOrigin;
+    }
+
+    public String getMediaFlowOrigin() {
+        return mediaFlowOrigin == null ? "" : mediaFlowOrigin.toString();
+    }
+
+    public boolean isMediaFlow() {
+        return mediaFlowOrigin != null;
     }
 
     public long getExpiresAtMillis() {

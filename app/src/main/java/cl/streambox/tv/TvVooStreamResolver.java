@@ -173,6 +173,12 @@ public final class TvVooStreamResolver implements StreamResolver {
 
         LinkedHashSet<String> aliases = new LinkedHashSet<>(definition.resolverAliases(channel));
         if (aliases.isEmpty()) aliases.addAll(generatedAliases(channel));
+        List<String> orderedAliases = TvVooSourceHistory.orderAliases(
+                stableSourceId(channel),
+                new ArrayList<>(aliases)
+        );
+        aliases.clear();
+        aliases.addAll(orderedAliases);
         int maxAliases = definition.getIntConfig(
                 "maxAliases",
                 DEFAULT_MAX_ALIASES,
@@ -221,10 +227,13 @@ public final class TvVooStreamResolver implements StreamResolver {
         LinkedHashMap<URI, String> candidatesByAlias = new LinkedHashMap<>();
         IOException lastError = null;
         for (AliasResult result : aliasResults) {
-            if (result.error != null) lastError = result.error;
             String alias = result.index >= 0 && result.index < limitedAliases.size()
                     ? limitedAliases.get(result.index)
                     : "";
+            if (result.error != null) {
+                lastError = result.error;
+                TvVooSourceHistory.recordFailure(stableSourceId(channel), alias);
+            }
             for (URI candidate : result.candidates) {
                 if (candidate != null && candidatesByAlias.size() < maxCandidates) {
                     candidatesByAlias.putIfAbsent(candidate, alias);
@@ -270,6 +279,7 @@ public final class TvVooStreamResolver implements StreamResolver {
                 if (attempt == null) continue;
                 if (attempt.getAccepted() != null) {
                     String alias = candidatesByAlias.get(attempt.getCandidate());
+                    TvVooSourceHistory.recordSuccess(stableSourceId(channel), alias);
                     int ordinal = result.size() + 1;
                     String qualityHint = aliasQualityHint(alias);
                     String label = "Fuente " + ordinal + " · " + qualityHint;
@@ -283,11 +293,16 @@ public final class TvVooStreamResolver implements StreamResolver {
                                     attempt.getAccepted(),
                                     playbackHeaders,
                                     PLAYBACK_USER_AGENT,
-                                    expiresAt()
+                                    expiresAt(),
+                                    alias
                             )
                     ));
                 } else if (attempt.getError() != null) {
                     lastError = attempt.getError();
+                    TvVooSourceHistory.recordFailure(
+                            stableSourceId(channel),
+                            candidatesByAlias.get(attempt.getCandidate())
+                    );
                 }
             }
         } finally {
@@ -607,6 +622,12 @@ public final class TvVooStreamResolver implements StreamResolver {
         // compatibility fallbacks; querying both delays the direct engine
         // behind unrelated dead candidates.
         if (aliases.isEmpty()) aliases.addAll(generatedAliases(channel));
+        List<String> orderedAliases = TvVooSourceHistory.orderAliases(
+                stableSourceId(channel),
+                new ArrayList<>(aliases)
+        );
+        aliases.clear();
+        aliases.addAll(orderedAliases);
         int maxAliases = definition.getIntConfig(
                 "maxAliases",
                 DEFAULT_MAX_ALIASES,
@@ -667,6 +688,7 @@ public final class TvVooStreamResolver implements StreamResolver {
                 )
         );
         LinkedHashSet<URI> globallySeenCandidates = new LinkedHashSet<>();
+        Map<URI, String> aliasesByCandidate = new LinkedHashMap<>();
         int nextAlias = 0;
         int inFlightAliases = 0;
         int completedAliases = 0;
@@ -698,6 +720,8 @@ public final class TvVooStreamResolver implements StreamResolver {
                 if (candidateAttempt != null) {
                     if (candidateAttempt.getAccepted() != null) {
                         URI source = candidateAttempt.getAccepted();
+                        String alias = aliasesByCandidate.get(candidateAttempt.getCandidate());
+                        TvVooSourceHistory.recordSuccess(stableSourceId(channel), alias);
                         progress.onProgress(ResolutionProgress.of(
                                 ResolutionStage.SOURCE_FOUND,
                                 "HLS válido · GET " + SafePlaybackText.url(source)
@@ -709,11 +733,16 @@ public final class TvVooStreamResolver implements StreamResolver {
                                 source,
                                 playbackHeaders,
                                 PLAYBACK_USER_AGENT,
-                                expiresAt()
+                                expiresAt(),
+                                alias
                         );
                     }
                     if (candidateAttempt.getError() != null) {
                         lastError = candidateAttempt.getError();
+                        TvVooSourceHistory.recordFailure(
+                                stableSourceId(channel),
+                                aliasesByCandidate.get(candidateAttempt.getCandidate())
+                        );
                     }
                     continue;
                 }
@@ -738,9 +767,19 @@ public final class TvVooStreamResolver implements StreamResolver {
                                         : new IOException("No se pudo consultar el alias.", cause)
                         );
                     }
-                    if (result.error != null) lastError = result.error;
+                    if (result.error != null) {
+                        lastError = result.error;
+                        String failedAlias = result.index >= 0
+                                && result.index < limitedAliases.size()
+                                ? limitedAliases.get(result.index)
+                                : "";
+                        TvVooSourceHistory.recordFailure(stableSourceId(channel), failedAlias);
+                    }
                     for (URI candidate : result.candidates) {
                         if (globallySeenCandidates.add(candidate)) {
+                            if (result.index >= 0 && result.index < limitedAliases.size()) {
+                                aliasesByCandidate.put(candidate, limitedAliases.get(result.index));
+                            }
                             candidateRace.submit(candidate);
                             if (!candidateRace.hasCapacity()) break;
                         }
@@ -774,6 +813,8 @@ public final class TvVooStreamResolver implements StreamResolver {
                     if (attempt != null) {
                         if (attempt.getAccepted() != null) {
                             URI source = attempt.getAccepted();
+                            String alias = aliasesByCandidate.get(attempt.getCandidate());
+                            TvVooSourceHistory.recordSuccess(stableSourceId(channel), alias);
                             progress.onProgress(ResolutionProgress.of(
                                     ResolutionStage.SOURCE_FOUND,
                                     "HLS válido · GET " + SafePlaybackText.url(source)
@@ -785,10 +826,17 @@ public final class TvVooStreamResolver implements StreamResolver {
                                     source,
                                     playbackHeaders,
                                     PLAYBACK_USER_AGENT,
-                                    expiresAt()
+                                    expiresAt(),
+                                    alias
                             );
                         }
-                        if (attempt.getError() != null) lastError = attempt.getError();
+                        if (attempt.getError() != null) {
+                            lastError = attempt.getError();
+                            TvVooSourceHistory.recordFailure(
+                                    stableSourceId(channel),
+                                    aliasesByCandidate.get(attempt.getCandidate())
+                            );
+                        }
                     }
                 } else {
                     Thread.yield();
@@ -1244,11 +1292,9 @@ public final class TvVooStreamResolver implements StreamResolver {
 
     private static String encodedAlias(String alias) throws IOException {
         String value = alias == null ? "" : alias.trim();
-        if (value.matches("vavoo_[A-Za-z0-9%._~+\\-]+")) return value;
-        if (value.startsWith("vavoo_")) {
-            return "vavoo_" + encodePart(value.substring("vavoo_".length()));
-        }
-        throw new IOException("Alias TvVoo inválido.");
+        String canonical = TvVooSourceHistory.canonicalAlias(value);
+        if (canonical.isEmpty()) throw new IOException("Alias TvVoo inválido.");
+        return canonical;
     }
 
     private static String encodePart(String value) {

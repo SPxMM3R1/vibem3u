@@ -1,5 +1,7 @@
 package cl.streambox.tv;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.ArrayList;
@@ -16,6 +18,14 @@ final class M3uCacheSanitizer {
     private static final Pattern RESOLVER_PATTERN = Pattern.compile(
         "\\bx-resolver\\s*=\\s*\\\"([^\\\"]*)\\\"",
         Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern RESOLVER_ID_PATTERN = Pattern.compile(
+            "\\bx-resolver-id\\s*=\\s*\\\"([^\\\"]*)\\\"",
+            Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern RESOLVER_ALIASES_PATTERN = Pattern.compile(
+            "\\bx-resolver-ids\\s*=\\s*\\\"([^\\\"]*)\\\"",
+            Pattern.CASE_INSENSITIVE
     );
     private static final Set<String> LEGACY_TVVOO_IDS = setOf(
             "premiersports1.ie", "premiersports2.ie", "skysportsracing.uk"
@@ -38,6 +48,8 @@ final class M3uCacheSanitizer {
         StringBuilder result = new StringBuilder(content.length());
         String pendingTvgId = "";
         String pendingResolver = "";
+        String pendingResolverId = "";
+        String pendingResolverAliases = "";
         for (String rawLine : content.split("\\r?\\n", -1)) {
             String line = rawLine.trim();
             if (line.matches("(?i)^#EXTVLCOPT:http-(cookie|authorization)\\s*=.*")) {
@@ -46,20 +58,30 @@ final class M3uCacheSanitizer {
             if (line.regionMatches(true, 0, "#EXTINF:", 0, 8)) {
                 pendingTvgId = extractTvgId(line);
                 pendingResolver = extractResolver(line);
+                pendingResolverId = extractResolverId(line);
+                pendingResolverAliases = extractResolverAliases(line);
                 result.append(SENSITIVE_HTTP_ATTRIBUTE.matcher(rawLine).replaceAll(""));
             } else if (!line.isEmpty() && !line.startsWith("#")
                     && isTvVoo(pendingTvgId, pendingResolver)) {
-                // TvVoo credentials are embedded in the path. Keeping only
-                // the stable EXTINF metadata prevents a session URL from
-                // becoming a persistent fallback.
-                result.append(TVVOO_PLACEHOLDER);
+                // TvVoo credentials are embedded in the path. Keep a
+                // tokenless resolver reference so the app renews the source.
+                result.append(tvvooReference(
+                        line,
+                        pendingTvgId,
+                        pendingResolverId,
+                        pendingResolverAliases
+                ));
                 pendingTvgId = "";
                 pendingResolver = "";
+                pendingResolverId = "";
+                pendingResolverAliases = "";
             } else if (!line.isEmpty() && !line.startsWith("#")
                     && isRenewableProvider(pendingTvgId, pendingResolver)) {
                 result.append(stripSensitiveCredentials(rawLine));
                 pendingTvgId = "";
                 pendingResolver = "";
+                pendingResolverId = "";
+                pendingResolverAliases = "";
             } else {
                 result.append(rawLine);
             }
@@ -77,6 +99,65 @@ final class M3uCacheSanitizer {
     private static String extractResolver(String line) {
         Matcher matcher = RESOLVER_PATTERN.matcher(line);
         return matcher.find() ? matcher.group(1).trim() : "";
+    }
+
+    private static String extractResolverId(String line) {
+        Matcher matcher = RESOLVER_ID_PATTERN.matcher(line);
+        return matcher.find() ? matcher.group(1).trim() : "";
+    }
+
+    private static String extractResolverAliases(String line) {
+        Matcher matcher = RESOLVER_ALIASES_PATTERN.matcher(line);
+        return matcher.find() ? matcher.group(1).trim() : "";
+    }
+
+    private static String tvvooReference(
+            String originalLine,
+            String tvgId,
+            String resolverId,
+            String resolverAliases
+    ) {
+        if (isSafeTvVooReference(originalLine)) return originalLine;
+        boolean hasSafeAlias = TvVooSourceHistory.isSafeAlias(resolverId);
+        if (!hasSafeAlias && !AppStrings.isBlank(resolverAliases)) {
+            for (String alias : resolverAliases.split(";")) {
+                if (TvVooSourceHistory.isSafeAlias(alias)) {
+                    hasSafeAlias = true;
+                    break;
+                }
+            }
+        }
+        // A legacy row with only a tvg-id or opaque alias cannot be renewed
+        // deterministically. Preserve the old placeholder for compatibility.
+        if (!hasSafeAlias || AppStrings.isBlank(tvgId)) return TVVOO_PLACEHOLDER;
+        try {
+            return "tvvoo://channel/" + URLEncoder.encode(
+                    tvgId.trim(),
+                    StandardCharsets.UTF_8.name()
+            ).replace("+", "%20");
+        } catch (Exception ignored) {
+            return TVVOO_PLACEHOLDER;
+        }
+    }
+
+    private static boolean isSafeTvVooReference(String value) {
+        if (AppStrings.isBlank(value)) return false;
+        try {
+            java.net.URI uri = java.net.URI.create(value.trim());
+            String path = uri.getRawPath();
+            return "tvvoo".equalsIgnoreCase(uri.getScheme())
+                    && "channel".equalsIgnoreCase(uri.getHost())
+                    && uri.getPort() == -1
+                    && uri.getUserInfo() == null
+                    && uri.getRawQuery() == null
+                    && uri.getRawFragment() == null
+                    && path != null
+                    && path.startsWith("/")
+                    && path.length() > 1
+                    && path.indexOf('/', 1) < 0;
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
     }
 
     private static boolean isRenewableProvider(String tvgId, String resolver) {
