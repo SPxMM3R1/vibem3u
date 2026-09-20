@@ -73,6 +73,13 @@
     <string name="github_publish_generic_error">No se pudo publicar la selección.</string>
     <string name="github_publish_error">No se pudo publicar: %1$s</string>
     <string name="github_publish_repo">Destino: SPxMM3R1/lista-m3u · main · data/vibem3u-selection.json</string>
+    <string name="catalog_refresh_ids">Actualizar IDs</string>
+    <string name="catalog_refresh_ids_working">Verificando IDs publicados…</string>
+    <string name="catalog_ids_status">IDs confirmados: %1$d · pendientes: %2$d</string>
+    <string name="catalog_ids_status_with_errors">IDs confirmados: %1$d · pendientes: %2$d · fuentes con error: %3$d</string>
+    <string name="catalog_id_assigned">ID EPG: %1$s</string>
+    <string name="catalog_id_pending">ID EPG: pendiente de Lista M3U</string>
+    <string name="catalog_selection_position">Orden %1$d</string>
     <string name="save_and_play">Guardar</string>
     <string name="exit_dialog_title">¿Salir de VibeM3U?</string>
     <string name="stay_watching">Seguir viendo</string>

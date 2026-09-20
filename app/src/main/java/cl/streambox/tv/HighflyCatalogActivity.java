@@ -49,6 +49,8 @@ public final class HighflyCatalogActivity extends Activity {
     private Button previousButton;
     private Button nextButton;
     private Button applyButton;
+    private Button refreshIdsButton;
+    private ChannelIdentityIndex identityIndex = ChannelIdentityIndex.empty();
     private int currentPage;
     private boolean applyingCategory;
 
@@ -74,7 +76,7 @@ public final class HighflyCatalogActivity extends Activity {
         TextView title = label("Canales Highfly", 24, Color.rgb(0, 255, 209));
         root.addView(title, new LinearLayout.LayoutParams(-1, dp(42)));
         TextView description = label(
-                "Marca canales del catálogo. La selección guarda solo referencias estables; la fuente se renueva al reproducir.",
+                "Marca canales del catálogo. El orden se conserva al seleccionar; el ID EPG se confirma desde la M3U.",
                 14,
                 Color.LTGRAY
         );
@@ -105,6 +107,14 @@ public final class HighflyCatalogActivity extends Activity {
         statusText = label("Cargando catálogo…", 14, Color.LTGRAY);
         root.addView(statusText, new LinearLayout.LayoutParams(-1, dp(34)));
 
+        refreshIdsButton = actionButton(getString(R.string.catalog_refresh_ids));
+        refreshIdsButton.setOnClickListener(view -> refreshIdentityIndex());
+        LinearLayout.LayoutParams refreshParams = new LinearLayout.LayoutParams(
+                dp(190), dp(44)
+        );
+        refreshParams.gravity = Gravity.END;
+        root.addView(refreshIdsButton, refreshParams);
+
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         channelContainer = new LinearLayout(this);
@@ -133,6 +143,7 @@ public final class HighflyCatalogActivity extends Activity {
         actions.addView(cancelButton, new LinearLayout.LayoutParams(dp(145), dp(50)));
         root.addView(actions, new LinearLayout.LayoutParams(-1, dp(62)));
         setContentView(root);
+        loadCachedIdentityIndex();
 
         categorySpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
@@ -181,6 +192,30 @@ public final class HighflyCatalogActivity extends Activity {
             } catch (Exception error) {
                 handler.post(() -> showStatus("No se pudo cargar Highfly: " + safeMessage(error)));
             }
+        });
+    }
+
+    private void loadCachedIdentityIndex() {
+        executor.execute(() -> {
+            ChannelIdentityIndex value = ChannelIdentityIndex.loadCached(this);
+            handler.post(() -> {
+                identityIndex = value;
+                renderPage();
+            });
+        });
+    }
+
+    private void refreshIdentityIndex() {
+        if (refreshIdsButton != null) refreshIdsButton.setEnabled(false);
+        showStatus(getString(R.string.catalog_refresh_ids_working));
+        executor.execute(() -> {
+            ChannelIdentityIndex.RefreshResult result = ChannelIdentityIndex.refresh(this);
+            handler.post(() -> {
+                identityIndex = result.getIndex();
+                if (refreshIdsButton != null) refreshIdsButton.setEnabled(true);
+                showIdentityStatus(result.getFailedSources());
+                renderPage();
+            });
         });
     }
 
@@ -251,12 +286,12 @@ public final class HighflyCatalogActivity extends Activity {
     private View addChannelRow(HighflyCatalogChannel channel) {
         CheckBox row = new CheckBox(this);
         row.setTag(channel.getResourceId());
-        row.setText(channel.getName());
+        row.setText(channelLabel(channel));
         row.setTextColor(Color.WHITE);
-        row.setTextSize(15);
+        row.setTextSize(13);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(14), 0, dp(14), 0);
-        row.setMinHeight(dp(50));
+        row.setMinHeight(dp(62));
         row.setFocusable(true);
         row.setBackgroundResource(R.drawable.settings_section_card);
         row.setChecked(selected.containsKey(channel.getResourceId()));
@@ -264,11 +299,47 @@ public final class HighflyCatalogActivity extends Activity {
             if (checked) selected.put(channel.getResourceId(), channel);
             else selected.remove(channel.getResourceId());
             showStatus(selected.size() + " canales Highfly seleccionados");
+            renderPage();
         });
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(50));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(62));
         params.bottomMargin = dp(4);
         channelContainer.addView(row, params);
         return row;
+    }
+
+    private String channelLabel(HighflyCatalogChannel channel) {
+        StringBuilder value = new StringBuilder();
+        int position = selectedPosition(channel.getResourceId());
+        if (position > 0) {
+            value.append(getString(R.string.catalog_selection_position, position))
+                    .append(" · ");
+        }
+        value.append(channel.getName()).append('\n');
+        String tvgId = identityIndex.tvgIdFor(channel);
+        value.append(AppStrings.isBlank(tvgId)
+                ? getString(R.string.catalog_id_pending)
+                : getString(R.string.catalog_id_assigned, tvgId));
+        return value.toString();
+    }
+
+    private int selectedPosition(String resourceId) {
+        int position = 1;
+        for (HighflyCatalogChannel selectedChannel : selected.values()) {
+            if (selectedChannel.getResourceId().equals(resourceId)) return position;
+            position++;
+        }
+        return 0;
+    }
+
+    private void showIdentityStatus(int failedSources) {
+        int confirmed = 0;
+        for (HighflyCatalogChannel channel : selected.values()) {
+            if (!AppStrings.isBlank(identityIndex.tvgIdFor(channel))) confirmed++;
+        }
+        int pending = Math.max(0, selected.size() - confirmed);
+        showStatus(failedSources > 0
+                ? getString(R.string.catalog_ids_status_with_errors, confirmed, pending, failedSources)
+                : getString(R.string.catalog_ids_status, confirmed, pending));
     }
 
     private void copyM3u() {

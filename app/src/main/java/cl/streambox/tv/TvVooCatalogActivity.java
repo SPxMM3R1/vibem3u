@@ -53,6 +53,8 @@ public final class TvVooCatalogActivity extends Activity {
     private Button nextButton;
     private Button applyButton;
     private Button copyButton;
+    private Button refreshIdsButton;
+    private ChannelIdentityIndex identityIndex = ChannelIdentityIndex.empty();
     private int currentPage;
     private int catalogRequest;
     private boolean applyingSpinner;
@@ -80,7 +82,7 @@ public final class TvVooCatalogActivity extends Activity {
         root.addView(title, new LinearLayout.LayoutParams(-1, dp(42)));
 
         TextView description = label(
-                "Busca y marca canales. La selección se conserva aunque TvVoo esté desactivado.",
+                "Busca y marca canales. El orden se conserva al seleccionar; el ID EPG se confirma desde la M3U.",
                 14,
                 Color.LTGRAY
         );
@@ -114,6 +116,14 @@ public final class TvVooCatalogActivity extends Activity {
         statusText = label("Cargando catálogo…", 14, Color.LTGRAY);
         root.addView(statusText, new LinearLayout.LayoutParams(-1, dp(34)));
 
+        refreshIdsButton = actionButton(getString(R.string.catalog_refresh_ids));
+        refreshIdsButton.setOnClickListener(view -> refreshIdentityIndex());
+        LinearLayout.LayoutParams refreshParams = new LinearLayout.LayoutParams(
+                dp(190), dp(44)
+        );
+        refreshParams.gravity = Gravity.END;
+        root.addView(refreshIdsButton, refreshParams);
+
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         channelContainer = new LinearLayout(this);
@@ -143,6 +153,7 @@ public final class TvVooCatalogActivity extends Activity {
         actions.addView(cancelButton, new LinearLayout.LayoutParams(dp(145), dp(50)));
         root.addView(actions, new LinearLayout.LayoutParams(-1, dp(62)));
         setContentView(root);
+        loadCachedIdentityIndex();
 
         countrySpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
@@ -201,6 +212,30 @@ public final class TvVooCatalogActivity extends Activity {
             } catch (Exception error) {
                 handler.post(() -> showStatus("No se pudo cargar TvVoo: " + safeMessage(error)));
             }
+        });
+    }
+
+    private void loadCachedIdentityIndex() {
+        executor.execute(() -> {
+            ChannelIdentityIndex value = ChannelIdentityIndex.loadCached(this);
+            handler.post(() -> {
+                identityIndex = value;
+                renderPage();
+            });
+        });
+    }
+
+    private void refreshIdentityIndex() {
+        if (refreshIdsButton != null) refreshIdsButton.setEnabled(false);
+        showStatus(getString(R.string.catalog_refresh_ids_working));
+        executor.execute(() -> {
+            ChannelIdentityIndex.RefreshResult result = ChannelIdentityIndex.refresh(this);
+            handler.post(() -> {
+                identityIndex = result.getIndex();
+                if (refreshIdsButton != null) refreshIdsButton.setEnabled(true);
+                showIdentityStatus(result.getFailedSources());
+                renderPage();
+            });
         });
     }
 
@@ -313,12 +348,12 @@ public final class TvVooCatalogActivity extends Activity {
     private View addChannelRow(TvVooCatalogChannel channel) {
         CheckBox row = new CheckBox(this);
         row.setTag(channel.getStableId());
-        row.setText(channel.getName());
+        row.setText(channelLabel(channel));
         row.setTextColor(Color.WHITE);
-        row.setTextSize(15);
+        row.setTextSize(13);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(14), 0, dp(14), 0);
-        row.setMinHeight(dp(50));
+        row.setMinHeight(dp(62));
         row.setFocusable(true);
         row.setBackgroundResource(R.drawable.settings_section_card);
         row.setChecked(selected.containsKey(channel.getStableId()));
@@ -326,11 +361,47 @@ public final class TvVooCatalogActivity extends Activity {
             if (checked) selected.put(channel.getStableId(), channel);
             else selected.remove(channel.getStableId());
             showStatus(selected.size() + " canales seleccionados");
+            renderPage();
         });
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(50));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(62));
         params.bottomMargin = dp(4);
         channelContainer.addView(row, params);
         return row;
+    }
+
+    private String channelLabel(TvVooCatalogChannel channel) {
+        StringBuilder value = new StringBuilder();
+        int position = selectedPosition(channel.getStableId());
+        if (position > 0) {
+            value.append(getString(R.string.catalog_selection_position, position))
+                    .append(" · ");
+        }
+        value.append(channel.getName()).append('\n');
+        String tvgId = identityIndex.tvgIdFor(channel);
+        value.append(AppStrings.isBlank(tvgId)
+                ? getString(R.string.catalog_id_pending)
+                : getString(R.string.catalog_id_assigned, tvgId));
+        return value.toString();
+    }
+
+    private int selectedPosition(String stableId) {
+        int position = 1;
+        for (TvVooCatalogChannel selectedChannel : selected.values()) {
+            if (selectedChannel.getStableId().equals(stableId)) return position;
+            position++;
+        }
+        return 0;
+    }
+
+    private void showIdentityStatus(int failedSources) {
+        int confirmed = 0;
+        for (TvVooCatalogChannel channel : selected.values()) {
+            if (!AppStrings.isBlank(identityIndex.tvgIdFor(channel))) confirmed++;
+        }
+        int pending = Math.max(0, selected.size() - confirmed);
+        showStatus(failedSources > 0
+                ? getString(R.string.catalog_ids_status_with_errors, confirmed, pending, failedSources)
+                : getString(R.string.catalog_ids_status, confirmed, pending));
     }
 
     private void copyM3u() {
