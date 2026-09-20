@@ -33,6 +33,19 @@ android {
         versionCode = 112
         versionName = "0.5.06"
         buildConfigField("boolean", "ENABLE_APP_UPDATES", "true")
+        // Public OAuth client id for the GitHub Device Flow. It is supplied
+        // by the release environment and is intentionally not a secret.
+        val githubDeviceClientId = System.getenv("VIBEM3U_GITHUB_DEVICE_CLIENT_ID")
+            ?: project.findProperty("githubDeviceClientId")?.toString()
+            ?: ""
+        val escapedGithubDeviceClientId = githubDeviceClientId
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+        buildConfigField(
+            "String",
+            "GITHUB_DEVICE_CLIENT_ID",
+            "\"$escapedGithubDeviceClientId\""
+        )
     }
 
     buildTypes {
@@ -79,6 +92,7 @@ dependencies {
     implementation("androidx.media3:media3-datasource-okhttp:1.10.1")
     implementation("androidx.media3:media3-ui:1.10.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.google.zxing:core:3.5.3")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

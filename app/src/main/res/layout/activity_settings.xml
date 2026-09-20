@@ -631,7 +631,7 @@
                             android:minHeight="0dp"
                             android:minWidth="0dp"
                             android:nextFocusUp="@id/highfly_source_enabled"
-                            android:nextFocusDown="@id/github_auto_publish"
+                            android:nextFocusDown="@id/github_device_authorize"
                             android:text="@string/highfly_open_catalog"
                             android:textColor="@color/white"
                             android:textSize="@dimen/settings_action_text_size" />
@@ -662,6 +662,22 @@
                             android:textColor="@color/muted"
                             android:textSize="@dimen/settings_body_text_size" />
 
+                        <Button
+                            android:id="@+id/github_device_authorize"
+                            android:layout_width="match_parent"
+                            android:layout_height="@dimen/settings_action_height"
+                            android:layout_marginTop="8dp"
+                            android:background="@drawable/focus_button"
+                            android:focusable="true"
+                            android:includeFontPadding="false"
+                            android:minHeight="0dp"
+                            android:minWidth="0dp"
+                            android:nextFocusUp="@id/highfly_catalog_button"
+                            android:nextFocusDown="@id/github_auto_publish"
+                            android:text="@string/github_device_authorize"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/settings_action_text_size" />
+
                         <Switch
                             android:id="@+id/github_auto_publish"
                             android:layout_width="match_parent"
@@ -669,7 +685,7 @@
                             android:layout_marginTop="8dp"
                             android:background="@drawable/settings_section_card"
                             android:focusable="true"
-                            android:nextFocusUp="@id/highfly_catalog_button"
+                            android:nextFocusUp="@id/github_device_authorize"
                             android:nextFocusDown="@id/github_token"
                             android:paddingStart="12dp"
                             android:paddingEnd="12dp"
@@ -678,6 +694,14 @@
                             android:textColor="@color/white"
                             android:textSize="@dimen/settings_control_text_size"
                             android:thumbTint="@color/cyan" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="@string/github_manual_token_label"
+                            android:textColor="@color/muted"
+                            android:textSize="@dimen/settings_body_text_size" />
 
                         <EditText
                             android:id="@+id/github_token"

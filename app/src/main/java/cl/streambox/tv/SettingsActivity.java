@@ -1,9 +1,11 @@
 package cl.streambox.tv;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
@@ -19,6 +21,7 @@ import android.view.ViewTreeObserver;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Switch;
@@ -93,6 +96,7 @@ public final class SettingsActivity extends Activity {
     private Switch highflySourceEnabled;
     private Button highflyCatalogButton;
     private Switch githubAutoPublish;
+    private Button githubDeviceAuthorizeButton;
     private EditText githubTokenInput;
     private TextView githubTokenStatus;
     private Button githubPublishButton;
@@ -146,6 +150,12 @@ public final class SettingsActivity extends Activity {
     private Button automaticQualityButton;
     private final List<Button> qualityOptionButtons = new ArrayList<>();
     private final List<Button> qualityFocusButtons = new ArrayList<>();
+    private GitHubDeviceAuthorization.Handle githubDeviceAuthorization;
+    private AlertDialog githubDeviceDialog;
+    private TextView githubDeviceDialogStatus;
+    private TextView githubDeviceDialogCode;
+    private TextView githubDeviceDialogUrl;
+    private ImageView githubDeviceDialogQr;
     /**
      * Seeds a completely unconfigured installation and fills only a missing
      * Lista 2 URL. Existing playlist choices remain authoritative, including
@@ -247,6 +257,7 @@ public final class SettingsActivity extends Activity {
         highflySourceEnabled = findViewById(R.id.highfly_source_enabled);
         highflyCatalogButton = findViewById(R.id.highfly_catalog_button);
         githubAutoPublish = findViewById(R.id.github_auto_publish);
+        githubDeviceAuthorizeButton = findViewById(R.id.github_device_authorize);
         githubTokenInput = findViewById(R.id.github_token);
         githubTokenStatus = findViewById(R.id.github_token_status);
         githubPublishButton = findViewById(R.id.github_publish_now);
@@ -349,6 +360,8 @@ public final class SettingsActivity extends Activity {
                 startActivity(new Intent(this, TvVooCatalogActivity.class)));
         highflyCatalogButton.setOnClickListener(view ->
                 startActivity(new Intent(this, HighflyCatalogActivity.class)));
+        githubDeviceAuthorizeButton.setOnClickListener(view ->
+                startGitHubDeviceAuthorization());
         githubPublishButton.setOnClickListener(view -> publishGitHubSelectionNow());
         mediaFlowSettingsButton.setOnClickListener(view ->
                 startActivity(new Intent(this, MediaFlowSettingsActivity.class)));
@@ -526,6 +539,199 @@ public final class SettingsActivity extends Activity {
             }
             updateGitHubPublicationStatus();
         }));
+    }
+
+    private void startGitHubDeviceAuthorization() {
+        if (!GitHubDeviceAuthorization.isConfigured()) {
+            githubPublishStatus.setText(R.string.github_device_missing_client);
+            githubPublishStatus.setVisibility(View.VISIBLE);
+            return;
+        }
+        if (githubDeviceAuthorization != null) return;
+        githubDeviceAuthorizeButton.setEnabled(false);
+        showGitHubDeviceDialog();
+        githubDeviceAuthorization = GitHubDeviceAuthorization.begin(
+                GitHubDeviceAuthorization.configuredClientId(),
+                new GitHubDeviceAuthorization.Callback() {
+                    @Override
+                    public void onDeviceCode(GitHubDeviceAuthorization.DeviceCode deviceCode) {
+                        mainHandler.post(() -> renderGitHubDeviceCode(deviceCode));
+                    }
+
+                    @Override
+                    public void onStatus(String status) {
+                        mainHandler.post(() -> updateGitHubDeviceDialogStatus(status));
+                    }
+
+                    @Override
+                    public void onSuccess(GitHubDeviceAuthorization.TokenPair tokens) {
+                        mainHandler.post(() -> finishGitHubDeviceAuthorization(tokens));
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        mainHandler.post(() -> failGitHubDeviceAuthorization(message));
+                    }
+                }
+        );
+    }
+
+    private void showGitHubDeviceDialog() {
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(24), dp(18), dp(24), dp(12));
+
+        TextView instructions = new TextView(this);
+        instructions.setText(R.string.github_device_instructions);
+        instructions.setTextColor(getColor(R.color.white));
+        instructions.setTextSize(TypedValue.COMPLEX_UNIT_PX,
+                getResources().getDimension(R.dimen.settings_body_text_size));
+        content.addView(instructions, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        ));
+
+        githubDeviceDialogQr = new ImageView(this);
+        githubDeviceDialogQr.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        githubDeviceDialogQr.setVisibility(View.GONE);
+        LinearLayout.LayoutParams qrParams = new LinearLayout.LayoutParams(dp(280), dp(280));
+        qrParams.gravity = Gravity.CENTER_HORIZONTAL;
+        qrParams.topMargin = dp(12);
+        content.addView(githubDeviceDialogQr, qrParams);
+
+        githubDeviceDialogCode = new TextView(this);
+        githubDeviceDialogCode.setGravity(Gravity.CENTER);
+        githubDeviceDialogCode.setText("—");
+        githubDeviceDialogCode.setTextColor(getColor(R.color.cyan));
+        githubDeviceDialogCode.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);
+        githubDeviceDialogCode.setTypeface(null, android.graphics.Typeface.BOLD);
+        content.addView(githubDeviceDialogCode, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        ));
+
+        githubDeviceDialogUrl = new TextView(this);
+        githubDeviceDialogUrl.setGravity(Gravity.CENTER);
+        githubDeviceDialogUrl.setText(GitHubDeviceAuthorization.VERIFICATION_URI);
+        githubDeviceDialogUrl.setTextColor(getColor(R.color.white));
+        githubDeviceDialogUrl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        content.addView(githubDeviceDialogUrl, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        ));
+
+        githubDeviceDialogStatus = new TextView(this);
+        githubDeviceDialogStatus.setGravity(Gravity.CENTER);
+        githubDeviceDialogStatus.setText(R.string.github_device_requesting);
+        githubDeviceDialogStatus.setTextColor(getColor(R.color.muted));
+        githubDeviceDialogStatus.setTextSize(TypedValue.COMPLEX_UNIT_PX,
+                getResources().getDimension(R.dimen.settings_body_text_size));
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        statusParams.topMargin = dp(8);
+        content.addView(githubDeviceDialogStatus, statusParams);
+
+        Button cancel = new Button(this);
+        cancel.setText(R.string.github_device_cancel);
+        cancel.setAllCaps(false);
+        cancel.setOnClickListener(view -> cancelGitHubDeviceAuthorization());
+        LinearLayout.LayoutParams cancelParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                getResources().getDimensionPixelSize(R.dimen.settings_action_height)
+        );
+        cancelParams.gravity = Gravity.CENTER_HORIZONTAL;
+        cancelParams.topMargin = dp(8);
+        content.addView(cancel, cancelParams);
+
+        githubDeviceDialog = new AlertDialog.Builder(this)
+                .setTitle(R.string.github_device_title)
+                .setView(content)
+                .create();
+        githubDeviceDialog.setOnCancelListener(dialog -> cancelGitHubDeviceAuthorization());
+        githubDeviceDialog.setOnShowListener(dialog -> cancel.requestFocus());
+        githubDeviceDialog.show();
+    }
+
+    private void renderGitHubDeviceCode(GitHubDeviceAuthorization.DeviceCode deviceCode) {
+        if (githubDeviceDialog == null || deviceCode == null) return;
+        githubDeviceDialogCode.setText(deviceCode.getUserCode());
+        githubDeviceDialogUrl.setText(deviceCode.getVerificationUri());
+        updateGitHubDeviceDialogStatus(formatGitHubDeviceExpiry(deviceCode.getExpiresAtMillis()));
+        try {
+            Bitmap qr = QrCodeBitmap.encode(deviceCode.getVerificationUri(), dp(280));
+            githubDeviceDialogQr.setImageBitmap(qr);
+            githubDeviceDialogQr.setVisibility(View.VISIBLE);
+        } catch (Exception error) {
+            githubDeviceDialogQr.setVisibility(View.GONE);
+            updateGitHubDeviceDialogStatus("QR no disponible; usa la dirección y el código.");
+        }
+    }
+
+    private String formatGitHubDeviceExpiry(long expiresAtMillis) {
+        long seconds = Math.max(0L, (expiresAtMillis - System.currentTimeMillis()) / 1000L);
+        return getString(
+                R.string.github_device_expiry,
+                String.format(Locale.ROOT, "%02d:%02d", seconds / 60L, seconds % 60L)
+        );
+    }
+
+    private void updateGitHubDeviceDialogStatus(String status) {
+        if (githubDeviceDialogStatus != null && !AppStrings.isBlank(status)) {
+            githubDeviceDialogStatus.setText(status);
+        }
+    }
+
+    private void finishGitHubDeviceAuthorization(
+            GitHubDeviceAuthorization.TokenPair tokens
+    ) {
+        try {
+            githubPublicationPreferences.setOAuthTokens(
+                    tokens.getAccessToken(),
+                    tokens.getRefreshToken(),
+                    tokens.getAccessExpiresAtMillis()
+            );
+            githubDeviceAuthorization = null;
+            if (githubDeviceDialog != null) {
+                githubDeviceDialog.dismiss();
+                githubDeviceDialog = null;
+            }
+            githubDeviceAuthorizeButton.setEnabled(true);
+            updateGitHubPublicationStatus();
+            githubPublishStatus.setText(R.string.github_device_success);
+            if (githubAutoPublish.isChecked()) publishGitHubSelectionNow();
+        } catch (Exception error) {
+            failGitHubDeviceAuthorization("No se pudo guardar la autorización.");
+        }
+    }
+
+    private void failGitHubDeviceAuthorization(String message) {
+        githubDeviceAuthorization = null;
+        if (githubDeviceDialog != null) {
+            githubDeviceDialog.dismiss();
+            githubDeviceDialog = null;
+        }
+        githubDeviceAuthorizeButton.setEnabled(true);
+        githubPublishStatus.setText(getString(
+                R.string.github_device_error,
+                AppStrings.isBlank(message) ? "error desconocido" : message
+        ));
+    }
+
+    private void cancelGitHubDeviceAuthorization() {
+        if (githubDeviceAuthorization != null) {
+            githubDeviceAuthorization.cancel();
+            githubDeviceAuthorization = null;
+        }
+        if (githubDeviceDialog != null) {
+            AlertDialog dialog = githubDeviceDialog;
+            githubDeviceDialog = null;
+            dialog.dismiss();
+        }
+        if (githubDeviceAuthorizeButton != null) {
+            githubDeviceAuthorizeButton.setEnabled(true);
+        }
     }
 
     private void renderHiddenChannels() {
@@ -1139,6 +1345,7 @@ public final class SettingsActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        cancelGitHubDeviceAuthorization();
         if (appUpdater != null) appUpdater.destroy();
         if (focusVisibilityListener != null) {
             ViewTreeObserver observer = getWindow().getDecorView().getViewTreeObserver();

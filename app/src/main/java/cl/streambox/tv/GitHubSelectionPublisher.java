@@ -77,7 +77,13 @@ public final class GitHubSelectionPublisher {
             return Result.skipped("Publicación automática desactivada.");
         }
 
-        String token = preferences.getToken();
+        String token;
+        try {
+            token = usableToken(preferences);
+        } catch (Exception error) {
+            preferences.markFailure("Vuelve a vincular GitHub desde Opciones.");
+            return Result.failed("La autorización de GitHub expiró.");
+        }
         if (AppStrings.isBlank(token)) {
             return Result.needsConfiguration("Configura un token de GitHub.");
         }
@@ -151,6 +157,32 @@ public final class GitHubSelectionPublisher {
             if (error.getStatusCode() == 404) return "";
             throw error;
         }
+    }
+
+    private static String usableToken(GitHubPublicationPreferences preferences)
+            throws Exception {
+        String token = preferences.getToken();
+        if (!preferences.isAccessTokenExpired(System.currentTimeMillis() + 30_000L)) {
+            return token;
+        }
+        String refresh = preferences.getRefreshToken();
+        if (AppStrings.isBlank(refresh)) {
+            throw new java.io.IOException("No hay refresh token de GitHub.");
+        }
+        GitHubDeviceAuthorization.TokenPair refreshed =
+                GitHubDeviceAuthorization.refreshAccessToken(
+                        GitHubDeviceAuthorization.configuredClientId(),
+                        refresh
+                );
+        String refreshedRefresh = AppStrings.isBlank(refreshed.getRefreshToken())
+                ? refresh
+                : refreshed.getRefreshToken();
+        preferences.setOAuthTokens(
+                refreshed.getAccessToken(),
+                refreshedRefresh,
+                refreshed.getAccessExpiresAtMillis()
+        );
+        return refreshed.getAccessToken();
     }
 
     private static Map<String, String> githubHeaders(String token) {
