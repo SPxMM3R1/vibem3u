@@ -30,6 +30,7 @@ public final class HighflyCatalogTest {
         assertEquals(2, catalog.size());
         HighflyCatalogChannel channel = catalog.getChannels().get(0);
         assertEquals("f1-3949409", channel.getSlug());
+        assertEquals("SkySportsF1.uk", channel.getStableId());
         String entry = channel.toM3uEntry();
         assertTrue(entry.contains("x-resolver=\"highfly\""));
         assertTrue(entry.contains("vibem3u://resolver/highfly/f1-3949409"));
@@ -39,6 +40,25 @@ public final class HighflyCatalogTest {
         assertEquals(1, parsed.size());
         assertEquals("highfly", parsed.get(0).getAttributes().get("x-resolver"));
         assertEquals("f1-3949409", parsed.get(0).getAttributes().get("x-resolver-id"));
+        assertEquals("SkySportsF1.uk", parsed.get(0).getAttributes().get("tvg-id"));
+        assertEquals("SkySportsF1.uk",
+                parsed.get(0).getAttributes().get("x-resolver-stable-id"));
+    }
+
+    @Test
+    public void derivesStableIdentityFromNameInsteadOfRotatingLeafSlug() {
+        assertEquals(
+                "SkySportsF1.uk",
+                HighflyCatalogChannel.stableIdentity("", "Sky Sports F1")
+        );
+        assertEquals(
+                "Highfly.someunknownchannel",
+                HighflyCatalogChannel.stableIdentity("", "Some Unknown Channel")
+        );
+        assertEquals(
+                "SkySportsF1.uk",
+                HighflyCatalogChannel.stableIdentity("SkySportsF1.uk", "Different label")
+        );
     }
 
     @Test

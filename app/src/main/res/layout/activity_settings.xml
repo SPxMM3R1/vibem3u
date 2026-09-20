@@ -631,7 +631,7 @@
                             android:minHeight="0dp"
                             android:minWidth="0dp"
                             android:nextFocusUp="@id/highfly_source_enabled"
-                            android:nextFocusDown="@id/tvvoo_source_enabled"
+                            android:nextFocusDown="@id/github_auto_publish"
                             android:text="@string/highfly_open_catalog"
                             android:textColor="@color/white"
                             android:textSize="@dimen/settings_action_text_size" />
@@ -645,6 +645,96 @@
                             android:textColor="@color/muted"
                             android:textSize="@dimen/settings_body_text_size" />
 
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            android:text="@string/github_selection_title"
+                            android:textColor="@color/cyan"
+                            android:textSize="@dimen/settings_card_title_text_size"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="@string/github_selection_description"
+                            android:textColor="@color/muted"
+                            android:textSize="@dimen/settings_body_text_size" />
+
+                        <Switch
+                            android:id="@+id/github_auto_publish"
+                            android:layout_width="match_parent"
+                            android:layout_height="@dimen/settings_control_height"
+                            android:layout_marginTop="8dp"
+                            android:background="@drawable/settings_section_card"
+                            android:focusable="true"
+                            android:nextFocusUp="@id/highfly_catalog_button"
+                            android:nextFocusDown="@id/github_token"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:showText="false"
+                            android:text="@string/github_auto_publish"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/settings_control_text_size"
+                            android:thumbTint="@color/cyan" />
+
+                        <EditText
+                            android:id="@+id/github_token"
+                            android:layout_width="match_parent"
+                            android:layout_height="@dimen/settings_control_height"
+                            android:layout_marginTop="6dp"
+                            android:background="@drawable/settings_input"
+                            android:hint="@string/github_token_hint"
+                            android:imeOptions="actionDone"
+                            android:inputType="textPassword|textNoSuggestions"
+                            android:nextFocusUp="@id/github_auto_publish"
+                            android:nextFocusDown="@id/github_publish_now"
+                            android:singleLine="true"
+                            android:textColor="@color/white"
+                            android:textColorHint="#78909C"
+                            android:textSize="@dimen/settings_control_text_size" />
+
+                        <TextView
+                            android:id="@+id/github_token_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:textColor="@color/muted"
+                            android:textSize="@dimen/settings_body_text_size" />
+
+                        <Button
+                            android:id="@+id/github_publish_now"
+                            android:layout_width="match_parent"
+                            android:layout_height="@dimen/settings_action_height"
+                            android:layout_marginTop="6dp"
+                            android:background="@drawable/focus_button"
+                            android:focusable="true"
+                            android:includeFontPadding="false"
+                            android:minHeight="0dp"
+                            android:minWidth="0dp"
+                            android:nextFocusUp="@id/github_token"
+                            android:nextFocusDown="@id/tvvoo_source_enabled"
+                            android:text="@string/github_publish_now"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/settings_action_text_size" />
+
+                        <TextView
+                            android:id="@+id/github_publish_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:textColor="@color/muted"
+                            android:textSize="@dimen/settings_body_text_size" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:text="@string/github_publish_repo"
+                            android:textColor="@color/muted"
+                            android:textSize="@dimen/settings_body_text_size" />
+
                         <Switch
                             android:id="@+id/tvvoo_source_enabled"
                             android:layout_width="match_parent"
@@ -652,7 +742,7 @@
                             android:layout_marginTop="12dp"
                             android:background="@drawable/settings_section_card"
                             android:focusable="true"
-                            android:nextFocusUp="@id/highfly_catalog_button"
+                            android:nextFocusUp="@id/github_publish_now"
                             android:nextFocusDown="@id/tvvoo_catalog_button"
                             android:paddingStart="12dp"
                             android:paddingEnd="12dp"

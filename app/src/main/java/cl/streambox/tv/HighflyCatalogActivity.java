@@ -283,6 +283,7 @@ public final class HighflyCatalogActivity extends Activity {
 
     private void applySelection() {
         selectionStore.apply(new ArrayList<>(selected.values()));
+        GitHubSelectionPublisher.enqueue(this, "highfly-selection");
         setResult(RESULT_OK);
         finish();
     }

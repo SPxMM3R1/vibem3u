@@ -316,6 +316,10 @@ public final class MainActivity extends Activity {
         tvVooSelectionStore = new TvVooSelectionStore(this);
         highflySelectionStore = new HighflySelectionStore(this);
         hiddenChannelStore = new HiddenChannelStore(this);
+        // Retry a pending app-selection publication without blocking playlist
+        // loading. The publisher skips unchanged selections and applies a
+        // cooldown after a failed attempt.
+        GitHubSelectionPublisher.enqueue(this, "app-start");
         // Install the process-local alias learning store before any resolver
         // can be used. It persists aliases only, never resolved URLs/tokens.
         new TvVooSourceHistory(this);

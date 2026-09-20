@@ -92,11 +92,17 @@ public final class SettingsActivity extends Activity {
     private Button tvvooCatalogButton;
     private Switch highflySourceEnabled;
     private Button highflyCatalogButton;
+    private Switch githubAutoPublish;
+    private EditText githubTokenInput;
+    private TextView githubTokenStatus;
+    private Button githubPublishButton;
+    private TextView githubPublishStatus;
     private Button mediaFlowSettingsButton;
     private TextView tvvooSelectionStatus;
     private TextView highflySelectionStatus;
     private TvVooSelectionStore tvvooSelectionStore;
     private HighflySelectionStore highflySelectionStore;
+    private GitHubPublicationPreferences githubPublicationPreferences;
     private Switch invertChannelKeys;
     private Switch normalizeVolume;
     private Button updateButton;
@@ -240,6 +246,11 @@ public final class SettingsActivity extends Activity {
         tvvooCatalogButton = findViewById(R.id.tvvoo_catalog_button);
         highflySourceEnabled = findViewById(R.id.highfly_source_enabled);
         highflyCatalogButton = findViewById(R.id.highfly_catalog_button);
+        githubAutoPublish = findViewById(R.id.github_auto_publish);
+        githubTokenInput = findViewById(R.id.github_token);
+        githubTokenStatus = findViewById(R.id.github_token_status);
+        githubPublishButton = findViewById(R.id.github_publish_now);
+        githubPublishStatus = findViewById(R.id.github_publish_status);
         mediaFlowSettingsButton = findViewById(R.id.mediaflow_settings_button);
         tvvooSelectionStatus = findViewById(R.id.tvvoo_selection_status);
         highflySelectionStatus = findViewById(R.id.highfly_selection_status);
@@ -281,6 +292,7 @@ public final class SettingsActivity extends Activity {
         resolverPreferences = new ResolverPreferences(this);
         tvvooSelectionStore = new TvVooSelectionStore(this);
         highflySelectionStore = new HighflySelectionStore(this);
+        githubPublicationPreferences = new GitHubPublicationPreferences(this);
         hiddenChannelStore = new HiddenChannelStore(this);
         urlInput.setText(existingUrl);
         urlInput.setSelection(urlInput.length());
@@ -305,6 +317,8 @@ public final class SettingsActivity extends Activity {
         ));
         tvvooSourceEnabled.setChecked(tvvooSelectionStore.isEnabled());
         highflySourceEnabled.setChecked(highflySelectionStore.isEnabled());
+        githubAutoPublish.setChecked(githubPublicationPreferences.isAutoPublishEnabled());
+        updateGitHubPublicationStatus();
         updateTvVooSelectionStatus();
         updateHighflySelectionStatus();
         invertChannelKeys.setChecked(prefs.getBoolean(KEY_INVERT_CHANNEL_KEYS, false));
@@ -335,6 +349,7 @@ public final class SettingsActivity extends Activity {
                 startActivity(new Intent(this, TvVooCatalogActivity.class)));
         highflyCatalogButton.setOnClickListener(view ->
                 startActivity(new Intent(this, HighflyCatalogActivity.class)));
+        githubPublishButton.setOnClickListener(view -> publishGitHubSelectionNow());
         mediaFlowSettingsButton.setOnClickListener(view ->
                 startActivity(new Intent(this, MediaFlowSettingsActivity.class)));
 
@@ -436,6 +451,81 @@ public final class SettingsActivity extends Activity {
                 state,
                 count
         ));
+    }
+
+    private void updateGitHubPublicationStatus() {
+        if (githubPublicationPreferences == null) return;
+        if (githubTokenStatus != null) {
+            githubTokenStatus.setText(
+                    githubPublicationPreferences.hasToken()
+                            ? getString(R.string.github_token_saved)
+                            : getString(R.string.github_publish_not_configured)
+            );
+        }
+        if (githubPublishStatus != null) {
+            String saved = githubPublicationPreferences.getLastStatus();
+            githubPublishStatus.setText(AppStrings.isBlank(saved)
+                    ? getString(R.string.github_publish_not_configured)
+                    : saved);
+        }
+    }
+
+    private boolean persistGitHubPublicationConfiguration() {
+        if (githubPublicationPreferences == null) return true;
+        String typedToken = githubTokenInput == null || githubTokenInput.getText() == null
+                ? ""
+                : githubTokenInput.getText().toString().trim();
+        try {
+            // Empty input intentionally preserves the encrypted token. This
+            // prevents the user from having to paste it on every visit.
+            if (!typedToken.isEmpty()) githubPublicationPreferences.setToken(typedToken);
+            boolean enabled = githubAutoPublish != null && githubAutoPublish.isChecked();
+            if (enabled && !githubPublicationPreferences.hasToken()) {
+                errorText.setText(R.string.github_token_required);
+                errorText.setVisibility(View.VISIBLE);
+                if (githubTokenInput != null) githubTokenInput.requestFocus();
+                return false;
+            }
+            githubPublicationPreferences.setAutoPublishEnabled(enabled);
+            if (githubTokenInput != null) githubTokenInput.setText("");
+            updateGitHubPublicationStatus();
+            return true;
+        } catch (Exception error) {
+            errorText.setText(R.string.github_token_invalid);
+            errorText.setVisibility(View.VISIBLE);
+            if (githubTokenInput != null) githubTokenInput.requestFocus();
+            return false;
+        }
+    }
+
+    private void publishGitHubSelectionNow() {
+        if (!persistGitHubPublicationConfiguration()) return;
+        if (!githubPublicationPreferences.hasToken()) {
+            if (githubPublishStatus != null) {
+                githubPublishStatus.setText(R.string.github_token_required);
+            }
+            if (githubTokenInput != null) githubTokenInput.requestFocus();
+            return;
+        }
+        if (githubPublishStatus != null) {
+            githubPublishStatus.setText(R.string.github_publish_working);
+        }
+        githubPublishButton.setEnabled(false);
+        GitHubSelectionPublisher.publishAsync(this, true, result -> mainHandler.post(() -> {
+            if (isFinishing()) return;
+            githubPublishButton.setEnabled(true);
+            if (result == null) {
+                githubPublishStatus.setText(R.string.github_publish_generic_error);
+            } else if (result.isPublished()) {
+                githubPublishStatus.setText(R.string.github_publish_success);
+            } else {
+                githubPublishStatus.setText(getString(
+                        R.string.github_publish_error,
+                        result.getMessage()
+                ));
+            }
+            updateGitHubPublicationStatus();
+        }));
     }
 
     private void renderHiddenChannels() {
@@ -903,6 +993,7 @@ public final class SettingsActivity extends Activity {
             highflyManifestUrlInput.requestFocus();
             return;
         }
+        if (!persistGitHubPublicationConfiguration()) return;
 
         boolean hiddenChannelsChanged = saveHiddenChannels();
         getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -936,6 +1027,7 @@ public final class SettingsActivity extends Activity {
                 resolverPreferences.setEnabled(definition, entry.getValue().isChecked());
             }
         }
+        GitHubSelectionPublisher.enqueue(this, "settings-save");
         Intent result = new Intent()
                 .putExtra(KEY_PLAYLIST_URL, value)
                 .putExtra(KEY_PLAYLIST_URL_2, value2)

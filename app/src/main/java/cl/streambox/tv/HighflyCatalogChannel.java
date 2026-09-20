@@ -12,16 +12,20 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.text.Normalizer;
 
 /** Stable metadata for one Highfly catalogue entry.
  *
- * <p>The resource id and slug identify the entry. No stream URL, session
- * parameter or authorization value is persisted here; the resolver obtains
- * the playable HLS source when the channel is opened.</p>
+ * <p>The resource id and stable id identify the entry inside the app. No
+ * stream URL, session parameter or authorization value is persisted here; the
+ * resolver obtains the playable HLS source when the channel is opened. The
+ * app-to-GitHub selection manifest intentionally keeps this provider identity
+ * separate from the public XMLTV/tvg-id assigned by Lista M3U.</p>
  */
 public final class HighflyCatalogChannel {
     private final String resourceId;
     private final String slug;
+    private final String stableId;
     private final String name;
     private final String group;
     private final String category;
@@ -36,6 +40,31 @@ public final class HighflyCatalogChannel {
             String logoUrl,
             List<String> genres
     ) {
+        this(
+                resourceId,
+                "",
+                name,
+                group,
+                category,
+                logoUrl,
+                genres
+        );
+    }
+
+    /**
+     * Creates a catalogue entry with an identity independent of the current
+     * Highfly leaf slug. The overload without {@code stableId} remains for
+     * old persisted rows and derives a deterministic name-based identity.
+     */
+    public HighflyCatalogChannel(
+            String resourceId,
+            String stableId,
+            String name,
+            String group,
+            String category,
+            String logoUrl,
+            List<String> genres
+    ) {
         String normalizedResourceId = clean(resourceId).toLowerCase(Locale.ROOT);
         if (!normalizedResourceId.matches("leaf:[A-Za-z0-9_-]{2,128}")) {
             throw new IllegalArgumentException("ID Highfly inválido.");
@@ -43,6 +72,7 @@ public final class HighflyCatalogChannel {
         this.resourceId = normalizedResourceId;
         this.slug = normalizedResourceId.substring("leaf:".length());
         this.name = nonBlank(name, this.slug);
+        this.stableId = stableIdentity(stableId, this.name);
         this.group = nonBlank(group, "Highfly");
         this.category = clean(category);
         this.logoUrl = safeLogoUrl(logoUrl);
@@ -62,6 +92,7 @@ public final class HighflyCatalogChannel {
 
     public String getResourceId() { return resourceId; }
     public String getSlug() { return slug; }
+    public String getStableId() { return stableId; }
     public String getName() { return name; }
     public String getGroup() { return group; }
     public String getCategory() { return category; }
@@ -76,6 +107,7 @@ public final class HighflyCatalogChannel {
         if (!group.isEmpty()) attributes.put("group-title", group);
         if (!category.isEmpty()) attributes.put("x-highfly-category", category);
         attributes.put("x-resolver", "highfly");
+        attributes.put("x-resolver-stable-id", stableId);
         attributes.put("x-resolver-id", slug);
         attributes.put("x-resolver-resource-id", resourceId);
         attributes.put("x-resolver-refresh", "on_play");
@@ -91,6 +123,7 @@ public final class HighflyCatalogChannel {
         appendAttribute(header, "tvg-id", tvgId());
         if (!logoUrl.isEmpty()) appendAttribute(header, "tvg-logo", logoUrl);
         appendAttribute(header, "x-resolver", "highfly");
+        appendAttribute(header, "x-resolver-stable-id", stableId);
         appendAttribute(header, "x-resolver-id", slug);
         appendAttribute(header, "x-resolver-resource-id", resourceId);
         appendAttribute(header, "x-resolver-refresh", "on_play");
@@ -102,6 +135,8 @@ public final class HighflyCatalogChannel {
     public JSONObject toJson() throws JSONException {
         JSONObject object = new JSONObject();
         object.put("resourceId", resourceId);
+        object.put("stableId", stableId);
+        object.put("tvgId", tvgId());
         object.put("name", name);
         object.put("group", group);
         object.put("category", category);
@@ -119,6 +154,7 @@ public final class HighflyCatalogChannel {
         if (category.isEmpty() && !genres.isEmpty()) category = genres.get(0);
         return new HighflyCatalogChannel(
                 object.optString("resourceId", ""),
+                object.optString("stableId", object.optString("tvgId", "")),
                 object.optString("name", ""),
                 object.optString("group", "Highfly"),
                 category,
@@ -138,6 +174,7 @@ public final class HighflyCatalogChannel {
         String category = genres.isEmpty() ? "Deportes" : genres.get(0);
         return new HighflyCatalogChannel(
                 id,
+                object.optString("stableId", object.optString("tvgId", "")),
                 name,
                 "Highfly · Deportes",
                 category,
@@ -150,7 +187,50 @@ public final class HighflyCatalogChannel {
     }
 
     private String tvgId() {
-        return "Highfly." + slug;
+        return stableId;
+    }
+
+    /**
+     * Returns the stable identity used by the app's local merge and resolver
+     * selection. Highfly currently publishes a rotating leaf id but no
+     * separate canonical id, so known channels use the identities already
+     * used by Lista M3U and unknown names receive a deterministic,
+     * slug-independent fallback. The public selection manifest does not
+     * export this as a final XMLTV/tvg-id.
+     */
+    public static String stableIdentity(String requested, String name) {
+        String explicit = clean(requested);
+        if (explicit.matches("[A-Za-z][A-Za-z0-9._-]{1,127}")) return explicit;
+
+        String normalized = compact(name);
+        if (normalized.contains("skysportsf1") || normalized.contains("skyf1")) {
+            return "SkySportsF1.uk";
+        }
+        if (normalized.contains("skysportstennis") || normalized.contains("skytennis")) {
+            return "SkySportsTennis.uk";
+        }
+        if (normalized.contains("skysportspremierleague")
+                || normalized.contains("skypremierleague")) {
+            return "SkySportsPremierLeague.uk";
+        }
+        if (normalized.contains("skysportsgolf") || normalized.contains("skygolf")) {
+            return "SkySportsGolf.uk";
+        }
+        if (normalized.equals("espn")) return "ESPN.us";
+        if (normalized.equals("marqueesportsnetwork")) {
+            return "MarqueeSportsNetwork.us";
+        }
+        if (normalized.equals("skysport1")) return "SkySport1.nz";
+        if (normalized.isEmpty()) return "Highfly.unknown";
+        return "Highfly." + normalized.substring(0, Math.min(112, normalized.length()));
+    }
+
+    private static String compact(String value) {
+        String normalized = Normalizer.normalize(clean(value), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "");
+        return normalized.trim();
     }
 
     private static List<String> readGenres(JSONArray values) {

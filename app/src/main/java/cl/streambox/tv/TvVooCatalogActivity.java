@@ -342,6 +342,7 @@ public final class TvVooCatalogActivity extends Activity {
 
     private void applySelection() {
         selectionStore.apply(new ArrayList<>(selected.values()));
+        GitHubSelectionPublisher.enqueue(this, "tvvoo-selection");
         setResult(RESULT_OK);
         showStatus("Selección guardada");
         finish();

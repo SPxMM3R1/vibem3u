@@ -98,7 +98,8 @@ public final class HighflySelectionStore {
         StringBuilder value = new StringBuilder();
         value.append(isEnabled() ? '1' : '0').append('\n');
         for (HighflyCatalogChannel channel : getSelectedCatalogChannels()) {
-            value.append(channel.getResourceId()).append('|')
+            value.append(channel.getStableId()).append('|')
+                    .append(channel.getResourceId()).append('|')
                     .append(channel.getSlug()).append('|')
                     .append(channel.getName()).append('|')
                     .append(channel.getGroup()).append('|')

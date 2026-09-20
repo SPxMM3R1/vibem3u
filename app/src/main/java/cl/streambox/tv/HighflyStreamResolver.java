@@ -122,6 +122,10 @@ public final class HighflyStreamResolver implements StreamResolver {
 
     @Override
     public String stableSourceId(Channel channel) {
+        String stableId = channel == null || channel.getAttributes() == null
+                ? ""
+                : channel.getAttributes().get("x-resolver-stable-id");
+        if (!AppStrings.isBlank(stableId)) return stableId.trim();
         String slug = stableSlug(channel);
         return AppStrings.isBlank(slug) ? definition.stableSourceId(channel) : slug;
     }

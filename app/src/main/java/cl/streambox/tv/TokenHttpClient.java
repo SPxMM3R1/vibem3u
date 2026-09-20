@@ -462,6 +462,54 @@ public class TokenHttpClient {
         }
     }
 
+    /**
+     * PUT JSON to a public, allow-listed HTTPS host.
+     *
+     * <p>The GitHub Contents API uses PUT for atomic file updates. Keeping the
+     * host check here is important because this method may carry a bearer
+     * credential and must never follow an arbitrary redirect.</p>
+     */
+    public Response putJsonOnHosts(
+            String url,
+            Map<String, String> headers,
+            String json,
+            int maxResponseBytes,
+            Set<String> allowedHosts
+    ) throws IOException {
+        URI uri = parseHttpUri(url);
+        if (!"https".equalsIgnoreCase(uri.getScheme())) {
+            throw new IOException("URL HTTPS no válida.");
+        }
+        requireAllowedHost(uri, allowedHosts);
+        byte[] requestBody = (json == null ? "{}" : json)
+                .getBytes(StandardCharsets.UTF_8);
+        if (requestBody.length > 256 * 1024) {
+            throw new IOException("Solicitud demasiado grande.");
+        }
+        ResolutionContext context = ResolutionContext.current();
+        check(context);
+        OkHttpClient client = clientFor(context, false);
+        Request request;
+        try {
+            Request.Builder builder = new Request.Builder()
+                    .url(uri.toString())
+                    .put(RequestBody.create(requestBody, JSON_MEDIA_TYPE));
+            addHeaders(builder, headers);
+            builder.header("Content-Type", "application/json; charset=utf-8");
+            if (headers == null || !containsHeader(headers, "User-Agent")) {
+                builder.header("User-Agent", BROWSER_USER_AGENT);
+            }
+            request = builder.build();
+        } catch (IllegalArgumentException error) {
+            throw new IOException("URL o cabecera no válida.", error);
+        }
+        try {
+            return execute(client, request, maxResponseBytes, false, context);
+        } finally {
+            java.util.Arrays.fill(requestBody, (byte) 0);
+        }
+    }
+
     public static final class Response {
         private final int statusCode;
         private final URI finalUri;

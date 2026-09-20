@@ -81,6 +81,10 @@ public final class HighflyChannelMerge {
         if (channel == null) return result;
         String tvgId = channel.getTvgId();
         if (!AppStrings.isBlank(tvgId)) result.add("id:" + tvgId.trim().toLowerCase(Locale.ROOT));
+        String stableId = channel.getAttributes().get("x-resolver-stable-id");
+        if (!AppStrings.isBlank(stableId)) {
+            result.add("id:" + stableId.trim().toLowerCase(Locale.ROOT));
+        }
         String slug = channel.getAttributes().get("x-resolver-id");
         if (AppStrings.isBlank(slug) && channel.getStreamUri() != null
                 && DynamicSourceReference.isAppOnly(channel.getStreamUri())
