@@ -30,8 +30,8 @@ android {
         minSdk = 29
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 112
-        versionName = "0.5.06"
+        versionCode = 113
+        versionName = "0.5.07"
         buildConfigField("boolean", "ENABLE_APP_UPDATES", "true")
         // Public OAuth client id for the GitHub Device Flow. It is supplied
         // by the release environment and is intentionally not a secret.
