@@ -172,7 +172,8 @@ public final class SettingsActivity extends Activity {
         SharedPreferences.Editor editor = null;
         if (!prefs.contains(KEY_PLAYLIST_URL_2)) {
             editor = prefs.edit()
-                    .putString(KEY_PLAYLIST_URL_2, DEFAULT_PLAYLIST_URL_2);
+                    .putString(KEY_PLAYLIST_URL_2, DEFAULT_PLAYLIST_URL_2)
+                    .putBoolean(KEY_PLAYLIST_ENABLED_2, false);
         }
         if (!prefs.contains(KEY_HIGHFLY_MANIFEST_URL)) {
             if (editor == null) editor = prefs.edit();
