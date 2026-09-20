@@ -93,6 +93,33 @@ public final class ResolverDefinition {
         );
     }
 
+    /** Minimal tokenless TvVoo definition used if the bundled catalogue cannot load. */
+    static ResolverDefinition fallbackTvVoo() {
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("endpointBase", "https://tvvoo.hayd.uk/stream/tv");
+        config.put("maxAliases", "8");
+        config.put("maxCandidates", "16");
+        config.put("streamsPath", "streams");
+        config.put("urlField", "url");
+        config.put("allowHttpFallback", "true");
+        config.put("recipeId", "bounded-payload-v1");
+        config.put("validationMode", "media-signature-v1");
+        LinkedHashSet<String> suffixes = new LinkedHashSet<>();
+        suffixes.add("@tvvoo");
+        return new ResolverDefinition(
+                "tvvoo",
+                "TvVoo externo",
+                "tvvoo",
+                true,
+                25L * 60L * 1000L,
+                Collections.emptySet(),
+                new ArrayList<>(suffixes),
+                Collections.emptySet(),
+                config,
+                Collections.emptyMap()
+        );
+    }
+
     public String getId() { return id; }
     public String getDisplayName() { return displayName; }
     public String getEngine() { return engine; }

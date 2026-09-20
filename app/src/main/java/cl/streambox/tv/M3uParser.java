@@ -75,6 +75,28 @@ public final class M3uParser {
                 continue;
             }
 
+            if (DynamicSourceReference.isInternalScheme(streamUri)) {
+                if (!DynamicSourceReference.isAppOnly(streamUri)) {
+                    resetPending(pendingAttributes);
+                    pendingName = null;
+                    pendingLogo = null;
+                    pendingGroup = "";
+                    continue;
+                }
+            } else {
+                URI appOnlyReference = DynamicSourceReference.normalize(
+                        streamUri,
+                        pendingAttributes
+                );
+                if (appOnlyReference != null) {
+                    DynamicSourceReference.enrichAttributes(
+                            streamUri,
+                            pendingAttributes
+                    );
+                    streamUri = appOnlyReference;
+                }
+            }
+
             String name = pendingName;
             if (name == null || AppStrings.isBlank(name)) {
                 name = valueOrDefault(pendingAttributes, "tvg-name", "Canal " + (channels.size() + 1));

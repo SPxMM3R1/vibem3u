@@ -17,6 +17,7 @@ public final class StreamResolverRegistry {
         List<StreamResolver> configured = new ArrayList<>();
         configured.add(new TvnStreamResolver());
         configured.add(new MeganoticiasStreamResolver());
+        configured.add(new TvVooStreamResolver(ResolverDefinition.fallbackTvVoo()));
         configured.add(new HighflyStreamResolver(ResolverDefinition.fallbackHighfly()));
         resolvers = Collections.unmodifiableList(configured);
         catalog = null;

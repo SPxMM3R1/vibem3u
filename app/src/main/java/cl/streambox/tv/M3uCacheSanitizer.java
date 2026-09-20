@@ -1,5 +1,6 @@
 package cl.streambox.tv;
 
+import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -77,8 +78,20 @@ final class M3uCacheSanitizer {
                 pendingResolverId = "";
                 pendingResolverAliases = "";
             } else if (!line.isEmpty() && !line.startsWith("#")
-                    && isRenewableProvider(pendingTvgId, pendingResolver)) {
-                result.append(stripSensitiveCredentials(rawLine));
+                    && isRenewableProvider(pendingTvgId, pendingResolver, line)) {
+                URI source = parseUri(line);
+                URI appOnlyReference = DynamicSourceReference.normalize(
+                        source,
+                        attributesFor(
+                                pendingTvgId,
+                                pendingResolver,
+                                pendingResolverId,
+                                pendingResolverAliases
+                        )
+                );
+                result.append(appOnlyReference == null
+                        ? stripSensitiveCredentials(rawLine)
+                        : appOnlyReference.toString());
                 pendingTvgId = "";
                 pendingResolver = "";
                 pendingResolverId = "";
@@ -174,11 +187,11 @@ final class M3uCacheSanitizer {
         }
     }
 
-    private static boolean isRenewableProvider(String tvgId, String resolver) {
-        return "0104".equalsIgnoreCase(tvgId)
-                || "Meganoticias.cl".equalsIgnoreCase(tvgId)
-                || "MeganoticiasAhora.cl".equalsIgnoreCase(tvgId)
-                || !AppStrings.isBlank(resolver);
+    private static boolean isRenewableProvider(String tvgId, String resolver, String line) {
+        return DynamicSourceReference.providerFor(
+                parseUri(line),
+                attributesFor(tvgId, resolver, "", "")
+        ) != null;
     }
 
     private static boolean isTvVoo(String tvgId, String resolver) {
@@ -186,6 +199,30 @@ final class M3uCacheSanitizer {
         return "tvvoo".equalsIgnoreCase(resolver)
                 || normalized.endsWith("@tvvoo")
                 || LEGACY_TVVOO_IDS.contains(normalized);
+    }
+
+    private static java.net.URI parseUri(String value) {
+        try {
+            return java.net.URI.create(value == null ? "" : value.trim());
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private static java.util.Map<String, String> attributesFor(
+            String tvgId,
+            String resolver,
+            String resolverId,
+            String resolverAliases
+    ) {
+        java.util.Map<String, String> result = new java.util.LinkedHashMap<>();
+        if (!AppStrings.isBlank(tvgId)) result.put("tvg-id", tvgId);
+        if (!AppStrings.isBlank(resolver)) result.put("x-resolver", resolver);
+        if (!AppStrings.isBlank(resolverId)) result.put("x-resolver-id", resolverId);
+        if (!AppStrings.isBlank(resolverAliases)) {
+            result.put("x-resolver-ids", resolverAliases);
+        }
+        return result;
     }
 
     private static String stripSensitiveCredentials(String value) {

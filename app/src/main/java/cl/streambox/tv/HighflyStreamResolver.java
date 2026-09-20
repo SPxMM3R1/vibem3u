@@ -356,6 +356,11 @@ public final class HighflyStreamResolver implements StreamResolver {
                     ? new IOException("Highfly no tiene una URL HLS de respaldo.")
                     : new IOException("Highfly no entregó una fuente reproducible.", cause);
         }
+        if (DynamicSourceReference.isAppOnly(channel.getStreamUri())) {
+            throw cause == null
+                    ? new IOException("Highfly no entregó una fuente reproducible.")
+                    : new IOException("Highfly no entregó una fuente reproducible.", cause);
+        }
         progress.onProgress(ResolutionProgress.of(
                 ResolutionStage.SOURCE_BUILDING,
                 "Highfly usa la URL HLS de respaldo de la M3U"
@@ -414,9 +419,11 @@ public final class HighflyStreamResolver implements StreamResolver {
     private static String stableSlug(Channel channel) {
         if (channel == null || channel.getAttributes() == null) return "";
         String configured = channel.getAttributes().get("x-resolver-id");
-        return configured != null && configured.matches("[A-Za-z0-9_-]{2,128}")
-                ? configured
-                : "";
+        if (configured != null && configured.matches("[A-Za-z0-9_-]{2,128}")) {
+            return configured;
+        }
+        String reference = DynamicSourceReference.stableId(channel.getStreamUri());
+        return reference.matches("[A-Za-z0-9_-]{2,128}") ? reference : "";
     }
 
     private static String candidateDetail(ResolverPayloadParsers.HighflyCandidate candidate) {

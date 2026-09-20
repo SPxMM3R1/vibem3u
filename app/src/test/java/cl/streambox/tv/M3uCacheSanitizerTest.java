@@ -21,9 +21,10 @@ public final class M3uCacheSanitizerTest {
 
         String sanitized = M3uCacheSanitizer.forDisk(playlist);
 
-        assertTrue(sanitized.contains("https://mdstrm.example/live.m3u8"));
-        assertTrue(sanitized.contains("https://mdstrm.example/mega.m3u8"));
-        assertTrue(sanitized.contains("https://mdstrm.example/meganoticias.m3u8"));
+        assertTrue(sanitized.contains("vibem3u://resolver/tvn/0104"));
+        assertTrue(sanitized.contains("vibem3u://resolver/meganoticias/MeganoticiasAhora.cl"));
+        assertTrue(sanitized.contains("vibem3u://resolver/meganoticias/Meganoticias.cl"));
+        assertFalse(sanitized.contains("mdstrm.example"));
         assertFalse(sanitized.contains("access_token=temporary"));
         assertTrue(sanitized.contains("https://example.org/other.m3u8?token=keep"));
     }
@@ -36,7 +37,7 @@ public final class M3uCacheSanitizerTest {
 
         String sanitized = M3uCacheSanitizer.forDisk(playlist);
 
-        assertTrue(sanitized.contains("https://mdstrm.example/live.m3u8\n"));
+        assertTrue(sanitized.contains("vibem3u://resolver/tvn/0104\n"));
         assertFalse(sanitized.contains("legacy"));
         assertEquals(sanitized, M3uCacheSanitizer.forDisk(sanitized));
     }
@@ -64,8 +65,37 @@ public final class M3uCacheSanitizerTest {
 
         String sanitized = M3uCacheSanitizer.forDisk(playlist);
 
-        assertTrue(sanitized.contains("?quality=high"));
+        assertTrue(sanitized.contains("vibem3u://resolver/tvn/0104"));
+        assertFalse(sanitized.contains("quality=high"));
         assertFalse(sanitized.contains("access_token"));
+    }
+
+    @Test
+    public void keepsDirectChannelsUntouched() {
+        String playlist = "#EXTM3U\n"
+                + "#EXTINF:-1 tvg-id=\"direct\",Directo\n"
+                + "https://example.org/live.m3u8?quality=high\n";
+
+        String sanitized = M3uCacheSanitizer.forDisk(playlist);
+
+        assertTrue(sanitized.contains("https://example.org/live.m3u8?quality=high"));
+        assertFalse(sanitized.contains("vibem3u://"));
+    }
+
+    @Test
+    public void convertsHighflyToStableAppOnlyReference() {
+        String playlist = "#EXTM3U\n"
+                + "#EXTINF:-1 tvg-id=\"SkySportsF1.uk\" "
+                + "x-resolver=\"highfly\" "
+                + "x-resolver-id=\"now-sky-sports-f1-free\",Sky F1\n"
+                + "https://leaf.highfly.dev/m3u/now-sky-sports-f1-free/live.m3u8\n";
+
+        String sanitized = M3uCacheSanitizer.forDisk(playlist);
+
+        assertTrue(sanitized.contains(
+                "vibem3u://resolver/highfly/now-sky-sports-f1-free"
+        ));
+        assertFalse(sanitized.contains("leaf.highfly.dev"));
     }
 
 }

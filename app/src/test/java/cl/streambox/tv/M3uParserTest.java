@@ -108,7 +108,39 @@ public class M3uParserTest {
         assertEquals("highfly", channel.getAttributes().get("x-resolver"));
         assertEquals("now-sky-sports-f1-free", channel.getAttributes().get("x-resolver-id"));
         assertEquals("on_play", channel.getAttributes().get("x-resolver-refresh"));
+        assertEquals(
+                "vibem3u://resolver/highfly/now-sky-sports-f1-free",
+                channel.getStreamUri().toString()
+        );
         assertFalse(channel.getStreamUri().toString().contains("token"));
+    }
+
+    @Test
+    public void turnsKnownDynamicSourcesIntoAppOnlyReferencesInMemory() {
+        String playlist = "#EXTM3U\n"
+                + "#EXTINF:-1 tvg-id=\"0104\",TVN\n"
+                + "https://mdstrm.example/live.m3u8?access_token=temporary\n"
+                + "#EXTINF:-1 tvg-id=\"Meganoticias.cl\",Mega\n"
+                + "https://mdstrm.example/mega.m3u8?access_token=temporary\n"
+                + "#EXTINF:-1 tvg-id=\"direct\",Directo\n"
+                + "https://example.org/direct.m3u8\n";
+
+        List<Channel> channels = M3uParser.parse(
+                playlist,
+                URI.create("https://example.org/list.m3u")
+        );
+
+        assertEquals("vibem3u://resolver/tvn/0104", channels.get(0).getStreamUri().toString());
+        assertEquals(
+                "vibem3u://resolver/meganoticias/Meganoticias.cl",
+                channels.get(1).getStreamUri().toString()
+        );
+        assertEquals("https://example.org/direct.m3u8", channels.get(2).getStreamUri().toString());
+        assertEquals("tvn", channels.get(0).getAttributes().get("x-resolver"));
+        assertEquals(
+                "meganoticias",
+                channels.get(1).getAttributes().get("x-resolver")
+        );
     }
 
     @Test

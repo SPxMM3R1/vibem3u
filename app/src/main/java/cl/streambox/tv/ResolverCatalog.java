@@ -85,6 +85,11 @@ public final class ResolverCatalog {
             }
             return null;
         }
+        String referenceProvider = DynamicSourceReference.provider(channel.getStreamUri());
+        if (!AppStrings.isBlank(referenceProvider)) {
+            ResolverDefinition referenced = getById(referenceProvider);
+            if (referenced != null) return referenced;
+        }
         for (ResolverDefinition provider : providers) {
             if (provider.matchesTvgId(channel)) return provider;
         }
