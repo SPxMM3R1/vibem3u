@@ -591,12 +591,124 @@ final class ResolverPayloadParsers {
         }
     }
 
+    static final class HighflyCatalogEntry {
+        private final String id;
+        private final String name;
+
+        HighflyCatalogEntry(String id, String name) {
+            this.id = id == null ? "" : id;
+            this.name = name == null ? "" : name;
+        }
+
+        String getId() { return id; }
+        String getName() { return name; }
+    }
+
     private static final class CandidateMetadata {
         long bitrateBitsPerSecond;
         int width;
         int height;
         String name = "";
         String title = "";
+    }
+
+    /**
+     * Checks the public Highfly/Stremio manifest without treating it as a
+     * stream catalogue. The manifest describes the resource routes; HLS
+     * candidates are obtained from the stream resource for the channel.
+     */
+    static boolean isHighflyStreamManifest(String json) throws IOException {
+        if (json == null || AppStrings.isBlank(json)) return false;
+        if (json.getBytes(StandardCharsets.UTF_8).length > MAX_HIGHFLY_PAYLOAD_BYTES) {
+            throw new IOException("Manifiesto Highfly demasiado grande.");
+        }
+        try {
+            JSONObject root = new JSONObject(json);
+            Object resourcesValue = root.opt("resources");
+            if (!(resourcesValue instanceof JSONArray)) return false;
+            JSONArray resources = (JSONArray) resourcesValue;
+            for (int index = 0; index < resources.length(); index++) {
+                JSONObject resource = resources.optJSONObject(index);
+                if (resource == null) continue;
+                if ("stream".equalsIgnoreCase(resource.optString("name", ""))) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (JSONException error) {
+            throw new IOException("Highfly devolvió un manifiesto inválido.", error);
+        }
+    }
+
+    /** Returns live catalog entries whose id or display name matches a channel. */
+    static List<HighflyCatalogEntry> parseHighflyCatalog(
+            String json,
+            List<String> identifiers,
+            int maximumEntries
+    ) throws IOException {
+        if (json == null || AppStrings.isBlank(json)
+                || identifiers == null || identifiers.isEmpty()) {
+            return Collections.emptyList();
+        }
+        if (json.getBytes(StandardCharsets.UTF_8).length > MAX_HIGHFLY_PAYLOAD_BYTES) {
+            throw new IOException("Catálogo Highfly demasiado grande.");
+        }
+        LinkedHashSet<String> normalizedIdentifiers = new LinkedHashSet<>();
+        for (String identifier : identifiers) {
+            String normalized = normalize(identifier);
+            if (!AppStrings.isBlank(normalized)) normalizedIdentifiers.add(normalized);
+            String display = normalizeHighflyName(identifier);
+            if (!AppStrings.isBlank(display)) normalizedIdentifiers.add(display);
+        }
+        int limit = Math.max(1, Math.min(16, maximumEntries));
+        try {
+            JSONObject root = new JSONObject(json);
+            Object metasValue = root.opt("metas");
+            if (!(metasValue instanceof JSONArray)) return Collections.emptyList();
+            JSONArray metas = (JSONArray) metasValue;
+            List<HighflyCatalogEntry> result = new ArrayList<>();
+            LinkedHashSet<String> seenIds = new LinkedHashSet<>();
+            for (int index = 0; index < metas.length() && result.size() < limit; index++) {
+                JSONObject meta = metas.optJSONObject(index);
+                if (meta == null) continue;
+                String id = meta.optString("id", "").trim();
+                if (!id.matches("[A-Za-z0-9_-]+:[A-Za-z0-9_-]{2,128}")) continue;
+                String name = meta.optString("name", "").trim();
+                if (!matchesHighflyCatalogEntry(id, name, normalizedIdentifiers)) continue;
+                if (seenIds.add(id)) result.add(new HighflyCatalogEntry(id, name));
+            }
+            return Collections.unmodifiableList(result);
+        } catch (JSONException error) {
+            throw new IOException("Highfly devolvió un catálogo inválido.", error);
+        }
+    }
+
+    private static boolean matchesHighflyCatalogEntry(
+            String id,
+            String name,
+            Set<String> identifiers
+    ) {
+        String normalizedId = normalize(id);
+        String normalizedResourceId = id.indexOf(':') >= 0
+                ? normalize(id.substring(id.indexOf(':') + 1))
+                : normalizedId;
+        String normalizedName = normalizeHighflyName(name);
+        for (String identifier : identifiers) {
+            if (identifier.equals(normalizedId)
+                    || identifier.equals(normalizedResourceId)) return true;
+            if (!AppStrings.isBlank(normalizedName)
+                    && (normalizedName.contains(identifier) || identifier.contains(normalizedName))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String normalizeHighflyName(String value) {
+        if (value == null) return "";
+        String withoutQuality = value.toLowerCase(Locale.ROOT)
+                .replaceAll("fullhd|ultrahd|uhd|fhd|4k|2k|1080p|720p|576p|480p|hd|sd|leaf", "");
+        return normalize(withoutQuality);
     }
 
     static URI parseHighflyManifest(String json, List<String> identifiers)

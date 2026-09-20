@@ -17,6 +17,49 @@ import static org.junit.Assert.assertTrue;
 
 public final class HighflyStreamResolverTest {
     @Test
+    public void resolvesTheStreamResourceFromTheConfiguredManifest() throws Exception {
+        List<String> requested = new java.util.ArrayList<>();
+        TokenHttpClient http = new TokenHttpClient() {
+            @Override
+            public Response getPublicOnHosts(
+                    String url,
+                    Map<String, String> headers,
+                    int maxResponseBytes,
+                    String range,
+                    java.util.Set<String> allowedHosts
+            ) {
+                requested.add(url);
+                String payload = url.endsWith("/manifest.json")
+                        ? "{\"resources\":[{\"name\":\"stream\"}]}"
+                        : "{\"streams\":[{\"title\":\"1920x1080 · ~5.0 Mbps\","
+                        + "\"url\":\"https://papacito.cfd/high.m3u8\"}]}";
+                return new Response(
+                        200,
+                        URI.create(url),
+                        "application/json",
+                        Collections.emptyMap(),
+                        payload.getBytes(StandardCharsets.UTF_8)
+                );
+            }
+        };
+        HighflyStreamResolver resolver = new HighflyStreamResolver(
+                definition(Collections.emptyMap()),
+                "https://sports.highfly.to/manifest.json",
+                http,
+                (uri, headers, listener) -> { }
+        );
+
+        ResolvedPlaybackSource source = resolver.resolve(channel());
+
+        assertEquals("https://sports.highfly.to/manifest.json", requested.get(0));
+        assertEquals(
+                "https://sports.highfly.to/stream/sport/leaf:now-sky-sports-tennis.json",
+                requested.get(1)
+        );
+        assertEquals("https://papacito.cfd/high.m3u8", source.getPlaybackUri().toString());
+    }
+
+    @Test
     public void requestsTheStableSlugEndpointAndUsesTheHighestBitrateCandidate() throws Exception {
         StubHttpClient http = new StubHttpClient(
                 "{\"streams\":["

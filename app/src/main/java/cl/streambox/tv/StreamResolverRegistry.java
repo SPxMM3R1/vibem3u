@@ -109,7 +109,10 @@ public final class StreamResolverRegistry {
                     )
                     : new TvVooStreamResolver(definition);
             case "highfly" -> new HighflyStreamResolver(
-                    definition
+                    definition,
+                    preferences == null
+                            ? HighflyStreamResolver.DEFAULT_MANIFEST_URL
+                            : preferences.highflyManifestUrl()
             );
             default -> throw new IllegalArgumentException("Motor de resolutor desconocido.");
         };

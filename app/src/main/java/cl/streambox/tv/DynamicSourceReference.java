@@ -119,7 +119,7 @@ final class DynamicSourceReference {
         return decode(segments[1]);
     }
 
-    private static URI create(String provider, String stableId) {
+    static URI create(String provider, String stableId) {
         if (!isKnownProvider(provider) || !isSafeIdentity(stableId)) return null;
         try {
             return URI.create(

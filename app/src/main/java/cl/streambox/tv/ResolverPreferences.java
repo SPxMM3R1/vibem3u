@@ -38,4 +38,19 @@ public final class ResolverPreferences {
         return mediaFlow;
     }
 
+    /**
+     * Highfly's public Stremio manifest is configurable for deployments that
+     * use a scoped manifest path. A blank or malformed value is rejected by
+     * the settings screen and the resolver falls back to its built-in URL.
+     */
+    public String highflyManifestUrl() {
+        String value = preferences.getString(
+                SettingsActivity.KEY_HIGHFLY_MANIFEST_URL,
+                SettingsActivity.DEFAULT_HIGHFLY_MANIFEST_URL
+        );
+        return AppStrings.isBlank(value)
+                ? SettingsActivity.DEFAULT_HIGHFLY_MANIFEST_URL
+                : value.trim();
+    }
+
 }

@@ -9,9 +9,39 @@ import java.util.Base64;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public final class ResolverPayloadParsersTest {
+    @Test
+    public void recognizesHighflyResourceManifestInsteadOfTreatingItAsHls() throws Exception {
+        assertTrue(ResolverPayloadParsers.isHighflyStreamManifest(
+                "{\"id\":\"community.sports.fly\","
+                        + "\"resources\":[{\"name\":\"catalog\"},"
+                        + "{\"name\":\"stream\",\"types\":[\"sport\"]}]}"
+        ));
+        assertFalse(ResolverPayloadParsers.isHighflyStreamManifest(
+                "{\"streams\":[{\"url\":\"https://leaf.highfly.dev/live.m3u8\"}]}"
+        ));
+    }
+
+    @Test
+    public void matchesSeveralHighflyQualityEntriesByTheStableChannelName() throws Exception {
+        List<ResolverPayloadParsers.HighflyCatalogEntry> entries =
+                ResolverPayloadParsers.parseHighflyCatalog(
+                        "{\"metas\":["
+                                + "{\"id\":\"leaf:f1-3949409\",\"name\":\"(FHD) : SKY SPORTS F1\"},"
+                                + "{\"id\":\"leaf:4k-344334\",\"name\":\"4K : SKY SPORTS F1\"},"
+                                + "{\"id\":\"leaf:uk-330030303\",\"name\":\"(FHD) : SKY SPORTS TENNIS\"}]}",
+                        Arrays.asList("Sky Sports F1"),
+                        8
+                );
+
+        assertEquals(2, entries.size());
+        assertEquals("leaf:f1-3949409", entries.get(0).getId());
+        assertEquals("leaf:4k-344334", entries.get(1).getId());
+    }
+
     @Test
     public void readsAndDeduplicatesTvVooJsonCandidates() throws Exception {
         List<URI> candidates = ResolverPayloadParsers.parseTvVooCandidates(

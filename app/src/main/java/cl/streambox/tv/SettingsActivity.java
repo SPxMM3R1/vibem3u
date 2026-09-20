@@ -49,10 +49,14 @@ public final class SettingsActivity extends Activity {
     /** Public Lista 2 shown in the second source field on a new installation. */
     public static final String DEFAULT_PLAYLIST_URL_2 =
             "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/m3u-externa.m3u";
+    /** Public Highfly/Stremio manifest used when a channel has no override. */
+    public static final String DEFAULT_HIGHFLY_MANIFEST_URL =
+            "https://sports.highfly.to/manifest.json";
     public static final String KEY_PLAYLIST_URL = "playlist_url";
     public static final String KEY_PLAYLIST_URL_2 = "playlist_url_2";
     public static final String KEY_PLAYLIST_ENABLED = "playlist_enabled";
     public static final String KEY_PLAYLIST_ENABLED_2 = "playlist_enabled_2";
+    public static final String KEY_HIGHFLY_MANIFEST_URL = "highfly_manifest_url";
     public static final String KEY_INVERT_CHANNEL_KEYS = "invert_channel_keys";
     public static final String KEY_NORMALIZE_VOLUME = "normalize_volume";
     public static final String EXTRA_INITIAL_TAB = "initial_tab";
@@ -73,20 +77,26 @@ public final class SettingsActivity extends Activity {
     public static final String EXTRA_RESOLVER_CATALOG_VERSION = "resolver_catalog_version";
     public static final String EXTRA_RESOLVER_IDS = "resolver_ids";
     public static final String EXTRA_RESOLVER_COUNTS = "resolver_counts";
+    public static final String EXTRA_HIDDEN_CHANNELS_CHANGED = "hidden_channels_changed";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService updateExecutor = Executors.newSingleThreadExecutor();
 
     private EditText urlInput;
     private EditText urlInput2;
+    private EditText highflyManifestUrlInput;
     private TextView errorText;
     private Switch playlistOneEnabled;
     private Switch playlistTwoEnabled;
     private Switch tvvooSourceEnabled;
     private Button tvvooCatalogButton;
+    private Switch highflySourceEnabled;
+    private Button highflyCatalogButton;
     private Button mediaFlowSettingsButton;
     private TextView tvvooSelectionStatus;
+    private TextView highflySelectionStatus;
     private TvVooSelectionStore tvvooSelectionStore;
+    private HighflySelectionStore highflySelectionStore;
     private Switch invertChannelKeys;
     private Switch normalizeVolume;
     private Button updateButton;
@@ -107,11 +117,15 @@ public final class SettingsActivity extends Activity {
     private TextView subtitlesStatus;
     private TextView resolverCatalogVersion;
     private LinearLayout resolverGroupsContainer;
+    private LinearLayout hiddenChannelsContainer;
+    private TextView hiddenChannelsStatus;
     private ResolverCatalogRepository resolverCatalogRepository;
     private ResolverPreferences resolverPreferences;
     private ResolverCatalog resolverCatalog;
+    private HiddenChannelStore hiddenChannelStore;
     private final Map<String, Switch> resolverGroupSwitches = new LinkedHashMap<>();
     private final Map<String, Integer> resolverGroupCounts = new LinkedHashMap<>();
+    private final Map<String, Switch> hiddenChannelSwitches = new LinkedHashMap<>();
     private View playbackFirstFocus;
     private int currentChannelIndex = -1;
     private String currentChannelTvgId = "";
@@ -144,15 +158,16 @@ public final class SettingsActivity extends Activity {
             editor = prefs.edit()
                     .putString(KEY_PLAYLIST_URL_2, DEFAULT_PLAYLIST_URL_2);
         }
-        if (hasPlaylistPreferences) {
-            if (editor != null) editor.apply();
-            return;
+        if (!prefs.contains(KEY_HIGHFLY_MANIFEST_URL)) {
+            if (editor == null) editor = prefs.edit();
+            editor.putString(KEY_HIGHFLY_MANIFEST_URL, DEFAULT_HIGHFLY_MANIFEST_URL);
         }
-        if (editor == null) editor = prefs.edit();
-        editor
-                .putString(KEY_PLAYLIST_URL, DEFAULT_PLAYLIST_URL)
-                .putBoolean(KEY_PLAYLIST_ENABLED, true)
-                .apply();
+        if (!hasPlaylistPreferences) {
+            if (editor == null) editor = prefs.edit();
+            editor.putString(KEY_PLAYLIST_URL, DEFAULT_PLAYLIST_URL)
+                    .putBoolean(KEY_PLAYLIST_ENABLED, true);
+        }
+        if (editor != null) editor.apply();
     }
 
     /** Removes credential state written by versions that exposed this provider separately. */
@@ -217,13 +232,17 @@ public final class SettingsActivity extends Activity {
 
         urlInput = findViewById(R.id.playlist_url);
         urlInput2 = findViewById(R.id.playlist_url_2);
+        highflyManifestUrlInput = findViewById(R.id.highfly_manifest_url);
         errorText = findViewById(R.id.url_error);
         playlistOneEnabled = findViewById(R.id.playlist_1_enabled);
         playlistTwoEnabled = findViewById(R.id.playlist_2_enabled);
         tvvooSourceEnabled = findViewById(R.id.tvvoo_source_enabled);
         tvvooCatalogButton = findViewById(R.id.tvvoo_catalog_button);
+        highflySourceEnabled = findViewById(R.id.highfly_source_enabled);
+        highflyCatalogButton = findViewById(R.id.highfly_catalog_button);
         mediaFlowSettingsButton = findViewById(R.id.mediaflow_settings_button);
         tvvooSelectionStatus = findViewById(R.id.tvvoo_selection_status);
+        highflySelectionStatus = findViewById(R.id.highfly_selection_status);
         invertChannelKeys = findViewById(R.id.invert_channel_keys);
         normalizeVolume = findViewById(R.id.normalize_volume);
         updateButton = findViewById(R.id.check_updates_button);
@@ -238,6 +257,8 @@ public final class SettingsActivity extends Activity {
         subtitlesStatus = findViewById(R.id.settings_subtitles_status);
         resolverCatalogVersion = findViewById(R.id.resolver_catalog_version);
         resolverGroupsContainer = findViewById(R.id.resolver_groups_container);
+        hiddenChannelsContainer = findViewById(R.id.hidden_channels_container);
+        hiddenChannelsStatus = findViewById(R.id.hidden_channels_status);
         tabs = new TextView[]{
                 findViewById(R.id.tab_general),
                 findViewById(R.id.tab_playback),
@@ -259,12 +280,21 @@ public final class SettingsActivity extends Activity {
         resolverCatalogRepository = new ResolverCatalogRepository(this);
         resolverPreferences = new ResolverPreferences(this);
         tvvooSelectionStore = new TvVooSelectionStore(this);
+        highflySelectionStore = new HighflySelectionStore(this);
+        hiddenChannelStore = new HiddenChannelStore(this);
         urlInput.setText(existingUrl);
         urlInput.setSelection(urlInput.length());
         String initialUrl2 = prefs.contains(KEY_PLAYLIST_URL_2)
                 ? existingUrl2
                 : DEFAULT_PLAYLIST_URL_2;
         urlInput2.setText(initialUrl2 == null ? "" : initialUrl2);
+        String initialHighflyManifest = prefs.getString(
+                KEY_HIGHFLY_MANIFEST_URL,
+                DEFAULT_HIGHFLY_MANIFEST_URL
+        );
+        highflyManifestUrlInput.setText(AppStrings.isBlank(initialHighflyManifest)
+                ? DEFAULT_HIGHFLY_MANIFEST_URL
+                : initialHighflyManifest);
         boolean firstPlaylistEnabled = prefs.contains(KEY_PLAYLIST_ENABLED)
                 ? prefs.getBoolean(KEY_PLAYLIST_ENABLED, true)
                 : existingUrl != null && !AppStrings.isBlank(existingUrl);
@@ -274,13 +304,16 @@ public final class SettingsActivity extends Activity {
                 false
         ));
         tvvooSourceEnabled.setChecked(tvvooSelectionStore.isEnabled());
+        highflySourceEnabled.setChecked(highflySelectionStore.isEnabled());
         updateTvVooSelectionStatus();
+        updateHighflySelectionStatus();
         invertChannelKeys.setChecked(prefs.getBoolean(KEY_INVERT_CHANNEL_KEYS, false));
         normalizeVolume.setChecked(prefs.getBoolean(KEY_NORMALIZE_VOLUME, false));
         TextView versionText = findViewById(R.id.current_version);
         versionText.setText(getString(R.string.current_version, BuildConfig.VERSION_NAME));
         initializeCurrentChannelOptions(getIntent());
         initializeResolverOptions(getIntent());
+        renderHiddenChannels();
 
         tvvooSourceEnabled.setOnCheckedChangeListener((button, checked) -> {
             // A selected TvVoo source must have its resolver engine available;
@@ -291,8 +324,17 @@ public final class SettingsActivity extends Activity {
             }
             updateTvVooSelectionStatus();
         });
+        highflySourceEnabled.setOnCheckedChangeListener((button, checked) -> {
+            if (checked) {
+                Switch highflyResolver = resolverGroupSwitches.get("highfly");
+                if (highflyResolver != null) highflyResolver.setChecked(true);
+            }
+            updateHighflySelectionStatus();
+        });
         tvvooCatalogButton.setOnClickListener(view ->
                 startActivity(new Intent(this, TvVooCatalogActivity.class)));
+        highflyCatalogButton.setOnClickListener(view ->
+                startActivity(new Intent(this, HighflyCatalogActivity.class)));
         mediaFlowSettingsButton.setOnClickListener(view ->
                 startActivity(new Intent(this, MediaFlowSettingsActivity.class)));
 
@@ -381,6 +423,72 @@ public final class SettingsActivity extends Activity {
                 ? getString(R.string.tvvoo_source_enabled)
                 : getString(R.string.tvvoo_source_disabled);
         tvvooSelectionStatus.setText(getString(R.string.tvvoo_selection_status, state, count));
+    }
+
+    private void updateHighflySelectionStatus() {
+        if (highflySelectionStore == null || highflySelectionStatus == null) return;
+        int count = highflySelectionStore.getSelectedCatalogChannels().size();
+        String state = highflySourceEnabled != null && highflySourceEnabled.isChecked()
+                ? getString(R.string.highfly_source_enabled)
+                : getString(R.string.highfly_source_disabled);
+        highflySelectionStatus.setText(getString(
+                R.string.highfly_selection_status,
+                state,
+                count
+        ));
+    }
+
+    private void renderHiddenChannels() {
+        if (hiddenChannelStore == null
+                || hiddenChannelsContainer == null
+                || hiddenChannelsStatus == null) return;
+        hiddenChannelsContainer.removeAllViews();
+        hiddenChannelSwitches.clear();
+
+        List<HiddenChannelStore.Entry> entries = hiddenChannelStore.getEntries();
+        hiddenChannelsStatus.setVisibility(entries.isEmpty() ? View.VISIBLE : View.GONE);
+        View previous = findViewById(R.id.interface_info);
+        for (HiddenChannelStore.Entry entry : entries) {
+            Switch channelSwitch = new Switch(this);
+            channelSwitch.setId(View.generateViewId());
+            channelSwitch.setLayoutParams(new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    getResources().getDimensionPixelSize(R.dimen.settings_control_height)
+            ));
+            channelSwitch.setBackgroundResource(R.drawable.settings_section_card);
+            channelSwitch.setFocusable(true);
+            channelSwitch.setGravity(Gravity.CENTER_VERTICAL);
+            channelSwitch.setPadding(dp(12), 0, dp(12), 0);
+            channelSwitch.setShowText(false);
+            String label = AppStrings.isBlank(entry.getTvgId())
+                    ? entry.getName()
+                    : entry.getName() + " · " + entry.getTvgId();
+            channelSwitch.setText(label);
+            channelSwitch.setTextColor(getColor(R.color.white));
+            channelSwitch.setTextSize(
+                    TypedValue.COMPLEX_UNIT_PX,
+                    getResources().getDimension(R.dimen.settings_control_text_size)
+            );
+            channelSwitch.setThumbTintList(getColorStateList(R.color.cyan));
+            channelSwitch.setChecked(true);
+            hiddenChannelsContainer.addView(channelSwitch);
+            hiddenChannelSwitches.put(entry.getIdentity(), channelSwitch);
+            previous.setNextFocusDownId(channelSwitch.getId());
+            channelSwitch.setNextFocusUpId(previous.getId());
+            previous = channelSwitch;
+        }
+        previous.setNextFocusDownId(saveButton.getId());
+    }
+
+    private boolean saveHiddenChannels() {
+        if (hiddenChannelStore == null) return false;
+        boolean changed = false;
+        for (Map.Entry<String, Switch> item : hiddenChannelSwitches.entrySet()) {
+            if (item.getValue().isChecked()) continue;
+            hiddenChannelStore.setHidden(item.getKey(), false);
+            changed = true;
+        }
+        return changed;
     }
 
     private void renderQualityOptions() {
@@ -752,11 +860,14 @@ public final class SettingsActivity extends Activity {
     private void save() {
         String value = urlInput.getText().toString().trim();
         String value2 = urlInput2.getText().toString().trim();
+        String highflyManifest = highflyManifestUrlInput.getText().toString().trim();
         boolean enabled1 = playlistOneEnabled.isChecked();
         boolean enabled2 = playlistTwoEnabled.isChecked();
         boolean tvvooEnabled = tvvooSourceEnabled.isChecked();
+        boolean highflyEnabled = highflySourceEnabled.isChecked();
         boolean tvvooHasSelection = !tvvooSelectionStore.getSelectedCatalogChannels().isEmpty();
-        if (!enabled1 && !enabled2 && !tvvooEnabled) {
+        boolean highflyHasSelection = !highflySelectionStore.getSelectedCatalogChannels().isEmpty();
+        if (!enabled1 && !enabled2 && !tvvooEnabled && !highflyEnabled) {
             errorText.setText(R.string.playlist_source_required);
             errorText.setVisibility(View.VISIBLE);
             playlistOneEnabled.requestFocus();
@@ -766,6 +877,12 @@ public final class SettingsActivity extends Activity {
             errorText.setText(R.string.tvvoo_selection_required);
             errorText.setVisibility(View.VISIBLE);
             tvvooCatalogButton.requestFocus();
+            return;
+        }
+        if (highflyEnabled && !highflyHasSelection) {
+            errorText.setText(R.string.highfly_selection_required);
+            errorText.setVisibility(View.VISIBLE);
+            highflyCatalogButton.requestFocus();
             return;
         }
         if (enabled1 && !isValidPlaylistUrl(value)) {
@@ -780,23 +897,36 @@ public final class SettingsActivity extends Activity {
             urlInput2.requestFocus();
             return;
         }
+        if (!HighflyStreamResolver.isAllowedManifestUrl(highflyManifest)) {
+            errorText.setText(R.string.highfly_manifest_url_required);
+            errorText.setVisibility(View.VISIBLE);
+            highflyManifestUrlInput.requestFocus();
+            return;
+        }
 
+        boolean hiddenChannelsChanged = saveHiddenChannels();
         getSharedPreferences(PREFS, MODE_PRIVATE)
                 .edit()
                 .putString(KEY_PLAYLIST_URL, value)
                 .putString(KEY_PLAYLIST_URL_2, value2)
+                .putString(KEY_HIGHFLY_MANIFEST_URL, highflyManifest)
                 .putBoolean(KEY_PLAYLIST_ENABLED, enabled1)
                 .putBoolean(KEY_PLAYLIST_ENABLED_2, enabled2)
                 .putBoolean(KEY_INVERT_CHANNEL_KEYS, invertChannelKeys.isChecked())
                 .putBoolean(KEY_NORMALIZE_VOLUME, normalizeVolume.isChecked())
                 .apply();
         tvvooSelectionStore.setEnabled(tvvooEnabled);
+        highflySelectionStore.setEnabled(highflyEnabled);
         if (tvvooEnabled) {
             // The source toggle is the user-facing opt-in. Keep the TvVoo
             // resolver engine enabled so a valid selection cannot become a
             // silently empty list after editing resolver settings.
             Switch tvvooResolver = resolverGroupSwitches.get("tvvoo");
             if (tvvooResolver != null) tvvooResolver.setChecked(true);
+        }
+        if (highflyEnabled) {
+            Switch highflyResolver = resolverGroupSwitches.get("highfly");
+            if (highflyResolver != null) highflyResolver.setChecked(true);
         }
         for (Map.Entry<String, Switch> entry : resolverGroupSwitches.entrySet()) {
             ResolverDefinition definition = resolverCatalog == null
@@ -810,7 +940,8 @@ public final class SettingsActivity extends Activity {
                 .putExtra(KEY_PLAYLIST_URL, value)
                 .putExtra(KEY_PLAYLIST_URL_2, value2)
                 .putExtra(KEY_PLAYLIST_ENABLED, enabled1)
-                .putExtra(KEY_PLAYLIST_ENABLED_2, enabled2);
+                .putExtra(KEY_PLAYLIST_ENABLED_2, enabled2)
+                .putExtra(EXTRA_HIDDEN_CHANNELS_CHANGED, hiddenChannelsChanged);
         if (hasCurrentChannel) {
             result.putExtra(EXTRA_CHANNEL_INDEX, currentChannelIndex)
                     .putExtra(EXTRA_CHANNEL_TVG_ID, currentChannelTvgId)
@@ -904,6 +1035,7 @@ public final class SettingsActivity extends Activity {
         super.onResume();
         enterImmersiveMode();
         updateTvVooSelectionStatus();
+        updateHighflySelectionStatus();
         if (appUpdater != null) appUpdater.onHostResume();
     }
 

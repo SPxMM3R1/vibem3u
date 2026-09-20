@@ -113,6 +113,8 @@ public final class MainActivity extends Activity {
     private ResolverCatalogRepository resolverCatalogRepository;
     private ResolverPreferences resolverPreferences;
     private TvVooSelectionStore tvVooSelectionStore;
+    private HighflySelectionStore highflySelectionStore;
+    private HiddenChannelStore hiddenChannelStore;
     private StreamResolverRegistry streamResolverRegistry;
     private Map<String, Integer> resolverChannelCounts = Collections.emptyMap();
     private final List<Channel> channels = new ArrayList<>();
@@ -142,6 +144,7 @@ public final class MainActivity extends Activity {
     private TextView sourceSelectorChannel;
     private TextView sourceSelectorStatus;
     private LinearLayout sourceSelectorOptions;
+    private Button sourceSelectorHideChannel;
     private ImageView channelLogo;
     private TextView channelLogoFallback;
     private TextView channelNumber;
@@ -199,8 +202,10 @@ public final class MainActivity extends Activity {
     private ResolutionContext sourceCandidateContext;
     private long sourceCandidateRequestId;
     private final List<ResolvedPlaybackCandidate> sourceCandidates = new ArrayList<>();
+    private final List<PlaybackOption> playbackOptions = new ArrayList<>();
     private final List<View> sourceCandidateViews = new ArrayList<>();
     private int sourceCandidateFocusIndex = -1;
+    private boolean sourceSelectorHideFocused;
     private ManifestHandoffCache playbackManifestCache;
     private long playbackResolutionRequestId;
     private long activePlaybackSourceRequestId = NO_RESOLUTION_REQUEST;
@@ -309,6 +314,8 @@ public final class MainActivity extends Activity {
         resolverCatalogRepository = new ResolverCatalogRepository(this);
         resolverPreferences = new ResolverPreferences(this);
         tvVooSelectionStore = new TvVooSelectionStore(this);
+        highflySelectionStore = new HighflySelectionStore(this);
+        hiddenChannelStore = new HiddenChannelStore(this);
         // Install the process-local alias learning store before any resolver
         // can be used. It persists aliases only, never resolved URLs/tokens.
         new TvVooSourceHistory(this);
@@ -359,6 +366,11 @@ public final class MainActivity extends Activity {
         sourceSelectorChannel = findViewById(R.id.source_selector_channel);
         sourceSelectorStatus = findViewById(R.id.source_selector_status);
         sourceSelectorOptions = findViewById(R.id.source_selector_options);
+        sourceSelectorHideChannel = findViewById(R.id.source_selector_hide_channel);
+        sourceSelectorHideChannel.setOnFocusChangeListener((view, focused) -> {
+            if (focused) sourceSelectorHideFocused = true;
+        });
+        sourceSelectorHideChannel.setOnClickListener(view -> hideCurrentChannelFromSelector());
         channelLogo = findViewById(R.id.channel_logo);
         channelLogoFallback = findViewById(R.id.channel_logo_fallback);
         channelNumber = findViewById(R.id.channel_number);
@@ -510,7 +522,7 @@ public final class MainActivity extends Activity {
                 ? Collections.emptyList()
                 : new ArrayList<>(configuredSources);
         String sourceSignature = playlistSourceSignature(sources);
-        if (sources.isEmpty() && !hasSelectedTvVooChannels()) {
+        if (sources.isEmpty() && !hasSelectedDynamicChannels()) {
             if (!settingsOpen) openSettings();
             return;
         }
@@ -579,7 +591,7 @@ public final class MainActivity extends Activity {
         // The selection store is local and available synchronously. Publish
         // it immediately so startup remains usable when M3U is offline or
         // still waiting for its cache/network callback.
-        if (hasSelectedTvVooChannels()) {
+        if (hasSelectedDynamicChannels()) {
             applyPlaylists(
                     visiblePlaylists,
                     sourceSignature,
@@ -863,7 +875,8 @@ public final class MainActivity extends Activity {
         resolverChannelCounts = streamResolverRegistry.countChannels(sourceChannels);
         List<Channel> enabledChannels = new ArrayList<>();
         for (Channel candidate : sourceChannels) {
-            if (streamResolverRegistry.isChannelEnabled(candidate)) {
+            if ((hiddenChannelStore == null || !hiddenChannelStore.isHidden(candidate))
+                    && streamResolverRegistry.isChannelEnabled(candidate)) {
                 enabledChannels.add(candidate);
             }
         }
@@ -998,18 +1011,37 @@ public final class MainActivity extends Activity {
             Playlist playlist = entry.getValue();
             if (playlist != null) result.addAll(playlist.getChannels());
         }
-        if (!hasSelectedTvVooChannels()) return result;
-        return new ArrayList<>(TvVooChannelMerge.merge(
-                result,
-                tvVooSelectionStore.getSelectedChannels(),
-                true
-        ));
+        if (hasSelectedTvVooChannels()) {
+            result = new ArrayList<>(TvVooChannelMerge.merge(
+                    result,
+                    tvVooSelectionStore.getSelectedChannels(),
+                    true
+            ));
+        }
+        if (hasSelectedHighflyChannels()) {
+            result = new ArrayList<>(HighflyChannelMerge.merge(
+                    result,
+                    highflySelectionStore.getSelectedChannels(),
+                    true
+            ));
+        }
+        return result;
     }
 
     private boolean hasSelectedTvVooChannels() {
         return tvVooSelectionStore != null
                 && tvVooSelectionStore.isEnabled()
                 && !tvVooSelectionStore.getSelectedChannels().isEmpty();
+    }
+
+    private boolean hasSelectedHighflyChannels() {
+        return highflySelectionStore != null
+                && highflySelectionStore.isEnabled()
+                && !highflySelectionStore.getSelectedChannels().isEmpty();
+    }
+
+    private boolean hasSelectedDynamicChannels() {
+        return hasSelectedTvVooChannels() || hasSelectedHighflyChannels();
     }
 
     private void showPlaylistError(String detail) {
@@ -2540,15 +2572,13 @@ public final class MainActivity extends Activity {
                 && sourceSelectorOverlay.getVisibility() == View.VISIBLE;
     }
 
-    /** Opens the explicit source chooser without disturbing the current player. */
+    /** Opens the shared source/quality chooser without disturbing the current player. */
     private void openPlaybackSourceSelector() {
         if (exiting || resourcesReleased || settingsOpen || player == null
                 || !hasWindowFocus() || playbackChannel == null
                 || playbackResolutionTask != null
-                || currentPlaybackSource == null
                 || streamResolverRegistry == null) return;
         StreamResolver resolver = streamResolverRegistry.find(playbackChannel);
-        if (resolver == null || !supportsSourceSelector(resolver)) return;
         if (isSourceSelectorVisible() || sourceCandidateTask != null) return;
 
         mainHandler.removeCallbacks(hideLightEpg);
@@ -2556,7 +2586,11 @@ public final class MainActivity extends Activity {
         sourceSelectorTitle.setText(getString(R.string.source_selector_title));
         sourceSelectorChannel.setText(playbackChannel.getName());
         sourceSelectorOverlay.setVisibility(View.VISIBLE);
-        startSourceSelectorQuery(playbackChannel, resolver);
+        if (resolver != null && supportsSourceSelector(resolver)) {
+            startSourceSelectorQuery(playbackChannel, resolver);
+        } else {
+            renderDirectQualitySelector(playbackChannel);
+        }
     }
 
     private static boolean supportsSourceSelector(StreamResolver resolver) {
@@ -2572,8 +2606,10 @@ public final class MainActivity extends Activity {
         sourceCandidateTask = null;
         sourceCandidateContext = null;
         sourceCandidates.clear();
+        playbackOptions.clear();
         sourceCandidateViews.clear();
         sourceCandidateFocusIndex = -1;
+        sourceSelectorHideFocused = false;
         sourceSelectorOptions.removeAllViews();
         sourceSelectorStatus.setText(getString(R.string.source_selector_consulting));
 
@@ -2624,9 +2660,13 @@ public final class MainActivity extends Activity {
         sourceCandidateTask = null;
         sourceCandidateContext = null;
         sourceCandidates.clear();
+        playbackOptions.clear();
         if (resolved != null) sourceCandidates.addAll(resolved);
         if (sourceCandidates.isEmpty()) {
-            sourceSelectorStatus.setText(getString(R.string.source_selector_no_options));
+            // Media3 may already expose adaptive variants even when the
+            // provider's alternate-source endpoint is empty. Keep the same
+            // window useful instead of showing a dead end.
+            renderDirectQualitySelector(channel);
             return;
         }
         renderSourceSelectorOptions();
@@ -2643,10 +2683,12 @@ public final class MainActivity extends Activity {
         sourceCandidateTask = null;
         sourceCandidateContext = null;
         sourceCandidates.clear();
+        playbackOptions.clear();
         sourceCandidateViews.clear();
         sourceCandidateFocusIndex = -1;
+        sourceSelectorHideFocused = false;
         sourceSelectorOptions.removeAllViews();
-        sourceSelectorStatus.setText(getString(R.string.source_selector_no_options));
+        renderDirectQualitySelector(channel);
     }
 
     private String sourceSelectorProgressText(ResolutionProgress progress) {
@@ -2676,16 +2718,82 @@ public final class MainActivity extends Activity {
     }
 
     private void renderSourceSelectorOptions() {
+        playbackOptions.clear();
+        for (ResolvedPlaybackCandidate candidate : sourceCandidates) {
+            playbackOptions.add(PlaybackOption.source(
+                    candidate,
+                    isCurrentSource(candidate.getSource())
+            ));
+        }
+        renderPlaybackOptions(getString(
+                R.string.source_selector_ready_count,
+                playbackOptions.size()
+        ));
+    }
+
+    private void renderDirectQualitySelector(Channel channel) {
+        sourceCandidates.clear();
+        playbackOptions.clear();
+        List<VideoTrackOption> qualities = player == null
+                ? Collections.emptyList()
+                : collectVideoTrackOptions(player.getCurrentTracks());
+        if (qualities.size() > 1) {
+            boolean automatic = playbackPreferences != null
+                    && playbackPreferences.isAutomaticQuality(channel);
+            playbackOptions.add(PlaybackOption.automatic(automatic));
+        }
+        VideoTrackOption selected = selectedQualityOption(channel, qualities);
+        for (VideoTrackOption quality : qualities) {
+            playbackOptions.add(PlaybackOption.quality(
+                    quality,
+                    quality == selected
+            ));
+        }
+        if (playbackOptions.isEmpty()) {
+            sourceCandidateViews.clear();
+            sourceSelectorOptions.removeAllViews();
+            sourceSelectorStatus.setText(getString(R.string.source_selector_no_options));
+            sourceSelectorHideFocused = true;
+            sourceSelectorHideChannel.requestFocus();
+            return;
+        }
+        renderPlaybackOptions(getString(
+                R.string.source_selector_quality_count,
+                qualities.size()
+        ));
+    }
+
+    private VideoTrackOption selectedQualityOption(
+            Channel channel,
+            List<VideoTrackOption> qualities
+    ) {
+        if (channel == null || qualities.isEmpty() || playbackPreferences == null) return null;
+        if (playbackPreferences.isAutomaticQuality(channel)) return null;
+        PlaybackPreferences.QualityPreference preference =
+                playbackPreferences.getQuality(channel);
+        return preference == null
+                ? qualities.get(0)
+                : findClosestQuality(qualities, preference);
+    }
+
+    private boolean isCurrentSource(ResolvedPlaybackSource source) {
+        if (source == null || currentPlaybackSource == null) return false;
+        URI currentUri = currentPlaybackSource.getPlaybackUri();
+        URI candidateUri = source.getPlaybackUri();
+        return currentUri != null && currentUri.equals(candidateUri);
+    }
+
+    private void renderPlaybackOptions(String status) {
         sourceSelectorOptions.removeAllViews();
         sourceCandidateViews.clear();
-        for (int index = 0; index < sourceCandidates.size(); index++) {
+        sourceSelectorHideFocused = false;
+        for (int index = 0; index < playbackOptions.size(); index++) {
             final int candidateIndex = index;
-            ResolvedPlaybackCandidate candidate = sourceCandidates.get(index);
+            PlaybackOption playbackOption = playbackOptions.get(index);
             TextView option = new TextView(this);
-            String detail = candidate.getDetail();
-            option.setText(AppStrings.isBlank(detail)
-                    ? candidate.getLabel()
-                    : candidate.getLabel() + "\n" + detail);
+            String detail = playbackOption.detail;
+            String label = (playbackOption.selected ? "✓ " : "") + playbackOption.label;
+            option.setText(AppStrings.isBlank(detail) ? label : label + "\n" + detail);
             option.setTextColor(getColor(R.color.white));
             option.setTextSize(15f);
             option.setGravity(Gravity.CENTER_VERTICAL);
@@ -2694,9 +2802,12 @@ public final class MainActivity extends Activity {
             option.setFocusableInTouchMode(true);
             option.setMinHeight(dp(54));
             option.setOnFocusChangeListener((view, focused) -> {
-                if (focused) sourceCandidateFocusIndex = candidateIndex;
+                if (focused) {
+                    sourceCandidateFocusIndex = candidateIndex;
+                    sourceSelectorHideFocused = false;
+                }
             });
-            option.setOnClickListener(view -> selectSourceCandidate(candidateIndex));
+            option.setOnClickListener(view -> selectPlaybackOption(candidateIndex));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
@@ -2705,30 +2816,67 @@ public final class MainActivity extends Activity {
             sourceSelectorOptions.addView(option, params);
             sourceCandidateViews.add(option);
         }
-        sourceSelectorStatus.setText(getString(
-                R.string.source_selector_ready_count,
-                sourceCandidates.size()
-        ));
+        sourceSelectorStatus.setText(status);
         if (!sourceCandidateViews.isEmpty()) {
             sourceCandidateFocusIndex = 0;
             sourceCandidateViews.get(0).requestFocus();
+            View last = sourceCandidateViews.get(sourceCandidateViews.size() - 1);
+            last.setNextFocusDownId(sourceSelectorHideChannel.getId());
+            sourceSelectorHideChannel.setNextFocusUpId(last.getId());
+        } else {
+            sourceSelectorHideFocused = true;
+            sourceSelectorHideChannel.requestFocus();
         }
     }
 
     private void moveSourceSelectorFocus(int delta) {
-        if (!isSourceSelectorVisible() || sourceCandidateViews.isEmpty()) return;
-        int size = sourceCandidateViews.size();
-        int index = sourceCandidateFocusIndex < 0 ? 0 : sourceCandidateFocusIndex;
+        if (!isSourceSelectorVisible()) return;
+        if (sourceCandidateViews.isEmpty()) {
+            sourceSelectorHideFocused = true;
+            sourceSelectorHideChannel.requestFocus();
+            return;
+        }
+        int size = sourceCandidateViews.size() + 1;
+        int index = sourceSelectorHideFocused
+                ? sourceCandidateViews.size()
+                : Math.max(0, sourceCandidateFocusIndex);
         index = (index + delta % size + size) % size;
-        sourceCandidateFocusIndex = index;
-        sourceCandidateViews.get(index).requestFocus();
+        if (index == sourceCandidateViews.size()) {
+            sourceSelectorHideFocused = true;
+            sourceSelectorHideChannel.requestFocus();
+        } else {
+            sourceSelectorHideFocused = false;
+            sourceCandidateFocusIndex = index;
+            sourceCandidateViews.get(index).requestFocus();
+        }
     }
 
     private void selectFocusedSource() {
-        if (sourceCandidateFocusIndex >= 0
-                && sourceCandidateFocusIndex < sourceCandidates.size()) {
-            selectSourceCandidate(sourceCandidateFocusIndex);
+        if (sourceSelectorHideFocused) {
+            hideCurrentChannelFromSelector();
+        } else if (sourceCandidateFocusIndex >= 0
+                && sourceCandidateFocusIndex < playbackOptions.size()) {
+            selectPlaybackOption(sourceCandidateFocusIndex);
         }
+    }
+
+    private void selectPlaybackOption(int index) {
+        if (index < 0 || index >= playbackOptions.size() || sourceCandidateTask != null) return;
+        PlaybackOption option = playbackOptions.get(index);
+        if (option.isQuality()) {
+            Channel channel = playbackChannel;
+            if (channel == null || player == null) return;
+            if (option.automatic) {
+                useAutomaticQuality(channel);
+            } else if (option.quality != null) {
+                applyFixedQuality(channel, option.quality, true);
+            }
+            closePlaybackSourceSelector();
+            requestDiagnosticsUpdate();
+            return;
+        }
+        int sourceIndex = sourceCandidates.indexOf(option.sourceCandidate);
+        if (sourceIndex >= 0) selectSourceCandidate(sourceIndex);
     }
 
     private void selectSourceCandidate(int index) {
@@ -2765,6 +2913,19 @@ public final class MainActivity extends Activity {
         startResolvedPlayback(channel, source, playbackGeneration, requestId);
     }
 
+    private void hideCurrentChannelFromSelector() {
+        if (playbackChannel == null || hiddenChannelStore == null) return;
+        hiddenChannelStore.setHidden(playbackChannel, true);
+        closePlaybackSourceSelector();
+        if (playlistsBySource.isEmpty() || channels.isEmpty()) return;
+        applyPlaylists(
+                new LinkedHashMap<>(playlistsBySource),
+                loadedPlaylistSignature,
+                playlistGeneration,
+                true
+        );
+    }
+
     private void closePlaybackSourceSelector() {
         sourceCandidateRequestId++;
         if (sourceCandidateContext != null) sourceCandidateContext.cancel();
@@ -2772,8 +2933,10 @@ public final class MainActivity extends Activity {
         if (sourceCandidateTask != null) sourceCandidateTask.cancel(true);
         sourceCandidateTask = null;
         sourceCandidates.clear();
+        playbackOptions.clear();
         sourceCandidateViews.clear();
         sourceCandidateFocusIndex = -1;
+        sourceSelectorHideFocused = false;
         if (sourceSelectorOptions != null) sourceSelectorOptions.removeAllViews();
         if (sourceSelectorOverlay != null) sourceSelectorOverlay.setVisibility(View.GONE);
     }
@@ -2839,7 +3002,14 @@ public final class MainActivity extends Activity {
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
             if (event.getAction() == KeyEvent.ACTION_DOWN
                     && event.getRepeatCount() == 0) {
-                showLightEpg();
+                StreamResolver resolver = playbackChannel == null || streamResolverRegistry == null
+                        ? null
+                        : streamResolverRegistry.find(playbackChannel);
+                if (resolver == null || !supportsSourceSelector(resolver)) {
+                    openPlaybackSourceSelector();
+                } else {
+                    showLightEpg();
+                }
             }
             return true;
         }
@@ -3211,7 +3381,7 @@ public final class MainActivity extends Activity {
             resolverSettingsSnapshotBeforeSettings = "";
             playlistSourcesSnapshotBeforeSettings = "";
             List<PlaylistSource> sources = getPlaylistSources();
-            if (resultCode == RESULT_OK && !sources.isEmpty()) {
+            if (resultCode == RESULT_OK && (!sources.isEmpty() || hasSelectedDynamicChannels())) {
                 applyPlaybackSettingsResult(data);
                 reloadResolverRegistry();
                 boolean resolverConfigurationChanged = AppStrings.isBlank(resolverSnapshotBefore)
@@ -3240,7 +3410,7 @@ public final class MainActivity extends Activity {
                     epgData = EpgData.empty();
                 }
                 refreshAfterSettings = true;
-            } else if (sources.isEmpty() && !hasSelectedTvVooChannels()) {
+            } else if (sources.isEmpty() && !hasSelectedDynamicChannels()) {
                 openSettings();
             }
         }
@@ -3287,9 +3457,17 @@ public final class MainActivity extends Activity {
             snapshot.append("|tvvoo-selection=")
                     .append(tvVooSelectionStore.signature());
         }
+        if (highflySelectionStore != null) {
+            snapshot.append("|highfly-selection=")
+                    .append(highflySelectionStore.signature());
+        }
         if (resolverPreferences != null && resolverPreferences.mediaFlowPreferences() != null) {
             snapshot.append("|mediaflow=")
                     .append(resolverPreferences.mediaFlowPreferences().signature());
+        }
+        if (resolverPreferences != null) {
+            snapshot.append("|highfly-manifest=")
+                    .append(resolverPreferences.highflyManifestUrl());
         }
         return snapshot.toString();
     }
@@ -3418,7 +3596,7 @@ public final class MainActivity extends Activity {
         }
         if (!settingsOpen && !refreshAfterSettings) {
             List<PlaylistSource> sources = getPlaylistSources();
-            if (sources.isEmpty() && !hasSelectedTvVooChannels()) {
+            if (sources.isEmpty() && !hasSelectedDynamicChannels()) {
                 openSettings();
             } else {
                 refreshPlaylists(sources);
@@ -3485,6 +3663,72 @@ public final class MainActivity extends Activity {
     @Override public void onLowMemory() {
         super.onLowMemory();
         handleMemoryPressure(PlaybackResourceWarningPolicy.LOW_MEMORY_CALLBACK_LEVEL);
+    }
+
+    /** One row in the shared source/quality selector. */
+    private static final class PlaybackOption {
+        final String label;
+        final String detail;
+        final ResolvedPlaybackCandidate sourceCandidate;
+        final VideoTrackOption quality;
+        final boolean automatic;
+        final boolean selected;
+
+        private PlaybackOption(
+                String label,
+                String detail,
+                ResolvedPlaybackCandidate sourceCandidate,
+                VideoTrackOption quality,
+                boolean automatic,
+                boolean selected
+        ) {
+            this.label = label;
+            this.detail = detail;
+            this.sourceCandidate = sourceCandidate;
+            this.quality = quality;
+            this.automatic = automatic;
+            this.selected = selected;
+        }
+
+        static PlaybackOption source(
+                ResolvedPlaybackCandidate candidate,
+                boolean selected
+        ) {
+            return new PlaybackOption(
+                    candidate.getLabel(),
+                    candidate.getDetail(),
+                    candidate,
+                    null,
+                    false,
+                    selected
+            );
+        }
+
+        static PlaybackOption automatic(boolean selected) {
+            return new PlaybackOption(
+                    "Automático",
+                    "Calidad adaptativa según la red y el reproductor.",
+                    null,
+                    null,
+                    true,
+                    selected
+            );
+        }
+
+        static PlaybackOption quality(VideoTrackOption quality, boolean selected) {
+            return new PlaybackOption(
+                    quality.label(),
+                    "Pista de video disponible en el stream.",
+                    null,
+                    quality,
+                    false,
+                    selected
+            );
+        }
+
+        boolean isQuality() {
+            return automatic || quality != null;
+        }
     }
 
     private static final class VideoTrackOption {

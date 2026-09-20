@@ -44,6 +44,12 @@
             android:screenOrientation="landscape" />
 
         <activity
+            android:name=".HighflyCatalogActivity"
+            android:exported="false"
+            android:theme="@style/Theme.VibeM3U.Settings"
+            android:screenOrientation="landscape" />
+
+        <activity
             android:name=".MediaFlowSettingsActivity"
             android:exported="false"
             android:theme="@style/Theme.VibeM3U.Settings"
