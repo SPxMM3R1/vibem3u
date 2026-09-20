@@ -2799,12 +2799,15 @@ public final class MainActivity extends Activity {
             String label = (playbackOption.selected ? "✓ " : "") + playbackOption.label;
             option.setText(AppStrings.isBlank(detail) ? label : label + "\n" + detail);
             option.setTextColor(getColor(R.color.white));
-            option.setTextSize(15f);
+            option.setTextSize(13f);
             option.setGravity(Gravity.CENTER_VERTICAL);
+            option.setIncludeFontPadding(false);
+            option.setLineSpacing(0f, 0.95f);
             option.setBackgroundResource(R.drawable.focus_button);
+            option.setPadding(dp(14), dp(6), dp(14), dp(6));
             option.setFocusable(true);
             option.setFocusableInTouchMode(true);
-            option.setMinHeight(dp(54));
+            option.setMinHeight(dp(44));
             option.setOnFocusChangeListener((view, focused) -> {
                 if (focused) {
                     sourceCandidateFocusIndex = candidateIndex;
@@ -2816,7 +2819,7 @@ public final class MainActivity extends Activity {
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
             );
-            params.setMargins(0, index == 0 ? 0 : dp(8), 0, 0);
+            params.setMargins(0, index == 0 ? 0 : dp(5), 0, 0);
             sourceSelectorOptions.addView(option, params);
             sourceCandidateViews.add(option);
         }
