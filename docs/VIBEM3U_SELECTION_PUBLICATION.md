@@ -117,6 +117,12 @@ Client Secret, ya que el Device Flow no lo requiere. Si una compilación no
 recibe ese valor, el botón informa que debe configurarse y el token manual
 continúa disponible.
 
+Los workflows de GitHub Actions leen el mismo valor desde la variable pública
+del repositorio `VIBEM3U_GITHUB_DEVICE_CLIENT_ID`. Esa variable debe mantenerse
+configurada en `Settings > Secrets and variables > Actions > Variables` para
+que los APK generados por CI y por el workflow de release incluyan el QR
+funcional.
+
 ## Publicación automática
 
 La app necesita una autorización de GitHub configurada por el usuario. GitHub
