@@ -19,10 +19,19 @@ que debe conservarse. Cada fila incluye:
 - `providerResourceId`: identidad que permite resolver el elemento en su
   proveedor;
 - `resolverSlug`, cuando Highfly lo entrega;
+- `identityState`: `canonical` si la identidad fue asignada por un catálogo
+  conocido o `provisional` si todavía deriva del nombre y requiere revisión;
+- `countryKey`, cuando la identidad canónica contiene una región conocida;
+- `aliases`, cuando existen aliases estables para una búsqueda controlada;
 - `name`, `group`, `category` y `order` como metadatos de ayuda.
 
 No incluye `tvg-id`. Tampoco convierte `resolverSlug`, `leaf:*`, un alias
 TvVoo ni el nombre visible en una identidad XMLTV.
+
+Durante la transición, las filas TvVoo también pueden incluir
+`resolverAliases`, que era el nombre utilizado por versiones anteriores de la
+app. Los consumidores nuevos deben leer `aliases`; ambos campos contienen los
+mismos aliases estables y nunca URLs de reproducción.
 
 ## Responsabilidad del runner Lista M3U
 
@@ -51,6 +60,8 @@ cruce explícito del catálogo del runner.
   "providerResourceId": "leaf:f1-3949409",
   "resolverSlug": "f1-3949409",
   "name": "(FHD) : SKY SPORTS F1",
+  "countryKey": "uk",
+  "identityState": "canonical",
   "order": 1
 }
 ```
@@ -60,6 +71,11 @@ logo y asociación EPG que ya use su catálogo. Si Highfly cambia el slug, el
 runner debe resolver el nuevo recurso por `catalogKey`/nombre normalizado y
 actualizar solo la referencia del proveedor; no debe cambiar el `tvg-id`
 canónico por ese motivo.
+
+Si el catálogo de la app todavía no puede confirmar la identidad, publicará
+`identityState: "provisional"` y una clave como `Highfly.nombre`. El runner
+puede usarla para revisión o reconciliación, pero no debe convertirla
+automáticamente en un `tvg-id` público.
 
 ## Publicación automática
 

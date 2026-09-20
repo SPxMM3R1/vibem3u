@@ -99,6 +99,31 @@ public final class HighflyCatalogChannel {
     public String getLogoUrl() { return logoUrl; }
     public List<String> getGenres() { return genres; }
 
+    /**
+     * Returns the identity state required by the Lista M3U contract.
+     * Known identities are safe for catalogue reconciliation; name-derived
+     * fallbacks remain provisional until the runner confirms them.
+     */
+    public String getIdentityState() {
+        return isCanonicalIdentity() ? "canonical" : "provisional";
+    }
+
+    public boolean isCanonicalIdentity() {
+        return !stableId.startsWith("Highfly.");
+    }
+
+    /**
+     * Returns the country suffix from a canonical ID such as
+     * {@code SkySportsTennis.uk}. Provisional identities have no confirmed
+     * country and therefore return an empty value.
+     */
+    public String getCountryKey() {
+        if (!isCanonicalIdentity()) return "";
+        int separator = stableId.lastIndexOf('.');
+        if (separator <= 0 || separator >= stableId.length() - 1) return "";
+        return stableId.substring(separator + 1).toLowerCase(Locale.ROOT);
+    }
+
     /** Creates the tokenless app-only reference consumed by HighflyResolver. */
     public Channel toChannel() {
         Map<String, String> attributes = new java.util.LinkedHashMap<>();

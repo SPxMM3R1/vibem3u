@@ -1,6 +1,7 @@
 package cl.streambox.tv;
 
 import org.junit.Test;
+import org.json.JSONObject;
 
 import java.net.URI;
 import java.util.Arrays;
@@ -59,6 +60,50 @@ public final class HighflyCatalogTest {
                 "SkySportsF1.uk",
                 HighflyCatalogChannel.stableIdentity("SkySportsF1.uk", "Different label")
         );
+    }
+
+    @Test
+    public void exposesCanonicalIdentityMetadataForSelectionPublication() throws Exception {
+        HighflyCatalogChannel channel = new HighflyCatalogChannel(
+                "leaf:tennis-847291",
+                "SkySportsTennis.uk",
+                "Sky Sports Tennis",
+                "Deportes",
+                "Tennis",
+                "",
+                Collections.singletonList("Tennis")
+        );
+
+        assertTrue(channel.isCanonicalIdentity());
+        assertEquals("canonical", channel.getIdentityState());
+        assertEquals("uk", channel.getCountryKey());
+
+        JSONObject row = AppSelectionManifest.highflyRow(channel, 3);
+        assertEquals("SkySportsTennis.uk", row.getString("catalogKey"));
+        assertEquals("leaf:tennis-847291", row.getString("providerResourceId"));
+        assertEquals("tennis-847291", row.getString("resolverSlug"));
+        assertEquals("canonical", row.getString("identityState"));
+        assertEquals("uk", row.getString("countryKey"));
+        assertEquals(3, row.getInt("order"));
+        assertTrue(!row.has("tvg-id"));
+    }
+
+    @Test
+    public void keepsNameDerivedIdentityProvisional() throws Exception {
+        HighflyCatalogChannel channel = new HighflyCatalogChannel(
+                "leaf:unknown-123",
+                "Unknown Highfly Channel",
+                "Highfly",
+                "Sports",
+                "",
+                Collections.emptyList()
+        );
+
+        assertFalse(channel.isCanonicalIdentity());
+        assertEquals("provisional", channel.getIdentityState());
+        assertEquals("", channel.getCountryKey());
+        assertEquals("provisional", AppSelectionManifest.highflyRow(channel, 1)
+                .getString("identityState"));
     }
 
     @Test

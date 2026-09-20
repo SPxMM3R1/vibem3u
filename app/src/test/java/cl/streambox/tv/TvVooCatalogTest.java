@@ -1,6 +1,7 @@
 package cl.streambox.tv;
 
 import org.junit.Test;
+import org.json.JSONArray;
 
 import java.net.URI;
 import java.util.List;
@@ -72,6 +73,28 @@ public final class TvVooCatalogTest {
         );
         assertTrue(TvVooCatalogChannel.isStableId(channel.getStableId()));
         assertFalse(TvVooCatalogChannel.isStableId("stale-id-from-cache"));
+    }
+
+    @Test
+    public void selectionPublicationUsesContractAliasesAndKeepsLegacyField() throws Exception {
+        TvVooCatalogChannel channel = new TvVooCatalogChannel(
+                "ignored",
+                "vavoo_SKY%201|group:uk",
+                "SKY 1",
+                "uk",
+                "Sports",
+                "Sport",
+                "",
+                java.util.Collections.singletonList("vavoo_SKY%201|group:uk")
+        );
+
+        org.json.JSONObject row = AppSelectionManifest.tvvooRow(channel, 4);
+        JSONArray aliases = row.getJSONArray("aliases");
+        assertEquals(aliases.toString(), row.getJSONArray("resolverAliases").toString());
+        assertEquals("canonical", row.getString("identityState"));
+        assertEquals("unitedkingdom", row.getString("countryKey"));
+        assertEquals(4, row.getInt("order"));
+        assertFalse(row.has("tvg-id"));
     }
 
     @Test

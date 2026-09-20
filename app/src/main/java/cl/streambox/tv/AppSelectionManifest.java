@@ -90,38 +90,57 @@ public final class AppSelectionManifest {
                 Object channel = channels.get(index);
                 JSONObject row;
                 if (channel instanceof TvVooCatalogChannel) {
-                    TvVooCatalogChannel value = (TvVooCatalogChannel) channel;
-                    row = new JSONObject();
-                    row.put("catalogKey", value.getStableId());
-                    row.put("providerResourceId", value.getStableId());
-                    row.put("alias", value.getAlias());
-                    row.put("country", value.getCountry());
-                    row.put("countryKey", value.getCountryKey());
-                    row.put("name", value.getName());
-                    row.put("group", value.getGroup());
-                    row.put("category", value.getCategory());
-                    JSONArray aliases = new JSONArray();
-                    for (String alias : value.getResolverAliases()) aliases.put(alias);
-                    row.put("resolverAliases", aliases);
+                    row = tvvooRow((TvVooCatalogChannel) channel, index + 1);
                 } else if (channel instanceof HighflyCatalogChannel) {
-                    HighflyCatalogChannel value = (HighflyCatalogChannel) channel;
-                    row = new JSONObject();
-                    row.put("catalogKey", value.getStableId());
-                    row.put("providerResourceId", value.getResourceId());
-                    row.put("resolverSlug", value.getSlug());
-                    row.put("name", value.getName());
-                    row.put("group", value.getGroup());
-                    row.put("category", value.getCategory());
+                    row = highflyRow((HighflyCatalogChannel) channel, index + 1);
                 } else {
                     continue;
                 }
                 row.put("provider", provider);
-                row.put("order", index + 1);
                 rows.put(row);
             }
         }
         source.put("channels", rows);
         return source;
+    }
+
+    static JSONObject tvvooRow(TvVooCatalogChannel value, int order) throws JSONException {
+        if (value == null) throw new IllegalArgumentException("value");
+        JSONObject row = new JSONObject();
+        row.put("catalogKey", value.getStableId());
+        row.put("providerResourceId", value.getStableId());
+        row.put("alias", value.getAlias());
+        row.put("country", value.getCountry());
+        row.put("countryKey", value.getCountryKey());
+        row.put("name", value.getName());
+        row.put("group", value.getGroup());
+        row.put("category", value.getCategory());
+        JSONArray aliases = new JSONArray();
+        for (String alias : value.getResolverAliases()) aliases.put(alias);
+        // `aliases` is the current public contract. Keep the legacy spelling
+        // while older runners are migrated.
+        row.put("aliases", aliases);
+        row.put("resolverAliases", aliases);
+        row.put("identityState", "canonical");
+        row.put("order", order);
+        return row;
+    }
+
+    static JSONObject highflyRow(HighflyCatalogChannel value, int order) throws JSONException {
+        if (value == null) throw new IllegalArgumentException("value");
+        JSONObject row = new JSONObject();
+        row.put("catalogKey", value.getStableId());
+        row.put("providerResourceId", value.getResourceId());
+        row.put("resolverSlug", value.getSlug());
+        row.put("name", value.getName());
+        row.put("group", value.getGroup());
+        row.put("category", value.getCategory());
+        row.put("identityState", value.getIdentityState());
+        if (!value.getCountryKey().isEmpty()) {
+            row.put("countryKey", value.getCountryKey());
+        }
+        row.put("order", order);
+        return row;
     }
 
     private static String nowUtc() {
