@@ -141,3 +141,18 @@ La publicación desde la app y el consumo del archivo son fases separadas: este
 contrato habilita el puente, pero el runner de Lista M3U debe implementar su
 lectura antes de que la selección afecte automáticamente a `m3u.m3u` y
 `epg.xml`.
+
+## Gestor de canales en Android TV
+
+La pestaña `Ajustes > Canales` administra las selecciones ya guardadas de cada
+fuente. TvVoo y Highfly conservan su orden por separado, de acuerdo con los
+arrays `sources[].channels` del manifiesto. `Subir` y `Bajar` reemplazan la
+lista local en ese orden; al publicar, `AppSelectionManifest` vuelve a numerar
+`order` sin cambiar `catalogKey`, `providerResourceId` ni `resolverSlug`.
+
+`Eliminar` quita el canal de la selección y por tanto del siguiente manifiesto.
+`Ocultar` y `Desocultar` son preferencias locales de reproducción respaldadas
+por `HiddenChannelStore`: no cambian la identidad pública ni agregan un campo
+de ocultación al contrato compartido. El botón `Publicar catálogo en GitHub`
+fuerza la escritura del manifiesto completo en
+`data/vibem3u-selection.json` usando la autorización OAuth/QR ya configurada.

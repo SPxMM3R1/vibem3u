@@ -151,8 +151,24 @@
                 android:gravity="center"
                 android:nextFocusDown="@id/check_updates_button"
                 android:nextFocusLeft="@id/tab_interface"
-                android:nextFocusRight="@id/tab_general"
+                android:nextFocusRight="@id/tab_channels"
                 android:text="@string/settings_tab_updates"
+                android:textColor="@color/white"
+                android:textSize="@dimen/settings_tab_text_size" />
+
+            <TextView
+                android:id="@+id/tab_channels"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/settings_tab"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:nextFocusDown="@id/channels_manager_container"
+                android:nextFocusLeft="@id/tab_updates"
+                android:nextFocusRight="@id/tab_general"
+                android:text="@string/settings_tab_channels"
                 android:textColor="@color/white"
                 android:textSize="@dimen/settings_tab_text_size" />
         </LinearLayout>
@@ -1026,6 +1042,20 @@
                             android:visibility="gone" />
                     </LinearLayout>
                 </LinearLayout>
+
+                <FrameLayout
+                    android:id="@+id/tab_page_channels"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:visibility="gone">
+
+                    <FrameLayout
+                        android:id="@+id/channels_manager_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingStart="@dimen/settings_page_horizontal_padding"
+                        android:paddingEnd="@dimen/settings_page_horizontal_padding" />
+                </FrameLayout>
             </FrameLayout>
         </ScrollView>
 

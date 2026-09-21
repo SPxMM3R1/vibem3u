@@ -45,6 +45,7 @@ public final class SettingsActivity extends Activity {
     public static final int TAB_RESOLVERS = 3;
     public static final int TAB_INTERFACE = 4;
     public static final int TAB_UPDATES = 5;
+    public static final int TAB_CHANNELS = 6;
     public static final String PREFS = "streambox_settings";
     /** Public Lista 1 used on a new installation. */
     public static final String DEFAULT_PLAYLIST_URL =
@@ -118,6 +119,8 @@ public final class SettingsActivity extends Activity {
     private Button saveButton;
     private Button cancelButton;
     private ScrollView settingsContent;
+    private FrameLayout channelsManagerContainer;
+    private ChannelCatalogManagerView channelCatalogManager;
     private ViewTreeObserver.OnGlobalFocusChangeListener focusVisibilityListener;
     private int selectedTabIndex;
     private TextView currentChannelName;
@@ -282,13 +285,15 @@ public final class SettingsActivity extends Activity {
         resolverGroupsContainer = findViewById(R.id.resolver_groups_container);
         hiddenChannelsContainer = findViewById(R.id.hidden_channels_container);
         hiddenChannelsStatus = findViewById(R.id.hidden_channels_status);
+        channelsManagerContainer = findViewById(R.id.channels_manager_container);
         tabs = new TextView[]{
                 findViewById(R.id.tab_general),
                 findViewById(R.id.tab_playback),
                 findViewById(R.id.tab_source),
                 findViewById(R.id.tab_resolvers),
                 findViewById(R.id.tab_interface),
-                findViewById(R.id.tab_updates)
+                findViewById(R.id.tab_updates),
+                findViewById(R.id.tab_channels)
         };
         tabPages = new View[]{
                 findViewById(R.id.tab_page_general),
@@ -296,7 +301,8 @@ public final class SettingsActivity extends Activity {
                 findViewById(R.id.tab_page_source),
                 findViewById(R.id.tab_page_resolvers),
                 findViewById(R.id.tab_page_interface),
-                findViewById(R.id.tab_page_updates)
+                findViewById(R.id.tab_page_updates),
+                findViewById(R.id.tab_page_channels)
         };
 
         appUpdater = new AppUpdater(this, updateExecutor, mainHandler);
@@ -306,6 +312,17 @@ public final class SettingsActivity extends Activity {
         highflySelectionStore = new HighflySelectionStore(this);
         githubPublicationPreferences = new GitHubPublicationPreferences(this);
         hiddenChannelStore = new HiddenChannelStore(this);
+        channelCatalogManager = new ChannelCatalogManagerView(this);
+        channelsManagerContainer.addView(channelCatalogManager, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+        ));
+        channelCatalogManager.setFooterFocus(saveButton);
+        channelCatalogManager.setOnCatalogChangedListener(() -> {
+            updateTvVooSelectionStatus();
+            updateHighflySelectionStatus();
+            renderHiddenChannels();
+        });
         urlInput.setText(existingUrl);
         urlInput.setSelection(urlInput.length());
         String initialUrl2 = prefs.contains(KEY_PLAYLIST_URL_2)
@@ -400,6 +417,7 @@ public final class SettingsActivity extends Activity {
 
         int defaultTab = hasExistingUrl ? TAB_GENERAL : TAB_SOURCE;
         int initialTab = getIntent().getIntExtra(EXTRA_INITIAL_TAB, defaultTab);
+        tabs[TAB_CHANNELS].setNextFocusDownId(channelCatalogManager.getFirstFocus().getId());
         showTab(initialTab, false);
         tabs[selectedTabIndex].requestFocus();
     }
@@ -952,6 +970,10 @@ public final class SettingsActivity extends Activity {
                 return findViewById(R.id.interface_info);
             case 5:
                 return updateButton;
+            case TAB_CHANNELS:
+                return channelCatalogManager == null
+                        ? tabs[TAB_CHANNELS]
+                        : channelCatalogManager.getFirstFocus();
             default:
                 return normalizeVolume;
         }
@@ -1335,6 +1357,7 @@ public final class SettingsActivity extends Activity {
         enterImmersiveMode();
         updateTvVooSelectionStatus();
         updateHighflySelectionStatus();
+        if (channelCatalogManager != null) channelCatalogManager.refresh();
         if (appUpdater != null) appUpdater.onHostResume();
     }
 
