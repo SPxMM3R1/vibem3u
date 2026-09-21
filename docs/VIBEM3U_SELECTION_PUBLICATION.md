@@ -42,8 +42,10 @@ mismos aliases estables y nunca URLs de reproducción.
 ## Responsabilidad del runner Lista M3U
 
 El runner debe leer `catalogKey` y `providerResourceId`, cruzarlos con su
-catálogo autoritativo y generar la entrada pública de la lista. El runner es
-quien decide y conserva:
+catálogo autoritativo y reconciliar la identidad compartida. La selección de
+TvVoo y Highfly es app-only: no promueve una fila a `m3u.m3u`/`1.m3u`. VibeM3U
+incorpora las filas seleccionadas localmente y renueva la fuente al abrir el
+canal. El runner decide y conserva para la frontera compartida:
 
 1. el `tvg-id` canónico que exista en `epg.xml`;
 2. el logo curado de `logos/`;
@@ -72,11 +74,11 @@ cruce explícito del catálogo del runner.
 }
 ```
 
-El runner puede convertirlo, por ejemplo, en una entrada con el `tvg-id`,
-logo y asociación EPG que ya use su catálogo. Si Highfly cambia el slug, el
-runner debe resolver el nuevo recurso por `catalogKey`/nombre normalizado y
-actualizar solo la referencia del proveedor; no debe cambiar el `tvg-id`
-canónico por ese motivo.
+El runner puede reflejarlo en su reporte, asociación EPG y logo del catálogo,
+pero no debe convertirlo en una nueva fila de la lista principal. Si Highfly
+cambia el slug, el runner debe resolver el nuevo recurso por
+`catalogKey`/nombre normalizado y actualizar solo la referencia del proveedor;
+no debe cambiar el `tvg-id` canónico por ese motivo.
 
 Si el catálogo de la app todavía no puede confirmar la identidad, publicará
 `identityState: "provisional"` y una clave como `Highfly.nombre`. El runner
@@ -138,9 +140,10 @@ escribir el archivo. Un error se reintenta después de una ventana de espera,
 sin mostrar el token ni el cuerpo de la respuesta en logs.
 
 La publicación desde la app y el consumo del archivo son fases separadas: este
-contrato habilita el puente, pero el runner de Lista M3U debe implementar su
-lectura antes de que la selección afecte automáticamente a `m3u.m3u` y
-`epg.xml`.
+contrato habilita el puente para identidades, EPG, logos y referencias de
+resolución. La selección no modifica automáticamente la membresía de
+`m3u.m3u`; VibeM3U mantiene los canales dinámicos localmente para que una caída
+de TvVoo o Highfly no obligue a regenerar la lista pública.
 
 ## Gestor de canales en Android TV
 
