@@ -22,7 +22,8 @@ import java.util.TimeZone;
  * decision or an EPG mapping: those are canonical presentation decisions of
  * the Lista M3U runner. VibeM3U keeps the provider resource id so the runner
  * can identify the selected catalogue item without mistaking a rotating slug
- * for an XMLTV identity.</p>
+ * for an XMLTV identity. The optional top-level catalogue order is app-local
+ * playback metadata and is safe for the runner to ignore.</p>
  */
 public final class AppSelectionManifest {
     public static final int SCHEMA_VERSION = 1;
@@ -34,8 +35,9 @@ public final class AppSelectionManifest {
         Context application = context.getApplicationContext();
         TvVooSelectionStore tvvoo = new TvVooSelectionStore(application);
         HighflySelectionStore highfly = new HighflySelectionStore(application);
+        ChannelCatalogOrderStore catalogOrder = new ChannelCatalogOrderStore(application);
         String highflyManifest = new ResolverPreferences(application).highflyManifestUrl();
-        String signature = signature(tvvoo, highfly, highflyManifest);
+        String signature = signature(tvvoo, highfly, highflyManifest, catalogOrder);
 
         try {
             JSONObject root = new JSONObject();
@@ -58,6 +60,8 @@ public final class AppSelectionManifest {
             highflySource.put("manifestUrl", highflyManifest);
             sources.put(highflySource);
             root.put("sources", sources);
+            root.put("catalogOrder", stringArray(catalogOrder.getOrder()));
+            root.put("catalogRemoved", stringArray(catalogOrder.getRemoved()));
             return new Snapshot(signature, root.toString());
         } catch (JSONException impossible) {
             throw new IllegalStateException("No se pudo construir la selección.", impossible);
@@ -69,11 +73,32 @@ public final class AppSelectionManifest {
             HighflySelectionStore highfly,
             String highflyManifest
     ) {
+        return signature(tvvoo, highfly, highflyManifest, null);
+    }
+
+    static String signature(
+            TvVooSelectionStore tvvoo,
+            HighflySelectionStore highfly,
+            String highflyManifest,
+            ChannelCatalogOrderStore catalogOrder
+    ) {
         String value = "schema=" + SCHEMA_VERSION
                 + "\ntvvoo=" + (tvvoo == null ? "" : tvvoo.signature())
                 + "\nhighfly=" + (highfly == null ? "" : highfly.signature())
-                + "\nmanifest=" + (highflyManifest == null ? "" : highflyManifest.trim());
+                + "\nmanifest=" + (highflyManifest == null ? "" : highflyManifest.trim())
+                + "\norder=" + (catalogOrder == null ? "" : catalogOrder.getOrder())
+                + "\nremoved=" + (catalogOrder == null ? "" : catalogOrder.getRemoved());
         return sha256(value);
+    }
+
+    private static JSONArray stringArray(List<String> values) {
+        JSONArray result = new JSONArray();
+        if (values != null) {
+            for (String value : values) {
+                if (value != null && !value.trim().isEmpty()) result.put(value.trim());
+            }
+        }
+        return result;
     }
 
     private static JSONObject source(

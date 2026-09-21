@@ -18,7 +18,8 @@ es la referencia de integración.
 ## Qué declara el archivo
 
 El documento declara únicamente la selección que hizo el usuario y el orden
-que debe conservarse. Cada fila incluye:
+que debe conservarse. También puede incluir el orden global local que usa la
+app para mezclar Lista M3U, TvVoo y Highfly. Cada fila incluye:
 
 - `provider`: `tvvoo` o `highfly`;
 - `catalogKey`: identidad lógica del catálogo;
@@ -33,6 +34,16 @@ que debe conservarse. Cada fila incluye:
 
 No incluye `tvg-id`. Tampoco convierte `resolverSlug`, `leaf:*`, un alias
 TvVoo ni el nombre visible en una identidad XMLTV.
+
+Cuando el usuario reordena la pestaña `Canales`, la app guarda dos arrays
+adicionales y sin secretos:
+
+- `catalogOrder`: claves internas estables en el orden global de reproducción;
+- `catalogRemoved`: claves de filas de Lista M3U eliminadas localmente.
+
+Estos arrays no contienen URLs HLS ni tokens. El runner puede ignorarlos: la
+selección de TvVoo/Highfly sigue siendo app-only y la membresía pública de
+`m3u.m3u` continúa siendo responsabilidad de Lista M3U.
 
 Durante la transición, las filas TvVoo también pueden incluir
 `resolverAliases`, que era el nombre utilizado por versiones anteriores de la
@@ -147,11 +158,17 @@ de TvVoo o Highfly no obligue a regenerar la lista pública.
 
 ## Gestor de canales en Android TV
 
-La pestaña `Ajustes > Canales` administra las selecciones ya guardadas de cada
-fuente. TvVoo y Highfly conservan su orden por separado, de acuerdo con los
-arrays `sources[].channels` del manifiesto. `Subir` y `Bajar` reemplazan la
-lista local en ese orden; al publicar, `AppSelectionManifest` vuelve a numerar
-`order` sin cambiar `catalogKey`, `providerResourceId` ni `resolverSlug`.
+La pestaña `Ajustes > Canales` muestra una sola lista con las filas cacheadas de
+Lista M3U y las selecciones guardadas de TvVoo y Highfly. Un toque selecciona la
+fila para usar `Subir` o `Bajar`; una pulsación larga abre `Ocultar` o
+`Eliminar`. El orden se aplica a la lista de reproducción de la app, incluso
+cuando un canal dinámico queda entre dos canales M3U. Highfly se deduplica y se
+ordena por `catalogKey`; su `providerResourceId` solo se conserva como
+referencia para resolverlo.
+
+TvVoo y Highfly también conservan sus arrays `sources[].channels` para la
+publicación. Al publicar, `AppSelectionManifest` vuelve a numerar `order` sin
+cambiar `catalogKey`, `providerResourceId` ni `resolverSlug`.
 
 `Eliminar` quita el canal de la selección y por tanto del siguiente manifiesto.
 `Ocultar` y `Desocultar` son preferencias locales de reproducción respaldadas

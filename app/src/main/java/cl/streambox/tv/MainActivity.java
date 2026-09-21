@@ -115,6 +115,7 @@ public final class MainActivity extends Activity {
     private TvVooSelectionStore tvVooSelectionStore;
     private HighflySelectionStore highflySelectionStore;
     private HiddenChannelStore hiddenChannelStore;
+    private ChannelCatalogOrderStore channelCatalogOrderStore;
     private StreamResolverRegistry streamResolverRegistry;
     private Map<String, Integer> resolverChannelCounts = Collections.emptyMap();
     private final List<Channel> channels = new ArrayList<>();
@@ -316,6 +317,7 @@ public final class MainActivity extends Activity {
         tvVooSelectionStore = new TvVooSelectionStore(this);
         highflySelectionStore = new HighflySelectionStore(this);
         hiddenChannelStore = new HiddenChannelStore(this);
+        channelCatalogOrderStore = new ChannelCatalogOrderStore(this);
         // Retry a pending app-selection publication without blocking playlist
         // loading. The publisher skips unchanged selections and applies a
         // cooldown after a failed attempt.
@@ -1029,7 +1031,9 @@ public final class MainActivity extends Activity {
                     true
             ));
         }
-        return result;
+        return channelCatalogOrderStore == null
+                ? result
+                : channelCatalogOrderStore.applyToPlayback(result);
     }
 
     private boolean hasSelectedTvVooChannels() {

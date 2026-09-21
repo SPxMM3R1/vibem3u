@@ -60,7 +60,7 @@ public final class HighflyCatalogActivity extends Activity {
         repository = new HighflyCatalogRepository(this);
         selectionStore = new HighflySelectionStore(this);
         for (HighflyCatalogChannel channel : selectionStore.getSelectedCatalogChannels()) {
-            selected.put(channel.getResourceId(), channel);
+            selected.put(channel.getStableId(), channel);
         }
         buildLayout();
         loadCatalogWithCache();
@@ -260,7 +260,7 @@ public final class HighflyCatalogActivity extends Activity {
         if (selectedOnlyToggle.isChecked()) {
             List<HighflyCatalogChannel> selectedRows = new ArrayList<>();
             for (HighflyCatalogChannel channel : filtered) {
-                if (selected.containsKey(channel.getResourceId())) selectedRows.add(channel);
+                if (selected.containsKey(channel.getStableId())) selectedRows.add(channel);
             }
             filtered = selectedRows;
         }
@@ -285,7 +285,7 @@ public final class HighflyCatalogActivity extends Activity {
 
     private View addChannelRow(HighflyCatalogChannel channel) {
         CheckBox row = new CheckBox(this);
-        row.setTag(channel.getResourceId());
+        row.setTag(channel.getStableId());
         row.setText(channelLabel(channel));
         row.setTextColor(Color.WHITE);
         row.setTextSize(13);
@@ -294,10 +294,10 @@ public final class HighflyCatalogActivity extends Activity {
         row.setMinHeight(dp(62));
         row.setFocusable(true);
         row.setBackgroundResource(R.drawable.settings_section_card);
-        row.setChecked(selected.containsKey(channel.getResourceId()));
+        row.setChecked(selected.containsKey(channel.getStableId()));
         row.setOnCheckedChangeListener((button, checked) -> {
-            if (checked) selected.put(channel.getResourceId(), channel);
-            else selected.remove(channel.getResourceId());
+            if (checked) selected.put(channel.getStableId(), channel);
+            else selected.remove(channel.getStableId());
             showStatus(selected.size() + " canales Highfly seleccionados");
             renderPage();
         });
@@ -309,7 +309,7 @@ public final class HighflyCatalogActivity extends Activity {
 
     private String channelLabel(HighflyCatalogChannel channel) {
         StringBuilder value = new StringBuilder();
-        int position = selectedPosition(channel.getResourceId());
+        int position = selectedPosition(channel.getStableId());
         if (position > 0) {
             value.append(getString(R.string.catalog_selection_position, position))
                     .append(" · ");
@@ -322,10 +322,10 @@ public final class HighflyCatalogActivity extends Activity {
         return value.toString();
     }
 
-    private int selectedPosition(String resourceId) {
+    private int selectedPosition(String stableId) {
         int position = 1;
         for (HighflyCatalogChannel selectedChannel : selected.values()) {
-            if (selectedChannel.getResourceId().equals(resourceId)) return position;
+            if (selectedChannel.getStableId().equals(stableId)) return position;
             position++;
         }
         return 0;
@@ -376,7 +376,7 @@ public final class HighflyCatalogActivity extends Activity {
         if (selectedOnlyToggle.isChecked()) {
             count = 0;
             for (HighflyCatalogChannel channel : catalog.filter(query, category)) {
-                if (selected.containsKey(channel.getResourceId())) count++;
+                if (selected.containsKey(channel.getStableId())) count++;
             }
         }
         return (count + PAGE_SIZE - 1) / PAGE_SIZE;

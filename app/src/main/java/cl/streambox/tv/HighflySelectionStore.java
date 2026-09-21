@@ -56,7 +56,10 @@ public final class HighflySelectionStore {
                     HighflyCatalogChannel channel = HighflyCatalogChannel.fromJson(
                             array.getJSONObject(index)
                     );
-                    unique.putIfAbsent(channel.getResourceId(), channel);
+                    // Several resolver leaves can represent the same public
+                    // channel. Keep one row per stable catalogKey and retain
+                    // the first current resource as the resolution reference.
+                    unique.putIfAbsent(channel.getStableId(), channel);
                 } catch (JSONException | IllegalArgumentException ignored) {
                     // Preserve valid selections if one old row is malformed.
                 }
@@ -72,7 +75,7 @@ public final class HighflySelectionStore {
         Map<String, Boolean> seen = new LinkedHashMap<>();
         if (channels != null) {
             for (HighflyCatalogChannel channel : channels) {
-                if (channel == null || seen.put(channel.getResourceId(), Boolean.TRUE) != null) {
+                if (channel == null || seen.put(channel.getStableId(), Boolean.TRUE) != null) {
                     continue;
                 }
                 if (array.length() >= MAX_SELECTED_CHANNELS) break;

@@ -3,6 +3,7 @@ package cl.streambox.tv;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.TypedValue;
@@ -14,35 +15,38 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Android TV channel catalogue manager embedded in the settings Canales tab.
  *
- * <p>The two providers keep independent order because the publication contract
- * emits one ordered channel array per source. The manager only persists
- * token-free catalogue metadata; playback references are still renewed by the
- * existing resolvers.</p>
+ * <p>The list is intentionally unified: cached Lista M3U rows are followed by
+ * the selected TvVoo and Highfly rows only when they are not already present.
+ * The global order is persisted separately from provider selections, so a
+ * dynamic channel can be moved above or below a public M3U channel and that
+ * order is used by playback.</p>
  */
 final class ChannelCatalogManagerView extends LinearLayout {
-    private static final int PROVIDER_TVVOO = 0;
-    private static final int PROVIDER_HIGHFLY = 1;
+    private static final int SOURCE_M3U = 0;
+    private static final int SOURCE_TVVOO = 1;
+    private static final int SOURCE_HIGHFLY = 2;
 
     private final Context context;
     private final TvVooSelectionStore tvvooSelectionStore;
     private final HighflySelectionStore highflySelectionStore;
     private final HiddenChannelStore hiddenChannelStore;
+    private final ChannelCatalogOrderStore orderStore;
+    private final PlaylistRepository playlistRepository;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final List<ManagedChannel> channels = new ArrayList<>();
 
-    private int provider = PROVIDER_TVVOO;
     private int selectedIndex = -1;
     private Runnable onCatalogChanged = () -> {};
 
-    private Button tvvooButton;
-    private Button highflyButton;
-    private Button addButton;
+    private Button addTvvooButton;
+    private Button addHighflyButton;
     private Button moveUpButton;
     private Button moveDownButton;
     private Button removeButton;
@@ -59,6 +63,8 @@ final class ChannelCatalogManagerView extends LinearLayout {
         tvvooSelectionStore = new TvVooSelectionStore(context);
         highflySelectionStore = new HighflySelectionStore(context);
         hiddenChannelStore = new HiddenChannelStore(context);
+        orderStore = new ChannelCatalogOrderStore(context);
+        playlistRepository = new PlaylistRepository(context.getApplicationContext());
         setOrientation(VERTICAL);
         setPadding(dp(10), dp(4), dp(10), dp(8));
         buildLayout();
@@ -66,7 +72,7 @@ final class ChannelCatalogManagerView extends LinearLayout {
     }
 
     View getFirstFocus() {
-        return tvvooButton;
+        return addTvvooButton;
     }
 
     void setFooterFocus(View footer) {
@@ -79,7 +85,7 @@ final class ChannelCatalogManagerView extends LinearLayout {
         onCatalogChanged = listener == null ? () -> {} : listener;
     }
 
-    /** Refreshes the local selection after returning from a provider catalogue. */
+    /** Refreshes the cached M3U rows and both dynamic selections. */
     void refresh() {
         render(false);
     }
@@ -101,29 +107,19 @@ final class ChannelCatalogManagerView extends LinearLayout {
         descriptionParams.topMargin = dp(4);
         addView(description, descriptionParams);
 
-        LinearLayout providerRow = horizontalRow();
-        tvvooButton = providerButton(R.string.channels_provider_tvvoo);
-        highflyButton = providerButton(R.string.channels_provider_highfly);
-        providerRow.addView(tvvooButton, weightedParams(4));
-        providerRow.addView(highflyButton, weightedParams(0));
-        LinearLayout.LayoutParams providerParams = new LinearLayout.LayoutParams(
+        LinearLayout addRow = horizontalRow();
+        addTvvooButton = sourceButton(R.string.channels_add_tvvoo);
+        addHighflyButton = sourceButton(R.string.channels_add_highfly);
+        addRow.addView(addTvvooButton, weightedParams(4));
+        addRow.addView(addHighflyButton, weightedParams(0));
+        LinearLayout.LayoutParams addRowParams = new LinearLayout.LayoutParams(
                 LayoutParams.MATCH_PARENT,
-                dp(38)
+                dp(40)
         );
-        providerParams.topMargin = dp(8);
-        addView(providerRow, providerParams);
-
-        tvvooButton.setOnClickListener(view -> selectProvider(PROVIDER_TVVOO));
-        highflyButton.setOnClickListener(view -> selectProvider(PROVIDER_HIGHFLY));
-
-        addButton = actionButton("");
-        LinearLayout.LayoutParams addParams = new LinearLayout.LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                dp(38)
-        );
-        addParams.topMargin = dp(5);
-        addButton.setOnClickListener(view -> openProviderCatalogue());
-        addView(addButton, addParams);
+        addRowParams.topMargin = dp(8);
+        addView(addRow, addRowParams);
+        addTvvooButton.setOnClickListener(view -> openProviderCatalogue(SOURCE_TVVOO));
+        addHighflyButton.setOnClickListener(view -> openProviderCatalogue(SOURCE_HIGHFLY));
 
         summary = textView("", false);
         summary.setTextColor(context.getResources().getColor(R.color.white));
@@ -190,17 +186,10 @@ final class ChannelCatalogManagerView extends LinearLayout {
         addView(status, statusParams);
     }
 
-    private void selectProvider(int nextProvider) {
-        if (provider == nextProvider) return;
-        provider = nextProvider;
-        selectedIndex = -1;
-        render(false);
-    }
-
-    private void openProviderCatalogue() {
+    private void openProviderCatalogue(int source) {
         Intent intent = new Intent(
                 context,
-                provider == PROVIDER_TVVOO
+                source == SOURCE_TVVOO
                         ? TvVooCatalogActivity.class
                         : HighflyCatalogActivity.class
         );
@@ -215,7 +204,7 @@ final class ChannelCatalogManagerView extends LinearLayout {
 
         channelContainer.removeAllViews();
         View focusTarget = null;
-        View previous = addButton;
+        View previous = addHighflyButton;
         if (channels.isEmpty()) {
             TextView empty = textView(getString(R.string.channels_empty), false);
             empty.setTextColor(context.getResources().getColor(R.color.muted));
@@ -223,7 +212,7 @@ final class ChannelCatalogManagerView extends LinearLayout {
                     LayoutParams.MATCH_PARENT,
                     LayoutParams.WRAP_CONTENT
             ));
-            addButton.setNextFocusDownId(publishButton.getId());
+            addHighflyButton.setNextFocusDownId(publishButton.getId());
         } else {
             for (int index = 0; index < channels.size(); index++) {
                 final int rowIndex = index;
@@ -233,6 +222,11 @@ final class ChannelCatalogManagerView extends LinearLayout {
                 row.setPadding(dp(10), 0, dp(10), 0);
                 row.setMinHeight(0);
                 row.setOnClickListener(view -> selectRow(rowIndex));
+                row.setOnLongClickListener(view -> {
+                    selectRow(rowIndex);
+                    showLongPressActions();
+                    return true;
+                });
                 row.setOnFocusChangeListener((view, hasFocus) -> {
                     if (hasFocus) selectRow(rowIndex);
                 });
@@ -249,10 +243,6 @@ final class ChannelCatalogManagerView extends LinearLayout {
             }
             previous.setNextFocusDownId(moveUpButton.getId());
         }
-        updateProviderButtons();
-        addButton.setText(provider == PROVIDER_TVVOO
-                ? R.string.channels_add_tvvoo
-                : R.string.channels_add_highfly);
         updateSummary();
         updateActions();
         if (requestSelectedFocus && focusTarget != null) {
@@ -261,20 +251,71 @@ final class ChannelCatalogManagerView extends LinearLayout {
     }
 
     private void loadChannels() {
+        Map<String, ManagedChannel> unique = new LinkedHashMap<>();
+        loadCachedM3uChannels(unique);
+        for (TvVooCatalogChannel channel : tvvooSelectionStore.getSelectedCatalogChannels()) {
+            ManagedChannel managed = ManagedChannel.tvvoo(channel);
+            if (!orderStore.isRemoved(managed.key)) unique.putIfAbsent(managed.key, managed);
+        }
+        for (HighflyCatalogChannel channel : highflySelectionStore.getSelectedCatalogChannels()) {
+            ManagedChannel managed = ManagedChannel.highfly(channel);
+            if (!orderStore.isRemoved(managed.key)) unique.putIfAbsent(managed.key, managed);
+        }
+
+        Map<String, ManagedChannel> remaining = new LinkedHashMap<>(unique);
         channels.clear();
-        if (provider == PROVIDER_TVVOO) {
-            for (TvVooCatalogChannel channel : tvvooSelectionStore.getSelectedCatalogChannels()) {
-                channels.add(ManagedChannel.tvvoo(channel));
+        for (String key : orderStore.getOrder()) {
+            ManagedChannel channel = remaining.remove(key);
+            if (channel != null) channels.add(channel);
+        }
+        channels.addAll(remaining.values());
+    }
+
+    private void loadCachedM3uChannels(Map<String, ManagedChannel> unique) {
+        SharedPreferences preferences = context.getApplicationContext().getSharedPreferences(
+                SettingsActivity.PREFS,
+                Context.MODE_PRIVATE
+        );
+        addCachedPlaylist(unique, preferences,
+                SettingsActivity.KEY_PLAYLIST_URL,
+                SettingsActivity.KEY_PLAYLIST_ENABLED,
+                true);
+        addCachedPlaylist(unique, preferences,
+                SettingsActivity.KEY_PLAYLIST_URL_2,
+                SettingsActivity.KEY_PLAYLIST_ENABLED_2,
+                false);
+    }
+
+    private void addCachedPlaylist(
+            Map<String, ManagedChannel> unique,
+            SharedPreferences preferences,
+            String urlKey,
+            String enabledKey,
+            boolean defaultEnabled
+    ) {
+        if (!preferences.getBoolean(enabledKey, defaultEnabled)) return;
+        String url = preferences.getString(urlKey, "");
+        if (AppStrings.isBlank(url)) return;
+        try {
+            Playlist playlist = playlistRepository.loadCached(url);
+            if (playlist == null) return;
+            for (Channel channel : playlist.getChannels()) {
+                // Dynamic rows are app-only after the Lista M3U publication
+                // change. Ignore stale cached copies here as well.
+                if (TvVooChannelMerge.isTvVoo(channel)
+                        || HighflyChannelMerge.isHighfly(channel)) continue;
+                ManagedChannel managed = ManagedChannel.m3u(channel);
+                if (orderStore.isRemoved(managed.key)) continue;
+                unique.putIfAbsent(managed.key, managed);
             }
-        } else {
-            for (HighflyCatalogChannel channel : highflySelectionStore.getSelectedCatalogChannels()) {
-                channels.add(ManagedChannel.highfly(channel));
-            }
+        } catch (Exception ignored) {
+            // The playback screen will report the source error. Settings must
+            // remain navigable when a cache is absent or stale.
         }
     }
 
     private String rowLabel(int index, ManagedChannel channel) {
-        String details = channel.group;
+        String details = channel.sourceLabel(context) + " · " + channel.group;
         if (!AppStrings.isBlank(channel.category)
                 && !channel.category.equalsIgnoreCase(channel.group)) {
             details += " · " + channel.category;
@@ -302,11 +343,31 @@ final class ChannelCatalogManagerView extends LinearLayout {
         if (selectedIndex < 0 || selectedIndex >= channels.size()) return;
         int target = selectedIndex + delta;
         if (target < 0 || target >= channels.size()) return;
-        Collections.swap(channels, selectedIndex, target);
+        java.util.Collections.swap(channels, selectedIndex, target);
         selectedIndex = target;
         persistCurrentOrder();
         render(true);
         setStatus(getString(R.string.channels_local_saved));
+    }
+
+    private void showLongPressActions() {
+        if (selectedIndex < 0 || selectedIndex >= channels.size()) return;
+        ManagedChannel channel = channels.get(selectedIndex);
+        String visibility = hiddenChannelStore.isHidden(channel.toChannel())
+                ? getString(R.string.channels_unhide)
+                : getString(R.string.channels_hide);
+        CharSequence[] actions = new CharSequence[]{
+                visibility,
+                getString(R.string.channels_remove)
+        };
+        new AlertDialog.Builder(context)
+                .setTitle(R.string.channels_actions_title)
+                .setItems(actions, (dialog, which) -> {
+                    if (which == 0) toggleSelectedVisibility();
+                    else if (which == 1) confirmRemoveSelected();
+                })
+                .setNegativeButton(R.string.channels_cancel, null)
+                .show();
     }
 
     private void confirmRemoveSelected() {
@@ -317,7 +378,7 @@ final class ChannelCatalogManagerView extends LinearLayout {
                 .setMessage(getString(
                         R.string.channels_delete_message,
                         channel.name,
-                        providerLabel()
+                        channel.sourceLabel(context)
                 ))
                 .setNegativeButton(R.string.channels_cancel, null)
                 .setPositiveButton(R.string.channels_delete_confirm,
@@ -329,6 +390,7 @@ final class ChannelCatalogManagerView extends LinearLayout {
         if (selectedIndex < 0 || selectedIndex >= channels.size()) return;
         ManagedChannel removed = channels.remove(selectedIndex);
         hiddenChannelStore.setHidden(removed.toChannel(), false);
+        if (removed.source == SOURCE_M3U) orderStore.markRemoved(removed.key);
         if (selectedIndex >= channels.size()) selectedIndex = channels.size() - 1;
         persistCurrentOrder();
         render(true);
@@ -348,15 +410,17 @@ final class ChannelCatalogManagerView extends LinearLayout {
     }
 
     private void persistCurrentOrder() {
-        if (provider == PROVIDER_TVVOO) {
-            List<TvVooCatalogChannel> values = new ArrayList<>();
-            for (ManagedChannel channel : channels) values.add(channel.tvvoo);
-            tvvooSelectionStore.apply(values);
-        } else {
-            List<HighflyCatalogChannel> values = new ArrayList<>();
-            for (ManagedChannel channel : channels) values.add(channel.highfly);
-            highflySelectionStore.apply(values);
+        List<String> globalOrder = new ArrayList<>();
+        List<TvVooCatalogChannel> tvvoo = new ArrayList<>();
+        List<HighflyCatalogChannel> highfly = new ArrayList<>();
+        for (ManagedChannel channel : channels) {
+            globalOrder.add(channel.key);
+            if (channel.source == SOURCE_TVVOO) tvvoo.add(channel.tvvoo);
+            if (channel.source == SOURCE_HIGHFLY) highfly.add(channel.highfly);
         }
+        orderStore.applyOrder(globalOrder);
+        tvvooSelectionStore.apply(tvvoo);
+        highflySelectionStore.apply(highfly);
         notifyCatalogChanged();
     }
 
@@ -369,22 +433,13 @@ final class ChannelCatalogManagerView extends LinearLayout {
         }));
     }
 
-    private void updateProviderButtons() {
-        tvvooButton.setSelected(provider == PROVIDER_TVVOO);
-        highflyButton.setSelected(provider == PROVIDER_HIGHFLY);
-        int selectedColor = context.getResources().getColor(R.color.black);
-        int normalColor = context.getResources().getColor(R.color.white);
-        tvvooButton.setTextColor(provider == PROVIDER_TVVOO ? selectedColor : normalColor);
-        highflyButton.setTextColor(provider == PROVIDER_HIGHFLY ? selectedColor : normalColor);
-    }
-
     private void updateSummary() {
         String selected = selectedIndex >= 0 && selectedIndex < channels.size()
                 ? " · " + getString(R.string.channels_selected, channels.get(selectedIndex).name)
                 : "";
         summary.setText(getString(
                 R.string.channels_summary,
-                providerLabel(),
+                getString(R.string.channels_catalog_all),
                 channels.size(),
                 selected
         ));
@@ -409,6 +464,10 @@ final class ChannelCatalogManagerView extends LinearLayout {
         onCatalogChanged.run();
     }
 
+    private void setStatus(String value) {
+        if (status != null) status.setText(value == null ? "" : value);
+    }
+
     private String selectedKey() {
         return selectedIndex >= 0 && selectedIndex < channels.size()
                 ? channels.get(selectedIndex).key
@@ -421,16 +480,6 @@ final class ChannelCatalogManagerView extends LinearLayout {
             if (key.equals(channels.get(index).key)) return index;
         }
         return -1;
-    }
-
-    private String providerLabel() {
-        return context.getString(provider == PROVIDER_TVVOO
-                ? R.string.channels_provider_tvvoo
-                : R.string.channels_provider_highfly);
-    }
-
-    private void setStatus(String value) {
-        if (status != null) status.setText(value == null ? "" : value);
     }
 
     private TextView textView(String value, boolean bold) {
@@ -448,7 +497,7 @@ final class ChannelCatalogManagerView extends LinearLayout {
         return view;
     }
 
-    private Button providerButton(int labelRes) {
+    private Button sourceButton(int labelRes) {
         Button button = actionButton(getString(labelRes));
         button.setBackgroundResource(R.drawable.settings_tab);
         button.setAllCaps(false);
@@ -504,36 +553,61 @@ final class ChannelCatalogManagerView extends LinearLayout {
         return context.getString(resourceId, arguments);
     }
 
+    private static String clean(String value, String fallback) {
+        return AppStrings.isBlank(value) ? fallback : value.trim();
+    }
+
     private static final class ManagedChannel {
+        private final int source;
         private final String key;
         private final String name;
         private final String group;
         private final String category;
+        private final Channel m3u;
         private final TvVooCatalogChannel tvvoo;
         private final HighflyCatalogChannel highfly;
 
         private ManagedChannel(
+                int source,
                 String key,
                 String name,
                 String group,
                 String category,
+                Channel m3u,
                 TvVooCatalogChannel tvvoo,
                 HighflyCatalogChannel highfly
         ) {
+            this.source = source;
             this.key = key;
-            this.name = name;
-            this.group = group;
-            this.category = category;
+            this.name = clean(name, "Canal sin nombre");
+            this.group = clean(group, "General");
+            this.category = category == null ? "" : category.trim();
+            this.m3u = m3u;
             this.tvvoo = tvvoo;
             this.highfly = highfly;
         }
 
+        static ManagedChannel m3u(Channel channel) {
+            return new ManagedChannel(
+                    SOURCE_M3U,
+                    ChannelCatalogOrderStore.keyFor(channel),
+                    channel.getName(),
+                    channel.getGroup(),
+                    channel.getAttributes().get("x-category"),
+                    channel,
+                    null,
+                    null
+            );
+        }
+
         static ManagedChannel tvvoo(TvVooCatalogChannel channel) {
             return new ManagedChannel(
-                    channel.getStableId(),
+                    SOURCE_TVVOO,
+                    ChannelCatalogOrderStore.keyFor(channel),
                     channel.getName(),
                     channel.getGroup(),
                     channel.getCategory(),
+                    null,
                     channel,
                     null
             );
@@ -541,17 +615,26 @@ final class ChannelCatalogManagerView extends LinearLayout {
 
         static ManagedChannel highfly(HighflyCatalogChannel channel) {
             return new ManagedChannel(
-                    channel.getResourceId(),
+                    SOURCE_HIGHFLY,
+                    ChannelCatalogOrderStore.keyFor(channel),
                     channel.getName(),
                     channel.getGroup(),
                     channel.getCategory(),
+                    null,
                     null,
                     channel
             );
         }
 
+        String sourceLabel(Context context) {
+            if (source == SOURCE_TVVOO) return context.getString(R.string.channels_provider_tvvoo);
+            if (source == SOURCE_HIGHFLY) return context.getString(R.string.channels_provider_highfly);
+            return context.getString(R.string.channels_provider_m3u);
+        }
+
         Channel toChannel() {
-            return tvvoo != null ? tvvoo.toChannel() : highfly.toChannel();
+            if (source == SOURCE_M3U) return m3u;
+            return source == SOURCE_TVVOO ? tvvoo.toChannel() : highfly.toChannel();
         }
     }
 }
