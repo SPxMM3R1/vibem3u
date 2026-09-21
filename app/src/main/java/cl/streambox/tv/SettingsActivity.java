@@ -38,7 +38,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class SettingsActivity extends Activity {
-    private static final float SETTINGS_PANEL_ASPECT_RATIO = 16f / 10f;
     public static final int TAB_GENERAL = 0;
     public static final int TAB_PLAYBACK = 1;
     public static final int TAB_SOURCE = 2;
@@ -234,7 +233,6 @@ public final class SettingsActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
         enterImmersiveMode();
-        fitSettingsPanelToAspectRatio();
 
         ensureDefaultPlaylistConfigured(this);
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
@@ -911,36 +909,6 @@ public final class SettingsActivity extends Activity {
 
     private int dp(int value) {
         return Math.max(1, Math.round(value * getResources().getDisplayMetrics().density));
-    }
-
-    private void fitSettingsPanelToAspectRatio() {
-        View root = findViewById(R.id.settings_root);
-        View panel = findViewById(R.id.settings_panel);
-        root.post(() -> {
-            int availableWidth = root.getWidth()
-                    - root.getPaddingLeft()
-                    - root.getPaddingRight();
-            int availableHeight = root.getHeight()
-                    - root.getPaddingTop()
-                    - root.getPaddingBottom();
-            if (availableWidth <= 0 || availableHeight <= 0) return;
-
-            int panelWidth;
-            int panelHeight;
-            if ((float) availableWidth / availableHeight > SETTINGS_PANEL_ASPECT_RATIO) {
-                panelHeight = availableHeight;
-                panelWidth = Math.round(panelHeight * SETTINGS_PANEL_ASPECT_RATIO);
-            } else {
-                panelWidth = availableWidth;
-                panelHeight = Math.round(panelWidth / SETTINGS_PANEL_ASPECT_RATIO);
-            }
-
-            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) panel.getLayoutParams();
-            params.width = panelWidth;
-            params.height = panelHeight;
-            params.gravity = Gravity.CENTER;
-            panel.setLayoutParams(params);
-        });
     }
 
     private void showTab(int selectedIndex, boolean requestFocus) {

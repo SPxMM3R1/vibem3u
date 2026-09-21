@@ -8,13 +8,13 @@
     android:paddingStart="@dimen/settings_outer_horizontal"
     android:paddingTop="@dimen/settings_outer_vertical"
     android:paddingEnd="@dimen/settings_outer_horizontal"
-    android:paddingBottom="@dimen/settings_outer_vertical">
+    android:paddingBottom="@dimen/settings_outer_bottom">
 
     <LinearLayout
         android:id="@+id/settings_panel"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@drawable/settings_glass_panel"
+        android:background="@drawable/channel_overlay_background"
         android:elevation="18dp"
         android:orientation="vertical">
 
