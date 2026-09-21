@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <dimen name="settings_outer_horizontal">32dp</dimen>
-    <dimen name="settings_outer_vertical">24dp</dimen>
-    <!-- 82dp OSD height + 28dp OSD bottom margin; the menu ends above it. -->
-    <dimen name="settings_outer_bottom">110dp</dimen>
+    <!-- Shared geometry: the settings menu replaces the channel OSD exactly. -->
+    <dimen name="channel_overlay_horizontal_margin">32dp</dimen>
+    <dimen name="channel_overlay_edge_margin">28dp</dimen>
+    <dimen name="channel_overlay_height">82dp</dimen>
     <dimen name="settings_panel_padding_horizontal">12dp</dimen>
     <dimen name="settings_panel_padding_top">8dp</dimen>
     <dimen name="settings_panel_padding_bottom">6dp</dimen>

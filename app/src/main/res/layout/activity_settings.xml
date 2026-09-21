@@ -5,17 +5,16 @@
     android:layout_height="match_parent"
     android:background="@android:color/transparent"
     android:clipChildren="false"
-    android:paddingStart="@dimen/settings_outer_horizontal"
-    android:paddingTop="@dimen/settings_outer_vertical"
-    android:paddingEnd="@dimen/settings_outer_horizontal"
-    android:paddingBottom="@dimen/settings_outer_bottom">
+    android:paddingStart="@dimen/channel_overlay_horizontal_margin"
+    android:paddingTop="@dimen/channel_overlay_edge_margin"
+    android:paddingEnd="@dimen/channel_overlay_horizontal_margin"
+    android:paddingBottom="@dimen/channel_overlay_edge_margin">
 
     <LinearLayout
         android:id="@+id/settings_panel"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="@drawable/channel_overlay_background"
-        android:elevation="18dp"
         android:orientation="vertical">
 
         <LinearLayout

@@ -3320,6 +3320,10 @@ public final class MainActivity extends Activity {
 
     private void openSettings(int initialTab) {
         if (settingsOpen) return;
+        mainHandler.removeCallbacks(hideOverlay);
+        hideOverlay.run();
+        mainHandler.removeCallbacks(hideLightEpg);
+        hideLightEpg.run();
         resolverSettingsSnapshotBeforeSettings = resolverSettingsSnapshot();
         playlistSourcesSnapshotBeforeSettings = playlistSourceSignature(getPlaylistSources());
         settingsOpen = true;
