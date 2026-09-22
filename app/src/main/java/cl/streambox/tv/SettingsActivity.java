@@ -120,6 +120,8 @@ public final class SettingsActivity extends Activity {
     private ScrollView settingsContent;
     private FrameLayout channelsManagerContainer;
     private ChannelCatalogManagerView channelCatalogManager;
+    private ChannelCatalogComposeController channelCatalogComposeController;
+    private ChannelCatalogComposeView channelCatalogComposeView;
     private ViewTreeObserver.OnGlobalFocusChangeListener focusVisibilityListener;
     private int selectedTabIndex;
     private TextView currentChannelName;
@@ -312,17 +314,7 @@ public final class SettingsActivity extends Activity {
         highflySelectionStore = new HighflySelectionStore(this);
         githubPublicationPreferences = new GitHubPublicationPreferences(this);
         hiddenChannelStore = new HiddenChannelStore(this);
-        channelCatalogManager = new ChannelCatalogManagerView(this);
-        channelsManagerContainer.addView(channelCatalogManager, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-        ));
-        channelCatalogManager.setFooterFocus(saveButton);
-        channelCatalogManager.setOnCatalogChangedListener(() -> {
-            updateTvVooSelectionStatus();
-            updateHighflySelectionStatus();
-            renderHiddenChannels();
-        });
+        installChannelCatalogUi();
         urlInput.setText(existingUrl);
         urlInput.setSelection(urlInput.length());
         String initialUrl2 = prefs.contains(KEY_PLAYLIST_URL_2)
@@ -377,7 +369,7 @@ public final class SettingsActivity extends Activity {
         });
         channelsModernUi.setOnCheckedChangeListener((button, checked) -> {
             ChannelCatalogManagerView.setModernUiEnabled(this, checked);
-            if (channelCatalogManager != null) channelCatalogManager.reloadLayoutSafely();
+            installChannelCatalogUi();
         });
         tvvooCatalogButton.setOnClickListener(view ->
                 startActivity(new Intent(this, TvVooCatalogActivity.class)));
@@ -422,9 +414,61 @@ public final class SettingsActivity extends Activity {
 
         int defaultTab = hasExistingUrl ? TAB_GENERAL : TAB_SOURCE;
         int initialTab = getIntent().getIntExtra(EXTRA_INITIAL_TAB, defaultTab);
-        tabs[TAB_CHANNELS].setNextFocusDownId(channelCatalogManager.getFirstFocus().getId());
+        tabs[TAB_CHANNELS].setNextFocusDownId(firstFocusForTab(TAB_CHANNELS).getId());
         showTab(initialTab, false);
         tabs[selectedTabIndex].requestFocus();
+    }
+
+    private void installChannelCatalogUi() {
+        if (channelsManagerContainer == null) return;
+        boolean useCompose = ChannelCatalogManagerView.isModernUiEnabled(this);
+        channelsManagerContainer.removeAllViews();
+        channelCatalogManager = null;
+        channelCatalogComposeController = null;
+        channelCatalogComposeView = null;
+        try {
+            if (useCompose) {
+                ChannelCatalogComposeController controller =
+                        new ChannelCatalogComposeController(this);
+                ChannelCatalogComposeView composeView = new ChannelCatalogComposeView(this);
+                composeView.setId(View.generateViewId());
+                composeView.setNextFocusDownId(saveButton.getId());
+                controller.setOnChangedListener(this::onChannelCatalogChanged);
+                composeView.bind(
+                        controller,
+                        () -> startActivity(new Intent(this, TvVooCatalogActivity.class)),
+                        () -> startActivity(new Intent(this, HighflyCatalogActivity.class))
+                );
+                channelCatalogComposeController = controller;
+                channelCatalogComposeView = composeView;
+                channelsManagerContainer.addView(composeView, new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT
+                ));
+            } else {
+                ChannelCatalogManagerView legacy = new ChannelCatalogManagerView(this);
+                legacy.setFooterFocus(saveButton);
+                legacy.setOnCatalogChangedListener(this::onChannelCatalogChanged);
+                channelCatalogManager = legacy;
+                channelsManagerContainer.addView(legacy, new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT
+                ));
+            }
+            if (tabs != null && tabs.length > TAB_CHANNELS) {
+                tabs[TAB_CHANNELS].setNextFocusDownId(firstFocusForTab(TAB_CHANNELS).getId());
+            }
+        } catch (RuntimeException error) {
+            if (!useCompose) throw error;
+            ChannelCatalogManagerView.setModernUiEnabled(this, false);
+            installChannelCatalogUi();
+        }
+    }
+
+    private void onChannelCatalogChanged() {
+        updateTvVooSelectionStatus();
+        updateHighflySelectionStatus();
+        renderHiddenChannels();
     }
 
     private void initializeCurrentChannelOptions(Intent intent) {
@@ -948,6 +992,7 @@ public final class SettingsActivity extends Activity {
             case 5:
                 return updateButton;
             case TAB_CHANNELS:
+                if (channelCatalogComposeView != null) return channelCatalogComposeView;
                 return channelCatalogManager == null
                         ? tabs[TAB_CHANNELS]
                         : channelCatalogManager.getFirstFocus();
@@ -1306,6 +1351,9 @@ public final class SettingsActivity extends Activity {
                     return true;
                 }
                 if (isTextFieldFocused() || isFooterButtonFocused()
+                        || (selectedTabIndex == TAB_CHANNELS
+                        && channelCatalogComposeView != null
+                        && isDescendantOf(getCurrentFocus(), channelCatalogComposeView))
                         || hasHorizontalTargetInCurrentPage(event.getKeyCode())) {
                     return super.dispatchKeyEvent(event);
                 }
@@ -1335,6 +1383,7 @@ public final class SettingsActivity extends Activity {
         updateTvVooSelectionStatus();
         updateHighflySelectionStatus();
         if (channelCatalogManager != null) channelCatalogManager.refresh();
+        if (channelCatalogComposeController != null) channelCatalogComposeController.refresh();
         if (appUpdater != null) appUpdater.onHostResume();
     }
 

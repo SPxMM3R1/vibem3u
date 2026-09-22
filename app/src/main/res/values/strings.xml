@@ -147,8 +147,8 @@
     <string name="channels_description_short">Selecciona un canal para ordenar, ocultar o eliminarlo. Mantén OK para más acciones.</string>
     <string name="channels_action_hint">OK seleccionar · mantener OK más acciones</string>
     <string name="channels_ui_fallback">Se activó el modo seguro del catálogo. Puedes volver a probar el diseño nuevo desde Interfaz.</string>
-    <string name="channels_modern_ui_title">Diseño nuevo del catálogo</string>
-    <string name="channels_modern_ui_description">Usa el diseño compacto del OSD para ordenar canales. Si algo falla, desactívalo para volver al diseño anterior.</string>
+    <string name="channels_modern_ui_title">Catálogo Compose for TV</string>
+    <string name="channels_modern_ui_description">Interfaz moderna para TV con foco D-pad y memoria de selección. Si algo falla, desactívala para volver al diseño seguro.</string>
     <string name="channels_catalog_all">Lista M3U + TvVoo + Highfly</string>
     <string name="channels_provider_tvvoo">TvVoo</string>
     <string name="channels_provider_highfly">Highfly</string>

@@ -1,5 +1,6 @@
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -8,6 +9,7 @@ android {
 
     buildFeatures {
         buildConfig = true
+        compose = true
     }
 
     val ciKeystorePath = System.getenv("VIBEM3U_KEYSTORE_PATH")
@@ -85,6 +87,8 @@ android {
 
 dependencies {
     implementation("androidx.core:core:1.17.0")
+    implementation("androidx.activity:activity-compose:1.10.0")
+    implementation("androidx.tv:tv-material:1.1.0")
     implementation("com.caverock:androidsvg-aar:1.4")
     implementation("androidx.media3:media3-exoplayer:1.10.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.10.1")
