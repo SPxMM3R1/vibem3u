@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -9,7 +8,6 @@ android {
 
     buildFeatures {
         buildConfig = true
-        compose = true
     }
 
     val ciKeystorePath = System.getenv("VIBEM3U_KEYSTORE_PATH")
@@ -32,8 +30,8 @@ android {
         minSdk = 29
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 117
-        versionName = "0.5.11"
+        versionCode = 118
+        versionName = "0.5.12"
         buildConfigField("boolean", "ENABLE_APP_UPDATES", "true")
         // Public OAuth client id for the GitHub Device Flow. It is supplied
         // by the release environment and is intentionally not a secret.
@@ -87,8 +85,6 @@ android {
 
 dependencies {
     implementation("androidx.core:core:1.17.0")
-    implementation("androidx.activity:activity-compose:1.10.0")
-    implementation("androidx.tv:tv-material:1.1.0")
     implementation("com.caverock:androidsvg-aar:1.4")
     implementation("androidx.media3:media3-exoplayer:1.10.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.10.1")

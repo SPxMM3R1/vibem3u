@@ -29,7 +29,6 @@ import java.util.Map;
  * order is used by playback.</p>
  */
 final class ChannelCatalogManagerView extends LinearLayout {
-    private static final String PREF_USE_MODERN_UI = "channels_catalog_ui_v2";
     private static final int SOURCE_M3U = 0;
     private static final int SOURCE_TVVOO = 1;
     private static final int SOURCE_HIGHFLY = 2;
@@ -56,7 +55,6 @@ final class ChannelCatalogManagerView extends LinearLayout {
     private TextView summary;
     private TextView status;
     private LinearLayout channelContainer;
-    private boolean modernUi;
 
     ChannelCatalogManagerView(Context context) {
         super(context);
@@ -68,39 +66,9 @@ final class ChannelCatalogManagerView extends LinearLayout {
         orderStore = new ChannelCatalogOrderStore(context);
         playlistRepository = new PlaylistRepository(context.getApplicationContext());
         setOrientation(VERTICAL);
-        setPadding(dp(16), dp(8), dp(16), dp(10));
-        rebuildLayoutSafely();
-    }
-
-    static boolean isModernUiEnabled(Context context) {
-        return context.getSharedPreferences(SettingsActivity.PREFS, Context.MODE_PRIVATE)
-                .getBoolean(PREF_USE_MODERN_UI, true);
-    }
-
-    static void setModernUiEnabled(Context context, boolean enabled) {
-        context.getSharedPreferences(SettingsActivity.PREFS, Context.MODE_PRIVATE)
-                .edit()
-                .putBoolean(PREF_USE_MODERN_UI, enabled)
-                .apply();
-    }
-
-    void reloadLayoutSafely() {
-        removeAllViews();
-        rebuildLayoutSafely();
-    }
-
-    private void rebuildLayoutSafely() {
-        try {
-            buildLayout();
-            render(false);
-        } catch (RuntimeException error) {
-            if (!isModernUiEnabled(context)) throw error;
-            setModernUiEnabled(context, false);
-            removeAllViews();
-            buildLegacyLayout();
-            render(false);
-            if (status != null) setStatus(getString(R.string.channels_ui_fallback));
-        }
+        setPadding(dp(10), dp(4), dp(10), dp(8));
+        buildLayout();
+        render(false);
     }
 
     View getFirstFocus() {
@@ -123,15 +91,6 @@ final class ChannelCatalogManagerView extends LinearLayout {
     }
 
     private void buildLayout() {
-        if (isModernUiEnabled(context)) {
-            buildModernLayout();
-        } else {
-            buildLegacyLayout();
-        }
-    }
-
-    private void buildLegacyLayout() {
-        modernUi = false;
         TextView heading = textView(getString(R.string.channels_heading), true);
         heading.setTextColor(context.getResources().getColor(R.color.cyan));
         addView(heading, new LinearLayout.LayoutParams(
@@ -227,144 +186,6 @@ final class ChannelCatalogManagerView extends LinearLayout {
         addView(status, statusParams);
     }
 
-    private void buildModernLayout() {
-        modernUi = true;
-        setPadding(dp(16), dp(8), dp(16), dp(10));
-
-        TextView heading = textView(getString(R.string.channels_heading), true);
-        heading.setTextColor(context.getResources().getColor(R.color.cyan));
-        addView(heading, new LinearLayout.LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                LayoutParams.WRAP_CONTENT
-        ));
-
-        TextView description = textView(getString(R.string.channels_description_short), false);
-        description.setTextColor(context.getResources().getColor(R.color.muted));
-        LinearLayout.LayoutParams descriptionParams = new LinearLayout.LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                LayoutParams.WRAP_CONTENT
-        );
-        descriptionParams.topMargin = dp(5);
-        addView(description, descriptionParams);
-
-        LinearLayout addRow = horizontalRow();
-        addTvvooButton = sourceButton(R.string.channels_add_tvvoo);
-        addHighflyButton = sourceButton(R.string.channels_add_highfly);
-        addRow.addView(addTvvooButton, weightedParams(8));
-        addRow.addView(addHighflyButton, weightedParams(0));
-        LinearLayout.LayoutParams addRowParams = new LinearLayout.LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                dp(46)
-        );
-        addRowParams.topMargin = dp(10);
-        addView(addRow, addRowParams);
-        addTvvooButton.setOnClickListener(view -> openProviderCatalogue(SOURCE_TVVOO));
-        addHighflyButton.setOnClickListener(view -> openProviderCatalogue(SOURCE_HIGHFLY));
-
-        summary = textView("", false);
-        summary.setTextColor(context.getResources().getColor(R.color.white));
-        LinearLayout.LayoutParams summaryParams = new LinearLayout.LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                LayoutParams.WRAP_CONTENT
-        );
-        summaryParams.topMargin = dp(8);
-        addView(summary, summaryParams);
-
-        LinearLayout editor = horizontalRow();
-        ScrollView scrollView = new ScrollView(context);
-        scrollView.setFillViewport(true);
-        scrollView.setNestedScrollingEnabled(false);
-        channelContainer = new LinearLayout(context);
-        channelContainer.setOrientation(VERTICAL);
-        scrollView.addView(channelContainer, new ScrollView.LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                LayoutParams.WRAP_CONTENT
-        ));
-        LinearLayout.LayoutParams listParams = new LinearLayout.LayoutParams(
-                0,
-                dp(286),
-                1.55f
-        );
-        listParams.topMargin = dp(8);
-        editor.addView(scrollView, listParams);
-
-        LinearLayout actions = new LinearLayout(context);
-        actions.setOrientation(VERTICAL);
-        actions.setPadding(dp(12), dp(10), dp(12), dp(10));
-        actions.setBackgroundResource(R.drawable.settings_section_card);
-        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(
-                0,
-                dp(286),
-                0.85f
-        );
-        actionsParams.leftMargin = dp(10);
-        actionsParams.topMargin = dp(8);
-        editor.addView(actions, actionsParams);
-
-        TextView actionsTitle = textView(getString(R.string.channels_actions_title), true);
-        actionsTitle.setTextColor(context.getResources().getColor(R.color.cyan));
-        actions.addView(actionsTitle, new LinearLayout.LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                LayoutParams.WRAP_CONTENT
-        ));
-
-        TextView actionsHint = textView(getString(R.string.channels_action_hint), false);
-        actionsHint.setTextColor(context.getResources().getColor(R.color.muted));
-        LinearLayout.LayoutParams actionsHintParams = new LinearLayout.LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                LayoutParams.WRAP_CONTENT
-        );
-        actionsHintParams.topMargin = dp(5);
-        actions.addView(actionsHint, actionsHintParams);
-
-        moveUpButton = actionButton(getString(R.string.channels_move_up));
-        moveDownButton = actionButton(getString(R.string.channels_move_down));
-        visibilityButton = actionButton(getString(R.string.channels_hide));
-        removeButton = actionButton(getString(R.string.channels_remove));
-        addAction(actions, moveUpButton, 10);
-        addAction(actions, moveDownButton, 6);
-        addAction(actions, visibilityButton, 6);
-        addAction(actions, removeButton, 6);
-        moveUpButton.setOnClickListener(view -> moveSelected(-1));
-        moveDownButton.setOnClickListener(view -> moveSelected(1));
-        visibilityButton.setOnClickListener(view -> toggleSelectedVisibility());
-        removeButton.setOnClickListener(view -> confirmRemoveSelected());
-
-        LinearLayout.LayoutParams editorParams = new LinearLayout.LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                dp(294)
-        );
-        addView(editor, editorParams);
-
-        publishButton = actionButton(getString(R.string.channels_publish));
-        LinearLayout.LayoutParams publishParams = new LinearLayout.LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                dp(46)
-        );
-        publishParams.topMargin = dp(10);
-        addView(publishButton, publishParams);
-        publishButton.setOnClickListener(view -> publishCatalog());
-        removeButton.setNextFocusDownId(publishButton.getId());
-
-        status = textView("", false);
-        status.setTextColor(context.getResources().getColor(R.color.muted));
-        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                LayoutParams.WRAP_CONTENT
-        );
-        statusParams.topMargin = dp(5);
-        addView(status, statusParams);
-    }
-
-    private void addAction(LinearLayout parent, Button button, int topMargin) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                dp(42)
-        );
-        params.topMargin = dp(topMargin);
-        parent.addView(button, params);
-    }
-
     private void openProviderCatalogue(int source) {
         Intent intent = new Intent(
                 context,
@@ -396,15 +217,10 @@ final class ChannelCatalogManagerView extends LinearLayout {
             for (int index = 0; index < channels.size(); index++) {
                 final int rowIndex = index;
                 ManagedChannel channel = channels.get(index);
-                View row = modernUi
-                        ? modernChannelRow(index, channel)
-                        : actionButton(rowLabel(index, channel));
-                if (!modernUi) {
-                    Button legacyRow = (Button) row;
-                    legacyRow.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-                    legacyRow.setPadding(dp(10), 0, dp(10), 0);
-                    legacyRow.setMinHeight(0);
-                }
+                Button row = actionButton(rowLabel(index, channel));
+                row.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+                row.setPadding(dp(10), 0, dp(10), 0);
+                row.setMinHeight(0);
                 row.setOnClickListener(view -> selectRow(rowIndex));
                 row.setOnLongClickListener(view -> {
                     selectRow(rowIndex);
@@ -418,9 +234,9 @@ final class ChannelCatalogManagerView extends LinearLayout {
                 previous.setNextFocusDownId(row.getId());
                 LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
                         LayoutParams.MATCH_PARENT,
-                        dp(modernUi ? 60 : 51)
+                        dp(51)
                 );
-                rowParams.bottomMargin = dp(modernUi ? 6 : 4);
+                rowParams.bottomMargin = dp(4);
                 channelContainer.addView(row, rowParams);
                 if (index == selectedIndex) focusTarget = row;
                 previous = row;
@@ -432,58 +248,6 @@ final class ChannelCatalogManagerView extends LinearLayout {
         if (requestSelectedFocus && focusTarget != null) {
             focusTarget.post(focusTarget::requestFocus);
         }
-    }
-
-    private View modernChannelRow(int index, ManagedChannel channel) {
-        boolean hidden = hiddenChannelStore.isHidden(channel.toChannel());
-        LinearLayout row = new LinearLayout(context);
-        row.setId(View.generateViewId());
-        row.setOrientation(VERTICAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setFocusable(true);
-        row.setClickable(true);
-        row.setLongClickable(true);
-        row.setBackgroundResource(R.drawable.channel_catalog_row);
-        row.setPadding(dp(14), dp(5), dp(14), dp(5));
-        row.setContentDescription(rowLabel(index, channel));
-
-        TextView title = new TextView(context);
-        title.setText((index + 1) + ". " + channel.name);
-        title.setTextColor(context.getResources().getColor(
-                hidden ? R.color.muted : R.color.white
-        ));
-        title.setTextSize(
-                TypedValue.COMPLEX_UNIT_PX,
-                context.getResources().getDimension(R.dimen.settings_control_text_size)
-        );
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        title.setIncludeFontPadding(false);
-        title.setMaxLines(1);
-        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        row.addView(title, new LinearLayout.LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                LayoutParams.WRAP_CONTENT
-        ));
-
-        String details = channel.sourceLabel(context) + " · " + channel.group;
-        if (!AppStrings.isBlank(channel.category)
-                && !channel.category.equalsIgnoreCase(channel.group)) {
-            details += " · " + channel.category;
-        }
-        if (hidden) details += getString(R.string.channels_hidden_suffix);
-        TextView metadata = textView(details, false);
-        metadata.setTextColor(context.getResources().getColor(
-                hidden ? R.color.amber : R.color.muted
-        ));
-        metadata.setMaxLines(1);
-        metadata.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        LinearLayout.LayoutParams metadataParams = new LinearLayout.LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                LayoutParams.WRAP_CONTENT
-        );
-        metadataParams.topMargin = dp(3);
-        row.addView(metadata, metadataParams);
-        return row;
     }
 
     private void loadChannels() {

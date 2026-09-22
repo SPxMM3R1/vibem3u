@@ -728,7 +728,7 @@
                             android:imeOptions="actionDone"
                             android:inputType="textPassword|textNoSuggestions"
                             android:nextFocusUp="@id/github_auto_publish"
-                            android:nextFocusDown="@id/tvvoo_source_enabled"
+                            android:nextFocusDown="@id/github_publish_now"
                             android:singleLine="true"
                             android:textColor="@color/white"
                             android:textColorHint="#78909C"
@@ -754,7 +754,6 @@
                             android:minWidth="0dp"
                             android:nextFocusUp="@id/github_token"
                             android:nextFocusDown="@id/tvvoo_source_enabled"
-                            android:visibility="gone"
                             android:text="@string/github_publish_now"
                             android:textColor="@color/white"
                             android:textSize="@dimen/settings_action_text_size" />
@@ -782,7 +781,7 @@
                             android:layout_marginTop="12dp"
                             android:background="@drawable/settings_section_card"
                             android:focusable="true"
-                            android:nextFocusUp="@id/github_token"
+                            android:nextFocusUp="@id/github_publish_now"
                             android:nextFocusDown="@id/tvvoo_catalog_button"
                             android:paddingStart="12dp"
                             android:paddingEnd="12dp"
@@ -940,31 +939,6 @@
                         android:text="@string/settings_interface_description"
                         android:textColor="@color/muted"
                         android:textSize="@dimen/settings_info_text_size" />
-
-                    <Switch
-                        android:id="@+id/channels_modern_ui"
-                        android:layout_width="match_parent"
-                        android:layout_height="@dimen/settings_control_height"
-                        android:layout_marginTop="@dimen/settings_section_margin_top"
-                        android:background="@drawable/settings_section_card"
-                        android:focusable="true"
-                        android:nextFocusUp="@id/interface_info"
-                        android:nextFocusDown="@id/hidden_channels_container"
-                        android:paddingStart="12dp"
-                        android:paddingEnd="12dp"
-                        android:showText="false"
-                        android:text="@string/channels_modern_ui_title"
-                        android:textColor="@color/white"
-                        android:textSize="@dimen/settings_control_text_size"
-                        android:thumbTint="@color/cyan" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="5dp"
-                        android:text="@string/channels_modern_ui_description"
-                        android:textColor="@color/muted"
-                        android:textSize="@dimen/settings_body_text_size" />
 
                     <TextView
                         android:layout_width="match_parent"
