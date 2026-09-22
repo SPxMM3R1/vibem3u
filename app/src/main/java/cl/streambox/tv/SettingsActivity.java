@@ -131,6 +131,7 @@ public final class SettingsActivity extends Activity {
     private LinearLayout resolverGroupsContainer;
     private LinearLayout hiddenChannelsContainer;
     private TextView hiddenChannelsStatus;
+    private Switch channelsModernUi;
     private ResolverCatalogRepository resolverCatalogRepository;
     private ResolverPreferences resolverPreferences;
     private ResolverCatalog resolverCatalog;
@@ -283,6 +284,7 @@ public final class SettingsActivity extends Activity {
         resolverGroupsContainer = findViewById(R.id.resolver_groups_container);
         hiddenChannelsContainer = findViewById(R.id.hidden_channels_container);
         hiddenChannelsStatus = findViewById(R.id.hidden_channels_status);
+        channelsModernUi = findViewById(R.id.channels_modern_ui);
         channelsManagerContainer = findViewById(R.id.channels_manager_container);
         tabs = new TextView[]{
                 findViewById(R.id.tab_general),
@@ -350,6 +352,7 @@ public final class SettingsActivity extends Activity {
         updateHighflySelectionStatus();
         invertChannelKeys.setChecked(prefs.getBoolean(KEY_INVERT_CHANNEL_KEYS, false));
         normalizeVolume.setChecked(prefs.getBoolean(KEY_NORMALIZE_VOLUME, false));
+        channelsModernUi.setChecked(ChannelCatalogManagerView.isModernUiEnabled(this));
         TextView versionText = findViewById(R.id.current_version);
         versionText.setText(getString(R.string.current_version, BuildConfig.VERSION_NAME));
         initializeCurrentChannelOptions(getIntent());
@@ -371,6 +374,10 @@ public final class SettingsActivity extends Activity {
                 if (highflyResolver != null) highflyResolver.setChecked(true);
             }
             updateHighflySelectionStatus();
+        });
+        channelsModernUi.setOnCheckedChangeListener((button, checked) -> {
+            ChannelCatalogManagerView.setModernUiEnabled(this, checked);
+            if (channelCatalogManager != null) channelCatalogManager.reloadLayoutSafely();
         });
         tvvooCatalogButton.setOnClickListener(view ->
                 startActivity(new Intent(this, TvVooCatalogActivity.class)));
@@ -760,7 +767,9 @@ public final class SettingsActivity extends Activity {
 
         List<HiddenChannelStore.Entry> entries = hiddenChannelStore.getEntries();
         hiddenChannelsStatus.setVisibility(entries.isEmpty() ? View.VISIBLE : View.GONE);
-        View previous = findViewById(R.id.interface_info);
+        View previous = channelsModernUi == null
+                ? findViewById(R.id.interface_info)
+                : channelsModernUi;
         for (HiddenChannelStore.Entry entry : entries) {
             Switch channelSwitch = new Switch(this);
             channelSwitch.setId(View.generateViewId());
