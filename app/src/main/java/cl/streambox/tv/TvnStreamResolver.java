@@ -9,7 +9,7 @@ import java.util.Map;
 public final class TvnStreamResolver implements StreamResolver {
     public static final String ID = "tvn";
     private static final String TVG_ID = "0104";
-    private static final String LIVE_PAGE = "https://live.tvn.cl/";
+    private static final String LIVE_PAGE = "https://live.tvn.cl/?tvn_seccion=prehome";
     private static final String PLAYLIST_BASE = "https://mdstrm.com/live-stream-playlist/";
     private static final long DEFAULT_TOKEN_CACHE_TTL_MILLIS = 5L * 60L * 1000L;
     private static final long DEFAULT_RESOLUTION_BUDGET_MILLIS = 12_000L;
