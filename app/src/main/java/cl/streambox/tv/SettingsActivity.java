@@ -38,9 +38,10 @@ public final class SettingsActivity extends Activity {
     public static final int TAB_GENERAL = 0;
     public static final int TAB_PLAYBACK = 1;
     public static final int TAB_SOURCE = 2;
-    public static final int TAB_RESOLVERS = 3;
-    public static final int TAB_INTERFACE = 4;
-    public static final int TAB_UPDATES = 5;
+    public static final int TAB_INTERFACE = 3;
+    public static final int TAB_UPDATES = 4;
+    /** Source model that derives each M3U list from its address instead of a switch. */
+    private static final int SOURCE_MODEL_URLS = 2;
     public static final String PREFS = "streambox_settings";
     /** Public Lista 1 used on a new installation. */
     public static final String DEFAULT_PLAYLIST_URL =
@@ -56,6 +57,7 @@ public final class SettingsActivity extends Activity {
     public static final String KEY_PLAYLIST_ENABLED = "playlist_enabled";
     public static final String KEY_PLAYLIST_ENABLED_2 = "playlist_enabled_2";
     public static final String KEY_HIGHFLY_MANIFEST_URL = "highfly_manifest_url";
+    public static final String KEY_SOURCE_MODEL = "source_model";
     public static final String KEY_INVERT_CHANNEL_KEYS = "invert_channel_keys";
     public static final String KEY_NORMALIZE_VOLUME = "normalize_volume";
     public static final String EXTRA_INITIAL_TAB = "initial_tab";
@@ -73,7 +75,6 @@ public final class SettingsActivity extends Activity {
     public static final String EXTRA_QUALITY_HEIGHT = "quality_height";
     public static final String EXTRA_SUBTITLES_AVAILABLE = "subtitles_available";
     public static final String EXTRA_SUBTITLES_ENABLED = "subtitles_enabled";
-    public static final String EXTRA_RESOLVER_CATALOG_VERSION = "resolver_catalog_version";
     public static final String EXTRA_RESOLVER_IDS = "resolver_ids";
     public static final String EXTRA_RESOLVER_COUNTS = "resolver_counts";
 
@@ -84,8 +85,6 @@ public final class SettingsActivity extends Activity {
     private EditText urlInput2;
     private EditText highflyManifestUrlInput;
     private TextView errorText;
-    private Switch playlistOneEnabled;
-    private Switch playlistTwoEnabled;
     private Button mediaFlowSettingsButton;
     private Switch invertChannelKeys;
     private Switch normalizeVolume;
@@ -107,7 +106,6 @@ public final class SettingsActivity extends Activity {
     private TextView qualityStatus;
     private Switch subtitlesSwitch;
     private TextView subtitlesStatus;
-    private TextView resolverCatalogVersion;
     private LinearLayout resolverGroupsContainer;
     private ResolverCatalogRepository resolverCatalogRepository;
     private ResolverPreferences resolverPreferences;
@@ -130,8 +128,8 @@ public final class SettingsActivity extends Activity {
     private final List<Button> qualityFocusButtons = new ArrayList<>();
     /**
      * Seeds a completely unconfigured installation and fills only a missing
-     * Lista 2 URL. Existing playlist choices remain authoritative, including
-     * an intentionally disabled or empty source.
+     * Highfly manifest. Existing playlist choices remain authoritative,
+     * including an intentionally empty source.
      */
     public static void ensureDefaultPlaylistConfigured(Context context) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -142,11 +140,6 @@ public final class SettingsActivity extends Activity {
                 || prefs.contains(KEY_PLAYLIST_ENABLED)
                 || prefs.contains(KEY_PLAYLIST_ENABLED_2);
         SharedPreferences.Editor editor = null;
-        if (!prefs.contains(KEY_PLAYLIST_URL_2)) {
-            editor = prefs.edit()
-                    .putString(KEY_PLAYLIST_URL_2, DEFAULT_PLAYLIST_URL_2)
-                    .putBoolean(KEY_PLAYLIST_ENABLED_2, false);
-        }
         if (!prefs.contains(KEY_HIGHFLY_MANIFEST_URL)) {
             if (editor == null) editor = prefs.edit();
             editor.putString(KEY_HIGHFLY_MANIFEST_URL, DEFAULT_HIGHFLY_MANIFEST_URL);
@@ -154,9 +147,29 @@ public final class SettingsActivity extends Activity {
         if (!hasPlaylistPreferences) {
             if (editor == null) editor = prefs.edit();
             editor.putString(KEY_PLAYLIST_URL, DEFAULT_PLAYLIST_URL)
-                    .putBoolean(KEY_PLAYLIST_ENABLED, true);
+                    .putBoolean(KEY_PLAYLIST_ENABLED, true)
+                    .putString(KEY_PLAYLIST_URL_2, "")
+                    .putBoolean(KEY_PLAYLIST_ENABLED_2, false);
         }
         if (editor != null) editor.apply();
+        migrateSourceModel(prefs);
+    }
+
+    /**
+     * Older releases exposed a switch per M3U list. The source tab now derives
+     * each list from its address, so an installation that kept Lista 2 switched
+     * off must keep that choice instead of loading it on the next start.
+     */
+    private static void migrateSourceModel(SharedPreferences prefs) {
+        if (prefs.getInt(KEY_SOURCE_MODEL, 1) >= SOURCE_MODEL_URLS) return;
+        SharedPreferences.Editor editor = prefs.edit().putInt(KEY_SOURCE_MODEL, SOURCE_MODEL_URLS);
+        if (!prefs.getBoolean(KEY_PLAYLIST_ENABLED_2, false)) {
+            String storedUrl2 = prefs.getString(KEY_PLAYLIST_URL_2, "");
+            if (!AppStrings.isBlank(storedUrl2) && storedUrl2.trim().equals(DEFAULT_PLAYLIST_URL_2)) {
+                editor.putString(KEY_PLAYLIST_URL_2, "");
+            }
+        }
+        editor.apply();
     }
 
     /** Removes credential state written by versions that exposed this provider separately. */
@@ -230,8 +243,6 @@ public final class SettingsActivity extends Activity {
         urlInput2 = findViewById(R.id.playlist_url_2);
         highflyManifestUrlInput = findViewById(R.id.highfly_manifest_url);
         errorText = findViewById(R.id.url_error);
-        playlistOneEnabled = findViewById(R.id.playlist_1_enabled);
-        playlistTwoEnabled = findViewById(R.id.playlist_2_enabled);
         mediaFlowSettingsButton = findViewById(R.id.mediaflow_settings_button);
         invertChannelKeys = findViewById(R.id.invert_channel_keys);
         normalizeVolume = findViewById(R.id.normalize_volume);
@@ -245,13 +256,11 @@ public final class SettingsActivity extends Activity {
         qualityStatus = findViewById(R.id.settings_quality_status);
         subtitlesSwitch = findViewById(R.id.settings_subtitles_switch);
         subtitlesStatus = findViewById(R.id.settings_subtitles_status);
-        resolverCatalogVersion = findViewById(R.id.resolver_catalog_version);
         resolverGroupsContainer = findViewById(R.id.resolver_groups_container);
         tabs = new TextView[]{
                 findViewById(R.id.tab_general),
                 findViewById(R.id.tab_playback),
                 findViewById(R.id.tab_source),
-                findViewById(R.id.tab_resolvers),
                 findViewById(R.id.tab_interface),
                 findViewById(R.id.tab_updates)
         };
@@ -259,7 +268,6 @@ public final class SettingsActivity extends Activity {
                 findViewById(R.id.tab_page_general),
                 findViewById(R.id.tab_page_playback),
                 findViewById(R.id.tab_page_source),
-                findViewById(R.id.tab_page_resolvers),
                 findViewById(R.id.tab_page_interface),
                 findViewById(R.id.tab_page_updates)
         };
@@ -269,10 +277,7 @@ public final class SettingsActivity extends Activity {
         resolverPreferences = new ResolverPreferences(this);
         urlInput.setText(existingUrl);
         urlInput.setSelection(urlInput.length());
-        String initialUrl2 = prefs.contains(KEY_PLAYLIST_URL_2)
-                ? existingUrl2
-                : DEFAULT_PLAYLIST_URL_2;
-        urlInput2.setText(initialUrl2 == null ? "" : initialUrl2);
+        urlInput2.setText(existingUrl2 == null ? "" : existingUrl2);
         String initialHighflyManifest = prefs.getString(
                 KEY_HIGHFLY_MANIFEST_URL,
                 DEFAULT_HIGHFLY_MANIFEST_URL
@@ -280,14 +285,6 @@ public final class SettingsActivity extends Activity {
         highflyManifestUrlInput.setText(AppStrings.isBlank(initialHighflyManifest)
                 ? DEFAULT_HIGHFLY_MANIFEST_URL
                 : initialHighflyManifest);
-        boolean firstPlaylistEnabled = prefs.contains(KEY_PLAYLIST_ENABLED)
-                ? prefs.getBoolean(KEY_PLAYLIST_ENABLED, true)
-                : existingUrl != null && !AppStrings.isBlank(existingUrl);
-        playlistOneEnabled.setChecked(firstPlaylistEnabled);
-        playlistTwoEnabled.setChecked(prefs.getBoolean(
-                KEY_PLAYLIST_ENABLED_2,
-                false
-        ));
         invertChannelKeys.setChecked(prefs.getBoolean(KEY_INVERT_CHANNEL_KEYS, false));
         normalizeVolume.setChecked(prefs.getBoolean(KEY_NORMALIZE_VOLUME, false));
         TextView versionText = findViewById(R.id.current_version);
@@ -513,14 +510,10 @@ public final class SettingsActivity extends Activity {
             case 1:
                 return playbackFirstFocus == null ? invertChannelKeys : playbackFirstFocus;
             case 2:
-                return playlistOneEnabled;
+                return urlInput;
             case 3:
-                return resolverGroupSwitches.isEmpty()
-                        ? tabs[TAB_RESOLVERS]
-                        : resolverGroupSwitches.values().iterator().next();
-            case 4:
                 return findViewById(R.id.interface_info);
-            case 5:
+            case 4:
                 return updateButton;
             default:
                 return normalizeVolume;
@@ -543,29 +536,18 @@ public final class SettingsActivity extends Activity {
             resolverCatalog = resolverCatalogRepository.load();
             renderResolverOptions();
         } catch (Exception error) {
-            String fallbackVersion = safeString(intent.getStringExtra(
-                    EXTRA_RESOLVER_CATALOG_VERSION
-            ));
-            resolverCatalogVersion.setText(getString(
-                    R.string.resolver_catalog_version,
-                    AppStrings.isBlank(fallbackVersion) ? getString(R.string.unknown_version) : fallbackVersion
-            ));
-            // The catalogue is bundled with the APK. A parse failure is
-            // reported by the version label; there is no remote resolver
+            // The catalogue is bundled with the APK. A parse failure simply
+            // leaves the resolver switches empty; there is no remote resolver
             // update path to fall back to.
         }
     }
 
     private void renderResolverOptions() {
         if (resolverCatalog == null) return;
-        resolverCatalogVersion.setText(getString(
-                R.string.resolver_catalog_version,
-                resolverCatalog.getVersion()
-        ));
         resolverGroupsContainer.removeAllViews();
         resolverGroupSwitches.clear();
 
-        View previous = tabs[TAB_RESOLVERS];
+        View previous = urlInput2;
         for (ResolverDefinition definition : resolverCatalog.getProviders()) {
             Switch groupSwitch = createResolverGroupSwitch(definition);
             resolverGroupsContainer.addView(groupSwitch);
@@ -574,16 +556,8 @@ public final class SettingsActivity extends Activity {
             groupSwitch.setNextFocusUpId(previous.getId());
             previous = groupSwitch;
         }
-        View lastResolverControl = previous;
-        lastResolverControl.setNextFocusDownId(saveButton.getId());
-        lastResolverControl.setOnKeyListener((view, keyCode, event) -> {
-            if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN
-                    && event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
-                saveButton.requestFocus();
-                return true;
-            }
-            return false;
-        });
+        previous.setNextFocusDownId(highflyManifestUrlInput.getId());
+        highflyManifestUrlInput.setNextFocusUpId(previous.getId());
     }
 
     private Switch createResolverGroupSwitch(ResolverDefinition definition) {
@@ -728,15 +702,17 @@ public final class SettingsActivity extends Activity {
         String value = urlInput.getText().toString().trim();
         String value2 = urlInput2.getText().toString().trim();
         String highflyManifest = highflyManifestUrlInput.getText().toString().trim();
-        boolean enabled1 = playlistOneEnabled.isChecked();
-        boolean enabled2 = playlistTwoEnabled.isChecked();
+        // Each M3U list is active while it has an address; the web editor owns
+        // which channels are published, so the app only needs the resolvers.
+        boolean enabled1 = !AppStrings.isBlank(value);
+        boolean enabled2 = !AppStrings.isBlank(value2);
         boolean hasPublishedProviderChannels = new PublishedPlaybackCatalogRepository(this)
                 .loadCached()
                 .hasActiveProviderChannels();
         if (!enabled1 && !enabled2 && !hasPublishedProviderChannels) {
             errorText.setText(R.string.playlist_source_required);
             errorText.setVisibility(View.VISIBLE);
-            playlistOneEnabled.requestFocus();
+            urlInput.requestFocus();
             return;
         }
         if (enabled1 && !isValidPlaylistUrl(value)) {

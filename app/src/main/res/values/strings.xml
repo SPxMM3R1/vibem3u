@@ -43,12 +43,10 @@
     <string name="settings_title">Opciones</string>
     <string name="settings_description">Organiza la fuente, la reproducción, el audio y las actualizaciones desde un solo lugar.</string>
     <string name="settings_source_title">Fuente de canales</string>
-    <string name="settings_source_description">Activa una o dos listas M3U. La lista 1 aparece primero y la lista 2 continúa con la numeración correlativa.</string>
+    <string name="settings_source_description">Las listas M3U se usan tal como las publica el editor web: la lista 1 aparece primero y la lista 2 continúa con la numeración correlativa. Deja una dirección vacía para no usarla.</string>
     <string name="settings_playback_title">Reproducción</string>
     <string name="playlist_url_hint">https://ejemplo.com/lista.m3u</string>
     <string name="playlist_url_2_hint">https://ejemplo.com/segunda-lista.m3u</string>
-    <string name="playlist_one_enabled">Lista 1 · usar esta fuente</string>
-    <string name="playlist_two_enabled">Lista 2 · usar esta fuente</string>
     <string name="highfly_manifest_title">Manifiesto Highfly</string>
     <string name="highfly_manifest_description">Se usa para descubrir las fuentes y calidades Highfly antes de reproducirlas. Puedes usar el manifiesto público o uno configurado por el proveedor.</string>
     <string name="highfly_manifest_url_hint">https://sports.highfly.to/manifest.json</string>
@@ -93,7 +91,6 @@
     <string name="settings_tab_general">General</string>
     <string name="settings_tab_playback">Reproducción</string>
     <string name="settings_tab_source">Fuente</string>
-    <string name="settings_tab_resolvers">Resolutores</string>
     <string name="settings_tab_interface">Interfaz</string>
     <string name="settings_tab_updates">Actualizaciones</string>
     <string name="settings_general_heading">General</string>
@@ -109,12 +106,8 @@
     <string name="settings_subtitles_title">Subtítulos</string>
     <string name="settings_source_heading">Fuente de canales</string>
     <string name="settings_provider_selection_web">Los canales Highfly y TvVoo se eligen, ordenan y ocultan en el editor web. La app reproduce la última publicación disponible; aquí no se modifican catálogos.</string>
-    <string name="settings_resolvers_heading">Resolutores integrados</string>
-    <string name="resolver_catalog_version">Catálogo integrado · %1$s</string>
-    <string name="resolver_catalog_description">Las reglas de identificación y los endpoints forman parte de esta versión de la app. Se actualizan únicamente al instalar una nueva APK.</string>
-    <string name="resolver_groups_title">Grupos de canales</string>
-    <string name="resolver_groups_description">Desactiva un proveedor para ocultar todos sus canales. Las fuentes directas y los demás grupos no cambian.</string>
-    <string name="unknown_version">desconocida</string>
+    <string name="resolver_groups_title">Resolutores</string>
+    <string name="resolver_groups_description">Apaga un resolutor para ocultar todos sus canales. Las fuentes directas de las listas M3U y los demás resolutores no cambian.</string>
     <string name="settings_interface_heading">Interfaz</string>
     <string name="settings_interface_description">Usa las flechas para navegar y OK para seleccionar. Mantén OK durante la reproducción para abrir Opciones generales; las pestañas se cambian con ◀ y ▶.</string>
     <string name="settings_updates_heading">Actualizaciones</string>

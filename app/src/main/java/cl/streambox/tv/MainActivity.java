@@ -530,14 +530,14 @@ public final class MainActivity extends Activity {
                 overlayAwaitingPlayback = true;
                 showOverlay(true);
                 if (!requestPlaybackSourceRecovery(error)) {
-                    if (isDecoderFailure(error)) {
-                        requestFullPlaybackRecovery("error de decodificador");
-                    } else {
-                        // Media3's bounded load policy owns transient I/O
-                        // retries. Recreating ExoPlayer is reserved for a
-                        // decoder/watchdog failure.
-                        showPlaybackFailure();
-                    }
+                    // Automatic reconnection for every channel error. Renewing
+                    // a resolver output is attempted first; a direct channel,
+                    // or a resolver that already spent its renewal, still gets
+                    // one bounded player restart before the channel is
+                    // reported as failed.
+                    requestFullPlaybackRecovery(isDecoderFailure(error)
+                            ? "error de decodificador"
+                            : "error de reproducción");
                 }
             }
         });
@@ -3301,11 +3301,7 @@ public final class MainActivity extends Activity {
             Integer count = resolverChannelCounts.get(definition.getId());
             resolverCounts.add(count == null ? 0 : count);
         }
-        intent.putExtra(
-                        SettingsActivity.EXTRA_RESOLVER_CATALOG_VERSION,
-                        streamResolverRegistry.getCatalogVersion()
-                )
-                .putStringArrayListExtra(SettingsActivity.EXTRA_RESOLVER_IDS, resolverIds)
+        intent.putStringArrayListExtra(SettingsActivity.EXTRA_RESOLVER_IDS, resolverIds)
                 .putIntegerArrayListExtra(SettingsActivity.EXTRA_RESOLVER_COUNTS, resolverCounts);
         if (channels.isEmpty()
                 || channelIndex < 0
