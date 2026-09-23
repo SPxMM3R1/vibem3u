@@ -14,13 +14,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.text.Normalizer;
 
-/** Stable metadata for one Highfly catalogue entry.
+/** Stable playback metadata for one Highfly entry published by Lista M3U.
  *
- * <p>The resource id and stable id identify the entry inside the app. No
- * stream URL, session parameter or authorization value is persisted here; the
- * resolver obtains the playable HLS source when the channel is opened. The
- * app-to-GitHub selection manifest intentionally keeps this provider identity
- * separate from the public XMLTV/tvg-id assigned by Lista M3U.</p>
+ * <p>The published {@code catalogKey} remains the stable identity, while the
+ * resource id and slug are only resolver references. No stream URL, session
+ * parameter or authorization value is persisted; the resolver obtains the
+ * playable source only when the channel is opened.</p>
  */
 public final class HighflyCatalogChannel {
     private final String resourceId;
@@ -188,29 +187,6 @@ public final class HighflyCatalogChannel {
         );
     }
 
-    public static HighflyCatalogChannel fromMeta(JSONObject object) throws JSONException {
-        if (object == null) throw new JSONException("Meta Highfly ausente.");
-        String id = object.optString("id", "").trim();
-        String name = object.optString("name", "").trim();
-        if (!id.matches("leaf:[A-Za-z0-9_-]{2,128}") || name.isEmpty()) {
-            throw new JSONException("Meta Highfly incompleta.");
-        }
-        List<String> genres = readGenres(object.optJSONArray("genres"));
-        String category = genres.isEmpty() ? "Deportes" : genres.get(0);
-        return new HighflyCatalogChannel(
-                id,
-                object.optString("stableId", object.optString("tvgId", "")),
-                name,
-                "Highfly · Deportes",
-                category,
-                object.optString(
-                        "poster",
-                        object.optString("logo", "")
-                ),
-                genres
-        );
-    }
-
     private String tvgId() {
         return stableId;
     }
@@ -220,8 +196,8 @@ public final class HighflyCatalogChannel {
      * selection. Highfly currently publishes a rotating leaf id but no
      * separate canonical id, so known channels use the identities already
      * used by Lista M3U and unknown names receive a deterministic,
-     * slug-independent fallback. The public selection manifest does not
-     * export this as a final XMLTV/tvg-id.
+     * slug-independent fallback. Unknown name-derived identities remain
+     * provisional and are not promoted to public identifiers by the app.
      */
     public static String stableIdentity(String requested, String name) {
         String explicit = clean(requested);

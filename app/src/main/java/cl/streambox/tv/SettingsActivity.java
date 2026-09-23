@@ -1,11 +1,9 @@
 package cl.streambox.tv;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
@@ -21,7 +19,6 @@ import android.view.ViewTreeObserver;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Switch;
@@ -44,7 +41,6 @@ public final class SettingsActivity extends Activity {
     public static final int TAB_RESOLVERS = 3;
     public static final int TAB_INTERFACE = 4;
     public static final int TAB_UPDATES = 5;
-    public static final int TAB_CHANNELS = 6;
     public static final String PREFS = "streambox_settings";
     /** Public Lista 1 used on a new installation. */
     public static final String DEFAULT_PLAYLIST_URL =
@@ -80,7 +76,6 @@ public final class SettingsActivity extends Activity {
     public static final String EXTRA_RESOLVER_CATALOG_VERSION = "resolver_catalog_version";
     public static final String EXTRA_RESOLVER_IDS = "resolver_ids";
     public static final String EXTRA_RESOLVER_COUNTS = "resolver_counts";
-    public static final String EXTRA_HIDDEN_CHANNELS_CHANGED = "hidden_channels_changed";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService updateExecutor = Executors.newSingleThreadExecutor();
@@ -91,22 +86,7 @@ public final class SettingsActivity extends Activity {
     private TextView errorText;
     private Switch playlistOneEnabled;
     private Switch playlistTwoEnabled;
-    private Switch tvvooSourceEnabled;
-    private Button tvvooCatalogButton;
-    private Switch highflySourceEnabled;
-    private Button highflyCatalogButton;
-    private Switch githubAutoPublish;
-    private Button githubDeviceAuthorizeButton;
-    private EditText githubTokenInput;
-    private TextView githubTokenStatus;
-    private Button githubPublishButton;
-    private TextView githubPublishStatus;
     private Button mediaFlowSettingsButton;
-    private TextView tvvooSelectionStatus;
-    private TextView highflySelectionStatus;
-    private TvVooSelectionStore tvvooSelectionStore;
-    private HighflySelectionStore highflySelectionStore;
-    private GitHubPublicationPreferences githubPublicationPreferences;
     private Switch invertChannelKeys;
     private Switch normalizeVolume;
     private Button updateButton;
@@ -117,9 +97,9 @@ public final class SettingsActivity extends Activity {
     private View[] tabPages;
     private Button saveButton;
     private Button cancelButton;
+    private FrameLayout settingsRoot;
+    private LinearLayout settingsPanel;
     private ScrollView settingsContent;
-    private FrameLayout channelsManagerContainer;
-    private ChannelCatalogManagerView channelCatalogManager;
     private ViewTreeObserver.OnGlobalFocusChangeListener focusVisibilityListener;
     private int selectedTabIndex;
     private TextView currentChannelName;
@@ -129,15 +109,11 @@ public final class SettingsActivity extends Activity {
     private TextView subtitlesStatus;
     private TextView resolverCatalogVersion;
     private LinearLayout resolverGroupsContainer;
-    private LinearLayout hiddenChannelsContainer;
-    private TextView hiddenChannelsStatus;
     private ResolverCatalogRepository resolverCatalogRepository;
     private ResolverPreferences resolverPreferences;
     private ResolverCatalog resolverCatalog;
-    private HiddenChannelStore hiddenChannelStore;
     private final Map<String, Switch> resolverGroupSwitches = new LinkedHashMap<>();
     private final Map<String, Integer> resolverGroupCounts = new LinkedHashMap<>();
-    private final Map<String, Switch> hiddenChannelSwitches = new LinkedHashMap<>();
     private View playbackFirstFocus;
     private int currentChannelIndex = -1;
     private String currentChannelTvgId = "";
@@ -152,12 +128,6 @@ public final class SettingsActivity extends Activity {
     private Button automaticQualityButton;
     private final List<Button> qualityOptionButtons = new ArrayList<>();
     private final List<Button> qualityFocusButtons = new ArrayList<>();
-    private GitHubDeviceAuthorization.Handle githubDeviceAuthorization;
-    private AlertDialog githubDeviceDialog;
-    private TextView githubDeviceDialogStatus;
-    private TextView githubDeviceDialogCode;
-    private TextView githubDeviceDialogUrl;
-    private ImageView githubDeviceDialogQr;
     /**
      * Seeds a completely unconfigured installation and fills only a missing
      * Lista 2 URL. Existing playlist choices remain authoritative, including
@@ -234,6 +204,14 @@ public final class SettingsActivity extends Activity {
         setContentView(R.layout.activity_settings);
         enterImmersiveMode();
 
+        settingsRoot = findViewById(R.id.settings_root);
+        settingsPanel = findViewById(R.id.settings_panel);
+        settingsRoot.addOnLayoutChangeListener((view, left, top, right, bottom,
+                                                 oldLeft, oldTop, oldRight, oldBottom) ->
+                updateSettingsPanelWidth()
+        );
+        settingsRoot.post(this::updateSettingsPanelWidth);
+
         ensureDefaultPlaylistConfigured(this);
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         String existingUrl = prefs.getString(KEY_PLAYLIST_URL, "");
@@ -254,19 +232,7 @@ public final class SettingsActivity extends Activity {
         errorText = findViewById(R.id.url_error);
         playlistOneEnabled = findViewById(R.id.playlist_1_enabled);
         playlistTwoEnabled = findViewById(R.id.playlist_2_enabled);
-        tvvooSourceEnabled = findViewById(R.id.tvvoo_source_enabled);
-        tvvooCatalogButton = findViewById(R.id.tvvoo_catalog_button);
-        highflySourceEnabled = findViewById(R.id.highfly_source_enabled);
-        highflyCatalogButton = findViewById(R.id.highfly_catalog_button);
-        githubAutoPublish = findViewById(R.id.github_auto_publish);
-        githubDeviceAuthorizeButton = findViewById(R.id.github_device_authorize);
-        githubTokenInput = findViewById(R.id.github_token);
-        githubTokenStatus = findViewById(R.id.github_token_status);
-        githubPublishButton = findViewById(R.id.github_publish_now);
-        githubPublishStatus = findViewById(R.id.github_publish_status);
         mediaFlowSettingsButton = findViewById(R.id.mediaflow_settings_button);
-        tvvooSelectionStatus = findViewById(R.id.tvvoo_selection_status);
-        highflySelectionStatus = findViewById(R.id.highfly_selection_status);
         invertChannelKeys = findViewById(R.id.invert_channel_keys);
         normalizeVolume = findViewById(R.id.normalize_volume);
         updateButton = findViewById(R.id.check_updates_button);
@@ -281,17 +247,13 @@ public final class SettingsActivity extends Activity {
         subtitlesStatus = findViewById(R.id.settings_subtitles_status);
         resolverCatalogVersion = findViewById(R.id.resolver_catalog_version);
         resolverGroupsContainer = findViewById(R.id.resolver_groups_container);
-        hiddenChannelsContainer = findViewById(R.id.hidden_channels_container);
-        hiddenChannelsStatus = findViewById(R.id.hidden_channels_status);
-        channelsManagerContainer = findViewById(R.id.channels_manager_container);
         tabs = new TextView[]{
                 findViewById(R.id.tab_general),
                 findViewById(R.id.tab_playback),
                 findViewById(R.id.tab_source),
                 findViewById(R.id.tab_resolvers),
                 findViewById(R.id.tab_interface),
-                findViewById(R.id.tab_updates),
-                findViewById(R.id.tab_channels)
+                findViewById(R.id.tab_updates)
         };
         tabPages = new View[]{
                 findViewById(R.id.tab_page_general),
@@ -299,28 +261,12 @@ public final class SettingsActivity extends Activity {
                 findViewById(R.id.tab_page_source),
                 findViewById(R.id.tab_page_resolvers),
                 findViewById(R.id.tab_page_interface),
-                findViewById(R.id.tab_page_updates),
-                findViewById(R.id.tab_page_channels)
+                findViewById(R.id.tab_page_updates)
         };
 
         appUpdater = new AppUpdater(this, updateExecutor, mainHandler);
         resolverCatalogRepository = new ResolverCatalogRepository(this);
         resolverPreferences = new ResolverPreferences(this);
-        tvvooSelectionStore = new TvVooSelectionStore(this);
-        highflySelectionStore = new HighflySelectionStore(this);
-        githubPublicationPreferences = new GitHubPublicationPreferences(this);
-        hiddenChannelStore = new HiddenChannelStore(this);
-        channelCatalogManager = new ChannelCatalogManagerView(this);
-        channelsManagerContainer.addView(channelCatalogManager, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-        ));
-        channelCatalogManager.setFooterFocus(saveButton);
-        channelCatalogManager.setOnCatalogChangedListener(() -> {
-            updateTvVooSelectionStatus();
-            updateHighflySelectionStatus();
-            renderHiddenChannels();
-        });
         urlInput.setText(existingUrl);
         urlInput.setSelection(urlInput.length());
         String initialUrl2 = prefs.contains(KEY_PLAYLIST_URL_2)
@@ -342,43 +288,12 @@ public final class SettingsActivity extends Activity {
                 KEY_PLAYLIST_ENABLED_2,
                 false
         ));
-        tvvooSourceEnabled.setChecked(tvvooSelectionStore.isEnabled());
-        highflySourceEnabled.setChecked(highflySelectionStore.isEnabled());
-        githubAutoPublish.setChecked(githubPublicationPreferences.isAutoPublishEnabled());
-        updateGitHubPublicationStatus();
-        updateTvVooSelectionStatus();
-        updateHighflySelectionStatus();
         invertChannelKeys.setChecked(prefs.getBoolean(KEY_INVERT_CHANNEL_KEYS, false));
         normalizeVolume.setChecked(prefs.getBoolean(KEY_NORMALIZE_VOLUME, false));
         TextView versionText = findViewById(R.id.current_version);
         versionText.setText(getString(R.string.current_version, BuildConfig.VERSION_NAME));
         initializeCurrentChannelOptions(getIntent());
         initializeResolverOptions(getIntent());
-        renderHiddenChannels();
-
-        tvvooSourceEnabled.setOnCheckedChangeListener((button, checked) -> {
-            // A selected TvVoo source must have its resolver engine available;
-            // turning the source off leaves the user's resolver preference intact.
-            if (checked) {
-                Switch tvvooResolver = resolverGroupSwitches.get("tvvoo");
-                if (tvvooResolver != null) tvvooResolver.setChecked(true);
-            }
-            updateTvVooSelectionStatus();
-        });
-        highflySourceEnabled.setOnCheckedChangeListener((button, checked) -> {
-            if (checked) {
-                Switch highflyResolver = resolverGroupSwitches.get("highfly");
-                if (highflyResolver != null) highflyResolver.setChecked(true);
-            }
-            updateHighflySelectionStatus();
-        });
-        tvvooCatalogButton.setOnClickListener(view ->
-                startActivity(new Intent(this, TvVooCatalogActivity.class)));
-        highflyCatalogButton.setOnClickListener(view ->
-                startActivity(new Intent(this, HighflyCatalogActivity.class)));
-        githubDeviceAuthorizeButton.setOnClickListener(view ->
-                startGitHubDeviceAuthorization());
-        githubPublishButton.setOnClickListener(view -> publishGitHubSelectionNow());
         mediaFlowSettingsButton.setOnClickListener(view ->
                 startActivity(new Intent(this, MediaFlowSettingsActivity.class)));
 
@@ -415,9 +330,21 @@ public final class SettingsActivity extends Activity {
 
         int defaultTab = hasExistingUrl ? TAB_GENERAL : TAB_SOURCE;
         int initialTab = getIntent().getIntExtra(EXTRA_INITIAL_TAB, defaultTab);
-        tabs[TAB_CHANNELS].setNextFocusDownId(channelCatalogManager.getFirstFocus().getId());
         showTab(initialTab, false);
         tabs[selectedTabIndex].requestFocus();
+    }
+
+    private void updateSettingsPanelWidth() {
+        if (settingsRoot == null || settingsPanel == null || settingsRoot.getWidth() <= 0) return;
+        int width = OverlayPanelWidth.resolveWidthPx(
+                settingsRoot.getWidth(),
+                getResources().getDisplayMetrics().density
+        );
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) settingsPanel.getLayoutParams();
+        if (params.width == width && params.gravity == Gravity.CENTER) return;
+        params.width = width;
+        params.gravity = Gravity.CENTER;
+        settingsPanel.setLayoutParams(params);
     }
 
     private void initializeCurrentChannelOptions(Intent intent) {
@@ -459,349 +386,6 @@ public final class SettingsActivity extends Activity {
                     updateSubtitleSwitchLabel());
         }
         updatePlaybackFirstFocus();
-    }
-
-    private void updateTvVooSelectionStatus() {
-        if (tvvooSelectionStore == null || tvvooSelectionStatus == null) return;
-        int count = tvvooSelectionStore.getSelectedCatalogChannels().size();
-        String state = tvvooSourceEnabled != null && tvvooSourceEnabled.isChecked()
-                ? getString(R.string.tvvoo_source_enabled)
-                : getString(R.string.tvvoo_source_disabled);
-        tvvooSelectionStatus.setText(getString(R.string.tvvoo_selection_status, state, count));
-    }
-
-    private void updateHighflySelectionStatus() {
-        if (highflySelectionStore == null || highflySelectionStatus == null) return;
-        int count = highflySelectionStore.getSelectedCatalogChannels().size();
-        String state = highflySourceEnabled != null && highflySourceEnabled.isChecked()
-                ? getString(R.string.highfly_source_enabled)
-                : getString(R.string.highfly_source_disabled);
-        highflySelectionStatus.setText(getString(
-                R.string.highfly_selection_status,
-                state,
-                count
-        ));
-    }
-
-    private void updateGitHubPublicationStatus() {
-        if (githubPublicationPreferences == null) return;
-        if (githubTokenStatus != null) {
-            githubTokenStatus.setText(
-                    githubPublicationPreferences.hasToken()
-                            ? getString(R.string.github_token_saved)
-                            : getString(R.string.github_publish_not_configured)
-            );
-        }
-        if (githubPublishStatus != null) {
-            String saved = githubPublicationPreferences.getLastStatus();
-            githubPublishStatus.setText(AppStrings.isBlank(saved)
-                    ? getString(R.string.github_publish_not_configured)
-                    : saved);
-        }
-    }
-
-    private boolean persistGitHubPublicationConfiguration() {
-        if (githubPublicationPreferences == null) return true;
-        String typedToken = githubTokenInput == null || githubTokenInput.getText() == null
-                ? ""
-                : githubTokenInput.getText().toString().trim();
-        try {
-            // Empty input intentionally preserves the encrypted token. This
-            // prevents the user from having to paste it on every visit.
-            if (!typedToken.isEmpty()) githubPublicationPreferences.setToken(typedToken);
-            boolean enabled = githubAutoPublish != null && githubAutoPublish.isChecked();
-            if (enabled && !githubPublicationPreferences.hasToken()) {
-                errorText.setText(R.string.github_token_required);
-                errorText.setVisibility(View.VISIBLE);
-                if (githubTokenInput != null) githubTokenInput.requestFocus();
-                return false;
-            }
-            githubPublicationPreferences.setAutoPublishEnabled(enabled);
-            if (githubTokenInput != null) githubTokenInput.setText("");
-            updateGitHubPublicationStatus();
-            return true;
-        } catch (Exception error) {
-            errorText.setText(R.string.github_token_invalid);
-            errorText.setVisibility(View.VISIBLE);
-            if (githubTokenInput != null) githubTokenInput.requestFocus();
-            return false;
-        }
-    }
-
-    private void publishGitHubSelectionNow() {
-        if (!persistGitHubPublicationConfiguration()) return;
-        if (!githubPublicationPreferences.hasToken()) {
-            if (githubPublishStatus != null) {
-                githubPublishStatus.setText(R.string.github_token_required);
-            }
-            if (githubTokenInput != null) githubTokenInput.requestFocus();
-            return;
-        }
-        if (githubPublishStatus != null) {
-            githubPublishStatus.setText(R.string.github_publish_working);
-        }
-        githubPublishButton.setEnabled(false);
-        GitHubSelectionPublisher.publishAsync(this, true, result -> mainHandler.post(() -> {
-            if (isFinishing()) return;
-            githubPublishButton.setEnabled(true);
-            if (result == null) {
-                githubPublishStatus.setText(R.string.github_publish_generic_error);
-            } else if (result.isPublished()) {
-                githubPublishStatus.setText(R.string.github_publish_success);
-            } else {
-                githubPublishStatus.setText(getString(
-                        R.string.github_publish_error,
-                        result.getMessage()
-                ));
-            }
-            updateGitHubPublicationStatus();
-        }));
-    }
-
-    private void startGitHubDeviceAuthorization() {
-        if (!GitHubDeviceAuthorization.isConfigured()) {
-            githubPublishStatus.setText(R.string.github_device_missing_client);
-            githubPublishStatus.setVisibility(View.VISIBLE);
-            return;
-        }
-        if (githubDeviceAuthorization != null) return;
-        githubDeviceAuthorizeButton.setEnabled(false);
-        showGitHubDeviceDialog();
-        githubDeviceAuthorization = GitHubDeviceAuthorization.begin(
-                GitHubDeviceAuthorization.configuredClientId(),
-                new GitHubDeviceAuthorization.Callback() {
-                    @Override
-                    public void onDeviceCode(GitHubDeviceAuthorization.DeviceCode deviceCode) {
-                        mainHandler.post(() -> renderGitHubDeviceCode(deviceCode));
-                    }
-
-                    @Override
-                    public void onStatus(String status) {
-                        mainHandler.post(() -> updateGitHubDeviceDialogStatus(status));
-                    }
-
-                    @Override
-                    public void onSuccess(GitHubDeviceAuthorization.TokenPair tokens) {
-                        mainHandler.post(() -> finishGitHubDeviceAuthorization(tokens));
-                    }
-
-                    @Override
-                    public void onError(String message) {
-                        mainHandler.post(() -> failGitHubDeviceAuthorization(message));
-                    }
-                }
-        );
-    }
-
-    private void showGitHubDeviceDialog() {
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(24), dp(18), dp(24), dp(12));
-
-        TextView instructions = new TextView(this);
-        instructions.setText(R.string.github_device_instructions);
-        instructions.setTextColor(getColor(R.color.white));
-        instructions.setTextSize(TypedValue.COMPLEX_UNIT_PX,
-                getResources().getDimension(R.dimen.settings_body_text_size));
-        content.addView(instructions, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        ));
-
-        githubDeviceDialogQr = new ImageView(this);
-        githubDeviceDialogQr.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        githubDeviceDialogQr.setVisibility(View.GONE);
-        LinearLayout.LayoutParams qrParams = new LinearLayout.LayoutParams(dp(280), dp(280));
-        qrParams.gravity = Gravity.CENTER_HORIZONTAL;
-        qrParams.topMargin = dp(12);
-        content.addView(githubDeviceDialogQr, qrParams);
-
-        githubDeviceDialogCode = new TextView(this);
-        githubDeviceDialogCode.setGravity(Gravity.CENTER);
-        githubDeviceDialogCode.setText("—");
-        githubDeviceDialogCode.setTextColor(getColor(R.color.cyan));
-        githubDeviceDialogCode.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);
-        githubDeviceDialogCode.setTypeface(null, android.graphics.Typeface.BOLD);
-        content.addView(githubDeviceDialogCode, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        ));
-
-        githubDeviceDialogUrl = new TextView(this);
-        githubDeviceDialogUrl.setGravity(Gravity.CENTER);
-        githubDeviceDialogUrl.setText(GitHubDeviceAuthorization.VERIFICATION_URI);
-        githubDeviceDialogUrl.setTextColor(getColor(R.color.white));
-        githubDeviceDialogUrl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        content.addView(githubDeviceDialogUrl, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        ));
-
-        githubDeviceDialogStatus = new TextView(this);
-        githubDeviceDialogStatus.setGravity(Gravity.CENTER);
-        githubDeviceDialogStatus.setText(R.string.github_device_requesting);
-        githubDeviceDialogStatus.setTextColor(getColor(R.color.muted));
-        githubDeviceDialogStatus.setTextSize(TypedValue.COMPLEX_UNIT_PX,
-                getResources().getDimension(R.dimen.settings_body_text_size));
-        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        );
-        statusParams.topMargin = dp(8);
-        content.addView(githubDeviceDialogStatus, statusParams);
-
-        Button cancel = new Button(this);
-        cancel.setText(R.string.github_device_cancel);
-        cancel.setAllCaps(false);
-        cancel.setOnClickListener(view -> cancelGitHubDeviceAuthorization());
-        LinearLayout.LayoutParams cancelParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                getResources().getDimensionPixelSize(R.dimen.settings_action_height)
-        );
-        cancelParams.gravity = Gravity.CENTER_HORIZONTAL;
-        cancelParams.topMargin = dp(8);
-        content.addView(cancel, cancelParams);
-
-        githubDeviceDialog = new AlertDialog.Builder(this)
-                .setTitle(R.string.github_device_title)
-                .setView(content)
-                .create();
-        githubDeviceDialog.setOnCancelListener(dialog -> cancelGitHubDeviceAuthorization());
-        githubDeviceDialog.setOnShowListener(dialog -> cancel.requestFocus());
-        githubDeviceDialog.show();
-    }
-
-    private void renderGitHubDeviceCode(GitHubDeviceAuthorization.DeviceCode deviceCode) {
-        if (githubDeviceDialog == null || deviceCode == null) return;
-        githubDeviceDialogCode.setText(deviceCode.getUserCode());
-        githubDeviceDialogUrl.setText(deviceCode.getVerificationUri());
-        updateGitHubDeviceDialogStatus(formatGitHubDeviceExpiry(deviceCode.getExpiresAtMillis()));
-        try {
-            Bitmap qr = QrCodeBitmap.encode(deviceCode.getVerificationUri(), dp(280));
-            githubDeviceDialogQr.setImageBitmap(qr);
-            githubDeviceDialogQr.setVisibility(View.VISIBLE);
-        } catch (Exception error) {
-            githubDeviceDialogQr.setVisibility(View.GONE);
-            updateGitHubDeviceDialogStatus("QR no disponible; usa la dirección y el código.");
-        }
-    }
-
-    private String formatGitHubDeviceExpiry(long expiresAtMillis) {
-        long seconds = Math.max(0L, (expiresAtMillis - System.currentTimeMillis()) / 1000L);
-        return getString(
-                R.string.github_device_expiry,
-                String.format(Locale.ROOT, "%02d:%02d", seconds / 60L, seconds % 60L)
-        );
-    }
-
-    private void updateGitHubDeviceDialogStatus(String status) {
-        if (githubDeviceDialogStatus != null && !AppStrings.isBlank(status)) {
-            githubDeviceDialogStatus.setText(status);
-        }
-    }
-
-    private void finishGitHubDeviceAuthorization(
-            GitHubDeviceAuthorization.TokenPair tokens
-    ) {
-        try {
-            githubPublicationPreferences.setOAuthTokens(
-                    tokens.getAccessToken(),
-                    tokens.getRefreshToken(),
-                    tokens.getAccessExpiresAtMillis()
-            );
-            githubDeviceAuthorization = null;
-            if (githubDeviceDialog != null) {
-                githubDeviceDialog.dismiss();
-                githubDeviceDialog = null;
-            }
-            githubDeviceAuthorizeButton.setEnabled(true);
-            updateGitHubPublicationStatus();
-            githubPublishStatus.setText(R.string.github_device_success);
-            if (githubAutoPublish.isChecked()) publishGitHubSelectionNow();
-        } catch (Exception error) {
-            failGitHubDeviceAuthorization("No se pudo guardar la autorización.");
-        }
-    }
-
-    private void failGitHubDeviceAuthorization(String message) {
-        githubDeviceAuthorization = null;
-        if (githubDeviceDialog != null) {
-            githubDeviceDialog.dismiss();
-            githubDeviceDialog = null;
-        }
-        githubDeviceAuthorizeButton.setEnabled(true);
-        githubPublishStatus.setText(getString(
-                R.string.github_device_error,
-                AppStrings.isBlank(message) ? "error desconocido" : message
-        ));
-    }
-
-    private void cancelGitHubDeviceAuthorization() {
-        if (githubDeviceAuthorization != null) {
-            githubDeviceAuthorization.cancel();
-            githubDeviceAuthorization = null;
-        }
-        if (githubDeviceDialog != null) {
-            AlertDialog dialog = githubDeviceDialog;
-            githubDeviceDialog = null;
-            dialog.dismiss();
-        }
-        if (githubDeviceAuthorizeButton != null) {
-            githubDeviceAuthorizeButton.setEnabled(true);
-        }
-    }
-
-    private void renderHiddenChannels() {
-        if (hiddenChannelStore == null
-                || hiddenChannelsContainer == null
-                || hiddenChannelsStatus == null) return;
-        hiddenChannelsContainer.removeAllViews();
-        hiddenChannelSwitches.clear();
-
-        List<HiddenChannelStore.Entry> entries = hiddenChannelStore.getEntries();
-        hiddenChannelsStatus.setVisibility(entries.isEmpty() ? View.VISIBLE : View.GONE);
-        View previous = findViewById(R.id.interface_info);
-        for (HiddenChannelStore.Entry entry : entries) {
-            Switch channelSwitch = new Switch(this);
-            channelSwitch.setId(View.generateViewId());
-            channelSwitch.setLayoutParams(new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    getResources().getDimensionPixelSize(R.dimen.settings_control_height)
-            ));
-            channelSwitch.setBackgroundResource(R.drawable.settings_section_card);
-            channelSwitch.setFocusable(true);
-            channelSwitch.setGravity(Gravity.CENTER_VERTICAL);
-            channelSwitch.setPadding(dp(12), 0, dp(12), 0);
-            channelSwitch.setShowText(false);
-            String label = AppStrings.isBlank(entry.getTvgId())
-                    ? entry.getName()
-                    : entry.getName() + " · " + entry.getTvgId();
-            channelSwitch.setText(label);
-            channelSwitch.setTextColor(getColor(R.color.white));
-            channelSwitch.setTextSize(
-                    TypedValue.COMPLEX_UNIT_PX,
-                    getResources().getDimension(R.dimen.settings_control_text_size)
-            );
-            channelSwitch.setThumbTintList(getColorStateList(R.color.cyan));
-            channelSwitch.setChecked(true);
-            hiddenChannelsContainer.addView(channelSwitch);
-            hiddenChannelSwitches.put(entry.getIdentity(), channelSwitch);
-            previous.setNextFocusDownId(channelSwitch.getId());
-            channelSwitch.setNextFocusUpId(previous.getId());
-            previous = channelSwitch;
-        }
-        previous.setNextFocusDownId(saveButton.getId());
-    }
-
-    private boolean saveHiddenChannels() {
-        if (hiddenChannelStore == null) return false;
-        boolean changed = false;
-        for (Map.Entry<String, Switch> item : hiddenChannelSwitches.entrySet()) {
-            if (item.getValue().isChecked()) continue;
-            hiddenChannelStore.setHidden(item.getKey(), false);
-            changed = true;
-        }
-        return changed;
     }
 
     private void renderQualityOptions() {
@@ -918,7 +502,7 @@ public final class SettingsActivity extends Activity {
         for (int index = 0; index < tabs.length; index++) {
             boolean selected = index == safeIndex;
             tabs[index].setSelected(selected);
-            tabs[index].setTextColor(getColor(selected ? R.color.black : R.color.white));
+            tabs[index].setTextColor(getColor(selected ? R.color.white : R.color.muted));
             tabPages[index].setVisibility(selected ? View.VISIBLE : View.GONE);
         }
         if (requestFocus) tabs[safeIndex].requestFocus();
@@ -938,10 +522,6 @@ public final class SettingsActivity extends Activity {
                 return findViewById(R.id.interface_info);
             case 5:
                 return updateButton;
-            case TAB_CHANNELS:
-                return channelCatalogManager == null
-                        ? tabs[TAB_CHANNELS]
-                        : channelCatalogManager.getFirstFocus();
             default:
                 return normalizeVolume;
         }
@@ -1150,26 +730,13 @@ public final class SettingsActivity extends Activity {
         String highflyManifest = highflyManifestUrlInput.getText().toString().trim();
         boolean enabled1 = playlistOneEnabled.isChecked();
         boolean enabled2 = playlistTwoEnabled.isChecked();
-        boolean tvvooEnabled = tvvooSourceEnabled.isChecked();
-        boolean highflyEnabled = highflySourceEnabled.isChecked();
-        boolean tvvooHasSelection = !tvvooSelectionStore.getSelectedCatalogChannels().isEmpty();
-        boolean highflyHasSelection = !highflySelectionStore.getSelectedCatalogChannels().isEmpty();
-        if (!enabled1 && !enabled2 && !tvvooEnabled && !highflyEnabled) {
+        boolean hasPublishedProviderChannels = new PublishedPlaybackCatalogRepository(this)
+                .loadCached()
+                .hasActiveProviderChannels();
+        if (!enabled1 && !enabled2 && !hasPublishedProviderChannels) {
             errorText.setText(R.string.playlist_source_required);
             errorText.setVisibility(View.VISIBLE);
             playlistOneEnabled.requestFocus();
-            return;
-        }
-        if (tvvooEnabled && !tvvooHasSelection) {
-            errorText.setText(R.string.tvvoo_selection_required);
-            errorText.setVisibility(View.VISIBLE);
-            tvvooCatalogButton.requestFocus();
-            return;
-        }
-        if (highflyEnabled && !highflyHasSelection) {
-            errorText.setText(R.string.highfly_selection_required);
-            errorText.setVisibility(View.VISIBLE);
-            highflyCatalogButton.requestFocus();
             return;
         }
         if (enabled1 && !isValidPlaylistUrl(value)) {
@@ -1190,9 +757,6 @@ public final class SettingsActivity extends Activity {
             highflyManifestUrlInput.requestFocus();
             return;
         }
-        if (!persistGitHubPublicationConfiguration()) return;
-
-        boolean hiddenChannelsChanged = saveHiddenChannels();
         getSharedPreferences(PREFS, MODE_PRIVATE)
                 .edit()
                 .putString(KEY_PLAYLIST_URL, value)
@@ -1203,19 +767,6 @@ public final class SettingsActivity extends Activity {
                 .putBoolean(KEY_INVERT_CHANNEL_KEYS, invertChannelKeys.isChecked())
                 .putBoolean(KEY_NORMALIZE_VOLUME, normalizeVolume.isChecked())
                 .apply();
-        tvvooSelectionStore.setEnabled(tvvooEnabled);
-        highflySelectionStore.setEnabled(highflyEnabled);
-        if (tvvooEnabled) {
-            // The source toggle is the user-facing opt-in. Keep the TvVoo
-            // resolver engine enabled so a valid selection cannot become a
-            // silently empty list after editing resolver settings.
-            Switch tvvooResolver = resolverGroupSwitches.get("tvvoo");
-            if (tvvooResolver != null) tvvooResolver.setChecked(true);
-        }
-        if (highflyEnabled) {
-            Switch highflyResolver = resolverGroupSwitches.get("highfly");
-            if (highflyResolver != null) highflyResolver.setChecked(true);
-        }
         for (Map.Entry<String, Switch> entry : resolverGroupSwitches.entrySet()) {
             ResolverDefinition definition = resolverCatalog == null
                     ? null
@@ -1224,13 +775,11 @@ public final class SettingsActivity extends Activity {
                 resolverPreferences.setEnabled(definition, entry.getValue().isChecked());
             }
         }
-        GitHubSelectionPublisher.enqueue(this, "settings-save");
         Intent result = new Intent()
                 .putExtra(KEY_PLAYLIST_URL, value)
                 .putExtra(KEY_PLAYLIST_URL_2, value2)
                 .putExtra(KEY_PLAYLIST_ENABLED, enabled1)
-                .putExtra(KEY_PLAYLIST_ENABLED_2, enabled2)
-                .putExtra(EXTRA_HIDDEN_CHANNELS_CHANGED, hiddenChannelsChanged);
+                .putExtra(KEY_PLAYLIST_ENABLED_2, enabled2);
         if (hasCurrentChannel) {
             result.putExtra(EXTRA_CHANNEL_INDEX, currentChannelIndex)
                     .putExtra(EXTRA_CHANNEL_TVG_ID, currentChannelTvgId)
@@ -1323,9 +872,6 @@ public final class SettingsActivity extends Activity {
     protected void onResume() {
         super.onResume();
         enterImmersiveMode();
-        updateTvVooSelectionStatus();
-        updateHighflySelectionStatus();
-        if (channelCatalogManager != null) channelCatalogManager.refresh();
         if (appUpdater != null) appUpdater.onHostResume();
     }
 
@@ -1337,7 +883,6 @@ public final class SettingsActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        cancelGitHubDeviceAuthorization();
         if (appUpdater != null) appUpdater.destroy();
         if (focusVisibilityListener != null) {
             ViewTreeObserver observer = getWindow().getDecorView().getViewTreeObserver();

@@ -239,43 +239,6 @@ public final class TvVooCatalogChannel {
         );
     }
 
-    /** Parses one Stremio meta id and returns the resolver's canonical alias. */
-    public static TvVooCatalogChannel fromMeta(JSONObject object, String countryKey)
-            throws JSONException {
-        if (object == null) throw new JSONException("Meta TvVoo ausente.");
-        String id = object.optString("id", "").trim();
-        String name = object.optString("name", "").trim();
-        if (id.isEmpty() || name.isEmpty() || !id.startsWith("vavoo_")) {
-            throw new JSONException("Meta TvVoo incompleta.");
-        }
-
-        String canonicalAlias = canonicalAlias(id, countryKey);
-        String normalizedCountry = countryKey(countryKey);
-        String stableId = buildStableId(normalizedCountry, canonicalAlias);
-        JSONArray genresArray = object.optJSONArray("genres");
-        List<String> genres = new ArrayList<>();
-        if (genresArray != null) {
-            for (int index = 0; index < genresArray.length(); index++) {
-                String genre = genresArray.optString(index, "").trim();
-                if (!genre.isEmpty()) genres.add(genre);
-            }
-        }
-        String category = genres.isEmpty() ? "" : genres.get(0);
-        String logo = object.optString("logo", "").trim();
-        String group = "TvVoo · " + countryDisplayName(normalizedCountry);
-        return new TvVooCatalogChannel(
-                stableId,
-                canonicalAlias,
-                name,
-                normalizedCountry,
-                group,
-                category,
-                logo,
-                genres,
-                Collections.singletonList(canonicalAlias)
-        );
-    }
-
     /**
      * TvVoo currently publishes ids such as
      * {@code vavoo_SKY%201|group:uk}. The resolver endpoint needs the whole
@@ -360,26 +323,6 @@ public final class TvVooCatalogChannel {
             case "tr", "turkey", "turkiye" -> "turkey";
             case "ie", "ireland" -> "ireland";
             default -> normalized;
-        };
-    }
-
-    public static String countryDisplayName(String key) {
-        return switch (countryKey(key)) {
-            case "unitedkingdom" -> "Reino Unido";
-            case "unitedstates" -> "Estados Unidos";
-            case "argentina" -> "Argentina";
-            case "chile" -> "Chile";
-            case "spain" -> "España";
-            case "france" -> "Francia";
-            case "germany" -> "Alemania";
-            case "italy" -> "Italia";
-            case "portugal" -> "Portugal";
-            case "netherlands" -> "Países Bajos";
-            case "poland" -> "Polonia";
-            case "turkey" -> "Turquía";
-            case "ireland" -> "Irlanda";
-            case "" -> "Todos los países";
-            default -> key == null || key.trim().isEmpty() ? "Todos los países" : key;
         };
     }
 

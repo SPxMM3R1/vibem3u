@@ -30,8 +30,6 @@ public class TokenHttpClient {
     private static final int MAX_PUBLIC_REDIRECTS = 4;
     private static final MediaType JSON_MEDIA_TYPE =
             MediaType.get("application/json; charset=utf-8");
-    private static final MediaType FORM_MEDIA_TYPE =
-            MediaType.get("application/x-www-form-urlencoded; charset=utf-8");
 
     private final int connectTimeoutMs;
     private final int readTimeoutMs;
@@ -448,111 +446,6 @@ public class TokenHttpClient {
             Request.Builder builder = new Request.Builder()
                     .url(uri.toString())
                     .post(RequestBody.create(requestBody, JSON_MEDIA_TYPE));
-            addHeaders(builder, headers);
-            builder.header("Content-Type", "application/json; charset=utf-8");
-            if (headers == null || !containsHeader(headers, "User-Agent")) {
-                builder.header("User-Agent", BROWSER_USER_AGENT);
-            }
-            request = builder.build();
-        } catch (IllegalArgumentException error) {
-            throw new IOException("URL o cabecera no válida.", error);
-        }
-        try {
-            return execute(client, request, maxResponseBytes, false, context);
-        } finally {
-            java.util.Arrays.fill(requestBody, (byte) 0);
-        }
-    }
-
-    /**
-     * POST form data to a public, allow-listed HTTPS host.
-     *
-     * <p>GitHub's OAuth device endpoints use URL-encoded form parameters.
-     * Keeping this transport here reuses the app's cancellation, timeout and
-     * host validation rules without exposing authorization data to logs.</p>
-     */
-    public Response postFormOnHosts(
-            String url,
-            Map<String, String> headers,
-            Map<String, String> form,
-            int maxResponseBytes,
-            Set<String> allowedHosts
-    ) throws IOException {
-        URI uri = parseHttpUri(url);
-        if (!"https".equalsIgnoreCase(uri.getScheme())) {
-            throw new IOException("URL HTTPS no válida.");
-        }
-        requireAllowedHost(uri, allowedHosts);
-        StringBuilder encoded = new StringBuilder();
-        if (form != null) {
-            for (Map.Entry<String, String> entry : form.entrySet()) {
-                if (entry.getKey() == null || entry.getValue() == null) continue;
-                if (encoded.length() > 0) encoded.append('&');
-                encoded.append(URLEncoder.encode(entry.getKey(), "UTF-8"));
-                encoded.append('=');
-                encoded.append(URLEncoder.encode(entry.getValue(), "UTF-8"));
-            }
-        }
-        byte[] requestBody = encoded.toString().getBytes(StandardCharsets.UTF_8);
-        if (requestBody.length > 64 * 1024) {
-            throw new IOException("Solicitud demasiado grande.");
-        }
-        ResolutionContext context = ResolutionContext.current();
-        check(context);
-        OkHttpClient client = clientFor(context, false);
-        Request request;
-        try {
-            Request.Builder builder = new Request.Builder()
-                    .url(uri.toString())
-                    .post(RequestBody.create(requestBody, FORM_MEDIA_TYPE));
-            addHeaders(builder, headers);
-            builder.header("Content-Type", FORM_MEDIA_TYPE.toString());
-            if (headers == null || !containsHeader(headers, "User-Agent")) {
-                builder.header("User-Agent", BROWSER_USER_AGENT);
-            }
-            request = builder.build();
-        } catch (IllegalArgumentException error) {
-            throw new IOException("URL o cabecera no válida.", error);
-        }
-        try {
-            return execute(client, request, maxResponseBytes, false, context);
-        } finally {
-            java.util.Arrays.fill(requestBody, (byte) 0);
-        }
-    }
-
-    /**
-     * PUT JSON to a public, allow-listed HTTPS host.
-     *
-     * <p>The GitHub Contents API uses PUT for atomic file updates. Keeping the
-     * host check here is important because this method may carry a bearer
-     * credential and must never follow an arbitrary redirect.</p>
-     */
-    public Response putJsonOnHosts(
-            String url,
-            Map<String, String> headers,
-            String json,
-            int maxResponseBytes,
-            Set<String> allowedHosts
-    ) throws IOException {
-        URI uri = parseHttpUri(url);
-        if (!"https".equalsIgnoreCase(uri.getScheme())) {
-            throw new IOException("URL HTTPS no válida.");
-        }
-        requireAllowedHost(uri, allowedHosts);
-        byte[] requestBody = (json == null ? "{}" : json)
-                .getBytes(StandardCharsets.UTF_8);
-        if (requestBody.length > 256 * 1024) {
-            throw new IOException("Solicitud demasiado grande.");
-        }
-        ResolutionContext context = ResolutionContext.current();
-        check(context);
-        OkHttpClient client = clientFor(context, false);
-        Request request;
-        try {
-            Request.Builder builder = new Request.Builder()
-                    .url(uri.toString())
-                    .put(RequestBody.create(requestBody, JSON_MEDIA_TYPE));
             addHeaders(builder, headers);
             builder.header("Content-Type", "application/json; charset=utf-8");
             if (headers == null || !containsHeader(headers, "User-Agent")) {

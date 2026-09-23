@@ -29,6 +29,7 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -114,8 +115,8 @@ public final class MainActivity extends Activity {
     private ResolverPreferences resolverPreferences;
     private TvVooSelectionStore tvVooSelectionStore;
     private HighflySelectionStore highflySelectionStore;
-    private HiddenChannelStore hiddenChannelStore;
-    private ChannelCatalogOrderStore channelCatalogOrderStore;
+    private PublishedPlaybackCatalogRepository publishedPlaybackCatalogRepository;
+    private PublishedPlaybackCatalog publishedPlaybackCatalog = PublishedPlaybackCatalog.empty();
     private StreamResolverRegistry streamResolverRegistry;
     private Map<String, Integer> resolverChannelCounts = Collections.emptyMap();
     private final List<Channel> channels = new ArrayList<>();
@@ -145,7 +146,7 @@ public final class MainActivity extends Activity {
     private TextView sourceSelectorChannel;
     private TextView sourceSelectorStatus;
     private LinearLayout sourceSelectorOptions;
-    private Button sourceSelectorHideChannel;
+    private Button sourceSelectorCloseButton;
     private ImageView channelLogo;
     private TextView channelLogoFallback;
     private TextView channelNumber;
@@ -206,7 +207,7 @@ public final class MainActivity extends Activity {
     private final List<PlaybackOption> playbackOptions = new ArrayList<>();
     private final List<View> sourceCandidateViews = new ArrayList<>();
     private int sourceCandidateFocusIndex = -1;
-    private boolean sourceSelectorHideFocused;
+    private boolean sourceSelectorCloseFocused;
     private ManifestHandoffCache playbackManifestCache;
     private long playbackResolutionRequestId;
     private long activePlaybackSourceRequestId = NO_RESOLUTION_REQUEST;
@@ -316,12 +317,20 @@ public final class MainActivity extends Activity {
         resolverPreferences = new ResolverPreferences(this);
         tvVooSelectionStore = new TvVooSelectionStore(this);
         highflySelectionStore = new HighflySelectionStore(this);
-        hiddenChannelStore = new HiddenChannelStore(this);
-        channelCatalogOrderStore = new ChannelCatalogOrderStore(this);
-        // Retry a pending app-selection publication without blocking playlist
-        // loading. The publisher skips unchanged selections and applies a
-        // cooldown after a failed attempt.
-        GitHubSelectionPublisher.enqueue(this, "app-start");
+        publishedPlaybackCatalogRepository = new PublishedPlaybackCatalogRepository(this);
+        publishedPlaybackCatalog = publishedPlaybackCatalogRepository.loadCached();
+        try {
+            // The public web document is the only source of provider selections.
+            // Applying even an empty cache clears selections saved by old app builds.
+            publishedPlaybackCatalog.applyProviderSelections(this);
+        } catch (java.io.IOException ignored) {
+            publishedPlaybackCatalog = PublishedPlaybackCatalog.empty();
+            try {
+                publishedPlaybackCatalog.applyProviderSelections(this);
+            } catch (java.io.IOException impossible) {
+                // The empty document has no provider rows to reject.
+            }
+        }
         // Install the process-local alias learning store before any resolver
         // can be used. It persists aliases only, never resolved URLs/tokens.
         new TvVooSourceHistory(this);
@@ -330,6 +339,7 @@ public final class MainActivity extends Activity {
         registerBackCallback();
         enterImmersiveMode();
         createPlayer();
+        refreshPublishedPlaybackCatalog();
         if (BuildConfig.ENABLE_APP_UPDATES) {
             appUpdater = new AppUpdater(this, networkExecutor, mainHandler);
             mainHandler.postDelayed(appUpdater::checkForUpdates, UPDATE_CHECK_DELAY_MS);
@@ -354,6 +364,17 @@ public final class MainActivity extends Activity {
     private void bindViews() {
         playerView = findViewById(R.id.player_view);
         channelOverlay = findViewById(R.id.channel_overlay);
+        android.util.DisplayMetrics displayMetrics = getResources().getDisplayMetrics();
+        FrameLayout.LayoutParams overlayParams = (FrameLayout.LayoutParams)
+                channelOverlay.getLayoutParams();
+        overlayParams.width = OverlayPanelWidth.resolveWidthPx(
+                displayMetrics.widthPixels,
+                displayMetrics.density
+        );
+        overlayParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        overlayParams.leftMargin = 0;
+        overlayParams.rightMargin = 0;
+        channelOverlay.setLayoutParams(overlayParams);
         loadingPanel = findViewById(R.id.loading_panel);
         loadingText = findViewById(R.id.loading_text);
         clock = findViewById(R.id.clock);
@@ -372,11 +393,11 @@ public final class MainActivity extends Activity {
         sourceSelectorChannel = findViewById(R.id.source_selector_channel);
         sourceSelectorStatus = findViewById(R.id.source_selector_status);
         sourceSelectorOptions = findViewById(R.id.source_selector_options);
-        sourceSelectorHideChannel = findViewById(R.id.source_selector_hide_channel);
-        sourceSelectorHideChannel.setOnFocusChangeListener((view, focused) -> {
-            if (focused) sourceSelectorHideFocused = true;
+        sourceSelectorCloseButton = findViewById(R.id.source_selector_close);
+        sourceSelectorCloseButton.setOnFocusChangeListener((view, focused) -> {
+            if (focused) sourceSelectorCloseFocused = true;
         });
-        sourceSelectorHideChannel.setOnClickListener(view -> hideCurrentChannelFromSelector());
+        sourceSelectorCloseButton.setOnClickListener(view -> closePlaybackSourceSelector());
         channelLogo = findViewById(R.id.channel_logo);
         channelLogoFallback = findViewById(R.id.channel_logo_fallback);
         channelNumber = findViewById(R.id.channel_number);
@@ -881,8 +902,7 @@ public final class MainActivity extends Activity {
         resolverChannelCounts = streamResolverRegistry.countChannels(sourceChannels);
         List<Channel> enabledChannels = new ArrayList<>();
         for (Channel candidate : sourceChannels) {
-            if ((hiddenChannelStore == null || !hiddenChannelStore.isHidden(candidate))
-                    && streamResolverRegistry.isChannelEnabled(candidate)) {
+            if (streamResolverRegistry.isChannelEnabled(candidate)) {
                 enabledChannels.add(candidate);
             }
         }
@@ -987,7 +1007,11 @@ public final class MainActivity extends Activity {
             // isCurrentPlayback(); replacing it here would make its result
             // stale even though the channel identity is unchanged.
             if (!resolutionInFlightForChannel) playbackChannel = selectedChannel;
-            channelNumber.setText(String.format(Locale.ROOT, "%03d", channelIndex + 1));
+            int displayNumber = publishedPlaybackCatalog.numberFor(
+                    selectedChannel,
+                    channelIndex + 1
+            );
+            channelNumber.setText(String.format(Locale.ROOT, "%03d", displayNumber));
             channelName.setText(selectedChannel.getName());
             updateProgrammeInfo();
             loadChannelLogo(selectedChannel, contentChanged);
@@ -1031,9 +1055,7 @@ public final class MainActivity extends Activity {
                     true
             ));
         }
-        return channelCatalogOrderStore == null
-                ? result
-                : channelCatalogOrderStore.applyToPlayback(result);
+        return publishedPlaybackCatalog.applyToPlayback(result);
     }
 
     private boolean hasSelectedTvVooChannels() {
@@ -1426,7 +1448,8 @@ public final class MainActivity extends Activity {
         }
         playbackPreferences.rememberChannel(channel, channelIndex);
 
-        channelNumber.setText(String.format(Locale.ROOT, "%03d", channelIndex + 1));
+        int displayNumber = publishedPlaybackCatalog.numberFor(channel, channelIndex + 1);
+        channelNumber.setText(String.format(Locale.ROOT, "%03d", displayNumber));
         channelName.setText(channel.getName());
         updateProgrammeInfo();
         videoInfo.setText("— · —");
@@ -2617,7 +2640,7 @@ public final class MainActivity extends Activity {
         playbackOptions.clear();
         sourceCandidateViews.clear();
         sourceCandidateFocusIndex = -1;
-        sourceSelectorHideFocused = false;
+        sourceSelectorCloseFocused = false;
         sourceSelectorOptions.removeAllViews();
         sourceSelectorStatus.setText(getString(R.string.source_selector_consulting));
 
@@ -2694,7 +2717,7 @@ public final class MainActivity extends Activity {
         playbackOptions.clear();
         sourceCandidateViews.clear();
         sourceCandidateFocusIndex = -1;
-        sourceSelectorHideFocused = false;
+        sourceSelectorCloseFocused = false;
         sourceSelectorOptions.removeAllViews();
         renderDirectQualitySelector(channel);
     }
@@ -2761,8 +2784,8 @@ public final class MainActivity extends Activity {
             sourceCandidateViews.clear();
             sourceSelectorOptions.removeAllViews();
             sourceSelectorStatus.setText(getString(R.string.source_selector_no_options));
-            sourceSelectorHideFocused = true;
-            sourceSelectorHideChannel.requestFocus();
+            sourceSelectorCloseFocused = true;
+            sourceSelectorCloseButton.requestFocus();
             return;
         }
         renderPlaybackOptions(getString(
@@ -2794,7 +2817,7 @@ public final class MainActivity extends Activity {
     private void renderPlaybackOptions(String status) {
         sourceSelectorOptions.removeAllViews();
         sourceCandidateViews.clear();
-        sourceSelectorHideFocused = false;
+        sourceSelectorCloseFocused = false;
         for (int index = 0; index < playbackOptions.size(); index++) {
             final int candidateIndex = index;
             PlaybackOption playbackOption = playbackOptions.get(index);
@@ -2815,7 +2838,7 @@ public final class MainActivity extends Activity {
             option.setOnFocusChangeListener((view, focused) -> {
                 if (focused) {
                     sourceCandidateFocusIndex = candidateIndex;
-                    sourceSelectorHideFocused = false;
+                    sourceSelectorCloseFocused = false;
                 }
             });
             option.setOnClickListener(view -> selectPlaybackOption(candidateIndex));
@@ -2832,39 +2855,66 @@ public final class MainActivity extends Activity {
             sourceCandidateFocusIndex = 0;
             sourceCandidateViews.get(0).requestFocus();
             View last = sourceCandidateViews.get(sourceCandidateViews.size() - 1);
-            last.setNextFocusDownId(sourceSelectorHideChannel.getId());
-            sourceSelectorHideChannel.setNextFocusUpId(last.getId());
+            last.setNextFocusDownId(sourceSelectorCloseButton.getId());
+            sourceSelectorCloseButton.setNextFocusUpId(last.getId());
         } else {
-            sourceSelectorHideFocused = true;
-            sourceSelectorHideChannel.requestFocus();
+            sourceSelectorCloseFocused = true;
+            sourceSelectorCloseButton.requestFocus();
         }
+    }
+
+    private void refreshPublishedPlaybackCatalog() {
+        if (publishedPlaybackCatalogRepository == null) return;
+        networkExecutor.execute(() -> {
+            PublishedPlaybackCatalog refreshed;
+            try {
+                refreshed = publishedPlaybackCatalogRepository.refresh();
+                refreshed.applyProviderSelections(getApplicationContext());
+            } catch (Exception ignored) {
+                // The last validated cache remains usable while GitHub is offline.
+                return;
+            }
+            PublishedPlaybackCatalog result = refreshed;
+            mainHandler.post(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                publishedPlaybackCatalog = result;
+                if (!playlistsBySource.isEmpty()) {
+                    applyPlaylists(
+                            new LinkedHashMap<>(playlistsBySource),
+                            loadedPlaylistSignature,
+                            playlistGeneration,
+                            false
+                    );
+                }
+            });
+        });
     }
 
     private void moveSourceSelectorFocus(int delta) {
         if (!isSourceSelectorVisible()) return;
         if (sourceCandidateViews.isEmpty()) {
-            sourceSelectorHideFocused = true;
-            sourceSelectorHideChannel.requestFocus();
+            sourceSelectorCloseFocused = true;
+            sourceSelectorCloseButton.requestFocus();
             return;
         }
         int size = sourceCandidateViews.size() + 1;
-        int index = sourceSelectorHideFocused
+        int index = sourceSelectorCloseFocused
                 ? sourceCandidateViews.size()
                 : Math.max(0, sourceCandidateFocusIndex);
         index = (index + delta % size + size) % size;
         if (index == sourceCandidateViews.size()) {
-            sourceSelectorHideFocused = true;
-            sourceSelectorHideChannel.requestFocus();
+            sourceSelectorCloseFocused = true;
+            sourceSelectorCloseButton.requestFocus();
         } else {
-            sourceSelectorHideFocused = false;
+            sourceSelectorCloseFocused = false;
             sourceCandidateFocusIndex = index;
             sourceCandidateViews.get(index).requestFocus();
         }
     }
 
     private void selectFocusedSource() {
-        if (sourceSelectorHideFocused) {
-            hideCurrentChannelFromSelector();
+        if (sourceSelectorCloseFocused) {
+            closePlaybackSourceSelector();
         } else if (sourceCandidateFocusIndex >= 0
                 && sourceCandidateFocusIndex < playbackOptions.size()) {
             selectPlaybackOption(sourceCandidateFocusIndex);
@@ -2924,19 +2974,6 @@ public final class MainActivity extends Activity {
         startResolvedPlayback(channel, source, playbackGeneration, requestId);
     }
 
-    private void hideCurrentChannelFromSelector() {
-        if (playbackChannel == null || hiddenChannelStore == null) return;
-        hiddenChannelStore.setHidden(playbackChannel, true);
-        closePlaybackSourceSelector();
-        if (playlistsBySource.isEmpty() || channels.isEmpty()) return;
-        applyPlaylists(
-                new LinkedHashMap<>(playlistsBySource),
-                loadedPlaylistSignature,
-                playlistGeneration,
-                true
-        );
-    }
-
     private void closePlaybackSourceSelector() {
         sourceCandidateRequestId++;
         if (sourceCandidateContext != null) sourceCandidateContext.cancel();
@@ -2947,7 +2984,7 @@ public final class MainActivity extends Activity {
         playbackOptions.clear();
         sourceCandidateViews.clear();
         sourceCandidateFocusIndex = -1;
-        sourceSelectorHideFocused = false;
+        sourceSelectorCloseFocused = false;
         if (sourceSelectorOptions != null) sourceSelectorOptions.removeAllViews();
         if (sourceSelectorOverlay != null) sourceSelectorOverlay.setVisibility(View.GONE);
     }

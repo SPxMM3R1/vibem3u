@@ -20,7 +20,6 @@ jobs:
 
     env:
       ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
-      VIBEM3U_GITHUB_DEVICE_CLIENT_ID: ${{ vars.VIBEM3U_GITHUB_DEVICE_CLIENT_ID }}
 
     steps:
       - name: Descargar el código
