@@ -68,7 +68,8 @@ public final class PlaylistDefaultsInstrumentedTest {
             assertEquals("", preferences.getString(SettingsActivity.KEY_PLAYLIST_URL, ""));
             assertFalse(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED, true));
             assertEquals("", preferences.getString(SettingsActivity.KEY_PLAYLIST_URL_2, ""));
-            assertFalse(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, true));
+            // An absent secondary-list flag means the list stays off.
+            assertFalse(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, false));
         } finally {
             snapshot.restore(preferences);
         }
@@ -98,7 +99,7 @@ public final class PlaylistDefaultsInstrumentedTest {
             SettingsActivity.ensureDefaultPlaylistConfigured(context);
 
             assertEquals("", preferences.getString(SettingsActivity.KEY_PLAYLIST_URL_2, ""));
-            assertFalse(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, true));
+            assertFalse(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, false));
         } finally {
             snapshot.restore(preferences);
         }
