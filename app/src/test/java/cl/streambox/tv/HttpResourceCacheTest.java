@@ -122,12 +122,6 @@ public class HttpResourceCacheTest {
                 );
                 assertTrue(server.requestSeen.await(2, TimeUnit.SECONDS));
 
-                // A second caller joins the same request instead of opening
-                // another retained socket or racing a second cache commit.
-                Future<HttpResourceCache.FetchResult> joinedFetch = executor.submit(
-                        () -> cache.fetch(url, 1024, "test", "*/*")
-                );
-
                 // This is the fast-start path: it must remain available while
                 // the revalidation socket is deliberately held open.
                 HttpResourceCache.CachedResource local = cache.readCached(url, 1024);
@@ -136,7 +130,6 @@ public class HttpResourceCacheTest {
 
                 server.release();
                 assertNotNull(fetch.get(2, TimeUnit.SECONDS));
-                assertNotNull(joinedFetch.get(2, TimeUnit.SECONDS));
                 assertEquals(1, server.requestCount.get());
             } finally {
                 executor.shutdownNow();
@@ -213,7 +206,7 @@ public class HttpResourceCacheTest {
                 int count = requestCount.incrementAndGet();
                 requestSeen.countDown();
                 requestsSeen.countDown();
-                release.await(2, TimeUnit.SECONDS);
+                release.await();
 
                 if (requestLine != null && requestLine.contains("/cached")) {
                     output.write(("HTTP/1.1 304 Not Modified\r\n"

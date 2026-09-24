@@ -1,9 +1,5 @@
 package cl.streambox.tv;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
@@ -102,36 +98,17 @@ public final class TvVooCatalogChannel {
                     String candidate = canonicalAlias(value, this.countryKey);
                     if (!candidate.isEmpty()) aliases.add(candidate);
                 } catch (IllegalArgumentException ignored) {
-                    // Ignore stale or malformed aliases from an older cache.
+                    // Ignore stale or malformed aliases from an older provider document.
                 }
             }
         }
         this.resolverAliases = Collections.unmodifiableList(new ArrayList<>(aliases));
 
-        // The identity is derived, never trusted from persisted or remote
-        // input. This prevents a stale stableId from separating one logical
-        // channel into two rows during the M3U/local-selection merge.
-        this.stableId = buildStableId(this.countryKey, this.alias);
-    }
-
-    public TvVooCatalogChannel(
-            String alias,
-            String name,
-            String country,
-            String group,
-            String category,
-            List<String> resolverAliases
-    ) {
-        this(
-                buildStableId(countryKey(country), alias),
-                alias,
-                name,
-                country,
-                group,
-                category,
-                "",
-                resolverAliases
-        );
+        String publishedStableId = buildStableId(this.countryKey, this.alias);
+        if (!publishedStableId.equals(clean(stableId))) {
+            throw new IllegalArgumentException("La identidad TvVoo publicada no coincide con sus alias.");
+        }
+        this.stableId = publishedStableId;
     }
 
     public String getStableId() { return stableId; }
@@ -144,100 +121,6 @@ public final class TvVooCatalogChannel {
     public String getLogoUrl() { return logoUrl; }
     public List<String> getGenres() { return genres; }
     public List<String> getResolverAliases() { return resolverAliases; }
-
-    /**
-     * M3U identity export. It contains no resolved URL, token or password;
-     * playback is renewed by the app from x-resolver-id at open time.
-     */
-    public String toM3uEntry() {
-        StringBuilder header = new StringBuilder("#EXTINF:-1");
-        appendAttribute(header, "tvg-id", stableId + "@TvVoo");
-        if (!logoUrl.isEmpty()) appendAttribute(header, "tvg-logo", logoUrl);
-        appendAttribute(header, "x-resolver", "tvvoo");
-        appendAttribute(header, "x-resolver-id", alias);
-        appendAttribute(header, "x-resolver-ids", alias);
-        appendAttribute(header, "x-resolver-country", countryKey);
-        appendAttribute(header, "x-resolver-refresh", "on_play");
-        header.append(',').append(cleanLine(name)).append('\n');
-        header.append("tvvoo://channel/").append(encodePath(stableId));
-        return header.toString();
-    }
-
-    private static void appendAttribute(StringBuilder output, String key, String value) {
-        output.append(' ').append(key).append("=\"")
-                .append(cleanLine(value).replace("\"", "&quot;"))
-                .append('"');
-    }
-
-    private static String cleanLine(String value) {
-        return clean(value).replace('\r', ' ').replace('\n', ' ');
-    }
-
-    private static String encodePath(String value) {
-        try {
-            return URLEncoder.encode(value, StandardCharsets.UTF_8.name())
-                    .replace("+", "%20");
-        } catch (Exception impossible) {
-            throw new IllegalStateException(impossible);
-        }
-    }
-
-    /** Returns a JSON object containing no resolved or signed playback URL. */
-    public JSONObject toJson() throws JSONException {
-        JSONObject object = new JSONObject();
-        object.put("stableId", stableId);
-        object.put("alias", alias);
-        object.put("name", name);
-        object.put("country", country);
-        object.put("group", group);
-        object.put("category", category);
-        JSONArray genres = new JSONArray();
-        for (String value : this.genres) genres.put(value);
-        object.put("genres", genres);
-        if (!logoUrl.isEmpty()) object.put("logo", logoUrl);
-        JSONArray aliases = new JSONArray();
-        for (String value : resolverAliases) aliases.put(value);
-        object.put("aliases", aliases);
-        return object;
-    }
-
-    public static TvVooCatalogChannel fromJson(JSONObject object) throws JSONException {
-        if (object == null) throw new JSONException("Canal TvVoo ausente.");
-        String alias = object.optString("alias", "").trim();
-        String stableId = object.optString("stableId", "").trim();
-        String country = object.optString("country", "").trim();
-        String group = object.optString("group", "").trim();
-        String name = object.optString("name", "").trim();
-        String category = object.optString("category", "").trim();
-        String logo = object.optString("logo", "").trim();
-        List<String> genres = new ArrayList<>();
-        JSONArray genresArray = object.optJSONArray("genres");
-        if (genresArray != null) {
-            for (int index = 0; index < genresArray.length(); index++) {
-                String value = genresArray.optString(index, "").trim();
-                if (!value.isEmpty()) genres.add(value);
-            }
-        }
-        List<String> aliases = new ArrayList<>();
-        JSONArray array = object.optJSONArray("aliases");
-        if (array != null) {
-            for (int index = 0; index < array.length(); index++) {
-                String value = array.optString(index, "").trim();
-                if (!value.isEmpty()) aliases.add(value);
-            }
-        }
-        return new TvVooCatalogChannel(
-                stableId,
-                alias,
-                name,
-                country,
-                group,
-                category,
-                logo,
-                genres,
-                aliases
-        );
-    }
 
     /**
      * TvVoo currently publishes ids such as
@@ -257,7 +140,7 @@ public final class TvVooCatalogChannel {
     }
 
     /**
-     * Converts a selected catalogue entry to the app's normal Channel model.
+     * Converts a web-published provider entry to the playback Channel model.
      * The URI is intentionally a non-token placeholder; the TvVoo resolver
      * replaces it before Media3 sees it.
      */
@@ -299,7 +182,7 @@ public final class TvVooCatalogChannel {
         }
     }
 
-    /** Country key used only for exact identity and local filtering. */
+    /** Country key used for the public identity and resolver aliases. */
     public static String countryKey(String value) {
         String normalized = normalize(value);
         int separator = normalized.indexOf("->");

@@ -61,6 +61,8 @@ public final class SettingsActivity extends Activity {
     public static final String KEY_INVERT_CHANNEL_KEYS = "invert_channel_keys";
     public static final String KEY_NORMALIZE_VOLUME = "normalize_volume";
     public static final String EXTRA_INITIAL_TAB = "initial_tab";
+    public static final String EXTRA_HAS_PUBLISHED_PROVIDER_CHANNELS =
+            "has_published_provider_channels";
     public static final String EXTRA_CHANNEL_INDEX = "channel_index";
     public static final String EXTRA_CHANNEL_TVG_ID = "channel_tvg_id";
     public static final String EXTRA_CHANNEL_NAME = "channel_name";
@@ -706,9 +708,10 @@ public final class SettingsActivity extends Activity {
         // which channels are published, so the app only needs the resolvers.
         boolean enabled1 = !AppStrings.isBlank(value);
         boolean enabled2 = !AppStrings.isBlank(value2);
-        boolean hasPublishedProviderChannels = new PublishedPlaybackCatalogRepository(this)
-                .loadCached()
-                .hasActiveProviderChannels();
+        boolean hasPublishedProviderChannels = getIntent().getBooleanExtra(
+                EXTRA_HAS_PUBLISHED_PROVIDER_CHANNELS,
+                false
+        );
         if (!enabled1 && !enabled2 && !hasPublishedProviderChannels) {
             errorText.setText(R.string.playlist_source_required);
             errorText.setVisibility(View.VISIBLE);

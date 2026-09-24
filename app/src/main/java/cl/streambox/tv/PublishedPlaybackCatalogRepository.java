@@ -7,19 +7,15 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import android.content.Context;
-import android.content.SharedPreferences;
 
 /** Reads the public playback configuration; redirects stay pinned to raw GitHub. */
 final class PublishedPlaybackCatalogRepository {
     static final String LAYOUT_URL =
             "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/data/channel-editor-layout.json";
-    private static final String PREFERENCES = "published_playback_catalog";
-    private static final String CACHE_KEY = "document";
     private static final Set<String> ALLOWED_HOSTS = Collections.unmodifiableSet(
             new HashSet<>(Collections.singletonList("raw.githubusercontent.com"))
     );
     private final TokenHttpClient httpClient;
-    private final SharedPreferences preferences;
 
     PublishedPlaybackCatalogRepository(Context context) {
         this(context, new TokenHttpClient(6_000, 15_000));
@@ -27,20 +23,22 @@ final class PublishedPlaybackCatalogRepository {
 
     PublishedPlaybackCatalogRepository(Context context, TokenHttpClient httpClient) {
         if (context == null) throw new IllegalArgumentException("context");
-        preferences = context.getApplicationContext().getSharedPreferences(
-                PREFERENCES,
-                Context.MODE_PRIVATE
-        );
         this.httpClient = httpClient == null ? new TokenHttpClient(6_000, 15_000) : httpClient;
     }
 
-    PublishedPlaybackCatalog loadCached() {
-        String cached = preferences.getString(CACHE_KEY, "");
-        if (cached == null || cached.trim().isEmpty()) return PublishedPlaybackCatalog.empty();
-        try {
-            return PublishedPlaybackCatalog.parse(cached);
-        } catch (IOException ignored) {
-            return PublishedPlaybackCatalog.empty();
+    static void clearRetiredLocalSelections(Context context) {
+        if (context == null) throw new IllegalArgumentException("context");
+        Context application = context.getApplicationContext();
+        if (application == null) application = context;
+        for (String preferenceName : new String[] {
+                "tvvoo_selection",
+                "highfly_selection",
+                "published_playback_catalog"
+        }) {
+            application.getSharedPreferences(preferenceName, Context.MODE_PRIVATE)
+                    .edit()
+                    .clear()
+                    .apply();
         }
     }
 
@@ -56,8 +54,6 @@ final class PublishedPlaybackCatalogRepository {
                 ALLOWED_HOSTS
         );
         String document = new String(response.getBody(), StandardCharsets.UTF_8);
-        PublishedPlaybackCatalog parsed = PublishedPlaybackCatalog.parse(document);
-        preferences.edit().putString(CACHE_KEY, document).apply();
-        return parsed;
+        return PublishedPlaybackCatalog.parse(document);
     }
 }

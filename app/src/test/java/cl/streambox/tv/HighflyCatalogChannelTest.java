@@ -1,6 +1,5 @@
 package cl.streambox.tv;
 
-import org.json.JSONObject;
 import org.junit.Test;
 
 import java.net.URI;
@@ -42,47 +41,8 @@ public final class HighflyCatalogChannelTest {
     }
 
     @Test
-    public void roundTripsPublishedSelectionCacheWithoutPersistingPlaybackUrl() throws Exception {
-        HighflyCatalogChannel channel = new HighflyCatalogChannel(
-                "leaf:f1-3949409",
-                "SkySportsF1.uk",
-                "Sky Sports F1",
-                "Highfly · Deportes",
-                "Motor Sports",
-                "https://cdn.example/f1.webp",
-                Collections.singletonList("Motor Sports")
-        );
-
-        JSONObject cached = channel.toJson();
-        assertFalse(cached.toString().contains(".m3u8"));
-        assertFalse(cached.toString().toLowerCase().contains("token"));
-        HighflyCatalogChannel restored = HighflyCatalogChannel.fromJson(cached);
-        assertEquals(channel.getStableId(), restored.getStableId());
-        assertEquals(channel.getResourceId(), restored.getResourceId());
-        assertEquals(channel.getGenres(), restored.getGenres());
-    }
-
-    @Test
-    public void keepsNameDerivedIdentityProvisional() {
-        HighflyCatalogChannel channel = new HighflyCatalogChannel(
-                "leaf:unknown-123",
-                "Unknown Highfly Channel",
-                "Highfly",
-                "Sports",
-                "",
-                Collections.emptyList()
-        );
-
-        assertFalse(channel.isCanonicalIdentity());
-        assertEquals("provisional", channel.getIdentityState());
-        assertEquals("", channel.getCountryKey());
-        assertEquals("Highfly.someunknownchannel",
-                HighflyCatalogChannel.stableIdentity("", "Some Unknown Channel"));
-    }
-
-    @Test
-    public void m3uPresentationWinsWhenMergingThePublishedHighflySelection() {
-        HighflyCatalogChannel selected = new HighflyCatalogChannel(
+    public void m3uPresentationWinsWhenMergingWebPublishedHighflyRow() {
+        HighflyCatalogChannel published = new HighflyCatalogChannel(
                 "leaf:f1-3949409",
                 "SkySportsF1.uk",
                 "Catálogo F1",
@@ -105,8 +65,7 @@ public final class HighflyCatalogChannelTest {
 
         List<Channel> merged = HighflyChannelMerge.merge(
                 Collections.singletonList(fromM3u),
-                Arrays.asList(selected.toChannel()),
-                true
+                Arrays.asList(published.toChannel())
         );
         assertEquals(1, merged.size());
         assertEquals("Lista F1", merged.get(0).getName());

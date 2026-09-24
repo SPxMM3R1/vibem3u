@@ -113,10 +113,9 @@ public final class MainActivity extends Activity {
     private final ResolverCoordinator resolverCoordinator = new ResolverCoordinator();
     private ResolverCatalogRepository resolverCatalogRepository;
     private ResolverPreferences resolverPreferences;
-    private TvVooSelectionStore tvVooSelectionStore;
-    private HighflySelectionStore highflySelectionStore;
     private PublishedPlaybackCatalogRepository publishedPlaybackCatalogRepository;
     private PublishedPlaybackCatalog publishedPlaybackCatalog = PublishedPlaybackCatalog.empty();
+    private boolean publishedCatalogRefreshPending;
     private StreamResolverRegistry streamResolverRegistry;
     private Map<String, Integer> resolverChannelCounts = Collections.emptyMap();
     private final List<Channel> channels = new ArrayList<>();
@@ -315,22 +314,10 @@ public final class MainActivity extends Activity {
         playbackPreferences = new PlaybackPreferences(this);
         resolverCatalogRepository = new ResolverCatalogRepository(this);
         resolverPreferences = new ResolverPreferences(this);
-        tvVooSelectionStore = new TvVooSelectionStore(this);
-        highflySelectionStore = new HighflySelectionStore(this);
+        PublishedPlaybackCatalogRepository.clearRetiredLocalSelections(this);
         publishedPlaybackCatalogRepository = new PublishedPlaybackCatalogRepository(this);
-        publishedPlaybackCatalog = publishedPlaybackCatalogRepository.loadCached();
-        try {
-            // The public web document is the only source of provider selections.
-            // Applying even an empty cache clears selections saved by old app builds.
-            publishedPlaybackCatalog.applyProviderSelections(this);
-        } catch (java.io.IOException ignored) {
-            publishedPlaybackCatalog = PublishedPlaybackCatalog.empty();
-            try {
-                publishedPlaybackCatalog.applyProviderSelections(this);
-            } catch (java.io.IOException impossible) {
-                // The empty document has no provider rows to reject.
-            }
-        }
+        publishedPlaybackCatalog = PublishedPlaybackCatalog.empty();
+        publishedCatalogRefreshPending = true;
         // Install the process-local alias learning store before any resolver
         // can be used. It persists aliases only, never resolved URLs/tokens.
         new TvVooSourceHistory(this);
@@ -549,8 +536,12 @@ public final class MainActivity extends Activity {
                 ? Collections.emptyList()
                 : new ArrayList<>(configuredSources);
         String sourceSignature = playlistSourceSignature(sources);
-        if (sources.isEmpty() && !hasSelectedDynamicChannels()) {
-            if (!settingsOpen) openSettings();
+        if (sources.isEmpty() && !hasPublishedProviderChannels()) {
+            if (publishedCatalogRefreshPending) {
+                showLoadingState(getString(R.string.loading_playlist));
+            } else if (!settingsOpen) {
+                openSettings();
+            }
             return;
         }
 
@@ -615,10 +606,9 @@ public final class MainActivity extends Activity {
                 visiblePlaylists,
                 sources
         );
-        // The selection store is local and available synchronously. Publish
-        // it immediately so startup remains usable when M3U is offline or
-        // still waiting for its cache/network callback.
-        if (hasSelectedDynamicChannels()) {
+        // Provider rows come only from the freshly fetched website document.
+        // Apply them immediately while configured M3U sources load.
+        if (hasPublishedProviderChannels()) {
             applyPlaylists(
                     visiblePlaylists,
                     sourceSignature,
@@ -1041,37 +1031,21 @@ public final class MainActivity extends Activity {
             Playlist playlist = entry.getValue();
             if (playlist != null) result.addAll(playlist.getChannels());
         }
-        if (hasSelectedTvVooChannels()) {
-            result = new ArrayList<>(TvVooChannelMerge.merge(
-                    result,
-                    tvVooSelectionStore.getSelectedChannels(),
-                    true
-            ));
-        }
-        if (hasSelectedHighflyChannels()) {
-            result = new ArrayList<>(HighflyChannelMerge.merge(
-                    result,
-                    highflySelectionStore.getSelectedChannels(),
-                    true
-            ));
-        }
+        List<Channel> publishedProviderChannels = publishedPlaybackCatalog.activeProviderChannels();
+        result = new ArrayList<>(TvVooChannelMerge.merge(
+                result,
+                publishedProviderChannels
+        ));
+        result = new ArrayList<>(HighflyChannelMerge.merge(
+                result,
+                publishedProviderChannels
+        ));
         return publishedPlaybackCatalog.applyToPlayback(result);
     }
 
-    private boolean hasSelectedTvVooChannels() {
-        return tvVooSelectionStore != null
-                && tvVooSelectionStore.isEnabled()
-                && !tvVooSelectionStore.getSelectedChannels().isEmpty();
-    }
-
-    private boolean hasSelectedHighflyChannels() {
-        return highflySelectionStore != null
-                && highflySelectionStore.isEnabled()
-                && !highflySelectionStore.getSelectedChannels().isEmpty();
-    }
-
-    private boolean hasSelectedDynamicChannels() {
-        return hasSelectedTvVooChannels() || hasSelectedHighflyChannels();
+    private boolean hasPublishedProviderChannels() {
+        return publishedPlaybackCatalog != null
+                && publishedPlaybackCatalog.hasActiveProviderChannels();
     }
 
     private void showPlaylistError(String detail) {
@@ -2865,27 +2839,39 @@ public final class MainActivity extends Activity {
 
     private void refreshPublishedPlaybackCatalog() {
         if (publishedPlaybackCatalogRepository == null) return;
+        publishedCatalogRefreshPending = true;
         networkExecutor.execute(() -> {
             PublishedPlaybackCatalog refreshed;
             try {
                 refreshed = publishedPlaybackCatalogRepository.refresh();
-                refreshed.applyProviderSelections(getApplicationContext());
             } catch (Exception ignored) {
-                // The last validated cache remains usable while GitHub is offline.
+                // Local selection/cache data was retired; offline startup must
+                // not reintroduce channels that are absent from the web config.
+                mainHandler.post(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    publishedPlaybackCatalog = PublishedPlaybackCatalog.empty();
+                    publishedCatalogRefreshPending = false;
+                    if (getPlaylistSources().isEmpty() && !settingsOpen) openSettings();
+                });
                 return;
             }
             PublishedPlaybackCatalog result = refreshed;
             mainHandler.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 publishedPlaybackCatalog = result;
-                if (!playlistsBySource.isEmpty()) {
-                    applyPlaylists(
-                            new LinkedHashMap<>(playlistsBySource),
-                            loadedPlaylistSignature,
-                            playlistGeneration,
-                            false
-                    );
+                publishedCatalogRefreshPending = false;
+                List<PlaylistSource> sources = getPlaylistSources();
+                if (sources.isEmpty() && !hasPublishedProviderChannels()) {
+                    if (!settingsOpen) openSettings();
+                    return;
                 }
+                if (playlistsBySource.isEmpty() && !hasPublishedProviderChannels()) return;
+                applyPlaylists(
+                        new LinkedHashMap<>(playlistsBySource),
+                        loadedPlaylistSignature,
+                        playlistGeneration,
+                        false
+                );
             });
         });
     }
@@ -3291,6 +3277,10 @@ public final class MainActivity extends Activity {
 
     private Intent createSettingsIntent(int initialTab) {
         Intent intent = new Intent(this, SettingsActivity.class);
+        intent.putExtra(
+                SettingsActivity.EXTRA_HAS_PUBLISHED_PROVIDER_CHANNELS,
+                hasPublishedProviderChannels()
+        );
         if (initialTab >= 0) {
             intent.putExtra(SettingsActivity.EXTRA_INITIAL_TAB, initialTab);
         }
@@ -3429,7 +3419,7 @@ public final class MainActivity extends Activity {
             resolverSettingsSnapshotBeforeSettings = "";
             playlistSourcesSnapshotBeforeSettings = "";
             List<PlaylistSource> sources = getPlaylistSources();
-            if (resultCode == RESULT_OK && (!sources.isEmpty() || hasSelectedDynamicChannels())) {
+            if (resultCode == RESULT_OK && (!sources.isEmpty() || hasPublishedProviderChannels())) {
                 applyPlaybackSettingsResult(data);
                 reloadResolverRegistry();
                 boolean resolverConfigurationChanged = AppStrings.isBlank(resolverSnapshotBefore)
@@ -3458,7 +3448,7 @@ public final class MainActivity extends Activity {
                     epgData = EpgData.empty();
                 }
                 refreshAfterSettings = true;
-            } else if (sources.isEmpty() && !hasSelectedDynamicChannels()) {
+            } else if (sources.isEmpty() && !hasPublishedProviderChannels()) {
                 openSettings();
             }
         }
@@ -3500,14 +3490,6 @@ public final class MainActivity extends Activity {
                     .append('=')
                     .append(resolverPreferences == null
                             || resolverPreferences.isEnabled(definition));
-        }
-        if (tvVooSelectionStore != null) {
-            snapshot.append("|tvvoo-selection=")
-                    .append(tvVooSelectionStore.signature());
-        }
-        if (highflySelectionStore != null) {
-            snapshot.append("|highfly-selection=")
-                    .append(highflySelectionStore.signature());
         }
         if (resolverPreferences != null && resolverPreferences.mediaFlowPreferences() != null) {
             snapshot.append("|mediaflow=")
@@ -3644,11 +3626,7 @@ public final class MainActivity extends Activity {
         }
         if (!settingsOpen && !refreshAfterSettings) {
             List<PlaylistSource> sources = getPlaylistSources();
-            if (sources.isEmpty() && !hasSelectedDynamicChannels()) {
-                openSettings();
-            } else {
-                refreshPlaylists(sources);
-            }
+            refreshPlaylists(sources);
         }
     }
 

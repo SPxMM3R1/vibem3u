@@ -31,7 +31,19 @@ public final class PublishedPlaybackCatalogTest {
                 catalog.getRows().get(2).toTvVoo().getStableId()
         );
         assertTrue(catalog.hasActiveProviderChannels());
+        List<Channel> publishedProviders = catalog.activeProviderChannels();
+        assertEquals(2, publishedProviders.size());
+        assertTrue(HighflyChannelMerge.isHighfly(publishedProviders.get(0)));
+        assertTrue(TvVooChannelMerge.isTvVoo(publishedProviders.get(1)));
         assertEquals("deleted", catalog.getRows().get(4).state);
+    }
+
+    @Test
+    public void emptyPublishedDocumentCannotAddProviderChannels() {
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.empty();
+
+        assertFalse(catalog.hasActiveProviderChannels());
+        assertTrue(catalog.activeProviderChannels().isEmpty());
     }
 
     @Test
@@ -79,7 +91,9 @@ public final class PublishedPlaybackCatalogTest {
                 "\"state\":\"active\"",
                 "\"state\":\"hidden\""
         );
-        assertFalse(PublishedPlaybackCatalog.parse(withoutActiveProviders).hasActiveProviderChannels());
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(withoutActiveProviders);
+        assertFalse(catalog.hasActiveProviderChannels());
+        assertTrue(catalog.activeProviderChannels().isEmpty());
     }
 
     @Test
@@ -97,7 +111,8 @@ public final class PublishedPlaybackCatalogTest {
                 Collections.emptyList()
         ).toChannel();
         Channel tvvoo = new TvVooCatalogChannel(
-                "", "vavoo_ESPN%201|group:es", "ESPN 1", "spain", "TvVoo", "Sport", "",
+                "spain|vavoo_ESPN%201%7Cgroup%3Aes",
+                "vavoo_ESPN%201|group:es", "ESPN 1", "spain", "TvVoo", "Sport", "",
                 Collections.emptyList()
         ).toChannel();
         Channel unlisted = new Channel("Not yet published",

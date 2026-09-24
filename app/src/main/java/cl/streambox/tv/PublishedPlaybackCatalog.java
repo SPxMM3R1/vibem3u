@@ -1,7 +1,5 @@
 package cl.streambox.tv;
 
-import android.content.Context;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -49,6 +47,24 @@ final class PublishedPlaybackCatalog {
             if ("provider".equals(row.kind) && "active".equals(row.state)) return true;
         }
         return false;
+    }
+
+    List<Channel> activeProviderChannels() {
+        List<Channel> result = new ArrayList<>();
+        for (Row row : rows) {
+            if (!"provider".equals(row.kind) || !"active".equals(row.state)) continue;
+            try {
+                result.add("tvvoo".equals(row.provider)
+                        ? row.toTvVoo().toChannel()
+                        : row.toHighfly().toChannel());
+            } catch (IOException error) {
+                throw new IllegalStateException(
+                        "Validated provider row cannot be converted: " + row.stableId,
+                        error
+                );
+            }
+        }
+        return Collections.unmodifiableList(result);
     }
 
     Map<String, Integer> activeNumbers() {
@@ -130,30 +146,6 @@ final class PublishedPlaybackCatalog {
         } catch (JSONException | IllegalArgumentException error) {
             throw new IOException("Configuración web inválida: " + safeMessage(error), error);
         }
-    }
-
-    /** Applies only the provider rows explicitly active in the published document. */
-    void applyProviderSelections(Context context) throws IOException {
-        if (context == null) throw new IllegalArgumentException("context");
-        List<TvVooCatalogChannel> tvvoo = new ArrayList<>();
-        List<HighflyCatalogChannel> highfly = new ArrayList<>();
-
-        // Validate the full selection before either provider store changes.
-        for (Row row : rows) {
-            if (!"provider".equals(row.kind) || !"active".equals(row.state)) continue;
-            if (row.provider.equals("tvvoo")) {
-                tvvoo.add(row.toTvVoo());
-            } else {
-                highfly.add(row.toHighfly());
-            }
-        }
-
-        TvVooSelectionStore tvvooStore = new TvVooSelectionStore(context);
-        tvvooStore.apply(tvvoo);
-        tvvooStore.setEnabled(!tvvoo.isEmpty());
-        HighflySelectionStore highflyStore = new HighflySelectionStore(context);
-        highflyStore.apply(highfly);
-        highflyStore.setEnabled(!highfly.isEmpty());
     }
 
     /** Orders playback from the web publication and filters its hidden/trash rows. */

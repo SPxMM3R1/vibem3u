@@ -10,24 +10,23 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/** Merges Highfly catalogue selections with the ordered M3U sources. */
+/** Merges web-published Highfly rows with the ordered M3U sources. */
 public final class HighflyChannelMerge {
     private HighflyChannelMerge() {}
 
-    /** M3U rows keep their name/logo/position; local-only rows are appended. */
+    /** M3U rows keep their name/logo/position; published rows fill gaps. */
     public static List<Channel> merge(
             List<Channel> playlistChannels,
-            List<Channel> selectedChannels,
-            boolean selectionEnabled
+            List<Channel> publishedChannels
     ) {
-        if (!selectionEnabled || selectedChannels == null || selectedChannels.isEmpty()) {
+        if (publishedChannels == null || publishedChannels.isEmpty()) {
             return copy(playlistChannels);
         }
 
-        Map<String, Channel> selectedByKey = new java.util.HashMap<>();
-        for (Channel selected : selectedChannels) {
-            if (!isHighfly(selected)) continue;
-            for (String key : identityKeys(selected)) selectedByKey.putIfAbsent(key, selected);
+        Map<String, Channel> publishedByKey = new java.util.HashMap<>();
+        for (Channel published : publishedChannels) {
+            if (!isHighfly(published)) continue;
+            for (String key : identityKeys(published)) publishedByKey.putIfAbsent(key, published);
         }
 
         List<Channel> result = new ArrayList<>();
@@ -48,20 +47,20 @@ public final class HighflyChannelMerge {
                 if (duplicate && !exact.isEmpty()) continue;
                 emitted.addAll(exact);
                 playlistKeys.addAll(keys);
-                result.add(enrichLogo(playlist, findByKeys(keys, selectedByKey)));
+                result.add(enrichLogo(playlist, findByKeys(keys, publishedByKey)));
             }
         }
 
         Set<String> appended = new HashSet<>();
-        for (Channel selected : selectedChannels) {
-            if (!isHighfly(selected)) continue;
-            Set<String> keys = identityKeys(selected);
+        for (Channel published : publishedChannels) {
+            if (!isHighfly(published)) continue;
+            Set<String> keys = identityKeys(published);
             if (!Collections.disjoint(keys, playlistKeys)) continue;
             Set<String> exact = new LinkedHashSet<>(keys);
             exact.removeIf(key -> !key.startsWith("id:") && !key.startsWith("slug:"));
             if (!exact.isEmpty() && !Collections.disjoint(exact, appended)) continue;
             appended.addAll(exact);
-            result.add(selected);
+            result.add(published);
         }
         return Collections.unmodifiableList(result);
     }
@@ -108,13 +107,13 @@ public final class HighflyChannelMerge {
         return null;
     }
 
-    private static Channel enrichLogo(Channel playlist, Channel selected) {
-        if (playlist == null || selected == null || playlist.getLogoUri() != null
-                || selected.getLogoUri() == null) return playlist;
+    private static Channel enrichLogo(Channel playlist, Channel published) {
+        if (playlist == null || published == null || playlist.getLogoUri() != null
+                || published.getLogoUri() == null) return playlist;
         return new Channel(
                 playlist.getName(),
                 playlist.getStreamUri(),
-                selected.getLogoUri(),
+                published.getLogoUri(),
                 playlist.getGroup(),
                 playlist.getAttributes()
         );

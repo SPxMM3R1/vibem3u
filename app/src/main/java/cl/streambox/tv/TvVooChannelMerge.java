@@ -13,27 +13,24 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/** Combines M3U rows with the ordered, opt-in TvVoo selection. */
+/** Merges web-published TvVoo rows with ordered M3U sources. */
 public final class TvVooChannelMerge {
     private TvVooChannelMerge() {}
 
-    /** Merges selected channels after the already ordered M3U1/M3U2 rows. */
+    /** Appends published rows not already present and enriches matching M3U rows. */
     public static List<Channel> merge(
             List<Channel> playlistChannels,
-            List<Channel> selectedChannels,
-            boolean selectionEnabled
+            List<Channel> publishedChannels
     ) {
-        if (!selectionEnabled || selectedChannels == null || selectedChannels.isEmpty()) {
+        if (publishedChannels == null || publishedChannels.isEmpty()) {
             return copy(playlistChannels);
         }
         List<Channel> result = new ArrayList<>();
-        Map<String, Channel> selectedByKey = new HashMap<>();
-        if (selectionEnabled && selectedChannels != null) {
-            for (Channel selected : selectedChannels) {
-                if (!isTvVoo(selected)) continue;
-                for (String key : identityKeys(selected)) {
-                    selectedByKey.putIfAbsent(key, selected);
-                }
+        Map<String, Channel> publishedByKey = new HashMap<>();
+        for (Channel published : publishedChannels) {
+            if (!isTvVoo(published)) continue;
+            for (String key : identityKeys(published)) {
+                publishedByKey.putIfAbsent(key, published);
             }
         }
 
@@ -57,36 +54,25 @@ public final class TvVooChannelMerge {
                     if (duplicate && !exactKeys.isEmpty()) continue;
                     emittedExactAliases.addAll(exactKeys);
                     playlistKeys.addAll(keys);
-                    Channel selected = findByKeys(keys, selectedByKey);
-                    result.add(enrichLogo(playlist, selected));
+                    Channel published = findByKeys(keys, publishedByKey);
+                    result.add(enrichLogo(playlist, published));
                 } else {
                     result.add(playlist);
                 }
             }
         }
 
-        if (!selectionEnabled || selectedChannels == null) {
-            return Collections.unmodifiableList(result);
-        }
         Set<String> appended = new HashSet<>();
-        for (Channel selected : selectedChannels) {
-            if (!isTvVoo(selected)) continue;
-            Set<String> keys = identityKeys(selected);
+        for (Channel published : publishedChannels) {
+            if (!isTvVoo(published)) continue;
+            Set<String> keys = identityKeys(published);
             if (!Collections.disjoint(keys, playlistKeys)) continue;
             Set<String> exactKeys = exactDedupKeys(keys);
             if (!exactKeys.isEmpty() && !Collections.disjoint(exactKeys, appended)) continue;
             if (!exactKeys.isEmpty()) appended.addAll(exactKeys);
-            result.add(selected);
+            result.add(published);
         }
         return Collections.unmodifiableList(result);
-    }
-
-    /** Convenience overload for callers whose selection switch is already true. */
-    public static List<Channel> merge(
-            List<Channel> playlistChannels,
-            List<Channel> selectedChannels
-    ) {
-        return merge(playlistChannels, selectedChannels, true);
     }
 
     public static boolean isTvVoo(Channel channel) {
@@ -139,13 +125,13 @@ public final class TvVooChannelMerge {
         return null;
     }
 
-    private static Channel enrichLogo(Channel playlist, Channel selected) {
-        if (playlist == null || selected == null || playlist.getLogoUri() != null
-                || selected.getLogoUri() == null) return playlist;
+    private static Channel enrichLogo(Channel playlist, Channel published) {
+        if (playlist == null || published == null || playlist.getLogoUri() != null
+                || published.getLogoUri() == null) return playlist;
         return new Channel(
                 playlist.getName(),
                 playlist.getStreamUri(),
-                selected.getLogoUri(),
+                published.getLogoUri(),
                 playlist.getGroup(),
                 playlist.getAttributes()
         );

@@ -1,25 +1,19 @@
 package cl.streambox.tv;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.text.Normalizer;
 
 /** Stable playback metadata for one Highfly entry published by Lista M3U.
  *
  * <p>The published {@code catalogKey} remains the stable identity, while the
  * resource id and slug are only resolver references. No stream URL, session
- * parameter or authorization value is persisted; the resolver obtains the
- * playable source only when the channel is opened.</p>
+ * parameter or authorization value is exposed by this model; the resolver
+ * obtains a playable source only when the channel is opened.</p>
  */
 public final class HighflyCatalogChannel {
     private final String resourceId;
@@ -31,30 +25,7 @@ public final class HighflyCatalogChannel {
     private final String logoUrl;
     private final List<String> genres;
 
-    public HighflyCatalogChannel(
-            String resourceId,
-            String name,
-            String group,
-            String category,
-            String logoUrl,
-            List<String> genres
-    ) {
-        this(
-                resourceId,
-                "",
-                name,
-                group,
-                category,
-                logoUrl,
-                genres
-        );
-    }
-
-    /**
-     * Creates a catalogue entry with an identity independent of the current
-     * Highfly leaf slug. The overload without {@code stableId} remains for
-     * old persisted rows and derives a deterministic name-based identity.
-     */
+    /** Creates a playback projection from a web-published stable identity. */
     public HighflyCatalogChannel(
             String resourceId,
             String stableId,
@@ -71,7 +42,11 @@ public final class HighflyCatalogChannel {
         this.resourceId = normalizedResourceId;
         this.slug = normalizedResourceId.substring("leaf:".length());
         this.name = nonBlank(name, this.slug);
-        this.stableId = stableIdentity(stableId, this.name);
+        String publishedStableId = clean(stableId);
+        if (!publishedStableId.matches("[A-Za-z][A-Za-z0-9._-]{1,127}")) {
+            throw new IllegalArgumentException("Identidad pública Highfly inválida.");
+        }
+        this.stableId = publishedStableId;
         this.group = nonBlank(group, "Highfly");
         this.category = clean(category);
         this.logoUrl = safeLogoUrl(logoUrl);
@@ -100,8 +75,8 @@ public final class HighflyCatalogChannel {
 
     /**
      * Returns the identity state required by the Lista M3U contract.
-     * Known identities are safe for catalogue reconciliation; name-derived
-     * fallbacks remain provisional until the runner confirms them.
+     * Web-published provisional identities remain provisional until the
+     * Lista M3U runner confirms them.
      */
     public String getIdentityState() {
         return isCanonicalIdentity() ? "canonical" : "provisional";
@@ -123,7 +98,7 @@ public final class HighflyCatalogChannel {
         return stableId.substring(separator + 1).toLowerCase(Locale.ROOT);
     }
 
-    /** Creates the tokenless app-only reference consumed by HighflyResolver. */
+    /** Creates the tokenless playback reference for this published row. */
     public Channel toChannel() {
         Map<String, String> attributes = new java.util.LinkedHashMap<>();
         attributes.put("tvg-id", tvgId());
@@ -141,117 +116,8 @@ public final class HighflyCatalogChannel {
         return new Channel(name, reference, logo, group, attributes);
     }
 
-    /** Tokenless M3U reference; the app resolves the HLS source at playback. */
-    public String toM3uEntry() {
-        StringBuilder header = new StringBuilder("#EXTINF:-1");
-        appendAttribute(header, "tvg-id", tvgId());
-        if (!logoUrl.isEmpty()) appendAttribute(header, "tvg-logo", logoUrl);
-        appendAttribute(header, "x-resolver", "highfly");
-        appendAttribute(header, "x-resolver-stable-id", stableId);
-        appendAttribute(header, "x-resolver-id", slug);
-        appendAttribute(header, "x-resolver-resource-id", resourceId);
-        appendAttribute(header, "x-resolver-refresh", "on_play");
-        header.append(',').append(cleanLine(name)).append('\n');
-        header.append(DynamicSourceReference.create("highfly", slug));
-        return header.toString();
-    }
-
-    public JSONObject toJson() throws JSONException {
-        JSONObject object = new JSONObject();
-        object.put("resourceId", resourceId);
-        object.put("stableId", stableId);
-        object.put("tvgId", tvgId());
-        object.put("name", name);
-        object.put("group", group);
-        object.put("category", category);
-        if (!logoUrl.isEmpty()) object.put("logo", logoUrl);
-        JSONArray values = new JSONArray();
-        for (String genre : genres) values.put(genre);
-        object.put("genres", values);
-        return object;
-    }
-
-    public static HighflyCatalogChannel fromJson(JSONObject object) throws JSONException {
-        if (object == null) throw new JSONException("Canal Highfly ausente.");
-        List<String> genres = readGenres(object.optJSONArray("genres"));
-        String category = object.optString("category", "").trim();
-        if (category.isEmpty() && !genres.isEmpty()) category = genres.get(0);
-        return new HighflyCatalogChannel(
-                object.optString("resourceId", ""),
-                object.optString("stableId", object.optString("tvgId", "")),
-                object.optString("name", ""),
-                object.optString("group", "Highfly"),
-                category,
-                object.optString("logo", ""),
-                genres
-        );
-    }
-
     private String tvgId() {
         return stableId;
-    }
-
-    /**
-     * Returns the stable identity used by the app's local merge and resolver
-     * selection. Highfly currently publishes a rotating leaf id but no
-     * separate canonical id, so known channels use the identities already
-     * used by Lista M3U and unknown names receive a deterministic,
-     * slug-independent fallback. Unknown name-derived identities remain
-     * provisional and are not promoted to public identifiers by the app.
-     */
-    public static String stableIdentity(String requested, String name) {
-        String explicit = clean(requested);
-        if (explicit.matches("[A-Za-z][A-Za-z0-9._-]{1,127}")) return explicit;
-
-        String normalized = compact(name);
-        if (normalized.contains("skysportsf1") || normalized.contains("skyf1")) {
-            return "SkySportsF1.uk";
-        }
-        if (normalized.contains("skysportstennis") || normalized.contains("skytennis")) {
-            return "SkySportsTennis.uk";
-        }
-        if (normalized.contains("skysportspremierleague")
-                || normalized.contains("skypremierleague")) {
-            return "SkySportsPremierLeague.uk";
-        }
-        if (normalized.contains("skysportsgolf") || normalized.contains("skygolf")) {
-            return "SkySportsGolf.uk";
-        }
-        if (normalized.equals("espn")) return "ESPN.us";
-        if (normalized.equals("marqueesportsnetwork")) {
-            return "MarqueeSportsNetwork.us";
-        }
-        if (normalized.equals("skysport1")) return "SkySport1.nz";
-        if (normalized.isEmpty()) return "Highfly.unknown";
-        return "Highfly." + normalized.substring(0, Math.min(112, normalized.length()));
-    }
-
-    private static String compact(String value) {
-        String normalized = Normalizer.normalize(clean(value), Normalizer.Form.NFD)
-                .replaceAll("\\p{M}+", "")
-                .toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "");
-        return normalized.trim();
-    }
-
-    private static List<String> readGenres(JSONArray values) {
-        List<String> result = new ArrayList<>();
-        if (values == null) return result;
-        for (int index = 0; index < values.length(); index++) {
-            String value = values.optString(index, "").trim();
-            if (!value.isEmpty()) result.add(value);
-        }
-        return result;
-    }
-
-    private static void appendAttribute(StringBuilder output, String key, String value) {
-        output.append(' ').append(key).append("=\"")
-                .append(cleanLine(value).replace("\"", "&quot;"))
-                .append('"');
-    }
-
-    private static String cleanLine(String value) {
-        return clean(value).replace('\r', ' ').replace('\n', ' ');
     }
 
     private static String clean(String value) {

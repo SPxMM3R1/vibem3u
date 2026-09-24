@@ -22,7 +22,7 @@ public final class TvVooChannelMergeTest {
                 "uk",
                 null
         );
-        Channel selected = channel(
+        Channel published = channel(
                 "Catalog name",
                 "other-id",
                 "vavoo_SKY 1|group:uk",
@@ -31,8 +31,7 @@ public final class TvVooChannelMergeTest {
         );
         List<Channel> merged = TvVooChannelMerge.merge(
                 Collections.singletonList(fromM3u),
-                Collections.singletonList(selected),
-                true
+                Collections.singletonList(published)
         );
 
         assertEquals(1, merged.size());
@@ -42,18 +41,17 @@ public final class TvVooChannelMergeTest {
     }
 
     @Test
-    public void sameDisplayNameDifferentAliasIsKeptAndSelectionIsAppended() {
+    public void sameDisplayNameDifferentAliasIsKeptAndPublishedRowIsAppended() {
         Channel first = channel(
                 "News", "first", "vavoo_NEWS%201|group:uk", "uk", null
         );
-        Channel selected = channel(
+        Channel published = channel(
                 "News", "second", "vavoo_NEWS%202|group:uk", "uk", null
         );
 
         List<Channel> merged = TvVooChannelMerge.merge(
                 Collections.singletonList(first),
-                Collections.singletonList(selected),
-                true
+                Collections.singletonList(published)
         );
 
         assertEquals(2, merged.size());
@@ -63,16 +61,12 @@ public final class TvVooChannelMergeTest {
     }
 
     @Test
-    public void disabledSelectionDoesNotAddCachedRows() {
-        Channel selected = channel(
-                "Only selected", "selected", "vavoo_ONLY|group:cl", "cl", null
-        );
+    public void noPublishedRowsMeansNoProviderChannelsAreAdded() {
         assertEquals(
                 0,
                 TvVooChannelMerge.merge(
                         Collections.emptyList(),
-                        Collections.singletonList(selected),
-                        false
+                        Collections.emptyList()
                 ).size()
         );
     }
@@ -87,8 +81,7 @@ public final class TvVooChannelMergeTest {
         );
         List<Channel> merged = TvVooChannelMerge.merge(
                 Arrays.asList(first, second),
-                Collections.singletonList(first),
-                true
+                Collections.singletonList(first)
         );
         assertEquals(1, merged.size());
         assertEquals("First", merged.get(0).getName());
