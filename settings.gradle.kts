@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "VibeM3U"
 include(":app")
+include(":local-catalog")
