@@ -4,7 +4,7 @@
     <dimen name="channel_overlay_horizontal_margin">32dp</dimen>
     <dimen name="channel_overlay_edge_margin">28dp</dimen>
     <dimen name="channel_overlay_height">82dp</dimen>
-    <dimen name="settings_panel_padding_horizontal">12dp</dimen>
+    <dimen name="settings_panel_padding_horizontal">28dp</dimen>
     <dimen name="settings_panel_padding_top">8dp</dimen>
     <dimen name="settings_panel_padding_bottom">6dp</dimen>
 
