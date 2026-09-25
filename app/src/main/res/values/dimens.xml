@@ -16,7 +16,7 @@
 
     <dimen name="settings_tabs_height">50dp</dimen>
     <dimen name="settings_tabs_padding">4dp</dimen>
-    <dimen name="settings_tab_text_size">14sp</dimen>
+    <dimen name="settings_tab_text_size">16sp</dimen>
     <dimen name="settings_content_padding_top">14dp</dimen>
     <dimen name="settings_content_padding_bottom">8dp</dimen>
     <dimen name="settings_page_horizontal_padding">0dp</dimen>
