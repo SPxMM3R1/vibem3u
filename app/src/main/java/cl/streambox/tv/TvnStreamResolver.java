@@ -11,7 +11,7 @@ public final class TvnStreamResolver implements StreamResolver {
     private static final String TVG_ID = "0104";
     private static final String LIVE_PAGE = "https://live.tvn.cl/?tvn_seccion=prehome";
     private static final String PLAYLIST_BASE = "https://mdstrm.com/live-stream-playlist/";
-    private static final long DEFAULT_TOKEN_CACHE_TTL_MILLIS = 5L * 60L * 1000L;
+    private static final long SESSION_TOKEN_CACHE_TTL_MILLIS = Long.MAX_VALUE;
     private static final long DEFAULT_RESOLUTION_BUDGET_MILLIS = 12_000L;
 
     private final ResolverDefinition definition;
@@ -35,7 +35,7 @@ public final class TvnStreamResolver implements StreamResolver {
         this.definition = definition;
         this.httpClient = httpClient;
         this.validator = new HlsStreamValidator(httpClient);
-        this.tokenExpiryPolicy = new TokenExpiryPolicy(DEFAULT_TOKEN_CACHE_TTL_MILLIS);
+        this.tokenExpiryPolicy = new TokenExpiryPolicy(cacheTtlFor(definition));
     }
 
     @Override
@@ -57,18 +57,15 @@ public final class TvnStreamResolver implements StreamResolver {
     }
 
     @Override public long cacheTtlMillis() {
-        if (definition == null) return DEFAULT_TOKEN_CACHE_TTL_MILLIS;
-        if (!definition.getBooleanConfig("cacheEnabled", true)) return 0L;
-        long configured = definition.getCacheTtlMillis();
-        if (configured <= 0L) return DEFAULT_TOKEN_CACHE_TTL_MILLIS;
-        // Token lifetime is provider-controlled. Keep the externally
-        // configurable value bounded so a stale token cannot remain reusable
-        // for an unexpectedly long period.
-        return Math.min(configured, DEFAULT_TOKEN_CACHE_TTL_MILLIS);
+        return cacheTtlFor(definition);
     }
 
     @Override public boolean cacheResolvedSource() {
         return cacheTtlMillis() > 0L;
+    }
+
+    @Override public boolean keepSessionSourceOnPlaybackPause() {
+        return cacheResolvedSource();
     }
 
     @Override
@@ -180,6 +177,15 @@ public final class TvnStreamResolver implements StreamResolver {
 
     private String config(String key, String fallback) {
         return definition == null ? fallback : definition.getConfig(key, fallback);
+    }
+
+    private static long cacheTtlFor(ResolverDefinition definition) {
+        if (definition == null) return SESSION_TOKEN_CACHE_TTL_MILLIS;
+        if (!definition.getBooleanConfig("cacheEnabled", true)) return 0L;
+        long configured = definition.getCacheTtlMillis();
+        return configured <= 0L
+                ? SESSION_TOKEN_CACHE_TTL_MILLIS
+                : Math.min(configured, SESSION_TOKEN_CACHE_TTL_MILLIS);
     }
 
     private long expiresAt() {

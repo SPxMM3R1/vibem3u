@@ -59,4 +59,12 @@ public class ResolutionTransportTest {
         assertEquals(0, ProviderStreamParsers.parseTvnExpiryMillis(
                 "var ad={expiration:1700000000};var player={access_token:'test-token'};", "test-token"));
     }
+
+    @Test public void sessionTokenPolicyRetainsUnknownExpiryButHonoursProviderExpiry() {
+        TokenExpiryPolicy policy = new TokenExpiryPolicy(Long.MAX_VALUE, 15_000L);
+
+        assertEquals(Long.MAX_VALUE, policy.effectiveExpiryAtMillis(100_000L, 0L));
+        assertEquals(185_000L, policy.effectiveExpiryAtMillis(100_000L, 200_000L));
+        assertTrue(policy.isExpired(100_000L, 200_000L, 185_000L));
+    }
 }

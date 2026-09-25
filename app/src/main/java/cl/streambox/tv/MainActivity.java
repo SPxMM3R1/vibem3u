@@ -1984,7 +1984,7 @@ public final class MainActivity extends Activity {
         player.play();
     }
 
-    /** Stops the active session when the activity is no longer visible. */
+    /** Stops playback when hidden but retains only unexpired in-session tokens. */
     private void stopPlaybackForFocusLoss() {
         boolean hasPlaybackSession = playbackChannel != null
                 || currentPlaybackSource != null
@@ -1992,7 +1992,7 @@ public final class MainActivity extends Activity {
         if (!hasPlaybackSession) return;
         restartPlaybackAfterFocusLoss = true;
         cancelPlaybackResolution();
-        resolverCoordinator.clear();
+        resolverCoordinator.clearForPlaybackPause();
         playbackGeneration++;
         playbackHasStarted = false;
         playbackLoadingSinceElapsedRealtime = -1L;

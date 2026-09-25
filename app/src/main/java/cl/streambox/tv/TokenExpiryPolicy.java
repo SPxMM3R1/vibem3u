@@ -5,7 +5,8 @@ package cl.streambox.tv;
  *
  * <p>Providers often expose an access token without a lifetime. This policy
  * therefore never decodes or infers a JWT: an explicit expiry is honoured when
- * supplied, otherwise reuse is bounded by a short age. The safety margin is
+ * supplied, otherwise reuse is bounded by the caller-provided age. Session
+ * token resolvers may use the current app session as that bound. The safety margin is
  * subtracted from explicit expiry so Media3 does not begin a request at the
  * exact instant a provider invalidates the token.</p>
  */

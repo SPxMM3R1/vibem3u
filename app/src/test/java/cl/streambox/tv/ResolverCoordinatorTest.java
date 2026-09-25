@@ -138,14 +138,16 @@ public final class ResolverCoordinatorTest {
     }
 
     @Test
-    public void officialTokenResolversUseBoundedSessionCacheByDefault() {
+    public void officialTokenResolversKeepTokensInMemoryForTheSession() {
         TvnStreamResolver tvn = new TvnStreamResolver();
         MeganoticiasStreamResolver mega = new MeganoticiasStreamResolver();
 
         assertTrue(tvn.cacheResolvedSource());
-        assertEquals(5L * 60L * 1000L, tvn.cacheTtlMillis());
+        assertEquals(Long.MAX_VALUE, tvn.cacheTtlMillis());
+        assertTrue(tvn.keepSessionSourceOnPlaybackPause());
         assertTrue(mega.cacheResolvedSource());
-        assertEquals(5L * 60L * 1000L, mega.cacheTtlMillis());
+        assertEquals(Long.MAX_VALUE, mega.cacheTtlMillis());
+        assertTrue(mega.keepSessionSourceOnPlaybackPause());
     }
 
     @Test
@@ -160,7 +162,7 @@ public final class ResolverCoordinatorTest {
     }
 
     @Test
-    public void legacyZeroTtlCatalogDoesNotDisableOfficialTokenCache() {
+    public void zeroTtlCatalogMeansSessionLifetimeForOfficialTokens() {
         TvnStreamResolver tvn = new TvnStreamResolver(definition("tvn", "tvn", 0L,
                 Collections.emptyMap()));
         MeganoticiasStreamResolver mega = new MeganoticiasStreamResolver(
@@ -168,9 +170,80 @@ public final class ResolverCoordinatorTest {
         );
 
         assertTrue(tvn.cacheResolvedSource());
-        assertEquals(5L * 60L * 1000L, tvn.cacheTtlMillis());
+        assertEquals(Long.MAX_VALUE, tvn.cacheTtlMillis());
         assertTrue(mega.cacheResolvedSource());
-        assertEquals(5L * 60L * 1000L, mega.cacheTtlMillis());
+        assertEquals(Long.MAX_VALUE, mega.cacheTtlMillis());
+    }
+
+    @Test
+    public void configuredTokenTtlStillBoundsReuseWhenExplicitlySet() {
+        TvnStreamResolver tvn = new TvnStreamResolver(
+                definition("tvn", "tvn", 120_000L, Collections.emptyMap())
+        );
+        MeganoticiasStreamResolver mega = new MeganoticiasStreamResolver(
+                definition("meganoticias", "meganoticias", 180_000L, Collections.emptyMap())
+        );
+
+        assertEquals(120_000L, tvn.cacheTtlMillis());
+        assertEquals(180_000L, mega.cacheTtlMillis());
+    }
+
+    @Test
+    public void playbackPauseKeepsOnlyUnexpiredSessionTokenSources() throws Exception {
+        ResolverCoordinator coordinator = new ResolverCoordinator();
+        AtomicInteger tokenCalls = new AtomicInteger();
+        AtomicInteger shortLivedCalls = new AtomicInteger();
+        Channel tokenChannel = channel("token-channel");
+        Channel shortLivedChannel = channel("short-lived-channel");
+        StreamResolver tokenResolver = new StreamResolver() {
+            @Override public String getId() { return "tvn"; }
+            @Override public boolean supports(Channel value) { return true; }
+            @Override public long cacheTtlMillis() { return Long.MAX_VALUE; }
+            @Override public boolean keepSessionSourceOnPlaybackPause() { return true; }
+            @Override public ResolvedPlaybackSource resolve(Channel value) {
+                int call = tokenCalls.incrementAndGet();
+                return ResolvedPlaybackSource.dynamic(
+                        "tvn", "token-channel",
+                        URI.create("https://example.org/token-" + call + ".m3u8"),
+                        Collections.emptyMap(), "test-agent", Long.MAX_VALUE
+                );
+            }
+        };
+        StreamResolver shortLivedResolver = new StreamResolver() {
+            @Override public String getId() { return "temporary"; }
+            @Override public boolean supports(Channel value) { return true; }
+            @Override public long cacheTtlMillis() { return 60_000L; }
+            @Override public ResolvedPlaybackSource resolve(Channel value) {
+                int call = shortLivedCalls.incrementAndGet();
+                return ResolvedPlaybackSource.dynamic(
+                        "temporary", "short-lived-channel",
+                        URI.create("https://example.org/temporary-" + call + ".m3u8"),
+                        Collections.emptyMap(), "test-agent",
+                        System.currentTimeMillis() + 60_000L
+                );
+            }
+        };
+
+        coordinator.resolve(tokenChannel, tokenResolver, false);
+        coordinator.resolve(shortLivedChannel, shortLivedResolver, false);
+        coordinator.clearForPlaybackPause();
+
+        assertEquals(1, coordinator.cachedSourceCount());
+        assertEquals(
+                "https://example.org/token-1.m3u8",
+                coordinator.resolve(tokenChannel, tokenResolver, false)
+                        .getPlaybackUri().toString()
+        );
+        assertEquals(1, tokenCalls.get());
+        assertEquals(
+                "https://example.org/temporary-2.m3u8",
+                coordinator.resolve(shortLivedChannel, shortLivedResolver, false)
+                        .getPlaybackUri().toString()
+        );
+        assertEquals(2, shortLivedCalls.get());
+
+        coordinator.clear();
+        assertEquals(0, coordinator.cachedSourceCount());
     }
 
     @Test
@@ -320,6 +393,16 @@ public final class ResolverCoordinatorTest {
                 Collections.emptyMap(),
                 "test-agent",
                 System.currentTimeMillis() + 60_000L
+        );
+    }
+
+    private static Channel channel(String id) {
+        return new Channel(
+                id,
+                URI.create("https://example.org/fallback.m3u8"),
+                null,
+                id,
+                Collections.singletonMap("tvg-id", id)
         );
     }
 

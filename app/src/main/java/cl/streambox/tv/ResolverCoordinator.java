@@ -2,12 +2,13 @@ package cl.streambox.tv;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 /** Session-only cache and single-flight coordination for dynamic sources. */
 public final class ResolverCoordinator {
     private final Object lock = new Object();
-    private final Map<String, ResolvedPlaybackSource> memoryCache = new HashMap<>();
+    private final Map<String, CachedSource> memoryCache = new HashMap<>();
     private final Map<String, InFlight> inFlight = new HashMap<>();
 
     public ResolvedPlaybackSource resolve(
@@ -44,7 +45,10 @@ public final class ResolverCoordinator {
                 memoryCache.remove(key);
             }
             if (!forceRefresh && allowCache) {
-                ResolvedPlaybackSource cached = memoryCache.get(key);
+                CachedSource cachedEntry = memoryCache.get(key);
+                ResolvedPlaybackSource cached = cachedEntry == null
+                        ? null
+                        : cachedEntry.source;
                 if (cached != null && !cached.isExpired(System.currentTimeMillis())) {
                     progress.onProgress(ResolutionProgress.of(
                             ResolutionStage.CACHE_REUSED,
@@ -74,7 +78,12 @@ public final class ResolverCoordinator {
                     && resolved != null
                     && !resolved.isExpired(System.currentTimeMillis())) {
                 synchronized (lock) {
-                    if (inFlight.get(key) == owner) memoryCache.put(key, resolved);
+                    if (inFlight.get(key) == owner) {
+                        memoryCache.put(key, new CachedSource(
+                                resolved,
+                                resolver.keepSessionSourceOnPlaybackPause()
+                        ));
+                    }
                 }
             }
             owner.complete(resolved);
@@ -108,6 +117,26 @@ public final class ResolverCoordinator {
         }
     }
 
+    /**
+     * Ends the active playback while retaining only explicitly opted-in
+     * session tokens. Other temporary resolver URLs are discarded as before.
+     */
+    public void clearForPlaybackPause() {
+        synchronized (lock) {
+            long now = System.currentTimeMillis();
+            Iterator<Map.Entry<String, CachedSource>> iterator =
+                    memoryCache.entrySet().iterator();
+            while (iterator.hasNext()) {
+                CachedSource cached = iterator.next().getValue();
+                if (!cached.keepOnPlaybackPause || cached.source.isExpired(now)) {
+                    iterator.remove();
+                }
+            }
+            for (InFlight request : inFlight.values()) request.cancel();
+            inFlight.clear();
+        }
+    }
+
     int cachedSourceCount() {
         synchronized (lock) {
             return memoryCache.size();
@@ -129,6 +158,16 @@ public final class ResolverCoordinator {
         return resolver != null
                 && resolver.cacheResolvedSource()
                 && resolver.cacheTtlMillis() > 0L;
+    }
+
+    private static final class CachedSource {
+        private final ResolvedPlaybackSource source;
+        private final boolean keepOnPlaybackPause;
+
+        CachedSource(ResolvedPlaybackSource source, boolean keepOnPlaybackPause) {
+            this.source = source;
+            this.keepOnPlaybackPause = keepOnPlaybackPause;
+        }
     }
 
     private static final class InFlight {

@@ -64,6 +64,16 @@ public interface StreamResolver {
         return true;
     }
 
+    /**
+     * Whether an in-memory source containing provider credentials should
+     * survive a temporary playback pause such as leaving the app window.
+     * Credentials are still discarded on expiry, authorization failure,
+     * resolver changes, or the end of the app session.
+     */
+    default boolean keepSessionSourceOnPlaybackPause() {
+        return false;
+    }
+
     /** Drops provider credentials and other session-only sensitive state. */
     default void clearSensitiveState() {
         // Most resolvers do not hold credentials between requests.
