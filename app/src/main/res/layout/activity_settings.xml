@@ -13,6 +13,8 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_gravity="center"
+        android:scaleX="0.7"
+        android:scaleY="0.7"
         android:background="@drawable/channel_overlay_background"
         android:orientation="vertical"
         android:paddingStart="@dimen/settings_panel_padding_horizontal"
