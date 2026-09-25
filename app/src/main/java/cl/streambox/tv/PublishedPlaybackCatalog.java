@@ -174,10 +174,24 @@ final class PublishedPlaybackCatalog {
         for (Row row : rows) {
             if (!"active".equals(row.state)) continue;
             List<Channel> matches = byKey.get(row.appKey());
-            if (matches != null) result.addAll(matches);
+            if (matches != null) {
+                for (Channel channel : matches) result.add(withDisplayName(channel, row.displayName));
+            }
         }
-        result.addAll(unlisted);
+        for (Channel channel : unlisted) result.add(channel);
         return Collections.unmodifiableList(result);
+    }
+
+    private static Channel withDisplayName(Channel channel, String displayName) {
+        if (channel == null || AppStrings.isBlank(displayName)
+                || displayName.equals(channel.getName())) return channel;
+        return new Channel(
+                displayName,
+                channel.getStreamUri(),
+                channel.getLogoUri(),
+                channel.getGroup(),
+                channel.getAttributes()
+        );
     }
 
     int numberFor(Channel channel, int fallback) {
@@ -270,6 +284,7 @@ final class PublishedPlaybackCatalog {
         final String stableId;
         final String state;
         final String name;
+        final String displayName;
         final String group;
         final String category;
         final String country;
@@ -288,6 +303,7 @@ final class PublishedPlaybackCatalog {
                 String stableId,
                 String state,
                 String name,
+                String displayName,
                 String group,
                 String category,
                 String country,
@@ -305,6 +321,7 @@ final class PublishedPlaybackCatalog {
             this.stableId = stableId;
             this.state = state;
             this.name = name;
+            this.displayName = displayName;
             this.group = group;
             this.category = category;
             this.country = country;
@@ -379,6 +396,10 @@ final class PublishedPlaybackCatalog {
                 }
             }
             String name = safeText(value, "name", true);
+            String displayName = safeText(value, "displayName", false);
+            if (displayName.length() > 160 || displayName.matches("(?s).*[\\r\\n].*")) {
+                throw new IOException("Nombre visible web no permitido.");
+            }
             String group = safeText(value, "group", kind.equals("provider"));
             String category = safeText(value, "category", false);
             String country = safeText(value, "country", false);
@@ -388,7 +409,7 @@ final class PublishedPlaybackCatalog {
                     value.optString("logoPath", "")
             );
             return new Row(
-                    kind, provider, stableId, state, name, group, category, country,
+                    kind, provider, stableId, state, name, displayName, group, category, country,
                     alias, resourceId, resolverSlug, identityState, aliases, logo, order, number
             );
         }

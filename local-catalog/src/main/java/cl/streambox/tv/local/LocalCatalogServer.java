@@ -158,11 +158,8 @@ public final class LocalCatalogServer {
         }
         if ("POST".equals(method) && "/api/publish".equals(path)) {
             GitHubPublisher.PublishResult result = publisher.publish(readJson(exchange));
-            JSONObject shas = new JSONObject();
-            result.blobShas.forEach(shas::put);
             sendJson(exchange, 200, new JSONObject()
-                    .put("sha", result.commitSha)
-                    .put("blobs", shas));
+                    .put("sha", result.commitSha));
             return true;
         }
         if ("POST".equals(method) && "/api/resolve".equals(path)) {

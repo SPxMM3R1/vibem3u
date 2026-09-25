@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -23,6 +22,22 @@ final class GitHubPublisher {
             "presentation-overrides.json"
     );
     private static final int MAX_DOCUMENT_BYTES = 1024 * 1024;
+    private static final int MAX_PUBLISH_ATTEMPTS = 6;
+
+    @FunctionalInterface
+    interface ApiRequest {
+        String execute(String method, String path, JSONObject body) throws IOException;
+    }
+
+    private final ApiRequest apiRequest;
+
+    GitHubPublisher() {
+        this(GitHubPublisher::requestThroughGh);
+    }
+
+    GitHubPublisher(ApiRequest apiRequest) {
+        this.apiRequest = apiRequest;
+    }
 
     boolean isAuthenticated() {
         try {
@@ -45,10 +60,7 @@ final class GitHubPublisher {
 
     PublishResult publish(JSONObject request) throws IOException {
         JSONObject documents = request.optJSONObject("documents");
-        JSONObject expectedShas = request.optJSONObject("expectedShas");
-        if (documents == null || expectedShas == null) {
-            throw new IOException("Faltan los documentos o las versiones base del catálogo.");
-        }
+        if (documents == null) throw new IOException("Faltan los documentos del catálogo.");
         if (documents.length() != ALLOWED_FILES.size()) {
             throw new IOException("El editor debe enviar exactamente los tres documentos autorizados.");
         }
@@ -72,65 +84,82 @@ final class GitHubPublisher {
             if (!ALLOWED_FILES.contains(key)) throw new IOException("El editor intentó publicar un archivo no permitido.");
         }
 
-        JSONObject ref = request("GET", "git/ref/heads/" + BRANCH, null);
-        String headSha = ref.getJSONObject("object").optString("sha", "");
-        if (headSha.isBlank()) throw new IOException("No se pudo leer la rama main de GitHub.");
+        String commitSha = null;
+        for (int attempt = 1; attempt <= MAX_PUBLISH_ATTEMPTS; attempt++) {
+            JSONObject ref = request("GET", "git/ref/heads/" + BRANCH, null);
+            String headSha = ref.getJSONObject("object").optString("sha", "");
+            if (headSha.isBlank()) throw new IOException("No se pudo leer la rama main de GitHub.");
 
-        for (String path : ALLOWED_FILES) {
-            JSONObject remote = contents(path);
-            String actualSha = remote == null ? null : remote.optString("sha", null);
-            String expectedSha = expectedShas.isNull(path) ? null : expectedShas.optString(path, null);
-            if (!equal(expectedSha, actualSha)) {
-                throw new ConflictException("El catálogo cambió en GitHub mientras lo estabas editando. Recarga la página antes de publicar.");
+            // Rebuild the editorial commit on the newest remote tree each time.
+            // Runner-owned files remain untouched; the editor's three declared
+            // documents intentionally take precedence over their remote copies.
+            JSONObject baseCommit = request("GET", "git/commits/" + headSha, null);
+            JSONArray treeEntries = new JSONArray();
+            for (Map.Entry<String, String> document : contentByPath.entrySet()) {
+                treeEntries.put(new JSONObject()
+                        .put("path", document.getKey())
+                        .put("mode", "100644")
+                        .put("type", "blob")
+                        .put("content", document.getValue()));
+            }
+            JSONObject tree = request("POST", "git/trees", new JSONObject()
+                    .put("base_tree", baseCommit.getJSONObject("tree").getString("sha"))
+                    .put("tree", treeEntries));
+            JSONObject commit = request("POST", "git/commits", new JSONObject()
+                    .put("message", "Actualiza catálogo editorial desde el editor local")
+                    .put("tree", tree.getString("sha"))
+                    .put("parents", new JSONArray().put(headSha)));
+            String candidateSha = commit.getString("sha");
+            try {
+                request("PATCH", "git/refs/heads/" + BRANCH, new JSONObject()
+                        .put("sha", candidateSha)
+                        .put("force", false));
+                commitSha = candidateSha;
+                break;
+            } catch (IOException concurrentUpdate) {
+                if (!isBranchRace(concurrentUpdate)) throw concurrentUpdate;
+                if (attempt == MAX_PUBLISH_ATTEMPTS) {
+                    throw new ConflictException("GitHub siguió recibiendo cambios durante la publicación. Tu edición local no se perdió; vuelve a pulsar Publicar.");
+                }
+                pauseBeforeRetry(attempt);
             }
         }
+        if (commitSha == null) throw new IOException("No se pudo publicar el catálogo.");
 
-        JSONObject baseCommit = request("GET", "git/commits/" + headSha, null);
-        JSONArray treeEntries = new JSONArray();
-        for (Map.Entry<String, String> document : contentByPath.entrySet()) {
-            treeEntries.put(new JSONObject()
-                    .put("path", document.getKey())
-                    .put("mode", "100644")
-                    .put("type", "blob")
-                    .put("content", document.getValue()));
-        }
-        JSONObject tree = request("POST", "git/trees", new JSONObject()
-                .put("base_tree", baseCommit.getJSONObject("tree").getString("sha"))
-                .put("tree", treeEntries));
-        JSONObject commit = request("POST", "git/commits", new JSONObject()
-                .put("message", "Actualiza selección y orden del catálogo VibeM3U")
-                .put("tree", tree.getString("sha"))
-                .put("parents", new JSONArray().put(headSha)));
-        String commitSha = commit.getString("sha");
-        request("PATCH", "git/refs/heads/" + BRANCH, new JSONObject()
-                .put("sha", commitSha)
-                .put("force", false));
-
-        Map<String, String> blobShas = new LinkedHashMap<>();
-        for (Map.Entry<String, String> entry : contentByPath.entrySet()) {
-            blobShas.put(entry.getKey(), gitBlobSha(entry.getValue()));
-        }
-        return new PublishResult(commitSha, blobShas);
-    }
-
-    private JSONObject contents(String path) throws IOException {
-        try {
-            return request("GET", "contents/" + path + "?ref=" + BRANCH, null);
-        } catch (GhApiException error) {
-            if (error.output.contains("HTTP 404") || error.output.contains("Not Found")) return null;
-            throw error;
-        }
+        return new PublishResult(commitSha);
     }
 
     private JSONObject request(String method, String path, JSONObject body) throws IOException {
-        String endpoint = "repos/" + REPOSITORY + "/" + path;
-        String output = body == null
-                ? runGh("api", "--hostname", "github.com", "--method", method, endpoint)
-                : runGhWithInput(body.toString(), "api", "--hostname", "github.com", "--method", method, "--input", "-", endpoint);
+        String output = apiRequest.execute(method, path, body);
         try {
             return new JSONObject(output);
         } catch (RuntimeException invalid) {
             throw new IOException("GitHub devolvió una respuesta inesperada. No se publicó el catálogo.");
+        }
+    }
+
+    private static String requestThroughGh(String method, String path, JSONObject body) throws IOException {
+        String endpoint = "repos/" + REPOSITORY + "/" + path;
+        String output = body == null
+                ? runGh("api", "--hostname", "github.com", "--method", method, endpoint)
+                : runGhWithInput(body.toString(), "api", "--hostname", "github.com", "--method", method, "--input", "-", endpoint);
+        return output;
+    }
+
+    private static boolean isBranchRace(IOException error) {
+        String message = error.getMessage() == null ? "" : error.getMessage();
+        if (error instanceof GhApiException) message += " " + ((GhApiException) error).output;
+        String text = message.toLowerCase(java.util.Locale.ROOT);
+        return (text.contains("409") || text.contains("422"))
+                && (text.contains("fast forward") || text.contains("reference") || text.contains("ref update"));
+    }
+
+    private static void pauseBeforeRetry(int attempt) throws IOException {
+        try {
+            Thread.sleep(Math.min(100L * attempt, 500L));
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Publicación cancelada durante la integración de un cambio remoto.");
         }
     }
 
@@ -194,35 +223,15 @@ final class GitHubPublisher {
         }
     }
 
-    private static String gitBlobSha(String content) throws IOException {
-        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
-        try {
-            MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
-            sha1.update(("blob " + bytes.length + "\0").getBytes(StandardCharsets.US_ASCII));
-            byte[] digest = sha1.digest(bytes);
-            StringBuilder result = new StringBuilder(40);
-            for (byte value : digest) result.append(String.format("%02x", value & 0xff));
-            return result.toString();
-        } catch (java.security.NoSuchAlgorithmException impossible) {
-            throw new IOException("SHA-1 no está disponible en Java.");
-        }
-    }
-
-    private static boolean equal(String left, String right) {
-        return left == null ? right == null : left.equals(right);
-    }
-
     private static void copy(InputStream input, ByteArrayOutputStream output) {
         copy(input, (OutputStream) output);
     }
 
     static final class PublishResult {
         final String commitSha;
-        final Map<String, String> blobShas;
 
-        PublishResult(String commitSha, Map<String, String> blobShas) {
+        PublishResult(String commitSha) {
             this.commitSha = commitSha;
-            this.blobShas = blobShas;
         }
     }
 

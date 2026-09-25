@@ -127,6 +127,46 @@ public final class PublishedPlaybackCatalogTest {
         assertEquals(99, catalog.numberFor(unlisted, 99));
     }
 
+    @Test
+    public void appliesCustomDisplayNamesWithoutChangingStableProviderIdentity() throws Exception {
+        String edited = document()
+                .replace("\"name\":\"TVN\"", "\"name\":\"TVN\",\"displayName\":\"TV Nacional\"")
+                .replace("\"name\":\"Sky Sports F1\"", "\"name\":\"Sky Sports F1\",\"displayName\":\"F1 en vivo\"")
+                .replace("\"name\":\"ESPN 1\"", "\"name\":\"ESPN 1\",\"displayName\":\"ESPN Deportes\"");
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);
+        Channel tvn = new Channel("TVN", java.net.URI.create("https://example.org/tvn.m3u8"),
+                null, "Nacionales", Collections.singletonMap("tvg-id", "0104"));
+        Channel highfly = new HighflyCatalogChannel(
+                "leaf:f1-hd", "SkySportsF1.uk", "Sky Sports F1", "Highfly", "Sport", "",
+                Collections.emptyList()
+        ).toChannel();
+        Channel tvvoo = new TvVooCatalogChannel(
+                "spain|vavoo_ESPN%201%7Cgroup%3Aes",
+                "vavoo_ESPN%201|group:es", "ESPN 1", "spain", "TvVoo", "Sport", "",
+                Collections.emptyList()
+        ).toChannel();
+
+        List<Channel> result = catalog.applyToPlayback(Arrays.asList(tvn, highfly, tvvoo));
+
+        assertEquals(Arrays.asList("TV Nacional", "F1 en vivo", "ESPN Deportes"), Arrays.asList(
+                result.get(0).getName(), result.get(1).getName(), result.get(2).getName()
+        ));
+        assertEquals("SkySportsF1.uk", result.get(1).getAttributes().get("x-resolver-stable-id"));
+        assertEquals("spain|vavoo_ESPN%201%7Cgroup%3Aes", result.get(2).getAttributes().get("x-resolver-stable-id"));
+    }
+
+    @Test
+    public void rejectsUnsafeCustomDisplayName() throws Exception {
+        assertInvalid(document().replace(
+                "\"name\":\"TVN\"",
+                "\"name\":\"TVN\",\"displayName\":\"Canal\\ninyectado\""
+        ));
+        assertInvalid(document().replace(
+                "\"name\":\"TVN\"",
+                "\"name\":\"TVN\",\"displayName\":\"https://example.org/live.m3u8\""
+        ));
+    }
+
     private static void assertInvalid(String value) throws Exception {
         try {
             PublishedPlaybackCatalog.parse(value);
