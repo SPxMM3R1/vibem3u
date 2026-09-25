@@ -8,17 +8,24 @@
     android:paddingTop="@dimen/channel_overlay_edge_margin"
     android:paddingBottom="@dimen/channel_overlay_edge_margin">
 
+    <!-- The shell stays full-size to align with the channel OSD; only its content scales. -->
     <LinearLayout
         android:id="@+id/settings_panel"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_gravity="center"
-        android:scaleX="0.7"
-        android:scaleY="0.7"
         android:background="@drawable/channel_overlay_background"
         android:orientation="vertical"
         android:paddingStart="@dimen/settings_panel_padding_horizontal"
         android:paddingEnd="@dimen/settings_panel_padding_horizontal">
+
+        <LinearLayout
+            android:id="@+id/settings_content_scale"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:scaleX="0.7"
+            android:scaleY="0.7">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -753,6 +760,7 @@
                 android:text="@string/cancel"
                 android:textColor="@color/white"
                 android:textSize="@dimen/settings_footer_text_size" />
+        </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>
