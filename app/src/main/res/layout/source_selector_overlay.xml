@@ -6,7 +6,7 @@
     android:background="@android:color/transparent"
     android:visibility="gone">
 
-    <!-- Keep the frame unscaled; the quality/source controls scale inside it. -->
+    <!-- Keep panel geometry independent from the controls' natural layout size. -->
     <LinearLayout
         android:id="@+id/source_selector_panel"
         android:layout_width="500dp"
@@ -22,9 +22,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:scaleX="0.7"
-            android:scaleY="0.7">
+            android:orientation="vertical">
 
         <TextView
             android:id="@+id/source_selector_title"

@@ -8,7 +8,7 @@
     android:paddingTop="@dimen/channel_overlay_edge_margin"
     android:paddingBottom="@dimen/channel_overlay_edge_margin">
 
-    <!-- The shell stays full-size to align with the channel OSD; only its content scales. -->
+    <!-- The shell stays aligned with the channel OSD; content keeps its natural layout size. -->
     <LinearLayout
         android:id="@+id/settings_panel"
         android:layout_width="match_parent"
@@ -23,9 +23,7 @@
             android:id="@+id/settings_content_scale"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:scaleX="0.7"
-            android:scaleY="0.7">
+            android:orientation="vertical">
 
         <LinearLayout
             android:layout_width="match_parent"
