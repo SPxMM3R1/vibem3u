@@ -167,6 +167,23 @@ public final class PublishedPlaybackCatalogTest {
         ));
     }
 
+    @Test
+    public void appliesRepositoryLogoToHighflyProviderRows() throws Exception {
+        String edited = document().replace(
+                "\"name\":\"Sky Sports F1\"",
+                "\"name\":\"Sky Sports F1\",\"logoOverride\":\"logos/sky-sports-f1.png\""
+        );
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);
+
+        List<Channel> providers = catalog.activeProviderChannels();
+
+        assertEquals(2, providers.size());
+        assertEquals(
+                "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/logos/sky-sports-f1.png",
+                providers.get(0).getLogoUri().toString()
+        );
+    }
+
     private static void assertInvalid(String value) throws Exception {
         try {
             PublishedPlaybackCatalog.parse(value);

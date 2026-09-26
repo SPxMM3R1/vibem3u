@@ -54,9 +54,11 @@ final class PublishedPlaybackCatalog {
         for (Row row : rows) {
             if (!"provider".equals(row.kind) || !"active".equals(row.state)) continue;
             try {
-                result.add("tvvoo".equals(row.provider)
-                        ? row.toTvVoo().toChannel()
-                        : row.toHighfly().toChannel());
+                if ("tvvoo".equals(row.provider)) {
+                    result.add(row.toTvVoo().toChannel());
+                } else {
+                    result.add(withPublisherLogo(row.toHighfly().toChannel(), row.logo));
+                }
             } catch (IOException error) {
                 throw new IllegalStateException(
                         "Validated provider row cannot be converted: " + row.stableId,
@@ -65,6 +67,28 @@ final class PublishedPlaybackCatalog {
             }
         }
         return Collections.unmodifiableList(result);
+    }
+
+    /**
+     * Highfly provider metadata only accepts posters hosted by its own CDN.
+     * The web editor can publish a repository logo for the same identity, so
+     * the channel keeps it without weakening the provider allowlist.
+     */
+    private static Channel withPublisherLogo(Channel channel, String logo) {
+        if (channel == null || AppStrings.isBlank(logo) || channel.getLogoUri() != null) {
+            return channel;
+        }
+        try {
+            return new Channel(
+                    channel.getName(),
+                    channel.getStreamUri(),
+                    java.net.URI.create(logo),
+                    channel.getGroup(),
+                    channel.getAttributes()
+            );
+        } catch (IllegalArgumentException invalid) {
+            return channel;
+        }
     }
 
     Map<String, Integer> activeNumbers() {
