@@ -18,9 +18,6 @@ import android.view.Surface;
 final class MarqueeSurfaceRenderer implements Choreographer.FrameCallback, AutoCloseable {
     private static final int MAX_CACHED_WIDTH_PX = 2048;
     private static final int MAX_CACHED_HEIGHT_PX = 256;
-    // ~30 fps para el titulo: reduce la presion del compositor sobre video de
-    // 50/60 fps; la posicion sigue calculandose por tiempo transcurrido.
-    private static final long MIN_FRAME_INTERVAL_NANOS = 33_000_000L;
 
     interface Listener {
         void onFirstFrame(MarqueeSurfaceRenderer source);
@@ -67,7 +64,6 @@ final class MarqueeSurfaceRenderer implements Choreographer.FrameCallback, AutoC
     private Bitmap cachedTitle;
     private float textTop;
     private long startFrameTimeNs = -1L;
-    private long lastSubmittedFrameNanos = -1L;
     private boolean firstFrameSubmitted;
 
     MarqueeSurfaceRenderer(Surface surface, Spec spec, Listener listener) {
@@ -110,13 +106,6 @@ final class MarqueeSurfaceRenderer implements Choreographer.FrameCallback, AutoC
 
     @Override public void doFrame(long frameTimeNanos) {
         if (closed) return;
-        if (lastSubmittedFrameNanos >= 0L
-                && frameTimeNanos - lastSubmittedFrameNanos < MIN_FRAME_INTERVAL_NANOS) {
-            // El desplazamiento usa el tiempo transcurrido: dibujar a ~30 fps
-            // reduce la presion sobre el compositor sin cambiar la velocidad.
-            choreographer.postFrameCallback(this);
-            return;
-        }
         boolean submitted = false;
         try {
             synchronized (surfaceLock) {
@@ -142,7 +131,6 @@ final class MarqueeSurfaceRenderer implements Choreographer.FrameCallback, AutoC
             return;
         }
         if (closed) return;
-        if (submitted) lastSubmittedFrameNanos = frameTimeNanos;
         if (submitted && !firstFrameSubmitted) {
             firstFrameSubmitted = true;
             listener.onFirstFrame(this); // One notification, not one per frame.
