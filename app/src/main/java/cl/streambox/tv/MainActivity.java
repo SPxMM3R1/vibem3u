@@ -1512,6 +1512,14 @@ public final class MainActivity extends Activity {
                 || playbackRecoveryFailed
                 || playbackAutoRecoveryInFlight) return;
 
+        if (isPlaybackOverlayVisible()) {
+            // El OSD puede retrasar cuadros en video de 50/60 FPS por composicion.
+            // Mientras el usuario lo tiene abierto no tratamos esa pausa como un
+            // fallo del canal; la vigilancia se reinicia al cerrarlo.
+            playbackLoadingSinceElapsedRealtime = -1L;
+            return;
+        }
+
         long nowMs = SystemClock.elapsedRealtime();
         if (nowMs < playbackRecoveryCooldownUntilElapsedRealtime) return;
         int state = player.getPlaybackState();
@@ -2575,6 +2583,13 @@ public final class MainActivity extends Activity {
     private boolean isSourceSelectorVisible() {
         return sourceSelectorOverlay != null
                 && sourceSelectorOverlay.getVisibility() == View.VISIBLE;
+    }
+
+    /** Any interactive overlay drawn on top of the video while the user browses. */
+    private boolean isPlaybackOverlayVisible() {
+        return (channelOverlay != null && channelOverlay.getVisibility() == View.VISIBLE)
+                || (lightEpgOverlay != null && lightEpgOverlay.getVisibility() == View.VISIBLE)
+                || isSourceSelectorVisible();
     }
 
     /** Opens the shared source/quality chooser without disturbing the current player. */
