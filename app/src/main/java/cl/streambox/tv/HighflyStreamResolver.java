@@ -198,9 +198,33 @@ public final class HighflyStreamResolver implements StreamResolver {
         } catch (IOException error) {
             return fallbackSource(channel, progress, error);
         }
-        if (candidates.isEmpty()) return fallbackSource(channel, progress, null);
+        ResolvedPlaybackSource source = resolveCandidateList(channel, progress, candidates);
+        if (source != null) return source;
 
-        IOException lastError = null;
+        // La hoja configurada dejo de entregar HLS usable: prueba las demas
+        // hojas publicadas del mismo canal antes de usar el respaldo de la M3U.
+        String requestedManifest = definition.channelManifestUrl(channel);
+        if (AppStrings.isBlank(requestedManifest)) requestedManifest = configuredManifestUrl;
+        if (AppStrings.isBlank(requestedManifest)) {
+            return fallbackSource(channel, progress, null);
+        }
+        IOException alternativeError = null;
+        try {
+            candidates = fetchCandidates(channel, progress, true);
+        } catch (IOException error) {
+            candidates = Collections.emptyList();
+            alternativeError = error;
+        }
+        source = resolveCandidateList(channel, progress, candidates);
+        if (source != null) return source;
+        return fallbackSource(channel, progress, alternativeError);
+    }
+
+    private ResolvedPlaybackSource resolveCandidateList(
+            Channel channel,
+            ResolutionProgressListener progress,
+            List<ResolverPayloadParsers.HighflyCandidate> candidates
+    ) {
         for (int index = 0; index < candidates.size(); index++) {
             ResolverPayloadParsers.HighflyCandidate candidate = candidates.get(index);
             progress.onProgress(ResolutionProgress.counted(
@@ -230,11 +254,10 @@ public final class HighflyStreamResolver implements StreamResolver {
                         expiresAt()
                 );
             } catch (IOException error) {
-                lastError = error;
+                // Un candidato invalido no cancela el resto de las hojas.
             }
         }
-
-        return fallbackSource(channel, progress, lastError);
+        return null;
     }
 
     private List<ResolvedPlaybackCandidate> resolvePlaybackCandidatesInContext(

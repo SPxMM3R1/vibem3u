@@ -214,6 +214,59 @@ public final class HighflyStreamResolverTest {
         );
     }
 
+    @Test
+    public void triesOtherPublishedLeavesWhenTheConfiguredSlugPublishesNoHls()
+            throws Exception {
+        List<String> requested = new java.util.ArrayList<>();
+        TokenHttpClient http = new TokenHttpClient() {
+            @Override
+            public Response getPublicOnHosts(
+                    String url,
+                    Map<String, String> headers,
+                    int maxResponseBytes,
+                    String range,
+                    java.util.Set<String> allowedHosts
+            ) {
+                requested.add(url);
+                String payload;
+                if (url.endsWith("/manifest.json")) {
+                    payload = "{\"resources\":[{\"name\":\"stream\"}]}";
+                } else if (url.endsWith("/catalog/sport/sports_live.json")) {
+                    payload = "{\"metas\":[{\"id\":\"leaf:alt-tennis\","
+                            + "\"name\":\"Sky Sports Tennis\"}]}";
+                } else if (url.contains("leaf:now-sky-sports-tennis")) {
+                    payload = "{\"streams\":[{\"url\":"
+                            + "\"https://www.google.com/accounts/upgrade\"}]}";
+                } else {
+                    payload = "{\"streams\":[{\"url\":"
+                            + "\"https://papacito.cfd/m3u/alt-tennis/live.m3u8\"}]}";
+                }
+                return new Response(
+                        200,
+                        URI.create(url),
+                        "application/json",
+                        Collections.emptyMap(),
+                        payload.getBytes(StandardCharsets.UTF_8)
+                );
+            }
+        };
+        HighflyStreamResolver resolver = new HighflyStreamResolver(
+                definition(Collections.emptyMap()),
+                "https://sports.highfly.to/manifest.json",
+                http,
+                (uri, headers, listener) -> { }
+        );
+
+        ResolvedPlaybackSource source = resolver.resolve(channel());
+
+        assertTrue(source.isDynamicallyResolved());
+        assertEquals(
+                "https://papacito.cfd/m3u/alt-tennis/live.m3u8",
+                source.getPlaybackUri().toString()
+        );
+        assertTrue(requested.stream().anyMatch(url -> url.contains("leaf:alt-tennis")));
+    }
+
     private static Channel channel() {
         Map<String, String> attributes = new LinkedHashMap<>();
         attributes.put("tvg-id", "SkySportsTennis.uk");
