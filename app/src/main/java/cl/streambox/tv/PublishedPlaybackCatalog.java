@@ -23,6 +23,7 @@ final class PublishedPlaybackCatalog {
 
     private final List<Row> rows;
     private final List<String> excludedM3u;
+    private final Set<String> skippedProviderRows = new LinkedHashSet<>();
 
     private PublishedPlaybackCatalog(List<Row> rows, List<String> excludedM3u) {
         List<Row> ordered = new ArrayList<>(rows);
@@ -51,6 +52,7 @@ final class PublishedPlaybackCatalog {
 
     List<Channel> activeProviderChannels() {
         List<Channel> result = new ArrayList<>();
+        skippedProviderRows.clear();
         for (Row row : rows) {
             if (!"provider".equals(row.kind) || !"active".equals(row.state)) continue;
             try {
@@ -60,13 +62,14 @@ final class PublishedPlaybackCatalog {
                     result.add(withPublisherLogo(row.toHighfly().toChannel(), row.logo));
                 }
             } catch (IOException error) {
-                throw new IllegalStateException(
-                        "Validated provider row cannot be converted: " + row.stableId,
-                        error
-                );
+                skippedProviderRows.add(row.stableId);
             }
         }
         return Collections.unmodifiableList(result);
+    }
+
+    List<String> skippedProviderRows() {
+        return Collections.unmodifiableList(new ArrayList<>(skippedProviderRows));
     }
 
     /**
@@ -312,6 +315,7 @@ final class PublishedPlaybackCatalog {
         final String group;
         final String category;
         final String country;
+        final String countryKey;
         final String alias;
         final String resourceId;
         final String resolverSlug;
@@ -331,6 +335,7 @@ final class PublishedPlaybackCatalog {
                 String group,
                 String category,
                 String country,
+                String countryKey,
                 String alias,
                 String resourceId,
                 String resolverSlug,
@@ -349,6 +354,7 @@ final class PublishedPlaybackCatalog {
             this.group = group;
             this.category = category;
             this.country = country;
+            this.countryKey = countryKey;
             this.alias = alias;
             this.resourceId = resourceId;
             this.resolverSlug = resolverSlug;
@@ -427,6 +433,7 @@ final class PublishedPlaybackCatalog {
             String group = safeText(value, "group", kind.equals("provider"));
             String category = safeText(value, "category", false);
             String country = safeText(value, "country", false);
+            String countryKey = safeText(value, "countryKey", false);
             if (kind.equals("provider") && group.isEmpty()) group = category;
             String logo = logoUrl(
                     value.optString("logoOverride", ""),
@@ -434,7 +441,8 @@ final class PublishedPlaybackCatalog {
             );
             return new Row(
                     kind, provider, stableId, state, name, displayName, group, category, country,
-                    alias, resourceId, resolverSlug, identityState, aliases, logo, order, number
+                    countryKey, alias, resourceId, resolverSlug, identityState, aliases, logo, order,
+                    number
             );
         }
 
@@ -450,10 +458,12 @@ final class PublishedPlaybackCatalog {
         }
 
         TvVooCatalogChannel toTvVoo() throws IOException {
-            String countryKey = country.isEmpty() ? stableId.substring(0, stableId.indexOf('|')) : country;
+            String resolvedCountryKey = !countryKey.isEmpty()
+                    ? countryKey
+                    : (country.isEmpty() ? stableId.substring(0, stableId.indexOf('|')) : country);
             try {
                 TvVooCatalogChannel channel = new TvVooCatalogChannel(
-                        stableId, alias, name, countryKey, group, category, logo, aliases
+                        stableId, alias, name, resolvedCountryKey, group, category, logo, aliases
                 );
                 if (!stableId.equals(channel.getStableId())) {
                     throw new IOException("La identidad TvVoo fue normalizada de forma inesperada.");

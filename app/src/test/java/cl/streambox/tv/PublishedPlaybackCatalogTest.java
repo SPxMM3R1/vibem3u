@@ -184,6 +184,36 @@ public final class PublishedPlaybackCatalogTest {
         );
     }
 
+    @Test
+    public void acceptsTvVooRowsThatCarryDisplayCountryAndCountryKey() throws Exception {
+        String edited = document()
+                .replace("\"country\":\"spain\"", "\"country\":\"Reino Unido\",\"countryKey\":\"unitedkingdom\"")
+                .replace("spain|vavoo_ESPN%201%7Cgroup%3Aes", "unitedkingdom|vavoo_ESPN%201%7Cgroup%3Aes");
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);
+
+        assertEquals(
+                "unitedkingdom|vavoo_ESPN%201%7Cgroup%3Aes",
+                catalog.getRows().get(2).toTvVoo().getStableId()
+        );
+        assertEquals(2, catalog.activeProviderChannels().size());
+        assertTrue(catalog.skippedProviderRows().isEmpty());
+    }
+
+    @Test
+    public void skipsUnconvertibleProviderRowsWithoutFailingStartup() throws Exception {
+        String edited = document().replace("\"country\":\"spain\"", "\"country\":\"Reino Unido\"");
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);
+
+        List<Channel> providers = catalog.activeProviderChannels();
+
+        assertEquals(1, providers.size());
+        assertTrue(HighflyChannelMerge.isHighfly(providers.get(0)));
+        assertEquals(
+                Collections.singletonList("spain|vavoo_ESPN%201%7Cgroup%3Aes"),
+                catalog.skippedProviderRows()
+        );
+    }
+
     private static void assertInvalid(String value) throws Exception {
         try {
             PublishedPlaybackCatalog.parse(value);
