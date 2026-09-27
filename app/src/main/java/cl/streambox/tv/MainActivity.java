@@ -2350,7 +2350,11 @@ public final class MainActivity extends Activity {
         PlaybackPreferences.QualityPreference preference =
                 playbackPreferences.getQuality(channel);
         if (preference == null) {
-            if (playbackPreferences.isAutomaticQuality(channel)) {
+            if (PlaybackQualityPolicy.shouldUseAutomaticQuality(
+                    channel,
+                    null,
+                    playbackPreferences.isAutomaticQuality(channel)
+            )) {
                 qualityPreferenceAppliedFor = channelIdentity;
                 player.setTrackSelectionParameters(player.getTrackSelectionParameters()
                         .buildUpon()
@@ -2746,8 +2750,15 @@ public final class MainActivity extends Activity {
                 ? Collections.emptyList()
                 : collectVideoTrackOptions(player.getCurrentTracks());
         if (qualities.size() > 1) {
+            PlaybackPreferences.QualityPreference preference = playbackPreferences == null
+                    ? null
+                    : playbackPreferences.getQuality(channel);
             boolean automatic = playbackPreferences != null
-                    && playbackPreferences.isAutomaticQuality(channel);
+                    && PlaybackQualityPolicy.shouldUseAutomaticQuality(
+                            channel,
+                            preference,
+                            playbackPreferences.isAutomaticQuality(channel)
+                    );
             playbackOptions.add(PlaybackOption.automatic(automatic));
         }
         VideoTrackOption selected = selectedQualityOption(channel, qualities);
@@ -2776,9 +2787,13 @@ public final class MainActivity extends Activity {
             List<VideoTrackOption> qualities
     ) {
         if (channel == null || qualities.isEmpty() || playbackPreferences == null) return null;
-        if (playbackPreferences.isAutomaticQuality(channel)) return null;
         PlaybackPreferences.QualityPreference preference =
                 playbackPreferences.getQuality(channel);
+        if (PlaybackQualityPolicy.shouldUseAutomaticQuality(
+                channel,
+                preference,
+                playbackPreferences.isAutomaticQuality(channel)
+        )) return null;
         return preference == null
                 ? qualities.get(0)
                 : findClosestQuality(qualities, preference);
@@ -3294,7 +3309,11 @@ public final class MainActivity extends Activity {
         }
         PlaybackPreferences.QualityPreference preference =
                 playbackPreferences.getQuality(channel);
-        boolean automaticQuality = playbackPreferences.isAutomaticQuality(channel);
+        boolean automaticQuality = PlaybackQualityPolicy.shouldUseAutomaticQuality(
+                channel,
+                preference,
+                playbackPreferences.isAutomaticQuality(channel)
+        );
         VideoTrackOption selectedOption = preference != null
                 ? findClosestQuality(options, preference)
                 : (automaticQuality || options.isEmpty() ? null : options.get(0));
