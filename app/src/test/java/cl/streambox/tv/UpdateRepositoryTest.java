@@ -33,4 +33,13 @@ public final class UpdateRepositoryTest {
                 update.getDownloadUri().toString()
         );
     }
+
+    @Test
+    public void bridgeFromMistakenSixLineToFiveThirtyThree() {
+        assertTrue(UpdateRepository.isNewerVersion("v0.5.33", "0.6.2"));
+        assertTrue(UpdateRepository.isNewerVersion("0.5.34", "0.6.1"));
+        assertFalse(UpdateRepository.isNewerVersion("0.5.32", "0.6.2"));
+        assertFalse(UpdateRepository.isNewerVersion("0.5.33", "0.5.33"));
+        assertFalse(UpdateRepository.isNewerVersion("0.5.33", "0.7.0"));
+    }
 }
