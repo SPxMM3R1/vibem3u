@@ -84,7 +84,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class MainActivity extends Activity {
     private static final int SETTINGS_REQUEST = 1001;
     private static final long OVERLAY_TIMEOUT_MS = 4_500;
-    private static final long LIGHT_EPG_TIMEOUT_MS = 6_500;
+    private static final long PROGRAMME_DETAIL_TIMEOUT_MS = 12_000;
     private static final long PLAYBACK_FREEZE_TIMEOUT_MS = 5_000L;
     private static final long PLAYBACK_DIAGNOSTIC_STALL_TIMEOUT_NS =
             PLAYBACK_FREEZE_TIMEOUT_MS * 1_000_000L;
@@ -131,15 +131,20 @@ public final class MainActivity extends Activity {
     private View loadingPanel;
     private TextView loadingText;
     private TextView clock;
-    private View lightEpgOverlay;
-    private ProgressBar lightEpgProgress;
-    private TextView lightEpgLive;
-    private TextView lightEpgRemaining;
-    private final TextView[] lightEpgLabels = new TextView[3];
-    private final TextView[] lightEpgTitles = new TextView[3];
-    private final TextView[] lightEpgTimes = new TextView[3];
-    private final View[] lightEpgSlots = new View[3];
-    private final View[] lightEpgDividers = new View[3];
+    private View programmeDetailOverlay;
+    private TextView detailLive;
+    private TextView detailLabel;
+    private TextView detailTitle;
+    private TextView detailMeta;
+    private ProgressBar detailProgress;
+    private TextView detailDescription;
+    private View detailSide;
+    private TextView detailNextLabel;
+    private TextView detailNextTitle;
+    private TextView detailAfterLabel;
+    private TextView detailAfterTitle;
+    private EpgGuideView guideView;
+    private EpgGuideNavigator guideNavigator;
     private View sourceSelectorOverlay;
     private TextView sourceSelectorTitle;
     private TextView sourceSelectorChannel;
@@ -241,14 +246,14 @@ public final class MainActivity extends Activity {
         clock.setVisibility(View.GONE);
         updateDiagnosticsVisibility();
     };
-    private final Runnable hideLightEpg = () -> {
-        if (lightEpgOverlay != null) {
-            lightEpgOverlay.setVisibility(View.GONE);
+    private final Runnable hideProgrammeDetail = () -> {
+        if (programmeDetailOverlay != null) {
+            programmeDetailOverlay.setVisibility(View.GONE);
         }
     };
-    /** Timeout de la mini EPG: se cierra junto con el OSD que la acompaña. */
-    private final Runnable hideLightEpgWithOverlay = () -> {
-        hideLightEpg.run();
+    /** Timeout del detalle: se cierra junto con el OSD que lo acompaña. */
+    private final Runnable hideProgrammeDetailWithOverlay = () -> {
+        hideProgrammeDetail.run();
         hideOverlay.run();
     };
     private final Runnable updateClock = new Runnable() {
@@ -370,28 +375,24 @@ public final class MainActivity extends Activity {
         loadingPanel = findViewById(R.id.loading_panel);
         loadingText = findViewById(R.id.loading_text);
         clock = findViewById(R.id.clock);
-        lightEpgOverlay = findViewById(R.id.light_epg_overlay);
-        FrameLayout.LayoutParams lightEpgParams = (FrameLayout.LayoutParams)
-                lightEpgOverlay.getLayoutParams();
-        lightEpgParams.width = overlayParams.width;
-        lightEpgParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        lightEpgOverlay.setLayoutParams(lightEpgParams);
-        lightEpgProgress = findViewById(R.id.light_epg_progress);
-        lightEpgLive = findViewById(R.id.light_epg_live_1);
-        lightEpgRemaining = findViewById(R.id.light_epg_remaining);
-        lightEpgLabels[0] = findViewById(R.id.light_epg_label_1);
-        lightEpgLabels[1] = findViewById(R.id.light_epg_label_2);
-        lightEpgLabels[2] = findViewById(R.id.light_epg_label_3);
-        lightEpgSlots[1] = findViewById(R.id.light_epg_slot_2);
-        lightEpgSlots[2] = findViewById(R.id.light_epg_slot_3);
-        lightEpgDividers[1] = findViewById(R.id.light_epg_divider_2);
-        lightEpgDividers[2] = findViewById(R.id.light_epg_divider_3);
-        lightEpgTitles[0] = findViewById(R.id.light_epg_title_1);
-        lightEpgTitles[1] = findViewById(R.id.light_epg_title_2);
-        lightEpgTitles[2] = findViewById(R.id.light_epg_title_3);
-        lightEpgTimes[0] = findViewById(R.id.light_epg_time_1);
-        lightEpgTimes[1] = findViewById(R.id.light_epg_time_2);
-        lightEpgTimes[2] = findViewById(R.id.light_epg_time_3);
+        programmeDetailOverlay = findViewById(R.id.programme_detail_overlay);
+        FrameLayout.LayoutParams detailParams = (FrameLayout.LayoutParams)
+                programmeDetailOverlay.getLayoutParams();
+        detailParams.width = overlayParams.width;
+        detailParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        programmeDetailOverlay.setLayoutParams(detailParams);
+        detailLive = findViewById(R.id.detail_live);
+        detailLabel = findViewById(R.id.detail_label);
+        detailTitle = findViewById(R.id.detail_title);
+        detailMeta = findViewById(R.id.detail_meta);
+        detailProgress = findViewById(R.id.detail_progress);
+        detailDescription = findViewById(R.id.detail_description);
+        detailSide = findViewById(R.id.detail_side);
+        detailNextLabel = findViewById(R.id.detail_next_label);
+        detailNextTitle = findViewById(R.id.detail_next_title);
+        detailAfterLabel = findViewById(R.id.detail_after_label);
+        detailAfterTitle = findViewById(R.id.detail_after_title);
+        guideView = findViewById(R.id.guide_overlay);
         sourceSelectorOverlay = findViewById(R.id.source_selector_overlay);
         sourceSelectorTitle = findViewById(R.id.source_selector_title);
         sourceSelectorChannel = findViewById(R.id.source_selector_channel);
@@ -2060,7 +2061,7 @@ public final class MainActivity extends Activity {
                     : channel.getGroup());
             programmeTime.setVisibility(View.GONE);
             liveProgress.setIndeterminate(true);
-            updateLightEpgInfo();
+            updateProgrammeDetail();
             return;
         }
 
@@ -2078,12 +2079,12 @@ public final class MainActivity extends Activity {
         liveProgress.setIndeterminate(false);
         liveProgress.setMax(1000);
         liveProgress.setProgress(progress);
-        updateLightEpgInfo();
+        updateProgrammeDetail();
     }
 
-    private void updateLightEpgInfo() {
-        if (lightEpgOverlay == null
-                || lightEpgOverlay.getVisibility() != View.VISIBLE
+    private void updateProgrammeDetail() {
+        if (programmeDetailOverlay == null
+                || programmeDetailOverlay.getVisibility() != View.VISIBLE
                 || channels.isEmpty()
                 || channelIndex < 0
                 || channelIndex >= channels.size()) return;
@@ -2091,67 +2092,63 @@ public final class MainActivity extends Activity {
         Channel channel = channels.get(channelIndex);
         long now = System.currentTimeMillis();
         SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
-        List<EpgProgramme> upcoming = epgData.findUpcoming(channel.getTvgId(), now, lightEpgTitles.length);
+        List<EpgProgramme> upcoming = epgData.findUpcoming(channel.getTvgId(), now, 3);
         EpgProgramme first = upcoming.isEmpty() ? null : upcoming.get(0);
         EpgProgramme current = first != null && first.getStartMillis() <= now ? first : null;
 
-        // Columna 1: programa en curso (o el primero que viene si aún no empieza).
         if (first == null) {
-            lightEpgLabels[0].setText(R.string.light_epg_now);
-            lightEpgTitles[0].setText(R.string.epg_no_information);
-            lightEpgTimes[0].setText("");
-        } else {
-            lightEpgLabels[0].setText(current != null
-                    ? getString(R.string.light_epg_now)
-                    : getString(R.string.light_epg_next_at,
-                            timeFormat.format(new Date(first.getStartMillis()))));
-            lightEpgTitles[0].setText(first.getTitle());
-            lightEpgTimes[0].setText(formatProgrammeRange(first, timeFormat));
-        }
-
-        // Columnas 2 y 3: los dos siguientes. Sin guía solo queda "Ahora".
-        for (int index = 1; index < lightEpgTitles.length; index++) {
-            int visibility = first == null ? View.GONE : View.VISIBLE;
-            lightEpgSlots[index].setVisibility(visibility);
-            lightEpgDividers[index].setVisibility(visibility);
-            if (first == null) continue;
-            EpgProgramme programme = index < upcoming.size() ? upcoming.get(index) : null;
-            if (programme == null) {
-                lightEpgLabels[index].setText("");
-                lightEpgTitles[index].setText(R.string.epg_no_next_programme);
-                lightEpgTimes[index].setText("");
-                continue;
-            }
-            String start = timeFormat.format(new Date(programme.getStartMillis()));
-            lightEpgLabels[index].setText(getString(index == 1
-                    ? R.string.light_epg_next_at
-                    : R.string.light_epg_after_at, start));
-            lightEpgTitles[index].setText(programme.getTitle());
-            lightEpgTimes[index].setText(getString(
-                    R.string.light_epg_range_duration,
-                    start,
-                    timeFormat.format(new Date(programme.getStopMillis())),
-                    formatEpgDuration(programme.getStopMillis() - programme.getStartMillis())));
-        }
-
-        if (current == null) {
-            lightEpgLive.setVisibility(first == null ? View.VISIBLE : View.GONE);
-            lightEpgProgress.setVisibility(View.GONE);
-            lightEpgRemaining.setVisibility(View.GONE);
+            detailLive.setVisibility(View.VISIBLE);
+            detailLabel.setText(AppStrings.isBlank(channel.getGroup())
+                    ? getString(R.string.live_content) : channel.getGroup());
+            detailTitle.setText(R.string.epg_no_information);
+            detailMeta.setText(channel.getName());
+            detailProgress.setVisibility(View.GONE);
+            detailDescription.setVisibility(View.GONE);
+            detailSide.setVisibility(View.GONE);
             return;
         }
-        lightEpgLive.setVisibility(View.VISIBLE);
-        lightEpgProgress.setVisibility(View.VISIBLE);
-        lightEpgRemaining.setVisibility(View.VISIBLE);
-        lightEpgRemaining.setText(getString(
-                R.string.light_epg_remaining,
-                formatEpgDuration(current.getStopMillis() - now)));
-        long duration = current.getStopMillis() - current.getStartMillis();
-        int progress = duration <= 0 ? 0 : (int) Math.max(0, Math.min(1000,
-                ((now - current.getStartMillis()) * 1000L) / duration));
-        lightEpgProgress.setIndeterminate(false);
-        lightEpgProgress.setMax(1000);
-        lightEpgProgress.setProgress(progress);
+
+        detailLive.setVisibility(current != null ? View.VISIBLE : View.GONE);
+        detailLabel.setText(current != null
+                ? getString(R.string.light_epg_now)
+                : getString(R.string.light_epg_next_at,
+                        timeFormat.format(new Date(first.getStartMillis()))));
+        detailTitle.setText(first.getTitle());
+        String range = formatProgrammeRange(first, timeFormat);
+        String duration = formatEpgDuration(first.getStopMillis() - first.getStartMillis());
+        detailMeta.setText(current != null
+                ? getString(R.string.detail_meta_live, range, duration,
+                        formatEpgDuration(current.getStopMillis() - now))
+                : getString(R.string.detail_meta, range, duration));
+        if (current != null) {
+            long total = current.getStopMillis() - current.getStartMillis();
+            int progress = total <= 0 ? 0 : (int) Math.max(0, Math.min(1000,
+                    ((now - current.getStartMillis()) * 1000L) / total));
+            detailProgress.setMax(1000);
+            detailProgress.setProgress(progress);
+            detailProgress.setVisibility(View.VISIBLE);
+        } else {
+            detailProgress.setVisibility(View.GONE);
+        }
+        String description = first.getDescription();
+        detailDescription.setText(description);
+        detailDescription.setVisibility(description.isEmpty() ? View.GONE : View.VISIBLE);
+
+        EpgProgramme next = upcoming.size() > 1 ? upcoming.get(1) : null;
+        EpgProgramme after = upcoming.size() > 2 ? upcoming.get(2) : null;
+        detailSide.setVisibility(next == null ? View.GONE : View.VISIBLE);
+        if (next != null) {
+            detailNextLabel.setText(getString(R.string.light_epg_next_at,
+                    timeFormat.format(new Date(next.getStartMillis()))));
+            detailNextTitle.setText(next.getTitle());
+        }
+        detailAfterLabel.setVisibility(after == null ? View.GONE : View.VISIBLE);
+        detailAfterTitle.setVisibility(after == null ? View.GONE : View.VISIBLE);
+        if (after != null) {
+            detailAfterLabel.setText(getString(R.string.light_epg_after_at,
+                    timeFormat.format(new Date(after.getStartMillis()))));
+            detailAfterTitle.setText(after.getTitle());
+        }
     }
 
     private String formatEpgDuration(long millis) {
@@ -2596,8 +2593,8 @@ public final class MainActivity extends Activity {
     }
 
     private void showOverlay(boolean keepVisible) {
-        hideLightEpg.run();
-        mainHandler.removeCallbacks(hideLightEpgWithOverlay);
+        hideProgrammeDetail.run();
+        mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
         channelOverlay.setVisibility(View.VISIBLE);
         clock.setVisibility(View.VISIBLE);
         updateDiagnosticsVisibility();
@@ -2614,14 +2611,121 @@ public final class MainActivity extends Activity {
         showOverlay(true);
     }
 
-    private void showLightEpg() {
+    private boolean isProgrammeDetailVisible() {
+        return programmeDetailOverlay != null
+                && programmeDetailOverlay.getVisibility() == View.VISIBLE;
+    }
+
+    private boolean isGuideVisible() {
+        return guideView != null && guideView.getVisibility() == View.VISIBLE;
+    }
+
+    /** Guía completa: filas de canales y bloques de programas; OK abre el canal enfocado. */
+    private void openGuide() {
+        if (channels.isEmpty() || guideView == null || settingsOpen || exiting) return;
+        closePlaybackSourceSelector();
+        mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
+        hideProgrammeDetail.run();
+        mainHandler.removeCallbacks(hideOverlay);
+        overlayAwaitingPlayback = false;
+        hideOverlay.run();
+        long now = System.currentTimeMillis();
+        int row = channelIndex >= 0 && channelIndex < channels.size() ? channelIndex : 0;
+        guideNavigator = new EpgGuideNavigator(channels.size(), row, now);
+        guideView.bind(guideSource, guideNavigator, now);
+        guideView.setVisibility(View.VISIBLE);
+    }
+
+    private void closeGuide() {
+        if (guideView != null) guideView.setVisibility(View.GONE);
+    }
+
+    private final EpgGuideView.Source guideSource = new EpgGuideView.Source() {
+        @Override public int rowCount() { return channels.size(); }
+
+        @Override public String number(int row) {
+            if (row < 0 || row >= channels.size()) return "";
+            int number = publishedPlaybackCatalog.numberFor(channels.get(row), row + 1);
+            return String.format(Locale.ROOT, "%03d", number);
+        }
+
+        @Override public String name(int row) {
+            return row < 0 || row >= channels.size() ? "" : channels.get(row).getName();
+        }
+
+        @Override public List<EpgProgramme> programmes(int row, long fromMillis, long toMillis) {
+            if (row < 0 || row >= channels.size()) return java.util.Collections.emptyList();
+            return epgData.findInWindow(channels.get(row).getTvgId(), fromMillis, toMillis);
+        }
+
+        @Override public int playingRow() { return channelIndex; }
+    };
+
+    /** Programas de la fila enfocada en un rango amplio para saltar entre bloques. */
+    private List<EpgProgramme> guideRowProgrammes() {
+        int row = guideNavigator.getRow();
+        if (row < 0 || row >= channels.size()) return java.util.Collections.emptyList();
+        long now = System.currentTimeMillis();
+        return epgData.findInWindow(channels.get(row).getTvgId(),
+                now - EpgGuideNavigator.WINDOW_MILLIS,
+                now + EpgGuideNavigator.MAX_AHEAD_MILLIS + EpgGuideNavigator.WINDOW_MILLIS);
+    }
+
+    private boolean handleGuideKey(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_CHANNEL_UP:
+                if (down && guideNavigator.moveRow(-1)) guideView.refresh(System.currentTimeMillis());
+                return true;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_CHANNEL_DOWN:
+                if (down && guideNavigator.moveRow(1)) guideView.refresh(System.currentTimeMillis());
+                return true;
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                if (down && guideNavigator.moveTime(-1, guideRowProgrammes())) {
+                    guideView.refresh(System.currentTimeMillis());
+                }
+                return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                if (down && guideNavigator.moveTime(1, guideRowProgrammes())) {
+                    guideView.refresh(System.currentTimeMillis());
+                }
+                return true;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+                if (down && event.getRepeatCount() == 0) {
+                    int row = guideNavigator.getRow();
+                    closeGuide();
+                    if (row != channelIndex) {
+                        playChannel(row);
+                    } else {
+                        showOverlay(false);
+                    }
+                }
+                return true;
+            case KeyEvent.KEYCODE_BACK:
+            case KeyEvent.KEYCODE_GUIDE:
+                if (down && event.getRepeatCount() == 0) closeGuide();
+                return true;
+            case KeyEvent.KEYCODE_MENU:
+            case KeyEvent.KEYCODE_SETTINGS:
+            case KeyEvent.KEYCODE_INFO:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void showProgrammeDetail() {
         if (channels.isEmpty() || channelIndex < 0 || channelIndex >= channels.size()) return;
-        mainHandler.removeCallbacks(hideLightEpgWithOverlay);
-        // La mini EPG se apoya sobre el OSD: ambos quedan visibles y se cierran juntos.
+        mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
+        // El detalle se apoya sobre el OSD: ambos quedan visibles y se cierran juntos.
         showOverlay(true);
-        lightEpgOverlay.setVisibility(View.VISIBLE);
-        updateLightEpgInfo();
-        mainHandler.postDelayed(hideLightEpgWithOverlay, LIGHT_EPG_TIMEOUT_MS);
+        programmeDetailOverlay.setVisibility(View.VISIBLE);
+        updateProgrammeDetail();
+        mainHandler.postDelayed(hideProgrammeDetailWithOverlay, PROGRAMME_DETAIL_TIMEOUT_MS);
     }
 
     private boolean isSourceSelectorVisible() {
@@ -2638,8 +2742,8 @@ public final class MainActivity extends Activity {
         StreamResolver resolver = streamResolverRegistry.find(playbackChannel);
         if (isSourceSelectorVisible() || sourceCandidateTask != null) return;
 
-        mainHandler.removeCallbacks(hideLightEpgWithOverlay);
-        hideLightEpg.run();
+        mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
+        hideProgrammeDetail.run();
         sourceSelectorTitle.setText(getString(R.string.source_selector_title));
         sourceSelectorChannel.setText(playbackChannel.getName());
         sourceSelectorOverlay.setVisibility(View.VISIBLE);
@@ -3033,6 +3137,7 @@ public final class MainActivity extends Activity {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
+        if (isGuideVisible() && handleGuideKey(event)) return true;
         if (isSourceSelectorVisible()) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 if (keyCode == KeyEvent.KEYCODE_BACK
@@ -3088,10 +3193,10 @@ public final class MainActivity extends Activity {
             return true;
         }
 
-        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_GUIDE) {
             if (event.getAction() == KeyEvent.ACTION_DOWN
                     && event.getRepeatCount() == 0) {
-                showLightEpg();
+                openGuide();
             }
             return true;
         }
@@ -3121,6 +3226,16 @@ public final class MainActivity extends Activity {
                 if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_INFO) {
                     if (loadFailed) {
                         refreshPlaylists(getPlaylistSources());
+                    } else if (isProgrammeDetailVisible()) {
+                        // Un nuevo OK cierra el detalle y deja el OSD con su tiempo normal.
+                        mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
+                        hideProgrammeDetail.run();
+                        showOverlay(false);
+                    } else if (keyCode == KeyEvent.KEYCODE_INFO
+                            || channelOverlay.getVisibility() == View.VISIBLE) {
+                        // Segundo OK (o INFO): detalle del programa sobre el OSD.
+                        startPlaybackFromInput();
+                        showProgrammeDetail();
                     } else {
                         startPlaybackFromInput();
                         showOverlay(false);
@@ -3165,9 +3280,9 @@ public final class MainActivity extends Activity {
             closePlaybackSourceSelector();
             return;
         }
-        if (lightEpgOverlay.getVisibility() == View.VISIBLE) {
-            mainHandler.removeCallbacks(hideLightEpgWithOverlay);
-            hideLightEpg.run();
+        if (programmeDetailOverlay.getVisibility() == View.VISIBLE) {
+            mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
+            hideProgrammeDetail.run();
             overlayAwaitingPlayback = false;
             mainHandler.removeCallbacks(hideOverlay);
             mainHandler.postDelayed(hideOverlay, OVERLAY_TIMEOUT_MS);
@@ -3400,8 +3515,9 @@ public final class MainActivity extends Activity {
         if (settingsOpen) return;
         mainHandler.removeCallbacks(hideOverlay);
         hideOverlay.run();
-        mainHandler.removeCallbacks(hideLightEpgWithOverlay);
-        hideLightEpg.run();
+        mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
+        hideProgrammeDetail.run();
+        closeGuide();
         resolverSettingsSnapshotBeforeSettings = resolverSettingsSnapshot();
         playlistSourcesSnapshotBeforeSettings = playlistSourceSignature(getPlaylistSources());
         settingsOpen = true;
@@ -3710,8 +3826,9 @@ public final class MainActivity extends Activity {
         if (playbackBitrateMeter != null) playbackBitrateMeter.setNotificationsEnabled(false);
         closePlaybackSourceSelector();
         resetResourceWarningState();
-        mainHandler.removeCallbacks(hideLightEpgWithOverlay);
-        hideLightEpg.run();
+        mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
+        hideProgrammeDetail.run();
+        closeGuide();
         if (!settingsOpen) {
             stopPlaybackForFocusLoss();
         }

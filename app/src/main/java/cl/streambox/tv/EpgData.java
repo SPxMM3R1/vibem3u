@@ -159,6 +159,30 @@ public final class EpgData {
         return Collections.unmodifiableList(upcoming);
     }
 
+    /**
+     * Programmes of {@code channelId} that overlap {@code [fromMillis, toMillis)}, in start
+     * order. Used by the full guide to draw one time window per row.
+     */
+    public List<EpgProgramme> findInWindow(String channelId, long fromMillis, long toMillis) {
+        if (channelId == null || AppStrings.isBlank(channelId) || toMillis <= fromMillis) {
+            return Collections.emptyList();
+        }
+        List<EpgProgramme> programmes = programmesByChannel.get(channelId);
+        if (programmes == null || programmes.isEmpty()) return Collections.emptyList();
+        List<EpgProgramme> result = new ArrayList<>();
+        for (EpgProgramme programme : programmes) {
+            if (programme.getStartMillis() >= toMillis) break;
+            if (programme.getStopMillis() <= fromMillis) continue;
+            result.add(programme);
+        }
+        return Collections.unmodifiableList(result);
+    }
+
+    public boolean hasChannel(String channelId) {
+        List<EpgProgramme> programmes = channelId == null ? null : programmesByChannel.get(channelId);
+        return programmes != null && !programmes.isEmpty();
+    }
+
     public int getProgrammeCount() { return programmeCount; }
 
     List<EpgProgramme> getProgrammes() { return programmes; }

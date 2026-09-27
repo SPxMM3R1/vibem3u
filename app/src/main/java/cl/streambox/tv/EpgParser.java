@@ -76,8 +76,10 @@ public final class EpgParser {
         private long startMillis;
         private long stopMillis;
         private String title;
+        private String description;
         private StringBuilder text;
         private boolean readingTitle;
+        private boolean readingDescription;
 
         @Override
         public void startElement(String uri, String localName, String qName, Attributes attributes) {
@@ -86,15 +88,25 @@ public final class EpgParser {
                 startMillis = parseXmlTvTime(attributes.getValue("start"));
                 stopMillis = parseXmlTvTime(attributes.getValue("stop"));
                 title = null;
+                description = null;
             } else if (channelId != null && "title".equalsIgnoreCase(qName) && title == null) {
                 readingTitle = true;
+                text = new StringBuilder();
+            } else if (channelId != null && "desc".equalsIgnoreCase(qName)
+                    && description == null && !readingTitle) {
+                readingDescription = true;
                 text = new StringBuilder();
             }
         }
 
         @Override
         public void characters(char[] chars, int start, int length) {
-            if (readingTitle) text.append(chars, start, length);
+            if (readingTitle) {
+                text.append(chars, start, length);
+            } else if (readingDescription
+                    && text.length() <= EpgProgramme.MAX_DESCRIPTION_CHARS * 2) {
+                text.append(chars, start, length);
+            }
         }
 
         @Override
@@ -104,14 +116,22 @@ public final class EpgParser {
                 if (!candidate.isEmpty()) title = candidate;
                 readingTitle = false;
                 text = null;
+            } else if ("desc".equalsIgnoreCase(qName) && readingDescription) {
+                String candidate = text.toString().trim();
+                if (!candidate.isEmpty()) description = candidate;
+                readingDescription = false;
+                text = null;
             } else if ("programme".equalsIgnoreCase(qName)) {
                 if (channelId != null && !AppStrings.isBlank(channelId) && title != null
                         && startMillis >= 0 && stopMillis > startMillis) {
-                    programmes.add(new EpgProgramme(channelId, title, startMillis, stopMillis));
+                    programmes.add(new EpgProgramme(
+                            channelId, title, startMillis, stopMillis, description));
                 }
                 channelId = null;
                 title = null;
+                description = null;
                 readingTitle = false;
+                readingDescription = false;
                 text = null;
             }
         }

@@ -116,11 +116,14 @@
     <string name="epg_no_information">Sin información disponible</string>
     <string name="epg_no_next_programme">No hay información siguiente</string>
     <string name="light_epg_live">● EN VIVO</string>
+    <string name="guide_title">Guía</string>
+    <string name="guide_hints">OK ver canal · ▲▼ canal · ◀▶ hora · BACK cerrar</string>
+    <string name="guide_live">en vivo</string>
+    <string name="detail_meta_live">%1$s · %2$s · quedan %3$s</string>
+    <string name="detail_meta">%1$s · %2$s</string>
     <string name="light_epg_now">Ahora</string>
     <string name="light_epg_next_at">A continuación · %1$s</string>
     <string name="light_epg_after_at">Después · %1$s</string>
-    <string name="light_epg_remaining">Quedan %1$s</string>
-    <string name="light_epg_range_duration">%1$s – %2$s · %3$s</string>
     <string name="light_epg_minutes">%1$d min</string>
     <string name="light_epg_hours">%1$d h</string>
     <string name="light_epg_hours_minutes">%1$d h %2$d min</string>
