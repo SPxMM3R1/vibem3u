@@ -21,6 +21,7 @@ import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.Gravity;
@@ -136,10 +137,9 @@ public final class MainActivity extends Activity {
     private TextView lightEpgGroup;
     private TextView lightEpgClock;
     private ProgressBar lightEpgProgress;
-    private TextView lightEpgCurrentTitle;
-    private TextView lightEpgCurrentTime;
-    private TextView lightEpgNextTitle;
-    private TextView lightEpgNextTime;
+    private TextView lightEpgLive;
+    private final TextView[] lightEpgTitles = new TextView[3];
+    private final TextView[] lightEpgTimes = new TextView[3];
     private View sourceSelectorOverlay;
     private TextView sourceSelectorTitle;
     private TextView sourceSelectorChannel;
@@ -371,10 +371,13 @@ public final class MainActivity extends Activity {
         lightEpgGroup = findViewById(R.id.light_epg_group);
         lightEpgClock = findViewById(R.id.light_epg_clock);
         lightEpgProgress = findViewById(R.id.light_epg_progress);
-        lightEpgCurrentTitle = findViewById(R.id.light_epg_current_title);
-        lightEpgCurrentTime = findViewById(R.id.light_epg_current_time);
-        lightEpgNextTitle = findViewById(R.id.light_epg_next_title);
-        lightEpgNextTime = findViewById(R.id.light_epg_next_time);
+        lightEpgLive = findViewById(R.id.light_epg_live_1);
+        lightEpgTitles[0] = findViewById(R.id.light_epg_title_1);
+        lightEpgTitles[1] = findViewById(R.id.light_epg_title_2);
+        lightEpgTitles[2] = findViewById(R.id.light_epg_title_3);
+        lightEpgTimes[0] = findViewById(R.id.light_epg_time_1);
+        lightEpgTimes[1] = findViewById(R.id.light_epg_time_2);
+        lightEpgTimes[2] = findViewById(R.id.light_epg_time_3);
         sourceSelectorOverlay = findViewById(R.id.source_selector_overlay);
         sourceSelectorTitle = findViewById(R.id.source_selector_title);
         sourceSelectorChannel = findViewById(R.id.source_selector_channel);
@@ -2074,8 +2077,7 @@ public final class MainActivity extends Activity {
         Channel channel = channels.get(channelIndex);
         long now = System.currentTimeMillis();
         SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
-        EpgProgramme current = epgData.findCurrent(channel.getTvgId(), now);
-        EpgProgramme next = epgData.findNext(channel.getTvgId(), now);
+        List<EpgProgramme> upcoming = epgData.findUpcoming(channel.getTvgId(), now, lightEpgTitles.length);
 
         lightEpgChannelNumber.setText(String.format(Locale.ROOT, "%03d", channelIndex + 1));
         lightEpgChannelName.setText(channel.getName());
@@ -2084,30 +2086,34 @@ public final class MainActivity extends Activity {
                 : channel.getGroup());
         lightEpgClock.setText(timeFormat.format(new Date(now)));
 
-        if (current == null) {
-            lightEpgCurrentTitle.setText(AppStrings.isBlank(channel.getGroup())
-                    ? getString(R.string.live_content)
-                    : channel.getGroup());
-            lightEpgCurrentTime.setText(R.string.epg_no_information);
-            lightEpgProgress.setIndeterminate(true);
-        } else {
-            lightEpgCurrentTitle.setText(current.getTitle());
-            lightEpgCurrentTime.setText(formatProgrammeRange(current, timeFormat));
-            long duration = current.getStopMillis() - current.getStartMillis();
-            int progress = duration <= 0 ? 0 : (int) Math.max(0, Math.min(1000,
-                    ((now - current.getStartMillis()) * 1000L) / duration));
-            lightEpgProgress.setIndeterminate(false);
-            lightEpgProgress.setMax(1000);
-            lightEpgProgress.setProgress(progress);
+        for (int index = 0; index < lightEpgTitles.length; index++) {
+            EpgProgramme programme = index < upcoming.size() ? upcoming.get(index) : null;
+            if (programme == null) {
+                lightEpgTitles[index].setText(index == 0
+                        ? R.string.epg_no_information
+                        : R.string.epg_no_next_programme);
+                lightEpgTimes[index].setText("");
+                continue;
+            }
+            lightEpgTitles[index].setText(programme.getTitle());
+            lightEpgTimes[index].setText(formatProgrammeRange(programme, timeFormat));
         }
 
-        if (next == null) {
-            lightEpgNextTitle.setText(R.string.epg_no_next_programme);
-            lightEpgNextTime.setText("");
-        } else {
-            lightEpgNextTitle.setText(next.getTitle());
-            lightEpgNextTime.setText(formatProgrammeRange(next, timeFormat));
+        EpgProgramme current = upcoming.isEmpty() ? null : upcoming.get(0);
+        if (current != null && current.getStartMillis() > now) current = null;
+        if (current == null) {
+            lightEpgLive.setVisibility(View.GONE);
+            lightEpgProgress.setVisibility(View.GONE);
+            return;
         }
+        lightEpgLive.setVisibility(View.VISIBLE);
+        lightEpgProgress.setVisibility(View.VISIBLE);
+        long duration = current.getStopMillis() - current.getStartMillis();
+        int progress = duration <= 0 ? 0 : (int) Math.max(0, Math.min(1000,
+                ((now - current.getStartMillis()) * 1000L) / duration));
+        lightEpgProgress.setIndeterminate(false);
+        lightEpgProgress.setMax(1000);
+        lightEpgProgress.setProgress(progress);
     }
 
     private static String formatProgrammeRange(
@@ -2800,7 +2806,10 @@ public final class MainActivity extends Activity {
             String label = (playbackOption.selected ? "✓ " : "") + playbackOption.label;
             option.setText(AppStrings.isBlank(detail) ? label : label + "\n" + detail);
             option.setTextColor(getColor(R.color.white));
-            option.setTextSize(13f);
+            option.setTextSize(
+                    TypedValue.COMPLEX_UNIT_PX,
+                    getResources().getDimension(R.dimen.settings_control_text_size)
+            );
             option.setGravity(Gravity.CENTER_VERTICAL);
             option.setIncludeFontPadding(false);
             option.setLineSpacing(0f, 0.95f);
@@ -3036,14 +3045,7 @@ public final class MainActivity extends Activity {
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
             if (event.getAction() == KeyEvent.ACTION_DOWN
                     && event.getRepeatCount() == 0) {
-                StreamResolver resolver = playbackChannel == null || streamResolverRegistry == null
-                        ? null
-                        : streamResolverRegistry.find(playbackChannel);
-                if (resolver == null || !supportsSourceSelector(resolver)) {
-                    openPlaybackSourceSelector();
-                } else {
-                    showLightEpg();
-                }
+                showLightEpg();
             }
             return true;
         }

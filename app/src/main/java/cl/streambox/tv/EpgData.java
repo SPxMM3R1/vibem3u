@@ -138,6 +138,27 @@ public final class EpgData {
         return null;
     }
 
+    /**
+     * Returns the programme in progress (when the guide has one) followed by
+     * the next programmes in start order, up to {@code limit} entries. A gap
+     * without a running programme is skipped, so the first entry is then the
+     * first future programme.
+     */
+    public List<EpgProgramme> findUpcoming(String channelId, long nowMillis, int limit) {
+        if (channelId == null || AppStrings.isBlank(channelId) || limit <= 0) {
+            return Collections.emptyList();
+        }
+        List<EpgProgramme> programmes = programmesByChannel.get(channelId);
+        if (programmes == null || programmes.isEmpty()) return Collections.emptyList();
+        List<EpgProgramme> upcoming = new ArrayList<>(Math.min(limit, 4));
+        for (EpgProgramme programme : programmes) {
+            if (programme.getStopMillis() <= nowMillis) continue;
+            upcoming.add(programme);
+            if (upcoming.size() >= limit) break;
+        }
+        return Collections.unmodifiableList(upcoming);
+    }
+
     public int getProgrammeCount() { return programmeCount; }
 
     List<EpgProgramme> getProgrammes() { return programmes; }
