@@ -28,6 +28,7 @@ final class HlsProxy {
     private static final int MAX_SESSIONS = 32;
     private static final int MAX_ASSETS_PER_SESSION = 8192;
     private static final int MAX_PLAYLIST_BYTES = 2 * 1024 * 1024;
+    private static final Pattern MEDIA_SEQUENCE = Pattern.compile("#EXT-X-MEDIA-SEQUENCE:[ \\t]*([0-9]+)");
     private static final Pattern URI_ATTRIBUTE = Pattern.compile("(?i)(URI\\s*=\\s*\")([^\"]+)(\")");
     private static final OkHttpClient HTTP = new OkHttpClient.Builder()
             .connectTimeout(12, TimeUnit.SECONDS)
@@ -59,7 +60,10 @@ final class HlsProxy {
 
     void close(String id) {
         Session session = sessions.remove(id);
-        if (session != null) session.assets.clear();
+        if (session != null) {
+            session.assets.clear();
+            session.assetIds.clear();
+        }
     }
 
     void stream(String sessionId, String assetId, String range, OutputStream output, ResponseWriter writer) throws IOException {
@@ -144,6 +148,9 @@ final class HlsProxy {
 
     private String rewriteManifest(Session session, URI base, String manifest) throws IOException {
         StringBuilder rewritten = new StringBuilder(manifest.length() + 256);
+        String playlistKey = withoutQuery(base);
+        long sequence = mediaSequence(manifest);
+        boolean mediaPlaylist = manifest.contains("#EXTINF");
         for (String line : manifest.split("\\r?\\n", -1)) {
             String value = line.trim();
             if (value.isEmpty()) {
@@ -154,22 +161,54 @@ final class HlsProxy {
                 Matcher matcher = URI_ATTRIBUTE.matcher(line);
                 StringBuffer replaced = new StringBuffer();
                 while (matcher.find()) {
-                    String proxied = localAsset(session, base.resolve(matcher.group(2)));
+                    URI target = base.resolve(matcher.group(2));
+                    String proxied = localAsset(session, target, withoutQuery(target));
                     matcher.appendReplacement(replaced, Matcher.quoteReplacement(matcher.group(1) + proxied + matcher.group(3)));
                 }
                 matcher.appendTail(replaced);
                 rewritten.append(replaced).append('\n');
             } else {
-                rewritten.append(localAsset(session, base.resolve(value))).append('\n');
+                URI target = base.resolve(value);
+                // En vivo, el proveedor puede firmar el mismo segmento con otro token en cada
+                // recarga. El ID local se ata a la posición (#EXT-X-MEDIA-SEQUENCE) para que
+                // hls.js vea siempre la misma URL por número de secuencia.
+                String key = mediaPlaylist && sequence >= 0
+                        ? playlistKey + "#" + sequence++
+                        : withoutQuery(target);
+                rewritten.append(localAsset(session, target, key)).append('\n');
             }
         }
         return rewritten.toString();
     }
 
-    private String localAsset(Session session, URI uri) throws IOException {
+    private static long mediaSequence(String manifest) {
+        Matcher matcher = MEDIA_SEQUENCE.matcher(manifest);
+        if (!matcher.find()) return manifest.contains("#EXTINF") ? 0L : -1L;
+        try {
+            return Long.parseLong(matcher.group(1));
+        } catch (NumberFormatException ignored) {
+            return -1L;
+        }
+    }
+
+    private static String withoutQuery(URI uri) {
+        return uri.getScheme() + "://" + uri.getRawAuthority() + (uri.getRawPath() == null ? "" : uri.getRawPath());
+    }
+
+    /**
+     * ID local estable por {@code key}: hls.js compara las URL por número de secuencia y corta
+     * con "media sequence mismatch" si un segmento ya listado cambia de dirección. Se guarda
+     * siempre la URL de origen más reciente (tokens renovados).
+     */
+    private String localAsset(Session session, URI uri, String key) throws IOException {
         validatePublicUri(uri);
-        if (session.assets.size() >= MAX_ASSETS_PER_SESSION) throw new IOException("La playlist contiene demasiados recursos.");
-        String id = UUID.randomUUID().toString().replace("-", "");
+        String id = session.assetIds.get(key);
+        if (id == null) {
+            if (session.assets.size() >= MAX_ASSETS_PER_SESSION) throw new IOException("La playlist contiene demasiados recursos.");
+            String created = UUID.randomUUID().toString().replace("-", "");
+            String previous = session.assetIds.putIfAbsent(key, created);
+            id = previous != null ? previous : created;
+        }
         session.assets.put(id, uri);
         return "/api/preview/" + session.id + "/asset/" + id;
     }
@@ -266,6 +305,7 @@ final class HlsProxy {
         final String userAgent;
         final Map<String, String> headers;
         final Map<String, URI> assets = new ConcurrentHashMap<>();
+        final Map<String, String> assetIds = new ConcurrentHashMap<>();
 
         Session(String id, ResolvedPlaybackSource source) {
             this.id = id;

@@ -144,6 +144,35 @@ public final class HlsProxyTest {
         proxy.close(session.id);
     }
 
+    @Test public void keepsSegmentUrlsStableAcrossLivePlaylistReloads() throws Exception {
+        // hls.js corta con "media sequence mismatch" si un segmento ya listado cambia de URL.
+        upstream.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/vnd.apple.mpegurl")
+                .setBody("#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:10\n#EXTINF:10.0,\ns10.ts?tok=a\n#EXTINF:10.0,\ns11.ts?tok=a\n"));
+        // En la recarga el proveedor vuelve a firmar el mismo segmento 11 con otro token.
+        upstream.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/vnd.apple.mpegurl")
+                .setBody("#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:11\n#EXTINF:10.0,\ns11.ts?tok=b\n#EXTINF:10.0,\ns12.ts?tok=b\n"));
+        HlsProxy proxy = new HlsProxy(true);
+        HlsProxy.Session session = proxy.open(ResolvedPlaybackSource.dynamic(
+                "tvvoo", "stable-key", upstream.url("live.m3u8").uri(), Collections.emptyMap(), "TestPlayer", 0L
+        ));
+
+        java.util.List<String> first = assetIds(fetchText(proxy, session.id, "root"));
+        java.util.List<String> second = assetIds(fetchText(proxy, session.id, "root"));
+
+        assertTrue(first.get(1).equals(second.get(0)));
+        assertFalse(second.get(1).equals(first.get(0)));
+        proxy.close(session.id);
+    }
+
+    private static java.util.List<String> assetIds(String playlist) {
+        java.util.List<String> ids = new java.util.ArrayList<>();
+        Matcher matcher = ASSET_ID.matcher(playlist);
+        while (matcher.find()) ids.add(matcher.group(1));
+        return ids;
+    }
+
     private static String fetchText(HlsProxy proxy, String sessionId, String assetId) throws IOException {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         proxy.stream(sessionId, assetId, null, output, (status, type, length, contentRange, acceptRanges) -> {

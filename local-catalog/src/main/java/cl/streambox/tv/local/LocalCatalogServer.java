@@ -230,8 +230,14 @@ public final class LocalCatalogServer {
                 ).toChannel();
             }
             if ("tvvoo".equals(provider)) {
+                // Las filas publicadas guardan el alias dentro de catalogKey (país|alias) y
+                // "country" es el nombre visible ("Reino Unido"): la clave es countryKey.
+                int separator = catalogKey.indexOf('|');
                 String alias = clean(row.optString("alias", ""), 256);
-                String country = clean(row.optString("country", row.optString("countryKey", "")), 120);
+                if (alias.isBlank() && separator > 0) alias = clean(catalogKey.substring(separator + 1), 256);
+                String country = clean(row.optString("countryKey", ""), 120);
+                if (country.isBlank() && separator > 0) country = clean(catalogKey.substring(0, separator), 120);
+                if (country.isBlank()) country = clean(row.optString("country", ""), 120);
                 if (alias.isBlank() || country.isBlank()) throw new IllegalArgumentException("El canal TvVoo necesita alias y país.");
                 List<String> aliases = stringArray(row.optJSONArray("aliases"));
                 if (aliases.isEmpty()) aliases = stringArray(row.optJSONArray("resolverAliases"));
