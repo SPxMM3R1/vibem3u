@@ -155,7 +155,6 @@ final class UpdateRepository {
     static boolean isNewerVersion(String candidate, String current) {
         int[] candidateParts = numericParts(candidate);
         int[] currentParts = numericParts(current);
-        if (isRenumberingBridge(candidateParts, currentParts)) return true;
         int length = Math.max(candidateParts.length, currentParts.length);
         for (int index = 0; index < length; index++) {
             int candidatePart = index < candidateParts.length ? candidateParts[index] : 0;
@@ -163,17 +162,6 @@ final class UpdateRepository {
             if (candidatePart != currentPart) return candidatePart > currentPart;
         }
         return false;
-    }
-
-    /**
-     * Puente temporal (solo 0.6.2): las versiones 0.6.x se publicaron por error y la línea
-     * sigue en 0.5.33. Una app 0.6.x acepta 0.5.33 o posterior como actualización; Android
-     * igual exige un versionCode mayor. VibeM3U 0.5.33 elimina esta regla.
-     */
-    private static boolean isRenumberingBridge(int[] candidate, int[] current) {
-        return current.length >= 2 && current[0] == 0 && current[1] == 6
-                && candidate.length >= 3 && candidate[0] == 0 && candidate[1] == 5
-                && candidate[2] >= 33;
     }
 
     private static int[] numericParts(String version) {

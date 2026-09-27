@@ -35,11 +35,9 @@ public final class UpdateRepositoryTest {
     }
 
     @Test
-    public void bridgeFromMistakenSixLineToFiveThirtyThree() {
-        assertTrue(UpdateRepository.isNewerVersion("v0.5.33", "0.6.2"));
-        assertTrue(UpdateRepository.isNewerVersion("0.5.34", "0.6.1"));
-        assertFalse(UpdateRepository.isNewerVersion("0.5.32", "0.6.2"));
-        assertFalse(UpdateRepository.isNewerVersion("0.5.33", "0.5.33"));
-        assertFalse(UpdateRepository.isNewerVersion("0.5.33", "0.7.0"));
+    public void noDowngradeRuleAfterTheRenumberingBridge() {
+        // 0.6.2 aceptaba 0.5.33+ para volver a la línea 0.5; 0.5.33 ya no lo hace.
+        assertFalse(UpdateRepository.isNewerVersion("0.5.34", "0.6.2"));
+        assertTrue(UpdateRepository.isNewerVersion("0.5.34", "0.5.33"));
     }
 }
