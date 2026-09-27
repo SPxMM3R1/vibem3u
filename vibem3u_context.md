@@ -1,3 +1,5 @@
+> **Documento histórico** (describe VibeM3U 0.4.83, 12-09-2026). Para el estado y las reglas vigentes lee `AGENTS.md` y `Lista M3U/REGLAS.md`.
+
 # vibem3u — contexto actual
 
 ultima actualización: 2026-09-12

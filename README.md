@@ -7,10 +7,11 @@ abre directamente la señal, muestra primero la lista y la programación desde s
 caché local, valida cambios en segundo plano y muestra una barra compacta al
 cambiar de canal.
 
-La versión 0.4.4 recuerda el último canal, permite fijar una variante de video por
-canal, presenta el reloj dentro de un panel con el mismo estilo de la información
-del canal y usa `Atrás` para ocultar primero la información visible. También conserva
-la actualización desde GitHub introducida en 0.3.0.
+Reproduce el catálogo que se publica desde el editor web de
+[Lista M3U](https://github.com/SPxMM3R1/lista-m3u) (listas M3U, Highfly y TvVoo). Con el
+control: OK muestra el OSD, un segundo OK el detalle del programa, ◀ la guía completa y ▶ las
+fuentes y calidades. Se actualiza sola desde GitHub Releases. Reglas vigentes:
+[`REGLAS.md`](https://github.com/SPxMM3R1/lista-m3u/blob/main/REGLAS.md).
 
 ## Descargar
 

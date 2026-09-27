@@ -1,5 +1,7 @@
 # AGENTS.md — VibeM3U
 
+> Reglas vigentes de ambos proyectos (identidad, EPG, logos, catálogo, versiones): `Lista M3U/REGLAS.md` (https://github.com/SPxMM3R1/lista-m3u/blob/main/REGLAS.md). Mandan sobre documentos antiguos como `vibem3u_context.md`.
+
 Guía para agentes de IA que trabajen en esta aplicación Android TV (reproducción, resolutores, OSD, ajustes y auxiliar local).
 
 ## Qué es esta aplicación
@@ -42,4 +44,4 @@ Guía para agentes de IA que trabajen en esta aplicación Android TV (reproducci
 
 - `VIBEM3U_ID_CONTRACT_EPG_LOGOS.md` (contrato vigente de identidad, EPG y logos).
 - `TVVOO_M3U_CONTRACT.md`, `RESOLVER_RECIPE_V1.md`, `CONTEXTO_LISTA_M3U_PARA_VIBEM3U.md`.
-- `OSD_THREADING.md`, `PLAYBACK_AUDIT.md`, `vibem3u_context.md` (contexto histórico).
+- `OSD_THREADING.md`, `PLAYBACK_AUDIT.md`, `vibem3u_context.md` (solo historia: describe la 0.4.83).
