@@ -606,7 +606,7 @@
                             android:nextFocusUp="@id/highfly_manifest_url"
                             android:nextFocusDown="@id/save_button"
                             android:text="@string/mediaflow_open_settings"
-                            android:textColor="@color/white"
+                            android:textColor="@color/focus_button_text"
                             android:textSize="@dimen/settings_action_text_size" />
 
                         <TextView
@@ -707,7 +707,7 @@
                             android:nextFocusUp="@id/tab_updates"
                             android:nextFocusDown="@id/save_button"
                             android:text="@string/check_updates"
-                            android:textColor="@color/white"
+                            android:textColor="@color/focus_button_text"
                             android:textSize="@dimen/settings_action_text_size" />
 
                         <TextView
@@ -742,7 +742,7 @@
                 android:minWidth="0dp"
                 android:nextFocusRight="@id/cancel_button"
                 android:text="@string/save_and_play"
-                android:textColor="@color/white"
+                android:textColor="@color/focus_button_text"
                 android:textSize="@dimen/settings_footer_text_size" />
 
             <Button
@@ -756,7 +756,7 @@
                 android:minWidth="0dp"
                 android:nextFocusLeft="@id/save_button"
                 android:text="@string/cancel"
-                android:textColor="@color/white"
+                android:textColor="@color/focus_button_text"
                 android:textSize="@dimen/settings_footer_text_size" />
         </LinearLayout>
         </LinearLayout>

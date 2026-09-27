@@ -80,7 +80,7 @@
             android:minWidth="0dp"
             android:nextFocusUp="@id/source_selector_options"
             android:text="@string/source_selector_close"
-            android:textColor="@color/white"
+            android:textColor="@color/focus_button_text"
             android:paddingStart="14dp"
             android:paddingTop="5dp"
             android:paddingEnd="14dp"

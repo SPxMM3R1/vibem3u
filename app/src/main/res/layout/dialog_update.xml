@@ -68,7 +68,7 @@
                 android:minHeight="0dp"
                 android:minWidth="0dp"
                 android:text="@string/update_later"
-                android:textColor="@color/white"
+                android:textColor="@color/focus_button_text"
                 android:textSize="8sp" />
 
             <Button
@@ -80,7 +80,7 @@
                 android:minHeight="0dp"
                 android:minWidth="0dp"
                 android:text="@string/update_now"
-                android:textColor="@color/white"
+                android:textColor="@color/focus_button_text"
                 android:textSize="8sp" />
         </LinearLayout>
     </LinearLayout>

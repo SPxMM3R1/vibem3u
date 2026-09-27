@@ -442,7 +442,7 @@ public final class SettingsActivity extends Activity {
         button.setMinHeight(0);
         button.setMinWidth(0);
         button.setPadding(dp(12), 0, dp(12), 0);
-        button.setTextColor(getColor(R.color.white));
+        button.setTextColor(getColorStateList(R.color.focus_option_text));
         button.setTextSize(
                 TypedValue.COMPLEX_UNIT_PX,
                 getResources().getDimension(R.dimen.settings_control_text_size)
@@ -501,7 +501,7 @@ public final class SettingsActivity extends Activity {
         for (int index = 0; index < tabs.length; index++) {
             boolean selected = index == safeIndex;
             tabs[index].setSelected(selected);
-            tabs[index].setTextColor(getColor(selected ? R.color.white : R.color.muted));
+            tabs[index].setTextColor(getColor(selected ? R.color.cyan : R.color.muted));
             tabPages[index].setVisibility(selected ? View.VISIBLE : View.GONE);
         }
         if (requestFocus) tabs[safeIndex].requestFocus();

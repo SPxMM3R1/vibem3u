@@ -132,14 +132,14 @@ public final class MainActivity extends Activity {
     private TextView loadingText;
     private TextView clock;
     private View lightEpgOverlay;
-    private TextView lightEpgChannelNumber;
-    private TextView lightEpgChannelName;
-    private TextView lightEpgGroup;
-    private TextView lightEpgClock;
     private ProgressBar lightEpgProgress;
     private TextView lightEpgLive;
+    private TextView lightEpgRemaining;
+    private final TextView[] lightEpgLabels = new TextView[3];
     private final TextView[] lightEpgTitles = new TextView[3];
     private final TextView[] lightEpgTimes = new TextView[3];
+    private final View[] lightEpgSlots = new View[3];
+    private final View[] lightEpgDividers = new View[3];
     private View sourceSelectorOverlay;
     private TextView sourceSelectorTitle;
     private TextView sourceSelectorChannel;
@@ -245,6 +245,11 @@ public final class MainActivity extends Activity {
         if (lightEpgOverlay != null) {
             lightEpgOverlay.setVisibility(View.GONE);
         }
+    };
+    /** Timeout de la mini EPG: se cierra junto con el OSD que la acompaña. */
+    private final Runnable hideLightEpgWithOverlay = () -> {
+        hideLightEpg.run();
+        hideOverlay.run();
     };
     private final Runnable updateClock = new Runnable() {
         @Override public void run() {
@@ -366,12 +371,21 @@ public final class MainActivity extends Activity {
         loadingText = findViewById(R.id.loading_text);
         clock = findViewById(R.id.clock);
         lightEpgOverlay = findViewById(R.id.light_epg_overlay);
-        lightEpgChannelNumber = findViewById(R.id.light_epg_channel_number);
-        lightEpgChannelName = findViewById(R.id.light_epg_channel_name);
-        lightEpgGroup = findViewById(R.id.light_epg_group);
-        lightEpgClock = findViewById(R.id.light_epg_clock);
+        FrameLayout.LayoutParams lightEpgParams = (FrameLayout.LayoutParams)
+                lightEpgOverlay.getLayoutParams();
+        lightEpgParams.width = overlayParams.width;
+        lightEpgParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        lightEpgOverlay.setLayoutParams(lightEpgParams);
         lightEpgProgress = findViewById(R.id.light_epg_progress);
         lightEpgLive = findViewById(R.id.light_epg_live_1);
+        lightEpgRemaining = findViewById(R.id.light_epg_remaining);
+        lightEpgLabels[0] = findViewById(R.id.light_epg_label_1);
+        lightEpgLabels[1] = findViewById(R.id.light_epg_label_2);
+        lightEpgLabels[2] = findViewById(R.id.light_epg_label_3);
+        lightEpgSlots[1] = findViewById(R.id.light_epg_slot_2);
+        lightEpgSlots[2] = findViewById(R.id.light_epg_slot_3);
+        lightEpgDividers[1] = findViewById(R.id.light_epg_divider_2);
+        lightEpgDividers[2] = findViewById(R.id.light_epg_divider_3);
         lightEpgTitles[0] = findViewById(R.id.light_epg_title_1);
         lightEpgTitles[1] = findViewById(R.id.light_epg_title_2);
         lightEpgTitles[2] = findViewById(R.id.light_epg_title_3);
@@ -2078,42 +2092,75 @@ public final class MainActivity extends Activity {
         long now = System.currentTimeMillis();
         SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
         List<EpgProgramme> upcoming = epgData.findUpcoming(channel.getTvgId(), now, lightEpgTitles.length);
+        EpgProgramme first = upcoming.isEmpty() ? null : upcoming.get(0);
+        EpgProgramme current = first != null && first.getStartMillis() <= now ? first : null;
 
-        lightEpgChannelNumber.setText(String.format(Locale.ROOT, "%03d", channelIndex + 1));
-        lightEpgChannelName.setText(channel.getName());
-        lightEpgGroup.setText(AppStrings.isBlank(channel.getGroup())
-                ? getString(R.string.live_content)
-                : channel.getGroup());
-        lightEpgClock.setText(timeFormat.format(new Date(now)));
+        // Columna 1: programa en curso (o el primero que viene si aún no empieza).
+        if (first == null) {
+            lightEpgLabels[0].setText(R.string.light_epg_now);
+            lightEpgTitles[0].setText(R.string.epg_no_information);
+            lightEpgTimes[0].setText("");
+        } else {
+            lightEpgLabels[0].setText(current != null
+                    ? getString(R.string.light_epg_now)
+                    : getString(R.string.light_epg_next_at,
+                            timeFormat.format(new Date(first.getStartMillis()))));
+            lightEpgTitles[0].setText(first.getTitle());
+            lightEpgTimes[0].setText(formatProgrammeRange(first, timeFormat));
+        }
 
-        for (int index = 0; index < lightEpgTitles.length; index++) {
+        // Columnas 2 y 3: los dos siguientes. Sin guía solo queda "Ahora".
+        for (int index = 1; index < lightEpgTitles.length; index++) {
+            int visibility = first == null ? View.GONE : View.VISIBLE;
+            lightEpgSlots[index].setVisibility(visibility);
+            lightEpgDividers[index].setVisibility(visibility);
+            if (first == null) continue;
             EpgProgramme programme = index < upcoming.size() ? upcoming.get(index) : null;
             if (programme == null) {
-                lightEpgTitles[index].setText(index == 0
-                        ? R.string.epg_no_information
-                        : R.string.epg_no_next_programme);
+                lightEpgLabels[index].setText("");
+                lightEpgTitles[index].setText(R.string.epg_no_next_programme);
                 lightEpgTimes[index].setText("");
                 continue;
             }
+            String start = timeFormat.format(new Date(programme.getStartMillis()));
+            lightEpgLabels[index].setText(getString(index == 1
+                    ? R.string.light_epg_next_at
+                    : R.string.light_epg_after_at, start));
             lightEpgTitles[index].setText(programme.getTitle());
-            lightEpgTimes[index].setText(formatProgrammeRange(programme, timeFormat));
+            lightEpgTimes[index].setText(getString(
+                    R.string.light_epg_range_duration,
+                    start,
+                    timeFormat.format(new Date(programme.getStopMillis())),
+                    formatEpgDuration(programme.getStopMillis() - programme.getStartMillis())));
         }
 
-        EpgProgramme current = upcoming.isEmpty() ? null : upcoming.get(0);
-        if (current != null && current.getStartMillis() > now) current = null;
         if (current == null) {
-            lightEpgLive.setVisibility(View.GONE);
+            lightEpgLive.setVisibility(first == null ? View.VISIBLE : View.GONE);
             lightEpgProgress.setVisibility(View.GONE);
+            lightEpgRemaining.setVisibility(View.GONE);
             return;
         }
         lightEpgLive.setVisibility(View.VISIBLE);
         lightEpgProgress.setVisibility(View.VISIBLE);
+        lightEpgRemaining.setVisibility(View.VISIBLE);
+        lightEpgRemaining.setText(getString(
+                R.string.light_epg_remaining,
+                formatEpgDuration(current.getStopMillis() - now)));
         long duration = current.getStopMillis() - current.getStartMillis();
         int progress = duration <= 0 ? 0 : (int) Math.max(0, Math.min(1000,
                 ((now - current.getStartMillis()) * 1000L) / duration));
         lightEpgProgress.setIndeterminate(false);
         lightEpgProgress.setMax(1000);
         lightEpgProgress.setProgress(progress);
+    }
+
+    private String formatEpgDuration(long millis) {
+        long totalMinutes = Math.max(1L, (millis + 59_999L) / 60_000L);
+        int hours = (int) (totalMinutes / 60L);
+        int minutes = (int) (totalMinutes % 60L);
+        if (hours == 0) return getString(R.string.light_epg_minutes, minutes);
+        if (minutes == 0) return getString(R.string.light_epg_hours, hours);
+        return getString(R.string.light_epg_hours_minutes, hours, minutes);
     }
 
     private static String formatProgrammeRange(
@@ -2550,7 +2597,7 @@ public final class MainActivity extends Activity {
 
     private void showOverlay(boolean keepVisible) {
         hideLightEpg.run();
-        mainHandler.removeCallbacks(hideLightEpg);
+        mainHandler.removeCallbacks(hideLightEpgWithOverlay);
         channelOverlay.setVisibility(View.VISIBLE);
         clock.setVisibility(View.VISIBLE);
         updateDiagnosticsVisibility();
@@ -2569,13 +2616,12 @@ public final class MainActivity extends Activity {
 
     private void showLightEpg() {
         if (channels.isEmpty() || channelIndex < 0 || channelIndex >= channels.size()) return;
-        mainHandler.removeCallbacks(hideOverlay);
-        mainHandler.removeCallbacks(hideLightEpg);
-        hideOverlay.run();
-        updateLightEpgInfo();
+        mainHandler.removeCallbacks(hideLightEpgWithOverlay);
+        // La mini EPG se apoya sobre el OSD: ambos quedan visibles y se cierran juntos.
+        showOverlay(true);
         lightEpgOverlay.setVisibility(View.VISIBLE);
         updateLightEpgInfo();
-        mainHandler.postDelayed(hideLightEpg, LIGHT_EPG_TIMEOUT_MS);
+        mainHandler.postDelayed(hideLightEpgWithOverlay, LIGHT_EPG_TIMEOUT_MS);
     }
 
     private boolean isSourceSelectorVisible() {
@@ -2592,7 +2638,7 @@ public final class MainActivity extends Activity {
         StreamResolver resolver = streamResolverRegistry.find(playbackChannel);
         if (isSourceSelectorVisible() || sourceCandidateTask != null) return;
 
-        mainHandler.removeCallbacks(hideLightEpg);
+        mainHandler.removeCallbacks(hideLightEpgWithOverlay);
         hideLightEpg.run();
         sourceSelectorTitle.setText(getString(R.string.source_selector_title));
         sourceSelectorChannel.setText(playbackChannel.getName());
@@ -2805,7 +2851,7 @@ public final class MainActivity extends Activity {
             String detail = playbackOption.detail;
             String label = (playbackOption.selected ? "✓ " : "") + playbackOption.label;
             option.setText(AppStrings.isBlank(detail) ? label : label + "\n" + detail);
-            option.setTextColor(getColor(R.color.white));
+            option.setTextColor(getColorStateList(R.color.focus_option_text));
             option.setTextSize(
                     TypedValue.COMPLEX_UNIT_PX,
                     getResources().getDimension(R.dimen.settings_control_text_size)
@@ -3120,8 +3166,11 @@ public final class MainActivity extends Activity {
             return;
         }
         if (lightEpgOverlay.getVisibility() == View.VISIBLE) {
-            mainHandler.removeCallbacks(hideLightEpg);
+            mainHandler.removeCallbacks(hideLightEpgWithOverlay);
             hideLightEpg.run();
+            overlayAwaitingPlayback = false;
+            mainHandler.removeCallbacks(hideOverlay);
+            mainHandler.postDelayed(hideOverlay, OVERLAY_TIMEOUT_MS);
             return;
         }
         if (channelOverlay.getVisibility() == View.VISIBLE
@@ -3351,7 +3400,7 @@ public final class MainActivity extends Activity {
         if (settingsOpen) return;
         mainHandler.removeCallbacks(hideOverlay);
         hideOverlay.run();
-        mainHandler.removeCallbacks(hideLightEpg);
+        mainHandler.removeCallbacks(hideLightEpgWithOverlay);
         hideLightEpg.run();
         resolverSettingsSnapshotBeforeSettings = resolverSettingsSnapshot();
         playlistSourcesSnapshotBeforeSettings = playlistSourceSignature(getPlaylistSources());
@@ -3661,7 +3710,7 @@ public final class MainActivity extends Activity {
         if (playbackBitrateMeter != null) playbackBitrateMeter.setNotificationsEnabled(false);
         closePlaybackSourceSelector();
         resetResourceWarningState();
-        mainHandler.removeCallbacks(hideLightEpg);
+        mainHandler.removeCallbacks(hideLightEpgWithOverlay);
         hideLightEpg.run();
         if (!settingsOpen) {
             stopPlaybackForFocusLoss();
