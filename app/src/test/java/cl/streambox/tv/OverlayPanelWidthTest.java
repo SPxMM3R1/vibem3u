@@ -1,31 +1,30 @@
 package cl.streambox.tv;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
 public final class OverlayPanelWidthTest {
     @Test
-    public void capsWidthOnLargeTelevisionWindows() {
-        assertEquals(1_440, OverlayPanelWidth.resolveWidthPx(1_920, 1f));
+    public void spansTheWindowMinusTheOsdMarginOnEachSide() {
+        assertEquals(1_856, OverlayPanelWidth.resolveWidthPx(1_920, 1f));
+        assertEquals(1_792, OverlayPanelWidth.resolveWidthPx(1_920, 2f));
     }
 
     @Test
-    public void keepsTheSameResponsiveFractionAtCommonTvDensity() {
-        assertEquals(1_101, OverlayPanelWidth.resolveWidthPx(1_280, 1.5f));
+    public void scalesTheMarginWithDensity() {
+        assertEquals(1_184, OverlayPanelWidth.resolveWidthPx(1_280, 1.5f));
     }
 
     @Test
-    public void preservesSafeMarginsOnNarrowWindows() {
-        int width = OverlayPanelWidth.resolveWidthPx(360, 1f);
-        assertEquals(312, width);
-        assertTrue(width < 360);
+    public void keepsMarginsOnNarrowWindows() {
+        assertEquals(296, OverlayPanelWidth.resolveWidthPx(360, 1f));
+        assertEquals(0, OverlayPanelWidth.resolveWidthPx(40, 1f));
     }
 
     @Test
     public void invalidInputsFailSafely() {
         assertEquals(0, OverlayPanelWidth.resolveWidthPx(0, 1f));
-        assertEquals(344, OverlayPanelWidth.resolveWidthPx(400, 0f));
+        assertEquals(336, OverlayPanelWidth.resolveWidthPx(400, 0f));
     }
 }

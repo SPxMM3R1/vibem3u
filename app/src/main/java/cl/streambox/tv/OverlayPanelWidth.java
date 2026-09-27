@@ -1,11 +1,15 @@
 package cl.streambox.tv;
 
-/** Shared responsive width for the channel OSD and the settings replacement panel. */
+/**
+ * Shared width for the channel OSD, the mini EPG and the settings replacement panel.
+ *
+ * <p>The OSD spans the window minus {@code channel_overlay_horizontal_margin} (32dp) on each
+ * side, as it did up to v0.5.13; the clock uses the same end margin so both right edges line
+ * up exactly.
+ */
 final class OverlayPanelWidth {
-    private static final float TARGET_FRACTION = 0.86f;
-    private static final float MIN_EDGE_MARGIN_DP = 24f;
-    private static final float MIN_PANEL_WIDTH_DP = 320f;
-    private static final float MAX_PANEL_WIDTH_DP = 1_440f;
+    /** Must match {@code @dimen/channel_overlay_horizontal_margin}. */
+    static final float EDGE_MARGIN_DP = 32f;
 
     private OverlayPanelWidth() {}
 
@@ -14,16 +18,7 @@ final class OverlayPanelWidth {
         if (!(density > 0f) || Float.isInfinite(density) || Float.isNaN(density)) {
             density = 1f;
         }
-
-        float windowWidthDp = availableWidthPx / density;
-        float edgeMarginDp = Math.min(MIN_EDGE_MARGIN_DP, windowWidthDp / 2f);
-        float safeMaximumDp = Math.max(0f, windowWidthDp - edgeMarginDp * 2f);
-        float minimumWidthDp = Math.min(MIN_PANEL_WIDTH_DP, safeMaximumDp);
-        float targetWidthDp = Math.min(MAX_PANEL_WIDTH_DP, windowWidthDp * TARGET_FRACTION);
-        float resolvedWidthDp = Math.min(
-                safeMaximumDp,
-                Math.max(minimumWidthDp, targetWidthDp)
-        );
-        return Math.min(availableWidthPx, Math.round(resolvedWidthDp * density));
+        int marginPx = Math.round(EDGE_MARGIN_DP * density);
+        return Math.max(0, availableWidthPx - marginPx * 2);
     }
 }

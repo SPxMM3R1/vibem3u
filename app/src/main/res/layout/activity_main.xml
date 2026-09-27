@@ -44,7 +44,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
         android:layout_marginTop="24dp"
-        android:layout_marginEnd="36dp"
+        android:layout_marginEnd="@dimen/channel_overlay_horizontal_margin"
         android:background="@drawable/channel_overlay_background"
         android:gravity="center"
         android:includeFontPadding="false"
