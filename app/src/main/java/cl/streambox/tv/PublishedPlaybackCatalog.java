@@ -479,8 +479,11 @@ final class PublishedPlaybackCatalog {
                 HighflyCatalogChannel channel = new HighflyCatalogChannel(
                         resourceId, stableId, name, group, category, logo, Collections.emptyList()
                 );
-                if (!resolverSlug.equals(channel.getSlug())
-                        || !identityState.equals(channel.getIdentityState())) {
+                // Solo la referencia de resolución debe coincidir. identityState es para el
+                // runner (EPG/logo): el editor marca "provisional" una clave conocida como
+                // SkySportsF1.uk cuando Highfly aún no figura en el catálogo, y eso no debe
+                // impedir reproducir la fila publicada.
+                if (!resolverSlug.equals(channel.getSlug())) {
                     throw new IOException("Identidad/ref. Highfly no coincide con el contrato.");
                 }
                 return channel;

@@ -214,6 +214,20 @@ public final class PublishedPlaybackCatalogTest {
         );
     }
 
+    @Test
+    public void keepsHighflyRowsThatTheEditorMarkedProvisional() throws Exception {
+        String edited = document().replace(
+                "\"identityState\":\"canonical\",\"name\":\"Sky Sports F1\"",
+                "\"identityState\":\"provisional\",\"name\":\"Sky Sports F1\"");
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);
+
+        List<Channel> providers = catalog.activeProviderChannels();
+
+        assertEquals(2, providers.size());
+        assertTrue(HighflyChannelMerge.isHighfly(providers.get(0)));
+        assertTrue(catalog.skippedProviderRows().isEmpty());
+    }
+
     private static void assertInvalid(String value) throws Exception {
         try {
             PublishedPlaybackCatalog.parse(value);
