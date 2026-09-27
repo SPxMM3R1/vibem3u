@@ -458,9 +458,11 @@ final class PublishedPlaybackCatalog {
         }
 
         TvVooCatalogChannel toTvVoo() throws IOException {
+            // "country" es texto visible ("Reino Unido"); la clave de país sale de countryKey
+            // o, si falta, del prefijo de catalogKey (contrato layout-provider-rows).
             String resolvedCountryKey = !countryKey.isEmpty()
                     ? countryKey
-                    : (country.isEmpty() ? stableId.substring(0, stableId.indexOf('|')) : country);
+                    : stableId.substring(0, stableId.indexOf('|'));
             try {
                 TvVooCatalogChannel channel = new TvVooCatalogChannel(
                         stableId, alias, name, resolvedCountryKey, group, category, logo, aliases

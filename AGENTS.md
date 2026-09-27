@@ -28,6 +28,7 @@ Guía para agentes de IA que trabajen en esta aplicación Android TV (reproducci
   3. `git tag vX.Y.Z && git push origin vX.Y.Z` (etiqueta lightweight). El workflow "Publicar APK" compila y publica el APK en el release.
   4. Verificar con `gh run watch` y `gh release view vX.Y.Z`; informar tamaño y SHA-256 del APK.
 - Tests: CI corre `testDebugUnitTest`, `testExperimentalUnitTest`, `testReleaseUnitTest`, lint y pruebas instrumentadas. Agregar tests JVM en `app/src/test/java/cl/streambox/tv/` para lógica pura (por ejemplo `EpgDataTest`).
+- Contrato de filas de proveedor: `app/src/test/resources/contracts/layout-provider-rows.json` es copia idéntica de `Lista M3U/contracts/layout-provider-rows.json`. Lo validan `LayoutContractTest` (app) y `LocalCatalogContractTest` (auxiliar); no editar la copia aquí sin cambiar primero la de Lista M3U.
 - Commits en español con prefijo: `feat(osd)`, `fix(settings)`, `feat(highfly)`, `chore(release)`.
 
 ## Reglas de reproducción y OSD

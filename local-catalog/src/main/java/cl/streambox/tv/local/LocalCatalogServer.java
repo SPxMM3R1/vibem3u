@@ -211,13 +211,26 @@ public final class LocalCatalogServer {
     }
 
     private Channel channelFromPayload(JSONObject row, String sourceList, String tvgId) throws IOException {
-        if ("provider".equals(row.optString("kind", ""))) {
+        if ("provider".equals(row.optString("kind", ""))) return providerChannelFromPayload(row);
+        return m3uChannelFromPayload(row, sourceList, tvgId);
+    }
+
+    /**
+     * Fila de proveedor del layout → canal resoluble. Sigue el contrato compartido
+     * contracts/layout-provider-rows.json (LocalCatalogContractTest).
+     */
+    static Channel providerChannelFromPayload(JSONObject row) {
+        {
             String provider = row.optString("provider", "");
             String catalogKey = row.optString("catalogKey", "");
             String name = clean(row.optString("name", ""), 160);
             if (catalogKey.isBlank() || name.isBlank()) throw new IllegalArgumentException("La identidad catalogKey o el nombre están vacíos.");
             if ("highfly".equals(provider)) {
                 String resourceId = clean(row.optString("providerResourceId", ""), 140);
+                String slug = clean(row.optString("resolverSlug", ""), 140);
+                if (!slug.isBlank() && !("leaf:" + slug).equals(resourceId)) {
+                    throw new IllegalArgumentException("La hoja Highfly no coincide con su resolverSlug.");
+                }
                 List<String> genres = stringArray(row.optJSONArray("genres"));
                 return new HighflyCatalogChannel(
                         resourceId,
@@ -232,6 +245,10 @@ public final class LocalCatalogServer {
             if ("tvvoo".equals(provider)) {
                 // Las filas publicadas guardan el alias dentro de catalogKey (país|alias) y
                 // "country" es el nombre visible ("Reino Unido"): la clave es countryKey.
+                String resourceId = row.optString("providerResourceId", "");
+                if (!resourceId.isBlank() && !resourceId.equals(catalogKey)) {
+                    throw new IllegalArgumentException("En TvVoo providerResourceId debe ser el mismo catalogKey.");
+                }
                 int separator = catalogKey.indexOf('|');
                 String alias = clean(row.optString("alias", ""), 256);
                 if (alias.isBlank() && separator > 0) alias = clean(catalogKey.substring(separator + 1), 256);
@@ -255,7 +272,9 @@ public final class LocalCatalogServer {
             }
             throw new IllegalArgumentException("El catálogo no reconoce este proveedor.");
         }
+    }
 
+    private Channel m3uChannelFromPayload(JSONObject row, String sourceList, String tvgId) throws IOException {
         if (!"m3u".equals(row.optString("kind", ""))) throw new IllegalArgumentException("Tipo de canal no compatible.");
         if (!("1.m3u".equals(sourceList) || "2.m3u".equals(sourceList)) || tvgId.isBlank()) {
             throw new IllegalArgumentException("Para probar una fuente M3U se necesita su Lista y tvg-id.");

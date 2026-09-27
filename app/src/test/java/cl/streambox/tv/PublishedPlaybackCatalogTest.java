@@ -201,7 +201,11 @@ public final class PublishedPlaybackCatalogTest {
 
     @Test
     public void skipsUnconvertibleProviderRowsWithoutFailingStartup() throws Exception {
-        String edited = document().replace("\"country\":\"spain\"", "\"country\":\"Reino Unido\"");
+        // Un countryKey que no coincide con catalogKey hace la fila inconvertible; "country"
+        // solo es texto visible y ya no cuenta como clave (contrato layout-provider-rows).
+        String edited = document().replace(
+                "\"country\":\"spain\"",
+                "\"country\":\"Reino Unido\",\"countryKey\":\"france\"");
         PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);
 
         List<Channel> providers = catalog.activeProviderChannels();
