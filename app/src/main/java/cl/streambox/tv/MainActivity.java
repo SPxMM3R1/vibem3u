@@ -2674,6 +2674,10 @@ public final class MainActivity extends Activity {
     private boolean handleGuideKey(KeyEvent event) {
         int keyCode = event.getKeyCode();
         boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
+        if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_GUIDE) {
+            if (down && event.getRepeatCount() == 0) closeGuide();
+            return true;
+        }
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_UP:
             case KeyEvent.KEYCODE_CHANNEL_UP:
@@ -2704,10 +2708,6 @@ public final class MainActivity extends Activity {
                         showOverlay(false);
                     }
                 }
-                return true;
-            case KeyEvent.KEYCODE_BACK:
-            case KeyEvent.KEYCODE_GUIDE:
-                if (down && event.getRepeatCount() == 0) closeGuide();
                 return true;
             case KeyEvent.KEYCODE_MENU:
             case KeyEvent.KEYCODE_SETTINGS:
