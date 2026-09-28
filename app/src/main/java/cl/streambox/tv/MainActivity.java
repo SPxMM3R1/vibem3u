@@ -35,6 +35,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 import android.window.OnBackInvokedDispatcher;
 
 import androidx.media3.common.AudioAttributes;
@@ -231,6 +232,12 @@ public final class MainActivity extends Activity {
             PlaybackResourceWarningPolicy.Type.NONE;
     private boolean startupSelectionPending;
     private String startupPreferredChannelIdentity = "";
+    /** Canal pedido por el botón «Ver» de un recordatorio; se abre al tener canales. */
+    private String pendingReminderChannelIdentity = "";
+    /** Ids de los recordatorios vigentes, para dibujar la campana en la Guía. */
+    private final Set<String> reminderIds = new HashSet<>();
+    private boolean guideOkDown;
+    private boolean guideOkLongHandled;
     private String epgMergeInputSignature = "";
     private long epgMergeGeneration;
     private boolean playbackDiagnosticsActive;
@@ -317,6 +324,9 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        consumeReminderIntent(getIntent());
+        // Android borra las alarmas si la app fue detenida: se reponen al abrirla.
+        ReminderAlerts.rescheduleAll(this);
         setContentView(R.layout.activity_main);
         SettingsActivity.ensureDefaultPlaylistConfigured(this);
         repository = new PlaylistRepository(this);
@@ -615,7 +625,9 @@ public final class MainActivity extends Activity {
         final Map<Integer, Playlist> visiblePlaylists = new LinkedHashMap<>(playlistsBySource);
         if (!existingPlaylist) {
             startupSelectionPending = true;
-            startupPreferredChannelIdentity = readLastChannelIdentity();
+            startupPreferredChannelIdentity = AppStrings.isBlank(pendingReminderChannelIdentity)
+                    ? readLastChannelIdentity()
+                    : pendingReminderChannelIdentity;
         }
 
         final boolean networkAvailable = isNetworkAvailable();
@@ -1026,6 +1038,36 @@ public final class MainActivity extends Activity {
             loadChannelLogo(selectedChannel, contentChanged);
             if (player != null && player.getPlaybackState() == Player.STATE_READY) hideLoadingState();
         }
+        applyPendingReminderChannel();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        consumeReminderIntent(intent);
+        applyPendingReminderChannel();
+    }
+
+    private void consumeReminderIntent(Intent intent) {
+        if (intent == null) return;
+        String identity = intent.getStringExtra(ReminderAlerts.EXTRA_OPEN_CHANNEL_IDENTITY);
+        if (!AppStrings.isBlank(identity)) {
+            pendingReminderChannelIdentity = identity;
+            intent.removeExtra(ReminderAlerts.EXTRA_OPEN_CHANNEL_IDENTITY);
+        }
+    }
+
+    /** «Ver» de un recordatorio: cambia al canal apenas la lista está cargada. */
+    private void applyPendingReminderChannel() {
+        if (AppStrings.isBlank(pendingReminderChannelIdentity) || channels.isEmpty()) return;
+        int index = findChannelIndexByIdentity(channels, pendingReminderChannelIdentity);
+        pendingReminderChannelIdentity = "";
+        if (index < 0) return;
+        closeGuide();
+        // Si ya es el canal actual, se deja como está (puede estar cargando).
+        if (index != channelIndex) playChannel(index);
+        showOverlay(false);
     }
 
     private static int findChannelIndexByIdentity(List<Channel> candidates, String identity) {
@@ -2696,6 +2738,9 @@ public final class MainActivity extends Activity {
         long now = System.currentTimeMillis();
         int row = channelIndex >= 0 && channelIndex < channels.size() ? channelIndex : 0;
         guideNavigator = new EpgGuideNavigator(channels.size(), row, now);
+        refreshReminderIds();
+        guideOkDown = false;
+        guideOkLongHandled = false;
         guideView.bind(guideSource, guideNavigator, now);
         guideView.setVisibility(View.VISIBLE);
     }
@@ -2723,6 +2768,12 @@ public final class MainActivity extends Activity {
         }
 
         @Override public int playingRow() { return channelIndex; }
+
+        @Override public boolean hasReminder(int row, EpgProgramme programme) {
+            if (row < 0 || row >= channels.size() || reminderIds.isEmpty()) return false;
+            return reminderIds.contains(PlaybackPreferences.channelIdentity(channels.get(row))
+                    + "@" + programme.getStartMillis());
+        }
     };
 
     /** Programas de la fila enfocada en un rango amplio para saltar entre bloques. */
@@ -2763,13 +2814,28 @@ public final class MainActivity extends Activity {
                 return true;
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
-                if (down && event.getRepeatCount() == 0) {
-                    int row = guideNavigator.getRow();
-                    closeGuide();
-                    if (row != channelIndex) {
-                        playChannel(row);
-                    } else {
-                        showOverlay(false);
+                // OK corto (al soltar) abre el canal; OK mantenido programa o quita
+                // el recordatorio del programa enfocado.
+                if (down) {
+                    if (event.getRepeatCount() == 0) {
+                        guideOkDown = true;
+                        guideOkLongHandled = false;
+                    } else if (guideOkDown && !guideOkLongHandled) {
+                        guideOkLongHandled = true;
+                        toggleGuideReminder();
+                    }
+                } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                    boolean shortPress = guideOkDown && !guideOkLongHandled;
+                    guideOkDown = false;
+                    guideOkLongHandled = false;
+                    if (shortPress) {
+                        int row = guideNavigator.getRow();
+                        closeGuide();
+                        if (row != channelIndex) {
+                            playChannel(row);
+                        } else {
+                            showOverlay(false);
+                        }
                     }
                 }
                 return true;
@@ -2780,6 +2846,48 @@ public final class MainActivity extends Activity {
             default:
                 return false;
         }
+    }
+
+    private void refreshReminderIds() {
+        reminderIds.clear();
+        for (ProgramReminder reminder : ReminderAlerts.list(this)) reminderIds.add(reminder.id());
+    }
+
+    /** Programa o quita el recordatorio del programa enfocado en la Guía. */
+    private void toggleGuideReminder() {
+        int row = guideNavigator.getRow();
+        if (row < 0 || row >= channels.size()) return;
+        EpgProgramme programme = guideNavigator.focusedProgramme(guideRowProgrammes());
+        if (programme == null) {
+            Toast.makeText(this, R.string.reminder_no_programme, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Channel channel = channels.get(row);
+        ProgramReminder reminder = new ProgramReminder(
+                PlaybackPreferences.channelIdentity(channel),
+                channel.getName(),
+                programme.getTitle(),
+                programme.getStartMillis(),
+                programme.getStopMillis()
+        );
+        boolean alreadySet = reminderIds.contains(reminder.id());
+        if (!alreadySet && programme.getStartMillis() <= System.currentTimeMillis()) {
+            Toast.makeText(this, R.string.reminder_already_started, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        boolean added;
+        try {
+            added = ReminderAlerts.toggle(this, reminder);
+        } catch (RuntimeException error) {
+            Log.w(PLAYBACK_HEALTH_TAG, "no se pudo programar el recordatorio", error);
+            return;
+        }
+        refreshReminderIds();
+        guideView.refresh(System.currentTimeMillis());
+        Toast.makeText(this, added
+                ? getString(R.string.reminder_added, programme.getTitle(),
+                        ReminderAlerts.when(programme.getStartMillis()))
+                : getString(R.string.reminder_removed), Toast.LENGTH_SHORT).show();
     }
 
     private void showProgrammeDetail() {

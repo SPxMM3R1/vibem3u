@@ -255,6 +255,7 @@ public final class SettingsActivity extends Activity {
         findViewById(R.id.reminder_permission_button).setOnClickListener(v -> openOverlayPermission());
         findViewById(R.id.reminder_test_button).setOnClickListener(v -> scheduleReminderTest());
         refreshReminderStatus();
+        refreshReminderList();
         cancelButton = findViewById(R.id.cancel_button);
         saveButton = findViewById(R.id.save_button);
         settingsContent = findViewById(R.id.settings_content);
@@ -510,6 +511,51 @@ public final class SettingsActivity extends Activity {
             tabPages[index].setVisibility(selected ? View.VISIBLE : View.GONE);
         }
         if (requestFocus) tabs[safeIndex].requestFocus();
+    }
+
+    /** Un botón por recordatorio; OK lo elimina y el foco pasa al siguiente. */
+    private void refreshReminderList() {
+        android.widget.LinearLayout list = findViewById(R.id.reminders_list);
+        View empty = findViewById(R.id.reminders_empty);
+        if (list == null || empty == null) return;
+        View focused = getCurrentFocus();
+        int focusedIndex = focused != null && focused.getParent() == list
+                ? list.indexOfChild(focused) : -1;
+        list.removeAllViews();
+        java.util.List<ProgramReminder> reminders = ReminderAlerts.list(this);
+        empty.setVisibility(reminders.isEmpty() ? View.VISIBLE : View.GONE);
+        float density = getResources().getDisplayMetrics().density;
+        for (ProgramReminder reminder : reminders) {
+            Button item = new Button(this);
+            item.setBackgroundResource(R.drawable.focus_button);
+            item.setTextColor(getColorStateList(R.color.focus_button_text));
+            item.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX,
+                    getResources().getDimension(R.dimen.settings_action_text_size));
+            item.setAllCaps(false);
+            item.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.START);
+            item.setSingleLine(true);
+            item.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            item.setIncludeFontPadding(false);
+            item.setMinHeight(0);
+            item.setMinimumHeight(0);
+            item.setText(ReminderAlerts.when(reminder.startMillis) + "   " + reminder.title
+                    + "  ·  " + reminder.channelName);
+            item.setOnClickListener(view -> {
+                ReminderAlerts.remove(this, reminder.id());
+                refreshReminderList();
+            });
+            android.widget.LinearLayout.LayoutParams params = new android.widget.LinearLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    (int) getResources().getDimension(R.dimen.settings_action_height));
+            params.topMargin = Math.round(6 * density);
+            list.addView(item, params);
+        }
+        if (focusedIndex >= 0) {
+            View next = list.getChildCount() == 0
+                    ? findViewById(R.id.reminder_permission_button)
+                    : list.getChildAt(Math.min(focusedIndex, list.getChildCount() - 1));
+            if (next != null) next.requestFocus();
+        }
     }
 
     private void refreshReminderStatus() {
@@ -885,6 +931,7 @@ public final class SettingsActivity extends Activity {
     protected void onResume() {
         super.onResume();
         refreshReminderStatus();
+        refreshReminderList();
         enterImmersiveMode();
         if (appUpdater != null) appUpdater.onHostResume();
     }

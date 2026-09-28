@@ -645,7 +645,6 @@
                         android:background="@drawable/settings_section_card"
                         android:focusable="true"
                         android:nextFocusUp="@id/tab_interface"
-                        android:nextFocusDown="@id/reminder_permission_button"
                         android:padding="@dimen/settings_info_padding"
                         android:text="@string/settings_interface_description"
                         android:textColor="@color/muted"
@@ -675,6 +674,22 @@
                             android:textColor="@color/muted"
                             android:textSize="@dimen/settings_body_text_size" />
 
+                        <TextView
+                            android:id="@+id/reminders_empty"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:text="@string/settings_reminders_empty"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/settings_body_text_size" />
+
+                        <LinearLayout
+                            android:id="@+id/reminders_list"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:orientation="vertical" />
+
                         <Button
                             android:id="@+id/reminder_permission_button"
                             android:layout_width="match_parent"
@@ -685,7 +700,6 @@
                             android:includeFontPadding="false"
                             android:minHeight="0dp"
                             android:minWidth="0dp"
-                            android:nextFocusUp="@id/interface_info"
                             android:nextFocusDown="@id/reminder_test_button"
                             android:text="@string/settings_reminders_permission"
                             android:textColor="@color/focus_button_text"

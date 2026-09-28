@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.text.Layout;
 import android.text.StaticLayout;
 import android.text.TextPaint;
@@ -31,6 +32,8 @@ public final class EpgGuideView extends View {
         String name(int row);
         List<EpgProgramme> programmes(int row, long fromMillis, long toMillis);
         int playingRow();
+        /** True si el programa tiene un recordatorio (se dibuja una campana). */
+        boolean hasReminder(int row, EpgProgramme programme);
     }
 
     private static final int CYAN = 0xFF00B8E6;
@@ -51,6 +54,7 @@ public final class EpgGuideView extends View {
     private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
     private final SimpleDateFormat dayFormat = new SimpleDateFormat("EEEE d", Locale.forLanguageTag("es-CL"));
 
+    private Drawable reminderBell;
     private Source source;
     private EpgGuideNavigator navigator;
     private long nowMillis;
@@ -192,6 +196,19 @@ public final class EpgGuideView extends View {
                 float textLeft = blockLeft + dp(9);
                 float textWidth = blockRight - textLeft - dp(6);
                 if (textWidth < dp(14)) continue;
+                if (source.hasReminder(row, programme)) {
+                    // Campana cyan antes del título: el programa tiene recordatorio.
+                    if (reminderBell == null) reminderBell = getContext().getDrawable(R.drawable.ic_reminder_bell);
+                    if (reminderBell != null && textWidth > dp(24)) {
+                        int size = Math.round(dp(11));
+                        int bellTop = Math.round(rowTop + dp(19) - size + dp(1));
+                        reminderBell.setBounds(Math.round(textLeft), bellTop,
+                                Math.round(textLeft) + size, bellTop + size);
+                        reminderBell.draw(canvas);
+                        textLeft += size + dp(4);
+                        textWidth -= size + dp(4);
+                    }
+                }
                 boolean past = programme.getStopMillis() <= nowMillis;
                 titlePaint.setTextSize(sp(12));
                 titlePaint.setTypeface(focused ? bold : regular);
