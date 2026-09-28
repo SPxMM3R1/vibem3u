@@ -5,6 +5,8 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.graphics.LinearGradient;
+import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
 import android.text.Layout;
 import android.text.StaticLayout;
@@ -42,7 +44,9 @@ public final class EpgGuideView extends View {
     private static final int DIM = 0xFF7F8C92;
     private static final int VEIL = 0x10FFFFFF;
     private static final int VEIL_FOCUS = 0x1FFFFFFF;
-    private static final int NOW_GLOW = 0x8C00B8E6;
+    /** Cyan al 45 %: la línea de la hora actual no compite con los títulos. */
+    private static final int NOW_LINE = 0x7300B8E6;
+    private static final int NOW_EDGE = 0x0000B8E6;
 
     private final TextPaint titlePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint textPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
@@ -68,7 +72,6 @@ public final class EpgGuideView extends View {
         super(context, attrs);
         titlePaint.setTypeface(bold);
         descriptionPaint.setColor(MUTED);
-        nowPaint.setColor(CYAN);
         setWillNotDraw(false);
     }
 
@@ -240,16 +243,20 @@ public final class EpgGuideView extends View {
         titlePaint.setTypeface(bold);
 
         if (nowVisible) {
-            // Hora actual: una sola línea continua sobre todos los canales visibles,
-            // con un punto donde parte y un brillo suave.
+            // Hora actual: línea continua de cyan translúcido exactamente de borde a
+            // borde de las filas visibles, con el mismo difuminado arriba y abajo.
             int shownRows = Math.max(0, Math.min(visibleRows, source.rowCount() - firstVisibleRow));
             if (shownRows > 0) {
-                float lineTop = rowsTop - dp(2);
+                float lineTop = rowsTop;
                 float lineBottom = rowsTop + shownRows * (rowHeight + rowGap) - rowGap;
-                nowPaint.setShadowLayer(dp(3), 0f, 0f, NOW_GLOW);
+                float fade = Math.min(0.45f, dp(14) / Math.max(1f, lineBottom - lineTop));
+                nowPaint.setShader(new LinearGradient(0f, lineTop, 0f, lineBottom,
+                        new int[] {NOW_EDGE, NOW_LINE, NOW_LINE, NOW_EDGE},
+                        new float[] {0f, fade, 1f - fade, 1f},
+                        Shader.TileMode.CLAMP));
                 rect.set(nowX - dp(1), lineTop, nowX + dp(1), lineBottom);
-                canvas.drawRoundRect(rect, dp(1), dp(1), nowPaint);
-                canvas.drawCircle(nowX, lineTop, dp(3), nowPaint);
+                canvas.drawRect(rect, nowPaint);
+                nowPaint.setShader(null);
             }
         }
 
