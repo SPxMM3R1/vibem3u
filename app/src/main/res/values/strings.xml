@@ -157,4 +157,15 @@
         <item quantity="one">%1$s · %2$d canal</item>
         <item quantity="other">%1$s · %2$d canales</item>
     </plurals>
+    <string name="reminder_label">RECORDATORIO</string>
+    <string name="reminder_watch_now">Ver ahora</string>
+    <string name="reminder_close">Cerrar</string>
+    <string name="reminder_test_title">Prueba de aviso de VibeM3U</string>
+    <string name="reminder_test_body">Si ves esta tarjeta, los recordatorios funcionan con la app cerrada.</string>
+    <string name="reminder_test_toast">VibeM3U: llegó el aviso de prueba, pero falta el permiso para mostrar la tarjeta.</string>
+    <string name="settings_reminders_title">Avisos de programas (prueba)</string>
+    <string name="settings_reminders_description">Comprueba si la tele puede avisarte con la app cerrada: aprieta Probar, sal de VibeM3U (o abre otra app) y espera un minuto.</string>
+    <string name="settings_reminders_permission">Permitir mostrar sobre otras apps</string>
+    <string name="settings_reminders_test">Probar aviso en 1 minuto</string>
+    <string name="settings_reminders_no_permission_screen">Esta tele no tiene ese menú. Actívalo una vez desde un PC con: %1$s</string>
 </resources>

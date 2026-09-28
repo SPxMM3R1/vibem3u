@@ -195,7 +195,8 @@ public final class MainActivity extends Activity {
     private boolean playbackHasStarted;
     private long playbackRecoveryCooldownUntilElapsedRealtime;
     private boolean playbackAutoRecoveryInFlight;
-    private boolean playbackFullRecoveryUsed;
+    private final PlaybackRecoveryBudget playbackRecoveryBudget = new PlaybackRecoveryBudget();
+    private long playbackRecoveryToken;
     private boolean playbackRecoveryFailed;
     private int playbackSourceRecoveryAttempts;
     private boolean playbackSourceRecoveryInFlight;
@@ -536,10 +537,10 @@ public final class MainActivity extends Activity {
                 showOverlay(true);
                 if (!requestPlaybackSourceRecovery(error)) {
                     // Automatic reconnection for every channel error. Renewing
-                    // a resolver output is attempted first; a direct channel,
-                    // or a resolver that already spent its renewal, still gets
-                    // one bounded player restart before the channel is
-                    // reported as failed.
+                    // a resolver output is attempted first; then up to
+                    // PlaybackRecoveryBudget.MAX_ATTEMPTS delayed restarts
+                    // (the later ones with a fresh source) before the channel
+                    // is reported as failed.
                     requestFullPlaybackRecovery(isDecoderFailure(error)
                             ? "error de decodificador"
                             : "error de reproducción");
@@ -1413,7 +1414,7 @@ public final class MainActivity extends Activity {
         playbackHasStarted = false;
         playbackRecoveryCooldownUntilElapsedRealtime = 0L;
         playbackAutoRecoveryInFlight = false;
-        playbackFullRecoveryUsed = false;
+        playbackRecoveryBudget.reset();
         playbackRecoveryFailed = false;
         playbackSourceRecoveryAttempts = 0;
         playbackSourceRecoveryInFlight = false;
@@ -1669,41 +1670,85 @@ public final class MainActivity extends Activity {
                 || code == PlaybackException.ERROR_CODE_AUDIO_TRACK_OFFLOAD_WRITE_FAILED;
     }
 
-    /** Performs one bounded full player restart for the current playback episode. */
+    /**
+     * Schedules a bounded, delayed restart of the current channel. Up to
+     * {@link PlaybackRecoveryBudget#MAX_ATTEMPTS} attempts per playback episode;
+     * from the second one the resolver output is discarded so a fresh source is
+     * requested. The budget is restored after stable playback, a channel change
+     * or an explicit retry from the remote.
+     */
     private void requestFullPlaybackRecovery(String reason) {
+        requestFullPlaybackRecovery(reason, false, false);
+    }
+
+    private void requestFullPlaybackRecovery(
+            String reason,
+            boolean keepDiagnosticCode,
+            boolean immediate
+    ) {
         if (playbackAutoRecoveryInFlight || playbackChannel == null) return;
-        long nowMs = SystemClock.elapsedRealtime();
-        if (nowMs < playbackRecoveryCooldownUntilElapsedRealtime) return;
-        if (reason != null && !"error de reproducción".equals(reason)) {
+        if (!keepDiagnosticCode && reason != null && !"error de reproducción".equals(reason)) {
             lastPlaybackDiagnosticCode = PlaybackDiagnosticCode.forWatchdog(reason);
         }
-        if (playbackFullRecoveryUsed) {
+        if (!playbackRecoveryBudget.hasAttemptLeft()) {
             if (lastPlaybackDiagnosticCode <= 0) {
                 lastPlaybackDiagnosticCode = PlaybackDiagnosticCode.recoveryExhausted();
             }
             showPlaybackFailure();
             return;
         }
-        playbackRecoveryCooldownUntilElapsedRealtime = nowMs + PLAYBACK_RECOVERY_COOLDOWN_MS;
-        playbackFullRecoveryUsed = true;
+        int attempt = playbackRecoveryBudget.consume();
+        boolean renewSource = PlaybackRecoveryBudget.renewsSource(attempt);
+        long delayMs = immediate ? 0L : PlaybackRecoveryBudget.delayMsFor(attempt);
         playbackAutoRecoveryInFlight = true;
-        Log.i(PLAYBACK_HEALTH_TAG, "recovery reason=" + reason);
-        playbackLoadingSinceElapsedRealtime = nowMs;
-
-        Channel channel = playbackChannel;
-        long diagnosticCodeBeforeRecovery = lastPlaybackDiagnosticCode;
-        String identity = PlaybackPreferences.channelIdentity(channel);
-        int targetIndex = findChannelIndexByIdentity(channels, identity);
+        playbackRecoveryFailed = false;
+        Log.i(PLAYBACK_HEALTH_TAG, "recovery reason=" + reason + " attempt=" + attempt
+                + " delayMs=" + delayMs + " renewSource=" + renewSource);
+        playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
         setStatus("RECONECTANDO", R.color.amber);
-        codecInfo.setText("Reiniciando reproducción");
+        codecInfo.setText("Reintento " + attempt + " de " + PlaybackRecoveryBudget.MAX_ATTEMPTS);
         showLoadingState(getString(R.string.loading_reopening_source));
 
+        long token = ++playbackRecoveryToken;
+        long generation = playbackGeneration;
+        Runnable restart = () -> {
+            if (token != playbackRecoveryToken
+                    || generation != playbackGeneration
+                    || exiting || isFinishing()) return;
+            performFullPlaybackRecovery(renewSource);
+        };
+        if (delayMs <= 0L) {
+            restart.run();
+        } else {
+            mainHandler.postDelayed(restart, delayMs);
+        }
+    }
+
+    private void performFullPlaybackRecovery(boolean renewSource) {
+        Channel channel = playbackChannel;
+        if (channel == null) {
+            showPlaybackFailure();
+            return;
+        }
+        playbackRecoveryCooldownUntilElapsedRealtime =
+                SystemClock.elapsedRealtime() + PLAYBACK_RECOVERY_COOLDOWN_MS;
+        long diagnosticCodeBeforeRecovery = lastPlaybackDiagnosticCode;
+        int usedAttempts = playbackRecoveryBudget.used();
+        String identity = PlaybackPreferences.channelIdentity(channel);
+        int targetIndex = findChannelIndexByIdentity(channels, identity);
+
         cancelPlaybackResolution();
-        // A watchdog/decoder recovery recreates ExoPlayer, but it does not
-        // prove that the resolver output is expired. Keep the validated
-        // TvVoo/MediaFlow source in the process-only coordinator cache so the
-        // new player can attach to it immediately. HTTP 401/403/410 and HLS
-        // source errors already take the explicit invalidate() path above.
+        StreamResolver resolver = streamResolverRegistry == null
+                ? null
+                : streamResolverRegistry.find(channel);
+        if (renewSource && resolver != null) {
+            // The previous restart reused the validated source and failed
+            // again: it may have expired, so ask the resolver for a new one.
+            resolverCoordinator.invalidate(channel, resolver);
+        }
+        // A first watchdog/decoder recovery recreates ExoPlayer but keeps the
+        // validated TvVoo/MediaFlow source in the process-only coordinator
+        // cache so the new player can attach to it immediately.
         discardCurrentPlaybackSource();
         playbackChannel = null;
         playbackGeneration++;
@@ -1716,9 +1761,9 @@ public final class MainActivity extends Activity {
         createPlayer();
         playChannel(targetIndex, false);
         lastPlaybackDiagnosticCode = diagnosticCodeBeforeRecovery;
-        // playChannel resets episode-local state. Keep the bounded recovery
-        // budget consumed until playback has been stable for a full episode.
-        playbackFullRecoveryUsed = true;
+        // playChannel resets episode-local state. Keep the attempts already
+        // spent until playback has been stable for a full episode.
+        playbackRecoveryBudget.restore(usedAttempts);
     }
 
     private void releasePlayerForRecovery() {
@@ -1858,7 +1903,14 @@ public final class MainActivity extends Activity {
         playbackSourceRecoveryInFlight = false;
         lastPlaybackDiagnosticCode = PlaybackDiagnosticCode.forResolverFailure(error);
         Log.i(PLAYBACK_HEALTH_TAG, "diagnostic code=" + lastPlaybackDiagnosticCode);
-        showPlaybackFailure();
+        // TvVoo/Highfly can fail intermittently: retry with the bounded budget
+        // (a fresh source from the second attempt) before reporting ERROR.
+        playbackAutoRecoveryInFlight = false;
+        if (playbackChannel == null) {
+            showPlaybackFailure();
+            return;
+        }
+        requestFullPlaybackRecovery("fuente no disponible", true, false);
     }
 
     private void startResolvedPlayback(
@@ -1968,7 +2020,7 @@ public final class MainActivity extends Activity {
 
     private void settlePlaybackEpisode(boolean playing) {
         if (!playbackRecoveryEpisode.onPlayingChanged(playing, System.nanoTime())) return;
-        playbackFullRecoveryUsed = false;
+        playbackRecoveryBudget.reset();
     }
 
     private boolean isCurrentPlayback(Channel channel, long expectedGeneration) {
@@ -1995,8 +2047,20 @@ public final class MainActivity extends Activity {
 
     private void startPlaybackFromInput() {
         if (player == null) return;
+        if (playbackRecoveryFailed) {
+            // OK/Play sobre un ERROR siempre reintenta, con reintentos repuestos.
+            playbackRecoveryBudget.reset();
+            playbackRecoveryFailed = false;
+            playbackAutoRecoveryInFlight = false;
+            requestFullPlaybackRecovery("reanudación tras error", true, true);
+            return;
+        }
+        if (playbackResolutionTask != null || playbackAutoRecoveryInFlight) {
+            // El canal ya está cargando o reconectando: no reiniciarlo.
+            return;
+        }
         if (player.getPlayerError() != null || player.getPlaybackState() == Player.STATE_IDLE) {
-            requestFullPlaybackRecovery("reanudación tras error");
+            requestFullPlaybackRecovery("reanudación tras error", false, true);
             return;
         }
         player.play();
@@ -2016,7 +2080,7 @@ public final class MainActivity extends Activity {
         playbackLoadingSinceElapsedRealtime = -1L;
         playbackAutoRecoveryInFlight = false;
         playbackRecoveryFailed = false;
-        playbackFullRecoveryUsed = false;
+        playbackRecoveryBudget.reset();
         discardCurrentPlaybackSource();
         playbackChannel = null;
         if (player != null) {

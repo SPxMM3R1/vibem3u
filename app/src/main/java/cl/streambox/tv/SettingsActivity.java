@@ -92,6 +92,7 @@ public final class SettingsActivity extends Activity {
     private Switch normalizeVolume;
     private Button updateButton;
     private TextView updateStatus;
+    private TextView reminderStatus;
     private AppUpdater appUpdater;
     private boolean hasExistingUrl;
     private TextView[] tabs;
@@ -250,6 +251,10 @@ public final class SettingsActivity extends Activity {
         normalizeVolume = findViewById(R.id.normalize_volume);
         updateButton = findViewById(R.id.check_updates_button);
         updateStatus = findViewById(R.id.update_status);
+        reminderStatus = findViewById(R.id.reminder_status);
+        findViewById(R.id.reminder_permission_button).setOnClickListener(v -> openOverlayPermission());
+        findViewById(R.id.reminder_test_button).setOnClickListener(v -> scheduleReminderTest());
+        refreshReminderStatus();
         cancelButton = findViewById(R.id.cancel_button);
         saveButton = findViewById(R.id.save_button);
         settingsContent = findViewById(R.id.settings_content);
@@ -505,6 +510,35 @@ public final class SettingsActivity extends Activity {
             tabPages[index].setVisibility(selected ? View.VISIBLE : View.GONE);
         }
         if (requestFocus) tabs[safeIndex].requestFocus();
+    }
+
+    private void refreshReminderStatus() {
+        if (reminderStatus != null) reminderStatus.setText(ReminderAlerts.status(this));
+    }
+
+    private void openOverlayPermission() {
+        Intent intent = new Intent(
+                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                android.net.Uri.parse("package:" + getPackageName())
+        );
+        try {
+            startActivity(intent);
+        } catch (android.content.ActivityNotFoundException | SecurityException error) {
+            reminderStatus.setText(getString(
+                    R.string.settings_reminders_no_permission_screen,
+                    ReminderAlerts.ADB_GRANT_COMMAND
+            ) + "\n" + ReminderAlerts.status(this));
+        }
+    }
+
+    private void scheduleReminderTest() {
+        try {
+            ReminderAlerts.scheduleTest(this);
+        } catch (RuntimeException error) {
+            reminderStatus.setText("No se pudo programar la prueba: " + error.getMessage());
+            return;
+        }
+        refreshReminderStatus();
     }
 
     private View firstFocusForTab(int tabIndex) {
@@ -850,6 +884,7 @@ public final class SettingsActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        refreshReminderStatus();
         enterImmersiveMode();
         if (appUpdater != null) appUpdater.onHostResume();
     }
