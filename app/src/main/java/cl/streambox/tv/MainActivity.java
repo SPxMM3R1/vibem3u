@@ -269,6 +269,8 @@ public final class MainActivity extends Activity {
             String currentTime = new SimpleDateFormat("HH:mm", Locale.getDefault())
                     .format(new Date());
             clock.setText(currentTime);
+            // La línea de la hora actual de la Guía avanza con el reloj.
+            if (isGuideVisible()) guideView.refresh(System.currentTimeMillis());
             mainHandler.postDelayed(this, 30_000);
         }
     };

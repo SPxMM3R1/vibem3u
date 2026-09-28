@@ -42,12 +42,14 @@ public final class EpgGuideView extends View {
     private static final int DIM = 0xFF7F8C92;
     private static final int VEIL = 0x10FFFFFF;
     private static final int VEIL_FOCUS = 0x1FFFFFFF;
+    private static final int NOW_GLOW = 0x8C00B8E6;
 
     private final TextPaint titlePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint textPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint smallPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint descriptionPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Paint blockPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint nowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect = new RectF();
     private final Typeface bold = Typeface.create(Typeface.DEFAULT, Typeface.BOLD);
     private final Typeface regular = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL);
@@ -66,6 +68,7 @@ public final class EpgGuideView extends View {
         super(context, attrs);
         titlePaint.setTypeface(bold);
         descriptionPaint.setColor(MUTED);
+        nowPaint.setColor(CYAN);
         setWillNotDraw(false);
     }
 
@@ -129,15 +132,28 @@ public final class EpgGuideView extends View {
         float gridWidth = right - gridLeft;
         smallPaint.setColor(MUTED);
         smallPaint.setTextSize(sp(10));
+        boolean nowVisible = nowMillis >= windowStart && nowMillis < navigator.getWindowEnd();
+        float nowX = xFor(nowMillis, gridLeft, gridWidth, windowStart);
+        String nowLabel = timeFormat.format(new Date(nowMillis));
+        float nowLabelLeft = nowX - smallPaint.measureText(nowLabel) / 2f;
+        float nowLabelRight = nowX + smallPaint.measureText(nowLabel) / 2f;
+        boolean nowLabelClashes = false;
         for (int slot = 0; slot < 6; slot++) {
             long time = windowStart + slot * EpgGuideNavigator.SLOT_MILLIS;
-            canvas.drawText(timeFormat.format(new Date(time)), xFor(time, gridLeft, gridWidth, windowStart), axisBaseline, smallPaint);
+            String label = timeFormat.format(new Date(time));
+            float labelLeft = xFor(time, gridLeft, gridWidth, windowStart);
+            float labelRight = labelLeft + smallPaint.measureText(label);
+            // Las horas del eje mandan: si la hora actual se les encima, esa no se dibuja.
+            if (labelLeft - dp(6) < nowLabelRight && nowLabelLeft < labelRight + dp(6)) {
+                nowLabelClashes = true;
+            }
+            canvas.drawText(label, labelLeft, axisBaseline, smallPaint);
         }
-        if (nowMillis >= windowStart && nowMillis < navigator.getWindowEnd()) {
+        if (nowVisible && !nowLabelClashes) {
+            // Hora actual: mismo tamaño que el eje, en cyan, centrada sobre la línea.
             smallPaint.setColor(CYAN);
-            String marker = "▼ " + timeFormat.format(new Date(nowMillis));
-            float x = xFor(nowMillis, gridLeft, gridWidth, windowStart) - dp(5);
-            canvas.drawText(marker, x, axisBaseline - sp(12), smallPaint);
+            canvas.drawText(nowLabel, nowLabelLeft, axisBaseline, smallPaint);
+            smallPaint.setColor(MUTED);
         }
 
         // Filas.
@@ -222,6 +238,20 @@ public final class EpgGuideView extends View {
             }
         }
         titlePaint.setTypeface(bold);
+
+        if (nowVisible) {
+            // Hora actual: una sola línea continua sobre todos los canales visibles,
+            // con un punto donde parte y un brillo suave.
+            int shownRows = Math.max(0, Math.min(visibleRows, source.rowCount() - firstVisibleRow));
+            if (shownRows > 0) {
+                float lineTop = rowsTop - dp(2);
+                float lineBottom = rowsTop + shownRows * (rowHeight + rowGap) - rowGap;
+                nowPaint.setShadowLayer(dp(3), 0f, 0f, NOW_GLOW);
+                rect.set(nowX - dp(1), lineTop, nowX + dp(1), lineBottom);
+                canvas.drawRoundRect(rect, dp(1), dp(1), nowPaint);
+                canvas.drawCircle(nowX, lineTop, dp(3), nowPaint);
+            }
+        }
 
         drawDetail(canvas, focusedProgramme, left, right, bottom - detailHeight, focusedRow);
     }
