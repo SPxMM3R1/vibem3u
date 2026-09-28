@@ -15,7 +15,9 @@
       },
       "config": {
         "cacheEnabled": true,
-        "pageUrl": "https://live.tvn.cl/?tvn_seccion=prehome",
+        "pageUrl": "https://tvn-live-test-506364290967.southamerica-west1.run.app",
+        "discoveryUrl": "https://www.tvn.cl/en-vivo",
+        "fallbackPageUrls": "https://live.tvn.cl/?tvn_seccion=prehome",
         "pageReferer": "https://www.tvn.cl/",
         "playlistTemplate": "https://mdstrm.com/live-stream-playlist/{streamId}.m3u8",
         "playbackOrigin": "https://live.tvn.cl",

@@ -41,6 +41,36 @@ final class ProviderStreamParsers {
 
     private ProviderStreamParsers() {}
 
+    /** La página «En vivo» de tvn.cl indica dónde vive hoy el reproductor. */
+    private static final Pattern TVN_LIVE_PAGE_ATTRIBUTE = Pattern.compile(
+            "data-(?:tvnplayer-)?urlenvivo\\s*=\\s*\"(https://[^\"\\s<>]{8,300})\"",
+            Pattern.CASE_INSENSITIVE
+    );
+
+    /**
+     * Dirección actual del reproductor en vivo de TVN publicada en tvn.cl, o
+     * null. Solo se aceptan hosts de TVN o de su servicio en Cloud Run.
+     */
+    static String parseTvnLivePageUrl(String html) {
+        if (html == null) return null;
+        Matcher matcher = TVN_LIVE_PAGE_ATTRIBUTE.matcher(html);
+        while (matcher.find()) {
+            String candidate = matcher.group(1).replace("&amp;", "&").trim();
+            try {
+                java.net.URI uri = java.net.URI.create(candidate);
+                String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(java.util.Locale.ROOT);
+                boolean trusted = host.equals("tvn.cl") || host.endsWith(".tvn.cl")
+                        || (host.startsWith("tvn-") && host.endsWith(".run.app"));
+                if ("https".equalsIgnoreCase(uri.getScheme()) && trusted && uri.getUserInfo() == null) {
+                    return candidate;
+                }
+            } catch (IllegalArgumentException ignored) {
+                // Valor inválido: se sigue buscando.
+            }
+        }
+        return null;
+    }
+
     static TvnConfig parseTvn(String html) throws IOException {
         return parseTvn(html, "", "", TVN_DEFAULT_ID);
     }

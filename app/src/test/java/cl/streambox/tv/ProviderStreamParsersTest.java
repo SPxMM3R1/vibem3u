@@ -17,6 +17,28 @@ public final class ProviderStreamParsersTest {
     }
 
     @Test
+    public void findsTvnLivePlayerAddressPublishedOnTvnCl() {
+        assertEquals(
+                "https://tvn-live-test-1.southamerica-west1.run.app",
+                ProviderStreamParsers.parseTvnLivePageUrl(
+                        "<div data-media-cntr=\"ms-player\" "
+                                + "data-urlenvivo=\"https://tvn-live-test-1.southamerica-west1.run.app\"></div>"));
+        assertEquals(
+                "https://live.tvn.cl/?a=1&b=2",
+                ProviderStreamParsers.parseTvnLivePageUrl(
+                        "<div data-tvnplayer-urlenvivo=\"https://live.tvn.cl/?a=1&amp;b=2\"></div>"));
+    }
+
+    @Test
+    public void ignoresUntrustedTvnLivePlayerAddresses() {
+        org.junit.Assert.assertNull(ProviderStreamParsers.parseTvnLivePageUrl(
+                "<div data-urlenvivo=\"https://evil.example/tvn\"></div>"));
+        org.junit.Assert.assertNull(ProviderStreamParsers.parseTvnLivePageUrl(
+                "<div data-urlenvivo=\"https://other.run.app\"></div>"));
+        org.junit.Assert.assertNull(ProviderStreamParsers.parseTvnLivePageUrl("<div></div>"));
+    }
+
+    @Test
     public void parsesMeganoticiasConfigurationAndToken() throws Exception {
         ProviderStreamParsers.MeganoticiasConfig config =
                 ProviderStreamParsers.parseMeganoticiasConfig(

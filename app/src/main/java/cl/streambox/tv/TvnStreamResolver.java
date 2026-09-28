@@ -3,13 +3,20 @@ package cl.streambox.tv;
 import java.io.IOException;
 import java.net.URI;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 
 /** Resolves TVN's short-lived MediaStream token from its public live page. */
 public final class TvnStreamResolver implements StreamResolver {
     public static final String ID = "tvn";
     private static final String TVG_ID = "0104";
-    private static final String LIVE_PAGE = "https://live.tvn.cl/?tvn_seccion=prehome";
+    private static final String LIVE_PAGE =
+            "https://tvn-live-test-506364290967.southamerica-west1.run.app";
+    /** tvn.cl publica aquí la dirección vigente del reproductor en vivo. */
+    private static final String DISCOVERY_PAGE = "https://www.tvn.cl/en-vivo";
+    private static final String LEGACY_LIVE_PAGE = "https://live.tvn.cl/?tvn_seccion=prehome";
+    /** Cada dirección tiene su propio plazo: una que no responde no agota el total. */
+    private static final long PAGE_ATTEMPT_BUDGET_MILLIS = 4_000L;
     private static final String PLAYLIST_BASE = "https://mdstrm.com/live-stream-playlist/";
     private static final long SESSION_TOKEN_CACHE_TTL_MILLIS = Long.MAX_VALUE;
     private static final long DEFAULT_RESOLUTION_BUDGET_MILLIS = 12_000L;
@@ -96,14 +103,42 @@ public final class TvnStreamResolver implements StreamResolver {
         ResolutionProgressListener progress = listener == null
                 ? ResolutionProgressListener.NONE
                 : listener;
-        String livePage = config("pageUrl", LIVE_PAGE);
         String pageReferer = config("pageReferer", "https://www.tvn.cl/");
-        progress.onProgress(ResolutionProgress.of(
-                ResolutionStage.PAGE_REQUEST,
-                "GET " + SafePlaybackText.url(livePage)
-                        + " · HTML · configuración pública"
-        ));
-        String page = httpClient.getText(livePage, pageHeaders(pageReferer));
+        // TVN movió su reproductor (live.tvn.cl dejó de responder en 2026-09):
+        // primero se lee la dirección vigente desde tvn.cl y luego se prueban
+        // las conocidas, cada una con su propio plazo.
+        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+        String discovered = discoverLivePage(pageReferer, progress);
+        if (discovered != null) candidates.add(discovered);
+        candidates.add(config("pageUrl", LIVE_PAGE));
+        for (String fallback : config("fallbackPageUrls", LEGACY_LIVE_PAGE).split(",")) {
+            if (!AppStrings.isBlank(fallback)) candidates.add(fallback.trim());
+        }
+        String livePage = null;
+        String page = null;
+        IOException lastError = null;
+        for (String candidate : candidates) {
+            progress.onProgress(ResolutionProgress.of(
+                    ResolutionStage.PAGE_REQUEST,
+                    "GET " + SafePlaybackText.url(candidate)
+                            + " · HTML · configuración pública"
+            ));
+            try {
+                page = getWithinAttemptBudget(candidate, pageHeaders(pageReferer));
+                if (page.contains("access_token")) {
+                    livePage = candidate;
+                    break;
+                }
+                lastError = new IOException("TVN no publicó el reproductor en esa dirección.");
+            } catch (IOException error) {
+                lastError = error;
+            }
+            ResolutionContext.current().check();
+        }
+        if (livePage == null) {
+            throw lastError != null ? lastError
+                    : new IOException("TVN no publicó el reproductor en vivo.");
+        }
         ProviderStreamParsers.TvnConfig providerConfig = ProviderStreamParsers.parseTvn(
                 page,
                 config("idPattern", ""),
@@ -156,6 +191,32 @@ public final class TvnStreamResolver implements StreamResolver {
                 TokenHttpClient.BROWSER_USER_AGENT,
                 expiresAt(explicitExpiryAtMillis)
         );
+    }
+
+    /** Lee en tvn.cl la dirección vigente del reproductor; null si no se pudo. */
+    private String discoverLivePage(String referer, ResolutionProgressListener progress) {
+        String discoveryPage = config("discoveryUrl", DISCOVERY_PAGE);
+        if (AppStrings.isBlank(discoveryPage)) return null;
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.PAGE_REQUEST,
+                "GET " + SafePlaybackText.url(discoveryPage) + " · dirección del reproductor"
+        ));
+        try {
+            return ProviderStreamParsers.parseTvnLivePageUrl(
+                    getWithinAttemptBudget(discoveryPage, pageHeaders(referer)));
+        } catch (IOException error) {
+            return null;
+        }
+    }
+
+    private String getWithinAttemptBudget(String url, Map<String, String> headers) throws IOException {
+        ResolutionContext parent = ResolutionContext.current();
+        ResolutionContext attempt = parent == null
+                ? new ResolutionContext(PAGE_ATTEMPT_BUDGET_MILLIS)
+                : parent.child(PAGE_ATTEMPT_BUDGET_MILLIS);
+        try (ResolutionContext.Scope ignored = attempt.activate()) {
+            return httpClient.getText(url, headers);
+        }
     }
 
     private static Map<String, String> pageHeaders(String referer) {
