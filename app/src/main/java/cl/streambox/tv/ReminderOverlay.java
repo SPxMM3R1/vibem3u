@@ -47,7 +47,9 @@ final class ReminderOverlay {
         watch.setOnClickListener(view -> {
             handler.removeCallbacks(dismiss);
             remove(windows);
-            Intent open = new Intent(app, MainActivity.class)
+            // Por nombre: MainActivity usa API inestable de Media3 y no se referencia aquí.
+            Intent open = new Intent()
+                    .setClassName(app, "cl.streambox.tv.MainActivity")
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
             app.startActivity(open);
         });
