@@ -291,8 +291,8 @@ public final class EpgGuideView extends View {
         if (logo != null) {
             // Mismo tamaño óptico que el logo del OSD.
             float drawnWidth = drawBitmapFit(canvas, logo, left, logoTop, logoHeight,
-                    dp(MainActivity.OSD_LOGO_AREA_WIDTH_DP) * dp(MainActivity.OSD_LOGO_AREA_HEIGHT_DP),
-                    dp(MainActivity.OSD_LOGO_MAX_WIDTH_DP), dp(MainActivity.OSD_LOGO_MAX_HEIGHT_DP),
+                    dp(LogoFit.OSD_LOGO_AREA_WIDTH_DP) * dp(LogoFit.OSD_LOGO_AREA_HEIGHT_DP),
+                    dp(LogoFit.OSD_LOGO_MAX_WIDTH_DP), dp(LogoFit.OSD_LOGO_MAX_HEIGHT_DP),
                     false);
             metaLeft = left + drawnWidth + dp(10);
         }

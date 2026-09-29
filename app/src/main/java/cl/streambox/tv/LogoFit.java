@@ -9,6 +9,11 @@ import android.graphics.Bitmap;
  * para que ese margen no achique el logo.
  */
 final class LogoFit {
+    /** Logo del OSD y del bloque de arriba de la Guía (dp): superficie 75×23, tope 105×32. */
+    static final float OSD_LOGO_AREA_WIDTH_DP = 75f;
+    static final float OSD_LOGO_AREA_HEIGHT_DP = 23f;
+    static final float OSD_LOGO_MAX_WIDTH_DP = 105f;
+    static final float OSD_LOGO_MAX_HEIGHT_DP = 32f;
     /** Alfa mínimo para considerar un píxel parte del logo. */
     private static final int ALPHA_THRESHOLD = 16;
 

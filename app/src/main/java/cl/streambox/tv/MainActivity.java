@@ -147,10 +147,6 @@ public final class MainActivity extends Activity {
     private TextView detailAfterTitle;
     private EpgGuideView guideView;
     private EpgGuideNavigator guideNavigator;
-    static final float OSD_LOGO_AREA_WIDTH_DP = 75f;
-    static final float OSD_LOGO_AREA_HEIGHT_DP = 23f;
-    static final float OSD_LOGO_MAX_WIDTH_DP = 105f;
-    static final float OSD_LOGO_MAX_HEIGHT_DP = 32f;
     /** Filas de la guía: índices en {@link #channels} según el filtro de categoría. */
     private final List<Integer> guideRows = new ArrayList<>();
     private final List<String> guideFilters = new ArrayList<>();
@@ -2370,8 +2366,8 @@ public final class MainActivity extends Activity {
 
         int expectedIndex = channelIndex;
         // Se carga con margen de sobra: el tamaño final lo fija el tamaño óptico.
-        int targetWidthPx = dpToPx(OSD_LOGO_MAX_WIDTH_DP * 1.5f);
-        int targetHeightPx = dpToPx(OSD_LOGO_MAX_HEIGHT_DP * 2f);
+        int targetWidthPx = dpToPx(LogoFit.OSD_LOGO_MAX_WIDTH_DP * 1.5f);
+        int targetHeightPx = dpToPx(LogoFit.OSD_LOGO_MAX_HEIGHT_DP * 2f);
         boolean shouldRevalidate = revalidate
                 || logoRevalidatedThisSession.add(logoUri.toString());
         Future<?> previousTask = logoRequestTask;
@@ -2424,8 +2420,8 @@ public final class MainActivity extends Activity {
                 || isFinishing()) return;
         // Tamaño óptico: la misma superficie visual para todos los logos.
         float[] size = LogoFit.opticalSize(bitmap.getWidth(), bitmap.getHeight(),
-                dpToPx(OSD_LOGO_AREA_WIDTH_DP) * (float) dpToPx(OSD_LOGO_AREA_HEIGHT_DP),
-                dpToPx(OSD_LOGO_MAX_WIDTH_DP), dpToPx(OSD_LOGO_MAX_HEIGHT_DP));
+                dpToPx(LogoFit.OSD_LOGO_AREA_WIDTH_DP) * (float) dpToPx(LogoFit.OSD_LOGO_AREA_HEIGHT_DP),
+                dpToPx(LogoFit.OSD_LOGO_MAX_WIDTH_DP), dpToPx(LogoFit.OSD_LOGO_MAX_HEIGHT_DP));
         ViewGroup.LayoutParams logoParams = channelLogo.getLayoutParams();
         logoParams.width = Math.max(1, Math.round(size[0]));
         logoParams.height = Math.max(1, Math.round(size[1]));
