@@ -25,6 +25,7 @@ import android.util.TypedValue;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.Gravity;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -146,6 +147,10 @@ public final class MainActivity extends Activity {
     private TextView detailAfterTitle;
     private EpgGuideView guideView;
     private EpgGuideNavigator guideNavigator;
+    static final float OSD_LOGO_AREA_WIDTH_DP = 75f;
+    static final float OSD_LOGO_AREA_HEIGHT_DP = 23f;
+    static final float OSD_LOGO_MAX_WIDTH_DP = 105f;
+    static final float OSD_LOGO_MAX_HEIGHT_DP = 32f;
     /** Filas de la guía: índices en {@link #channels} según el filtro de categoría. */
     private final List<Integer> guideRows = new ArrayList<>();
     private final List<String> guideFilters = new ArrayList<>();
@@ -167,6 +172,9 @@ public final class MainActivity extends Activity {
     private ContinuousMarqueeTextView contentTitle;
     private TextView programmeTime;
     private ProgressBar liveProgress;
+    private View osdHero;
+    private TextView osdDescription;
+    private TextView osdNext;
     private TextView videoInfo;
     private TextView codecInfo;
     private TextView statusDot;
@@ -266,6 +274,7 @@ public final class MainActivity extends Activity {
         if (programmeDetailOverlay != null) {
             programmeDetailOverlay.setVisibility(View.GONE);
         }
+        if (osdHero != null) osdHero.setVisibility(View.VISIBLE);
     };
     /** Timeout del detalle: se cierra junto con el OSD que lo acompaña. */
     private final Runnable hideProgrammeDetailWithOverlay = () -> {
@@ -274,9 +283,20 @@ public final class MainActivity extends Activity {
     };
     private final Runnable updateClock = new Runnable() {
         @Override public void run() {
+            Date nowDate = new Date();
             String currentTime = new SimpleDateFormat("HH:mm", Locale.getDefault())
-                    .format(new Date());
-            clock.setText(currentTime);
+                    .format(nowDate);
+            String day = new SimpleDateFormat("EEEE d", Locale.forLanguageTag("es-CL"))
+                    .format(nowDate);
+            if (!day.isEmpty()) {
+                day = day.substring(0, 1).toUpperCase(Locale.ROOT) + day.substring(1);
+            }
+            android.text.SpannableString text = new android.text.SpannableString(
+                    day + "  ·  " + currentTime);
+            text.setSpan(new android.text.style.ForegroundColorSpan(getColor(R.color.white)),
+                    text.length() - currentTime.length(), text.length(),
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            clock.setText(text);
             // La línea de la hora actual de la Guía avanza con el reloj.
             if (isGuideVisible()) guideView.refresh(System.currentTimeMillis());
             mainHandler.postDelayed(this, 30_000);
@@ -383,23 +403,17 @@ public final class MainActivity extends Activity {
         playerView = findViewById(R.id.player_view);
         channelOverlay = findViewById(R.id.channel_overlay);
         android.util.DisplayMetrics displayMetrics = getResources().getDisplayMetrics();
-        FrameLayout.LayoutParams overlayParams = (FrameLayout.LayoutParams)
-                channelOverlay.getLayoutParams();
-        overlayParams.width = OverlayPanelWidth.resolveWidthPx(
+        int panelWidth = OverlayPanelWidth.resolveWidthPx(
                 displayMetrics.widthPixels,
                 displayMetrics.density
         );
-        overlayParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        overlayParams.leftMargin = 0;
-        overlayParams.rightMargin = 0;
-        channelOverlay.setLayoutParams(overlayParams);
         loadingPanel = findViewById(R.id.loading_panel);
         loadingText = findViewById(R.id.loading_text);
         clock = findViewById(R.id.clock);
         programmeDetailOverlay = findViewById(R.id.programme_detail_overlay);
         FrameLayout.LayoutParams detailParams = (FrameLayout.LayoutParams)
                 programmeDetailOverlay.getLayoutParams();
-        detailParams.width = overlayParams.width;
+        detailParams.width = panelWidth;
         detailParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
         programmeDetailOverlay.setLayoutParams(detailParams);
         detailLive = findViewById(R.id.detail_live);
@@ -431,6 +445,9 @@ public final class MainActivity extends Activity {
         contentTitle = findViewById(R.id.content_title);
         programmeTime = findViewById(R.id.programme_time);
         liveProgress = findViewById(R.id.live_progress);
+        osdHero = findViewById(R.id.osd_hero);
+        osdDescription = findViewById(R.id.osd_description);
+        osdNext = findViewById(R.id.osd_next);
         videoInfo = findViewById(R.id.video_info);
         codecInfo = findViewById(R.id.codec_info);
         statusDot = findViewById(R.id.status_dot);
@@ -1043,8 +1060,7 @@ public final class MainActivity extends Activity {
                     selectedChannel,
                     channelIndex + 1
             );
-            channelNumber.setText(String.format(Locale.ROOT, "%03d", displayNumber));
-            channelName.setText(selectedChannel.getName());
+            bindOsdChannel(displayNumber, selectedChannel);
             updateProgrammeInfo();
             loadChannelLogo(selectedChannel, contentChanged);
             if (player != null && player.getPlaybackState() == Player.STATE_READY) hideLoadingState();
@@ -1495,8 +1511,7 @@ public final class MainActivity extends Activity {
         playbackPreferences.rememberChannel(channel, channelIndex);
 
         int displayNumber = publishedPlaybackCatalog.numberFor(channel, channelIndex + 1);
-        channelNumber.setText(String.format(Locale.ROOT, "%03d", displayNumber));
-        channelName.setText(channel.getName());
+        bindOsdChannel(displayNumber, channel);
         updateProgrammeInfo();
         videoInfo.setText("— · —");
         codecInfo.setText("— · — · —");
@@ -2167,6 +2182,14 @@ public final class MainActivity extends Activity {
         return path != null && path.toLowerCase(Locale.ROOT).contains(".m3u8");
     }
 
+    /** Línea del canal en el OSD: «025 · Deportes». El logo reemplaza al nombre. */
+    private void bindOsdChannel(int displayNumber, Channel channel) {
+        String number = String.format(Locale.ROOT, "%03d", displayNumber);
+        String group = channel.getGroup();
+        channelNumber.setText(AppStrings.isBlank(group) ? number : number + "  ·  " + group.trim());
+        channelName.setText(channel.getName());
+    }
+
     private void updateProgrammeInfo() {
         if (channels.isEmpty() || channelIndex < 0 || channelIndex >= channels.size()) return;
         Channel channel = channels.get(channelIndex);
@@ -2178,6 +2201,8 @@ public final class MainActivity extends Activity {
                     ? getString(R.string.live_content)
                     : channel.getGroup());
             programmeTime.setVisibility(View.GONE);
+            osdDescription.setVisibility(View.GONE);
+            osdNext.setVisibility(View.GONE);
             liveProgress.setIndeterminate(true);
             updateProgrammeDetail();
             return;
@@ -2186,10 +2211,15 @@ public final class MainActivity extends Activity {
         contentTitle.setText(programme.getTitle());
         SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
         String timeRange = timeFormat.format(new Date(programme.getStartMillis()))
-                + " — "
+                + " – "
                 + timeFormat.format(new Date(programme.getStopMillis()));
-        programmeTime.setText(timeRange);
+        programmeTime.setText(timeRange + "  ·  " + getString(R.string.guide_remaining,
+                EpgGuideView.formatDuration(programme.getStopMillis() - now)));
         programmeTime.setVisibility(View.VISIBLE);
+
+        String description = programme.getDescription();
+        osdDescription.setText(description);
+        osdDescription.setVisibility(AppStrings.isBlank(description) ? View.GONE : View.VISIBLE);
 
         long duration = programme.getStopMillis() - programme.getStartMillis();
         int progress = duration <= 0 ? 0 : (int) Math.max(0, Math.min(1000,
@@ -2197,7 +2227,41 @@ public final class MainActivity extends Activity {
         liveProgress.setIndeterminate(false);
         liveProgress.setMax(1000);
         liveProgress.setProgress(progress);
+
+        bindOsdNext(channel, programme, timeFormat);
         updateProgrammeDetail();
+    }
+
+    /** «Después · 22:15 Programa», con la campana cyan si tiene recordatorio. */
+    private void bindOsdNext(Channel channel, EpgProgramme current, SimpleDateFormat timeFormat) {
+        EpgProgramme next = null;
+        for (EpgProgramme candidate : epgData.findUpcoming(channel.getTvgId(),
+                current.getStopMillis(), 2)) {
+            if (candidate.getStartMillis() >= current.getStopMillis()) {
+                next = candidate;
+                break;
+            }
+        }
+        if (next == null) {
+            osdNext.setVisibility(View.GONE);
+            return;
+        }
+        String prefix = getString(R.string.guide_next,
+                timeFormat.format(new Date(next.getStartMillis()))) + "  ";
+        android.text.SpannableString text = new android.text.SpannableString(prefix + next.getTitle());
+        text.setSpan(new android.text.style.ForegroundColorSpan(getColor(R.color.white)),
+                prefix.length(), text.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        osdNext.setText(text);
+        refreshReminderIds();
+        boolean reminded = reminderIds.contains(
+                PlaybackPreferences.channelIdentity(channel) + "@" + next.getStartMillis());
+        android.graphics.drawable.Drawable bell = null;
+        if (reminded) {
+            bell = getDrawable(R.drawable.ic_reminder_bell);
+            if (bell != null) bell.setBounds(0, 0, dpToPx(10), dpToPx(10));
+        }
+        osdNext.setCompoundDrawablesRelative(bell, null, null, null);
+        osdNext.setVisibility(View.VISIBLE);
     }
 
     private void updateProgrammeDetail() {
@@ -2289,7 +2353,8 @@ public final class MainActivity extends Activity {
 
     private void loadChannelLogo(Channel channel, boolean revalidate) {
         URI logoUri = channel.getLogoUri();
-        String fallback = initials(channel.getName());
+        // Sin logo, el nombre del canal ocupa su lugar.
+        String fallback = channel.getName();
         String expectedIdentity = PlaybackPreferences.channelIdentity(channel);
         long requestGeneration = ++logoRequestGeneration;
         if (!expectedIdentity.equals(displayedLogoIdentity)) {
@@ -2304,12 +2369,9 @@ public final class MainActivity extends Activity {
         }
 
         int expectedIndex = channelIndex;
-        int targetWidthPx = channelLogo.getWidth() > 0
-                ? channelLogo.getWidth()
-                : dpToPx(78);
-        int targetHeightPx = channelLogo.getHeight() > 0
-                ? channelLogo.getHeight()
-                : dpToPx(54);
+        // Se carga con margen de sobra: el tamaño final lo fija el tamaño óptico.
+        int targetWidthPx = dpToPx(OSD_LOGO_MAX_WIDTH_DP * 1.5f);
+        int targetHeightPx = dpToPx(OSD_LOGO_MAX_HEIGHT_DP * 2f);
         boolean shouldRevalidate = revalidate
                 || logoRevalidatedThisSession.add(logoUri.toString());
         Future<?> previousTask = logoRequestTask;
@@ -2321,8 +2383,9 @@ public final class MainActivity extends Activity {
                     targetHeightPx
             );
             if (cached != null) {
+                android.graphics.Bitmap trimmedCached = LogoFit.trim(cached);
                 mainHandler.post(() -> showChannelLogo(
-                        cached,
+                        trimmedCached,
                         expectedIndex,
                         expectedIdentity,
                         requestGeneration
@@ -2337,8 +2400,9 @@ public final class MainActivity extends Activity {
                         targetHeightPx
                 );
                 if (cached != null && !refreshed.isChanged()) return;
+                android.graphics.Bitmap trimmedRefreshed = LogoFit.trim(refreshed.getBitmap());
                 mainHandler.post(() -> showChannelLogo(
-                        refreshed.getBitmap(),
+                        trimmedRefreshed,
                         expectedIndex,
                         expectedIdentity,
                         requestGeneration
@@ -2358,7 +2422,15 @@ public final class MainActivity extends Activity {
         if (requestGeneration != logoRequestGeneration
                 || !isCurrentLogo(expectedIndex, expectedIdentity)
                 || isFinishing()) return;
-        channelLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        // Tamaño óptico: la misma superficie visual para todos los logos.
+        float[] size = LogoFit.opticalSize(bitmap.getWidth(), bitmap.getHeight(),
+                dpToPx(OSD_LOGO_AREA_WIDTH_DP) * (float) dpToPx(OSD_LOGO_AREA_HEIGHT_DP),
+                dpToPx(OSD_LOGO_MAX_WIDTH_DP), dpToPx(OSD_LOGO_MAX_HEIGHT_DP));
+        ViewGroup.LayoutParams logoParams = channelLogo.getLayoutParams();
+        logoParams.width = Math.max(1, Math.round(size[0]));
+        logoParams.height = Math.max(1, Math.round(size[1]));
+        channelLogo.setLayoutParams(logoParams);
+        channelLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
         channelLogo.setImageBitmap(bitmap);
         channelLogo.setVisibility(View.VISIBLE);
         channelLogoFallback.setVisibility(View.GONE);
@@ -2375,6 +2447,10 @@ public final class MainActivity extends Activity {
     }
 
     private int dpToPx(int dp) {
+        return Math.max(1, Math.round(dp * getResources().getDisplayMetrics().density));
+    }
+
+    private int dpToPx(float dp) {
         return Math.max(1, Math.round(dp * getResources().getDisplayMetrics().density));
     }
 
@@ -2827,7 +2903,7 @@ public final class MainActivity extends Activity {
                     // Sin logo: la guía muestra el nombre del canal.
                 }
             }
-            android.graphics.Bitmap result = loaded;
+            android.graphics.Bitmap result = LogoFit.trim(loaded);
             mainHandler.post(() -> {
                 if (result == null) {
                     guideLogoRequests.remove(key);
@@ -3057,6 +3133,8 @@ public final class MainActivity extends Activity {
         mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
         // El detalle se apoya sobre el OSD: ambos quedan visibles y se cierran juntos.
         showOverlay(true);
+        // El detalle toma el lugar del bloque del OSD; los datos técnicos siguen visibles.
+        if (osdHero != null) osdHero.setVisibility(View.INVISIBLE);
         programmeDetailOverlay.setVisibility(View.VISIBLE);
         updateProgrammeDetail();
         mainHandler.postDelayed(hideProgrammeDetailWithOverlay, PROGRAMME_DETAIL_TIMEOUT_MS);
@@ -4029,16 +4107,6 @@ public final class MainActivity extends Activity {
         if (network == null) return false;
         NetworkCapabilities capabilities = manager.getNetworkCapabilities(network);
         return capabilities != null && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
-    }
-
-    private static String initials(String name) {
-        if (name == null || AppStrings.isBlank(name)) return "TV";
-        StringBuilder result = new StringBuilder(2);
-        for (String word : name.trim().split("\\s+")) {
-            if (!word.isEmpty()) result.append(Character.toUpperCase(word.charAt(0)));
-            if (result.length() == 2) break;
-        }
-        return result.length() == 0 ? "TV" : result.toString();
     }
 
     private static String codecName(String mimeType) {

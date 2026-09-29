@@ -289,7 +289,11 @@ public final class EpgGuideView extends View {
         Bitmap logo = source.logo(row);
         float metaLeft = left;
         if (logo != null) {
-            float drawnWidth = drawBitmapFit(canvas, logo, left, logoTop, dp(62), logoHeight, false);
+            // Mismo tamaño óptico que el logo del OSD.
+            float drawnWidth = drawBitmapFit(canvas, logo, left, logoTop, logoHeight,
+                    dp(MainActivity.OSD_LOGO_AREA_WIDTH_DP) * dp(MainActivity.OSD_LOGO_AREA_HEIGHT_DP),
+                    dp(MainActivity.OSD_LOGO_MAX_WIDTH_DP), dp(MainActivity.OSD_LOGO_MAX_HEIGHT_DP),
+                    false);
             metaLeft = left + drawnWidth + dp(10);
         }
         smallPaint.setTypeface(regular);
@@ -431,7 +435,8 @@ public final class EpgGuideView extends View {
         float logoWidth = dp(60);
         Bitmap logo = source.logo(row);
         if (logo != null) {
-            drawBitmapFit(canvas, logo, logoLeft, rowTop + (rowHeight - dp(22)) / 2f, logoWidth, dp(22), true);
+            drawBitmapFit(canvas, logo, logoLeft, rowTop, rowHeight,
+                    dp(44) * dp(15), logoWidth, dp(22), true);
         } else {
             textPaint.setColor(selected ? WHITE : MUTED);
             canvas.drawText(TextUtils.ellipsize(source.name(row), textPaint, cellWidth - dp(42),
@@ -512,15 +517,20 @@ public final class EpgGuideView extends View {
         return size;
     }
 
-    /** Dibuja el bitmap contenido en la caja; devuelve el ancho dibujado. */
-    private float drawBitmapFit(Canvas canvas, Bitmap bitmap, float x, float y, float boxWidth,
-                                float boxHeight, boolean center) {
+    /**
+     * Dibuja el logo con tamaño óptico ({@link LogoFit}): la misma superficie visual para
+     * todos, sin pasar {@code maxWidth}×{@code maxHeight}. Queda centrado en vertical dentro
+     * de la franja {@code y}..{@code y + bandHeight}; devuelve el ancho dibujado.
+     */
+    private float drawBitmapFit(Canvas canvas, Bitmap bitmap, float x, float y, float bandHeight,
+                                float area, float maxWidth, float maxHeight, boolean center) {
         if (bitmap.getWidth() <= 0 || bitmap.getHeight() <= 0) return 0f;
-        float scale = Math.min(boxWidth / bitmap.getWidth(), boxHeight / bitmap.getHeight());
-        float drawWidth = bitmap.getWidth() * scale;
-        float drawHeight = bitmap.getHeight() * scale;
-        float drawLeft = center ? x + (boxWidth - drawWidth) / 2f : x;
-        float drawTop = y + (boxHeight - drawHeight) / 2f;
+        float[] size = LogoFit.opticalSize(bitmap.getWidth(), bitmap.getHeight(), area,
+                maxWidth, maxHeight);
+        float drawWidth = size[0];
+        float drawHeight = size[1];
+        float drawLeft = center ? x + (maxWidth - drawWidth) / 2f : x;
+        float drawTop = y + (bandHeight - drawHeight) / 2f;
         rect.set(drawLeft, drawTop, drawLeft + drawWidth, drawTop + drawHeight);
         canvas.drawBitmap(bitmap, null, rect, bitmapPaint);
         return drawWidth;
@@ -533,16 +543,17 @@ public final class EpgGuideView extends View {
         }
         if (programme.getStartMillis() <= nowMillis && nowMillis < programme.getStopMillis()) {
             return text + "  ·  " + getContext().getString(R.string.guide_remaining,
-                    duration(programme.getStopMillis() - nowMillis));
+                    formatDuration(programme.getStopMillis() - nowMillis));
         }
         if (programme.getStartMillis() > nowMillis) {
             return text + "  ·  " + getContext().getString(R.string.guide_starts_in,
-                    duration(programme.getStartMillis() - nowMillis));
+                    formatDuration(programme.getStartMillis() - nowMillis));
         }
         return text;
     }
 
-    private static String duration(long millis) {
+    /** Duración legible: «37 min», «2 h», «1 h 20 min». */
+    static String formatDuration(long millis) {
         long minutes = Math.max(1L, (millis + 59_999L) / 60_000L);
         if (minutes < 60) return minutes + " min";
         long hours = minutes / 60;

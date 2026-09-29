@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Detalle del programa (segundo OK / INFO): se apoya sobre el OSD con su mismo ancho
-     (OverlayPanelWidth, aplicado en MainActivity) y su misma superficie. -->
+<!-- Detalle del programa (segundo OK / INFO): ocupa el lugar del bloque del OSD (que se
+     oculta mientras está abierto) con el ancho de OverlayPanelWidth. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/programme_detail_overlay"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_gravity="bottom|center_horizontal"
-    android:layout_marginBottom="118dp"
+    android:layout_marginBottom="46dp"
     android:background="@drawable/channel_overlay_background"
     android:baselineAligned="false"
     android:minHeight="120dp"
