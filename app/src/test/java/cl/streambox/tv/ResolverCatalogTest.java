@@ -14,6 +14,22 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public final class ResolverCatalogTest {
+    /**
+     * El catálogo que va dentro de la APK debe cargar completo: si una dirección no está
+     * permitida se rechaza entero y la app queda sin resolutores (Highfly cayó en 0.5.37).
+     */
+    @Test
+    public void bundledCatalogLoadsWithEveryProvider() throws Exception {
+        java.nio.file.Path asset = java.nio.file.Paths.get("src/main/assets/resolver_catalog.json");
+        String json = new String(java.nio.file.Files.readAllBytes(asset), java.nio.charset.StandardCharsets.UTF_8);
+
+        java.util.Set<String> ids = new java.util.HashSet<>();
+        for (ResolverDefinition definition : ResolverCatalog.parse(json).getProviders()) {
+            ids.add(definition.getId());
+        }
+        assertTrue(ids.containsAll(java.util.Arrays.asList("tvn", "meganoticias", "tvvoo", "highfly")));
+    }
+
     @Test
     public void explicitResolverWinsBeforeTvgIdAndHost() throws Exception {
         ResolverCatalog catalog = ResolverCatalog.parse(catalogJson());

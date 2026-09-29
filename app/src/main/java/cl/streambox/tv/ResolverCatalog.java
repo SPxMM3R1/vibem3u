@@ -371,7 +371,11 @@ public final class ResolverCatalog {
 
     private static Map<String, Set<String>> allowedHosts() {
         Map<String, Set<String>> result = new HashMap<>();
-        result.put("tvn", setOf("live.tvn.cl", "www.tvn.cl", "mdstrm.com"));
+        // TVN movió su reproductor en vivo a Cloud Run (2026-09); live.tvn.cl queda de respaldo.
+        result.put("tvn", setOf(
+                "live.tvn.cl", "www.tvn.cl", "mdstrm.com",
+                "tvn-live-test-506364290967.southamerica-west1.run.app"
+        ));
         result.put("meganoticias", setOf(
                 "www.meganoticias.cl", "meganoticias.cl", "api.mega.cl", "mdstrm.com"
         ));
