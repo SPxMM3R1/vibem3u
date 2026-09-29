@@ -12,6 +12,9 @@ import android.content.Context;
 final class PublishedPlaybackCatalogRepository {
     static final String LAYOUT_URL =
             "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/data/channel-editor-layout.json";
+    /** Enlaces directos Highfly que el runner renueva cada 30 minutos. */
+    static final String HIGHFLY_LINKS_URL =
+            "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/data/highfly-live.json";
     private static final Set<String> ALLOWED_HOSTS = Collections.unmodifiableSet(
             new HashSet<>(Collections.singletonList("raw.githubusercontent.com"))
     );
@@ -55,5 +58,17 @@ final class PublishedPlaybackCatalogRepository {
         );
         String document = new String(response.getBody(), StandardCharsets.UTF_8);
         return PublishedPlaybackCatalog.parse(document);
+    }
+
+    /** Descarga los enlaces directos Highfly; un fallo solo deja el resolutor de siempre. */
+    String fetchHighflyLinks() throws IOException {
+        TokenHttpClient.Response response = httpClient.getPublicOnHosts(
+                HIGHFLY_LINKS_URL,
+                Collections.singletonMap("Accept", "application/json"),
+                PublishedHighflyLinks.MAX_BYTES,
+                null,
+                ALLOWED_HOSTS
+        );
+        return new String(response.getBody(), StandardCharsets.UTF_8);
     }
 }

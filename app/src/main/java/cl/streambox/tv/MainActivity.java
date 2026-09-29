@@ -533,6 +533,7 @@ public final class MainActivity extends Activity {
             }
 
             @Override public void onPlayerError(PlaybackException error) {
+                markPublishedHighflyLinkFailed();
                 settlePlaybackEpisode(false);
                 startupMetrics.failed(startupMetrics.currentId());
                 playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
@@ -1785,6 +1786,7 @@ public final class MainActivity extends Activity {
         StreamResolver resolver = streamResolverRegistry == null
                 ? null
                 : streamResolverRegistry.find(channel);
+        if (renewSource) markPublishedHighflyLinkFailed();
         if (renewSource && resolver != null) {
             // The previous restart reused the validated source and failed
             // again: it may have expired, so ask the resolver for a new one.
@@ -2850,6 +2852,14 @@ public final class MainActivity extends Activity {
         }
     }
 
+    /** Si falló el enlace directo Highfly del runner, el próximo intento usa el resolutor. */
+    private void markPublishedHighflyLinkFailed() {
+        if (currentPlaybackSource != null
+                && "highfly".equalsIgnoreCase(currentPlaybackSource.getResolverId())) {
+            PublishedHighflyLinks.markFailed(currentPlaybackSource.getPlaybackUri());
+        }
+    }
+
     private void refreshReminderIds() {
         reminderIds.clear();
         for (ProgramReminder reminder : ReminderAlerts.list(this)) reminderIds.add(reminder.id());
@@ -3175,6 +3185,15 @@ public final class MainActivity extends Activity {
         publishedCatalogRefreshPending = true;
         networkExecutor.execute(() -> {
             PublishedPlaybackCatalog refreshed;
+            try {
+                // Enlaces directos Highfly primero: así el primer canal ya abre rápido.
+                PublishedHighflyLinks.update(
+                        publishedPlaybackCatalogRepository.fetchHighflyLinks(),
+                        System.currentTimeMillis()
+                );
+            } catch (Exception ignored) {
+                // Sin enlaces publicados, Highfly se resuelve como siempre.
+            }
             try {
                 refreshed = publishedPlaybackCatalogRepository.refresh();
             } catch (Exception ignored) {

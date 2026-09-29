@@ -188,6 +188,24 @@ public final class HighflyStreamResolver implements StreamResolver {
         ResolutionProgressListener progress = listener == null
                 ? ResolutionProgressListener.NONE
                 : listener;
+        // Camino rápido: el runner ya confirmó la hoja con señal y publicó su enlace
+        // directo (sin token). Se entrega a Media3 sin consultar la API ni validar; si
+        // no reproduce, MainActivity lo marca como fallido y el reintento resuelve.
+        URI published = PublishedHighflyLinks.usable(stableSourceId(channel));
+        if (published != null) {
+            progress.onProgress(ResolutionProgress.of(
+                    ResolutionStage.SOURCE_FOUND,
+                    "Highfly · enlace directo del runner · " + SafePlaybackText.url(published)
+            ));
+            return ResolvedPlaybackSource.dynamic(
+                    getId(),
+                    stableSourceId(channel),
+                    published,
+                    highflyHeaders("*/*"),
+                    PLAYBACK_USER_AGENT,
+                    expiresAt()
+            );
+        }
         String slug = stableSlug(channel);
         if (AppStrings.isBlank(slug)) {
             return fallbackSource(channel, progress, null);
