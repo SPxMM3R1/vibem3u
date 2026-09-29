@@ -12,7 +12,7 @@ import java.util.List;
  */
 final class EpgGuideNavigator {
     static final long SLOT_MILLIS = 30L * 60L * 1000L;
-    static final long WINDOW_MILLIS = 6L * SLOT_MILLIS;
+    static final long WINDOW_MILLIS = 5L * SLOT_MILLIS;
     /** Maximum distance into the future the guide may scroll (the runner publishes up to a week). */
     static final long MAX_AHEAD_MILLIS = 7L * 24L * 60L * 60L * 1000L;
 

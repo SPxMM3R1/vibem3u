@@ -146,6 +146,14 @@ public final class MainActivity extends Activity {
     private TextView detailAfterTitle;
     private EpgGuideView guideView;
     private EpgGuideNavigator guideNavigator;
+    /** Filas de la guía: índices en {@link #channels} según el filtro de categoría. */
+    private final List<Integer> guideRows = new ArrayList<>();
+    private final List<String> guideFilters = new ArrayList<>();
+    private int guideFilterIndex;
+    private boolean guideFiltersFocused;
+    /** Logos ya cargados para la guía, por URI; solo se tocan en el hilo principal. */
+    private final java.util.Map<String, android.graphics.Bitmap> guideLogos = new java.util.HashMap<>();
+    private final Set<String> guideLogoRequests = new HashSet<>();
     private View sourceSelectorOverlay;
     private TextView sourceSelectorTitle;
     private TextView sourceSelectorChannel;
@@ -2740,8 +2748,9 @@ public final class MainActivity extends Activity {
         overlayAwaitingPlayback = false;
         hideOverlay.run();
         long now = System.currentTimeMillis();
-        int row = channelIndex >= 0 && channelIndex < channels.size() ? channelIndex : 0;
-        guideNavigator = new EpgGuideNavigator(channels.size(), row, now);
+        rebuildGuideFilters();
+        guideFiltersFocused = false;
+        guideNavigator = new EpgGuideNavigator(guideRows.size(), guidePlayingRow(), now);
         refreshReminderIds();
         guideOkDown = false;
         guideOkLongHandled = false;
@@ -2749,43 +2758,145 @@ public final class MainActivity extends Activity {
         guideView.setVisibility(View.VISIBLE);
     }
 
+    /** «Todos» más las categorías (grupos) de la lista, en el orden en que aparecen. */
+    private void rebuildGuideFilters() {
+        String selected = guideFilterIndex > 0 && guideFilterIndex < guideFilters.size()
+                ? guideFilters.get(guideFilterIndex) : null;
+        guideFilters.clear();
+        guideFilters.add(getString(R.string.guide_filter_all));
+        Set<String> seen = new HashSet<>();
+        for (Channel channel : channels) {
+            String group = channel.getGroup();
+            if (!AppStrings.isBlank(group) && seen.add(group.trim())) guideFilters.add(group.trim());
+        }
+        guideFilterIndex = selected == null ? 0 : Math.max(0, guideFilters.indexOf(selected));
+        rebuildGuideRows();
+    }
+
+    private void rebuildGuideRows() {
+        guideRows.clear();
+        String filter = guideFilterIndex > 0 && guideFilterIndex < guideFilters.size()
+                ? guideFilters.get(guideFilterIndex) : null;
+        for (int index = 0; index < channels.size(); index++) {
+            String group = channels.get(index).getGroup();
+            if (filter == null || (group != null && filter.equals(group.trim()))) guideRows.add(index);
+        }
+    }
+
+    /** Fila del canal en reproducción dentro del filtro actual, o la primera. */
+    private int guidePlayingRow() {
+        return Math.max(0, guideRows.indexOf(channelIndex));
+    }
+
+    /** Índice en {@link #channels} de una fila de la guía, o -1. */
+    private int guideChannelIndex(int row) {
+        return row < 0 || row >= guideRows.size() ? -1 : guideRows.get(row);
+    }
+
+    private Channel guideChannel(int row) {
+        int index = guideChannelIndex(row);
+        return index < 0 || index >= channels.size() ? null : channels.get(index);
+    }
+
+    private void changeGuideFilter(int delta) {
+        int next = Math.max(0, Math.min(guideFilters.size() - 1, guideFilterIndex + delta));
+        if (next == guideFilterIndex) return;
+        guideFilterIndex = next;
+        rebuildGuideRows();
+        long now = System.currentTimeMillis();
+        guideNavigator = new EpgGuideNavigator(guideRows.size(), guidePlayingRow(), now);
+        guideView.bind(guideSource, guideNavigator, now);
+    }
+
+    /** Logo de la guía: si no está en memoria se carga en segundo plano y se redibuja. */
+    private android.graphics.Bitmap guideLogo(Channel channel) {
+        URI logoUri = channel.getLogoUri();
+        if (logoUri == null || !("http".equalsIgnoreCase(logoUri.getScheme())
+                || "https".equalsIgnoreCase(logoUri.getScheme()))) return null;
+        String key = logoUri.toString();
+        android.graphics.Bitmap bitmap = guideLogos.get(key);
+        if (bitmap != null || !guideLogoRequests.add(key)) return bitmap;
+        int width = dpToPx(90);
+        int height = dpToPx(36);
+        logoCacheExecutor.submit(() -> {
+            android.graphics.Bitmap loaded = channelLogoCache.loadCached(logoUri, width, height);
+            if (loaded == null) {
+                try {
+                    loaded = channelLogoCache.load(logoUri, width, height);
+                } catch (Exception ignored) {
+                    // Sin logo: la guía muestra el nombre del canal.
+                }
+            }
+            android.graphics.Bitmap result = loaded;
+            mainHandler.post(() -> {
+                if (result == null) {
+                    guideLogoRequests.remove(key);
+                    return;
+                }
+                guideLogos.put(key, result);
+                if (isGuideVisible()) guideView.invalidate();
+            });
+        });
+        return null;
+    }
+
     private void closeGuide() {
         if (guideView != null) guideView.setVisibility(View.GONE);
     }
 
     private final EpgGuideView.Source guideSource = new EpgGuideView.Source() {
-        @Override public int rowCount() { return channels.size(); }
+        @Override public int rowCount() { return guideRows.size(); }
 
         @Override public String number(int row) {
-            if (row < 0 || row >= channels.size()) return "";
-            int number = publishedPlaybackCatalog.numberFor(channels.get(row), row + 1);
+            Channel channel = guideChannel(row);
+            if (channel == null) return "";
+            int number = publishedPlaybackCatalog.numberFor(channel, guideChannelIndex(row) + 1);
             return String.format(Locale.ROOT, "%03d", number);
         }
 
         @Override public String name(int row) {
-            return row < 0 || row >= channels.size() ? "" : channels.get(row).getName();
+            Channel channel = guideChannel(row);
+            return channel == null ? "" : channel.getName();
+        }
+
+        @Override public String category(int row) {
+            Channel channel = guideChannel(row);
+            return channel == null || AppStrings.isBlank(channel.getGroup()) ? "" : channel.getGroup().trim();
+        }
+
+        @Override public android.graphics.Bitmap logo(int row) {
+            Channel channel = guideChannel(row);
+            return channel == null ? null : guideLogo(channel);
         }
 
         @Override public List<EpgProgramme> programmes(int row, long fromMillis, long toMillis) {
-            if (row < 0 || row >= channels.size()) return java.util.Collections.emptyList();
-            return epgData.findInWindow(channels.get(row).getTvgId(), fromMillis, toMillis);
+            Channel channel = guideChannel(row);
+            if (channel == null) return java.util.Collections.emptyList();
+            return epgData.findInWindow(channel.getTvgId(), fromMillis, toMillis);
         }
 
-        @Override public int playingRow() { return channelIndex; }
+        @Override public int playingRow() { return guideRows.indexOf(channelIndex); }
 
         @Override public boolean hasReminder(int row, EpgProgramme programme) {
-            if (row < 0 || row >= channels.size() || reminderIds.isEmpty()) return false;
-            return reminderIds.contains(PlaybackPreferences.channelIdentity(channels.get(row))
+            Channel channel = guideChannel(row);
+            if (channel == null || reminderIds.isEmpty()) return false;
+            return reminderIds.contains(PlaybackPreferences.channelIdentity(channel)
                     + "@" + programme.getStartMillis());
         }
+
+        @Override public List<String> filters() { return guideFilters; }
+
+        @Override public int selectedFilter() { return guideFilterIndex; }
+
+        @Override public boolean filtersFocused() { return guideFiltersFocused; }
     };
 
     /** Programas de la fila enfocada en un rango amplio para saltar entre bloques. */
     private List<EpgProgramme> guideRowProgrammes() {
-        int row = guideNavigator.getRow();
-        if (row < 0 || row >= channels.size()) return java.util.Collections.emptyList();
+        Channel channel = guideChannel(guideNavigator.getRow());
+        if (channel == null) return java.util.Collections.emptyList();
         long now = System.currentTimeMillis();
-        return epgData.findInWindow(channels.get(row).getTvgId(),
+        return epgData.findInWindow(channel.getTvgId(),
                 now - EpgGuideNavigator.WINDOW_MILLIS,
                 now + EpgGuideNavigator.MAX_AHEAD_MILLIS + EpgGuideNavigator.WINDOW_MILLIS);
     }
@@ -2797,8 +2908,18 @@ public final class MainActivity extends Activity {
             if (down && event.getRepeatCount() == 0) closeGuide();
             return true;
         }
+        if (guideFiltersFocused) return handleGuideFilterKey(keyCode, down);
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_UP:
+                if (!down) return true;
+                if (guideNavigator.moveRow(-1)) {
+                    guideView.refresh(System.currentTimeMillis());
+                } else if (event.getRepeatCount() == 0 && guideFilters.size() > 1) {
+                    // Arriba desde el primer canal: foco a los filtros de categoría.
+                    guideFiltersFocused = true;
+                    guideView.refresh(System.currentTimeMillis());
+                }
+                return true;
             case KeyEvent.KEYCODE_CHANNEL_UP:
                 if (down && guideNavigator.moveRow(-1)) guideView.refresh(System.currentTimeMillis());
                 return true;
@@ -2833,7 +2954,8 @@ public final class MainActivity extends Activity {
                     guideOkDown = false;
                     guideOkLongHandled = false;
                     if (shortPress) {
-                        int row = guideNavigator.getRow();
+                        int row = guideChannelIndex(guideNavigator.getRow());
+                        if (row < 0) return true;
                         closeGuide();
                         if (row != channelIndex) {
                             playChannel(row);
@@ -2843,6 +2965,35 @@ public final class MainActivity extends Activity {
                     }
                 }
                 return true;
+            case KeyEvent.KEYCODE_MENU:
+            case KeyEvent.KEYCODE_SETTINGS:
+            case KeyEvent.KEYCODE_INFO:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /** Teclas con el foco en los filtros: ◀ ▶ cambian la categoría; ▼ u OK vuelven a los canales. */
+    private boolean handleGuideFilterKey(int keyCode, boolean down) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                if (down) changeGuideFilter(-1);
+                return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                if (down) changeGuideFilter(1);
+                return true;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+                if (down) {
+                    guideFiltersFocused = false;
+                    guideOkDown = false;
+                    guideOkLongHandled = false;
+                    guideView.refresh(System.currentTimeMillis());
+                }
+                return true;
+            case KeyEvent.KEYCODE_DPAD_UP:
             case KeyEvent.KEYCODE_MENU:
             case KeyEvent.KEYCODE_SETTINGS:
             case KeyEvent.KEYCODE_INFO:
@@ -2867,14 +3018,13 @@ public final class MainActivity extends Activity {
 
     /** Programa o quita el recordatorio del programa enfocado en la Guía. */
     private void toggleGuideReminder() {
-        int row = guideNavigator.getRow();
-        if (row < 0 || row >= channels.size()) return;
+        Channel channel = guideChannel(guideNavigator.getRow());
+        if (channel == null) return;
         EpgProgramme programme = guideNavigator.focusedProgramme(guideRowProgrammes());
         if (programme == null) {
             Toast.makeText(this, R.string.reminder_no_programme, Toast.LENGTH_SHORT).show();
             return;
         }
-        Channel channel = channels.get(row);
         ProgramReminder reminder = new ProgramReminder(
                 PlaybackPreferences.channelIdentity(channel),
                 channel.getName(),

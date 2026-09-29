@@ -117,8 +117,12 @@
     <string name="epg_no_next_programme">No hay información siguiente</string>
     <string name="light_epg_live">● EN VIVO</string>
     <string name="guide_title">Guía</string>
-    <string name="guide_hints">OK ver canal · Mantén OK recordar · ◀▶ hora · BACK cerrar</string>
-    <string name="guide_live">en vivo</string>
+    <string name="guide_hints">OK:ver|Mantén OK:recordar|◀ ▶:horas|▲ ▼:canales|Atrás:cerrar</string>
+    <string name="guide_hints_filters">◀ ▶:categoría|▼ o OK:canales|Atrás:cerrar</string>
+    <string name="guide_filter_all">Todos</string>
+    <string name="guide_next">Después · %1$s</string>
+    <string name="guide_remaining">quedan %1$s</string>
+    <string name="guide_starts_in">empieza en %1$s</string>
     <string name="detail_meta_live">%1$s · %2$s · quedan %3$s</string>
     <string name="detail_meta">%1$s · %2$s</string>
     <string name="light_epg_now">Ahora</string>
