@@ -31,6 +31,11 @@ public final class MediaFlowSettingsActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         setContentView(R.layout.activity_mediaflow_settings);
+        if (UiStyle.isClassic(this)) {
+            // Clásico: fondo negro de 0.5.40 en vez del degradado moderno.
+            ((android.view.ViewGroup) findViewById(android.R.id.content)).getChildAt(0)
+                    .setBackgroundColor(getColor(R.color.black));
+        }
         preferences = new MediaFlowPreferences(this);
         enabled = findViewById(R.id.mediaflow_enabled);
         origin = findViewById(R.id.mediaflow_origin);

@@ -29,7 +29,7 @@ import java.util.Locale;
  * sobre {@link EpgGuideNavigator#WINDOW_MILLIS}. El foco solo marca el canal seleccionado; el
  * programa enfocado se lee en el hero.
  */
-public final class EpgGuideView extends View {
+public final class EpgGuideView extends View implements GuideSurface {
     /** Datos que la guía lee por fila (canal). */
     interface Source {
         int rowCount();
@@ -103,7 +103,7 @@ public final class EpgGuideView extends View {
         setWillNotDraw(false);
     }
 
-    void bind(Source source, EpgGuideNavigator navigator, long nowMillis) {
+    @Override public void bind(Source source, EpgGuideNavigator navigator, long nowMillis) {
         this.source = source;
         this.navigator = navigator;
         this.nowMillis = nowMillis;
@@ -111,7 +111,7 @@ public final class EpgGuideView extends View {
         invalidate();
     }
 
-    void refresh(long nowMillis) {
+    @Override public void refresh(long nowMillis) {
         this.nowMillis = nowMillis;
         invalidate();
     }

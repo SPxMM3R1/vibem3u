@@ -189,7 +189,8 @@ final class AppUpdater {
 
         Dialog dialog = new Dialog(activity);
         updateDialog = dialog;
-        dialog.setContentView(R.layout.dialog_update);
+        dialog.setContentView(UiStyle.isClassic(activity)
+                ? R.layout.classic_dialog_update : R.layout.dialog_update);
         dialog.setCanceledOnTouchOutside(false);
 
         TextView message = dialog.findViewById(R.id.update_message);

@@ -28,6 +28,7 @@
     visual, en el OSD y en la Guía.
   - **Menús**: Opciones, selector de fuentes, detalle del programa, diálogos, carga y
     MediaFlow usan filas tenues con foco cyan y píldoras.
+- **Dos estilos** elegibles en Opciones › Interfaz › «Interfaz clásica»: moderno (por defecto) y clásico (Guía, OSD, detalle, menús y diálogos de la 0.5.40). Al cambiarlo, la app se recarga.
 - **Reproducción**:
   - Highfly abre con el enlace directo que publica Lista M3U (`PublishedHighflyLinks`) y usa
     el resolutor solo de respaldo.
@@ -81,6 +82,7 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-09-30**: estilo clásico elegible (diseño 0.5.40) junto al moderno, pedido por el usuario; recursos `classic_*`, `EpgGuideClassicView`, `UiStyle`.
 - **2026-09-30 (estabilidad)**: el editor local no compilaba desde la 0.5.40 (faltaba `PublishedHighflyLinks` en `local-catalog/build.gradle.kts`); arreglado y el CI ahora compila y prueba `local-catalog`. Hallazgo de una revisión externa (Sol).
 - **2026-09-30**: `AGENTS.md` y este `ESTADO.md` pasan a ser la puesta al día obligatoria;
   punteros para cualquier proveedor de IA. Codex y OpenCode leen `AGENTS.md` directo; `opencode.json`

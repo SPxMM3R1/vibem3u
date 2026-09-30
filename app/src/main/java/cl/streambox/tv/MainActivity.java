@@ -145,7 +145,11 @@ public final class MainActivity extends Activity {
     private TextView detailNextTitle;
     private TextView detailAfterLabel;
     private TextView detailAfterTitle;
-    private EpgGuideView guideView;
+    /** Guía activa (moderna o clásica, según {@link UiStyle}). */
+    private View guideView;
+    private GuideSurface guideSurface;
+    /** Estilo con que se creó esta pantalla; si cambia en Opciones, se recarga. */
+    private boolean classicUi;
     private EpgGuideNavigator guideNavigator;
     /** Filas de la guía: índices en {@link #channels} según el filtro de categoría. */
     private final List<Integer> guideRows = new ArrayList<>();
@@ -287,14 +291,18 @@ public final class MainActivity extends Activity {
             if (!day.isEmpty()) {
                 day = day.substring(0, 1).toUpperCase(Locale.ROOT) + day.substring(1);
             }
-            android.text.SpannableString text = new android.text.SpannableString(
-                    day + "  ·  " + currentTime);
-            text.setSpan(new android.text.style.ForegroundColorSpan(getColor(R.color.white)),
-                    text.length() - currentTime.length(), text.length(),
-                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            clock.setText(text);
+            if (classicUi) {
+                clock.setText(currentTime);
+            } else {
+                android.text.SpannableString text = new android.text.SpannableString(
+                        day + "  ·  " + currentTime);
+                text.setSpan(new android.text.style.ForegroundColorSpan(getColor(R.color.white)),
+                        text.length() - currentTime.length(), text.length(),
+                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                clock.setText(text);
+            }
             // La línea de la hora actual de la Guía avanza con el reloj.
-            if (isGuideVisible()) guideView.refresh(System.currentTimeMillis());
+            if (isGuideVisible()) guideSurface.refresh(System.currentTimeMillis());
             mainHandler.postDelayed(this, 30_000);
         }
     };
@@ -350,6 +358,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        classicUi = UiStyle.isClassic(this);
         consumeReminderIntent(getIntent());
         // Android borra las alarmas si la app fue detenida: se reponen al abrirla.
         ReminderAlerts.rescheduleAll(this);
@@ -403,14 +412,32 @@ public final class MainActivity extends Activity {
                 displayMetrics.widthPixels,
                 displayMetrics.density
         );
+        android.view.LayoutInflater.from(this).inflate(
+                classicUi ? R.layout.classic_osd : R.layout.osd_modern,
+                (ViewGroup) channelOverlay, true);
+        if (classicUi) {
+            // Panel clásico: ancho de pantalla menos 32 dp por lado, centrado abajo.
+            View panel = ((ViewGroup) channelOverlay).getChildAt(0);
+            FrameLayout.LayoutParams panelParams = (FrameLayout.LayoutParams) panel.getLayoutParams();
+            panelParams.width = panelWidth;
+            panelParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+            panelParams.leftMargin = 0;
+            panelParams.rightMargin = 0;
+            panel.setLayoutParams(panelParams);
+        }
         loadingPanel = findViewById(R.id.loading_panel);
         loadingText = findViewById(R.id.loading_text);
         clock = findViewById(R.id.clock);
-        programmeDetailOverlay = findViewById(R.id.programme_detail_overlay);
+        android.view.ViewStub detailStub = findViewById(R.id.programme_detail_stub);
+        detailStub.setLayoutResource(classicUi
+                ? R.layout.classic_programme_detail_overlay : R.layout.programme_detail_overlay);
+        programmeDetailOverlay = detailStub.inflate();
         FrameLayout.LayoutParams detailParams = (FrameLayout.LayoutParams)
                 programmeDetailOverlay.getLayoutParams();
         detailParams.width = panelWidth;
         detailParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        // Clásico: se apoya sobre el panel del OSD; moderno: ocupa el lugar de su bloque.
+        detailParams.bottomMargin = dpToPx(classicUi ? 118 : 46);
         programmeDetailOverlay.setLayoutParams(detailParams);
         detailLive = findViewById(R.id.detail_live);
         detailLabel = findViewById(R.id.detail_label);
@@ -423,7 +450,9 @@ public final class MainActivity extends Activity {
         detailNextTitle = findViewById(R.id.detail_next_title);
         detailAfterLabel = findViewById(R.id.detail_after_label);
         detailAfterTitle = findViewById(R.id.detail_after_title);
-        guideView = findViewById(R.id.guide_overlay);
+        guideView = findViewById(classicUi ? R.id.guide_overlay_classic : R.id.guide_overlay);
+        guideSurface = (GuideSurface) guideView;
+        if (classicUi) applyClassicChrome();
         sourceSelectorOverlay = findViewById(R.id.source_selector_overlay);
         sourceSelectorTitle = findViewById(R.id.source_selector_title);
         sourceSelectorChannel = findViewById(R.id.source_selector_channel);
@@ -2182,7 +2211,8 @@ public final class MainActivity extends Activity {
     private void bindOsdChannel(int displayNumber, Channel channel) {
         String number = String.format(Locale.ROOT, "%03d", displayNumber);
         String group = channel.getGroup();
-        channelNumber.setText(AppStrings.isBlank(group) ? number : number + "  ·  " + group.trim());
+        channelNumber.setText(classicUi || AppStrings.isBlank(group)
+                ? number : number + "  ·  " + group.trim());
         channelName.setText(channel.getName());
     }
 
@@ -2197,8 +2227,8 @@ public final class MainActivity extends Activity {
                     ? getString(R.string.live_content)
                     : channel.getGroup());
             programmeTime.setVisibility(View.GONE);
-            osdDescription.setVisibility(View.GONE);
-            osdNext.setVisibility(View.GONE);
+            if (osdDescription != null) osdDescription.setVisibility(View.GONE);
+            if (osdNext != null) osdNext.setVisibility(View.GONE);
             liveProgress.setIndeterminate(true);
             updateProgrammeDetail();
             return;
@@ -2207,15 +2237,17 @@ public final class MainActivity extends Activity {
         contentTitle.setText(programme.getTitle());
         SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
         String timeRange = timeFormat.format(new Date(programme.getStartMillis()))
-                + " – "
+                + (classicUi ? " — " : " – ")
                 + timeFormat.format(new Date(programme.getStopMillis()));
-        programmeTime.setText(timeRange + "  ·  " + getString(R.string.guide_remaining,
-                EpgGuideView.formatDuration(programme.getStopMillis() - now)));
+        programmeTime.setText(classicUi ? timeRange : timeRange + "  ·  " + getString(
+                R.string.guide_remaining, EpgGuideView.formatDuration(programme.getStopMillis() - now)));
         programmeTime.setVisibility(View.VISIBLE);
 
         String description = programme.getDescription();
-        osdDescription.setText(description);
-        osdDescription.setVisibility(AppStrings.isBlank(description) ? View.GONE : View.VISIBLE);
+        if (osdDescription != null) {
+            osdDescription.setText(description);
+            osdDescription.setVisibility(AppStrings.isBlank(description) ? View.GONE : View.VISIBLE);
+        }
 
         long duration = programme.getStopMillis() - programme.getStartMillis();
         int progress = duration <= 0 ? 0 : (int) Math.max(0, Math.min(1000,
@@ -2224,7 +2256,7 @@ public final class MainActivity extends Activity {
         liveProgress.setMax(1000);
         liveProgress.setProgress(progress);
 
-        bindOsdNext(channel, programme, timeFormat);
+        if (osdNext != null) bindOsdNext(channel, programme, timeFormat);
         updateProgrammeDetail();
     }
 
@@ -2275,7 +2307,7 @@ public final class MainActivity extends Activity {
         EpgProgramme current = first != null && first.getStartMillis() <= now ? first : null;
 
         if (first == null) {
-            detailLive.setVisibility(View.GONE); // Sin «EN VIVO», como en la Guía.
+            detailLive.setVisibility(classicUi ? View.VISIBLE : View.GONE); // Moderno: sin «EN VIVO».
             detailLabel.setText(AppStrings.isBlank(channel.getGroup())
                     ? getString(R.string.live_content) : channel.getGroup());
             detailTitle.setText(R.string.epg_no_information);
@@ -2286,7 +2318,7 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        detailLive.setVisibility(View.GONE);
+        detailLive.setVisibility(classicUi && current != null ? View.VISIBLE : View.GONE);
         detailLabel.setText(current != null
                 ? getString(R.string.light_epg_now)
                 : getString(R.string.light_epg_next_at,
@@ -2349,8 +2381,8 @@ public final class MainActivity extends Activity {
 
     private void loadChannelLogo(Channel channel, boolean revalidate) {
         URI logoUri = channel.getLogoUri();
-        // Sin logo, el nombre del canal ocupa su lugar.
-        String fallback = channel.getName();
+        // Sin logo: moderno muestra el nombre; clásico, las iniciales en el recuadro.
+        String fallback = classicUi ? initials(channel.getName()) : channel.getName();
         String expectedIdentity = PlaybackPreferences.channelIdentity(channel);
         long requestGeneration = ++logoRequestGeneration;
         if (!expectedIdentity.equals(displayedLogoIdentity)) {
@@ -2366,8 +2398,8 @@ public final class MainActivity extends Activity {
 
         int expectedIndex = channelIndex;
         // Se carga con margen de sobra: el tamaño final lo fija el tamaño óptico.
-        int targetWidthPx = dpToPx(LogoFit.OSD_LOGO_MAX_WIDTH_DP * 1.5f);
-        int targetHeightPx = dpToPx(LogoFit.OSD_LOGO_MAX_HEIGHT_DP * 2f);
+        int targetWidthPx = classicUi ? dpToPx(78) : dpToPx(LogoFit.OSD_LOGO_MAX_WIDTH_DP * 1.5f);
+        int targetHeightPx = classicUi ? dpToPx(54) : dpToPx(LogoFit.OSD_LOGO_MAX_HEIGHT_DP * 2f);
         boolean shouldRevalidate = revalidate
                 || logoRevalidatedThisSession.add(logoUri.toString());
         Future<?> previousTask = logoRequestTask;
@@ -2379,7 +2411,7 @@ public final class MainActivity extends Activity {
                     targetHeightPx
             );
             if (cached != null) {
-                android.graphics.Bitmap trimmedCached = LogoFit.trim(cached);
+                android.graphics.Bitmap trimmedCached = classicUi ? cached : LogoFit.trim(cached);
                 mainHandler.post(() -> showChannelLogo(
                         trimmedCached,
                         expectedIndex,
@@ -2396,7 +2428,8 @@ public final class MainActivity extends Activity {
                         targetHeightPx
                 );
                 if (cached != null && !refreshed.isChanged()) return;
-                android.graphics.Bitmap trimmedRefreshed = LogoFit.trim(refreshed.getBitmap());
+                android.graphics.Bitmap trimmedRefreshed = classicUi
+                        ? refreshed.getBitmap() : LogoFit.trim(refreshed.getBitmap());
                 mainHandler.post(() -> showChannelLogo(
                         trimmedRefreshed,
                         expectedIndex,
@@ -2418,6 +2451,15 @@ public final class MainActivity extends Activity {
         if (requestGeneration != logoRequestGeneration
                 || !isCurrentLogo(expectedIndex, expectedIdentity)
                 || isFinishing()) return;
+        if (classicUi) {
+            // Clásico: logo contenido en su recuadro fijo de 78×54 dp.
+            channelLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            channelLogo.setImageBitmap(bitmap);
+            channelLogo.setVisibility(View.VISIBLE);
+            channelLogoFallback.setVisibility(View.GONE);
+            displayedLogoIdentity = expectedIdentity;
+            return;
+        }
         // Tamaño óptico: la misma superficie visual para todos los logos.
         float[] size = LogoFit.opticalSize(bitmap.getWidth(), bitmap.getHeight(),
                 dpToPx(LogoFit.OSD_LOGO_AREA_WIDTH_DP) * (float) dpToPx(LogoFit.OSD_LOGO_AREA_HEIGHT_DP),
@@ -2826,7 +2868,7 @@ public final class MainActivity extends Activity {
         refreshReminderIds();
         guideOkDown = false;
         guideOkLongHandled = false;
-        guideView.bind(guideSource, guideNavigator, now);
+        guideSurface.bind(guideSource, guideNavigator, now);
         guideView.setVisibility(View.VISIBLE);
     }
 
@@ -2877,7 +2919,7 @@ public final class MainActivity extends Activity {
         rebuildGuideRows();
         long now = System.currentTimeMillis();
         guideNavigator = new EpgGuideNavigator(guideRows.size(), guidePlayingRow(), now);
-        guideView.bind(guideSource, guideNavigator, now);
+        guideSurface.bind(guideSource, guideNavigator, now);
     }
 
     /** Logo de la guía: si no está en memoria se carga en segundo plano y se redibuja. */
@@ -2985,28 +3027,28 @@ public final class MainActivity extends Activity {
             case KeyEvent.KEYCODE_DPAD_UP:
                 if (!down) return true;
                 if (guideNavigator.moveRow(-1)) {
-                    guideView.refresh(System.currentTimeMillis());
-                } else if (event.getRepeatCount() == 0 && guideFilters.size() > 1) {
+                    guideSurface.refresh(System.currentTimeMillis());
+                } else if (event.getRepeatCount() == 0 && guideFilters.size() > 1 && !classicUi) {
                     // Arriba desde el primer canal: foco a los filtros de categoría.
                     guideFiltersFocused = true;
-                    guideView.refresh(System.currentTimeMillis());
+                    guideSurface.refresh(System.currentTimeMillis());
                 }
                 return true;
             case KeyEvent.KEYCODE_CHANNEL_UP:
-                if (down && guideNavigator.moveRow(-1)) guideView.refresh(System.currentTimeMillis());
+                if (down && guideNavigator.moveRow(-1)) guideSurface.refresh(System.currentTimeMillis());
                 return true;
             case KeyEvent.KEYCODE_DPAD_DOWN:
             case KeyEvent.KEYCODE_CHANNEL_DOWN:
-                if (down && guideNavigator.moveRow(1)) guideView.refresh(System.currentTimeMillis());
+                if (down && guideNavigator.moveRow(1)) guideSurface.refresh(System.currentTimeMillis());
                 return true;
             case KeyEvent.KEYCODE_DPAD_LEFT:
                 if (down && guideNavigator.moveTime(-1, guideRowProgrammes())) {
-                    guideView.refresh(System.currentTimeMillis());
+                    guideSurface.refresh(System.currentTimeMillis());
                 }
                 return true;
             case KeyEvent.KEYCODE_DPAD_RIGHT:
                 if (down && guideNavigator.moveTime(1, guideRowProgrammes())) {
-                    guideView.refresh(System.currentTimeMillis());
+                    guideSurface.refresh(System.currentTimeMillis());
                 }
                 return true;
             case KeyEvent.KEYCODE_DPAD_CENTER:
@@ -3062,7 +3104,7 @@ public final class MainActivity extends Activity {
                     guideFiltersFocused = false;
                     guideOkDown = false;
                     guideOkLongHandled = false;
-                    guideView.refresh(System.currentTimeMillis());
+                    guideSurface.refresh(System.currentTimeMillis());
                 }
                 return true;
             case KeyEvent.KEYCODE_DPAD_UP:
@@ -3117,7 +3159,7 @@ public final class MainActivity extends Activity {
             return;
         }
         refreshReminderIds();
-        guideView.refresh(System.currentTimeMillis());
+        guideSurface.refresh(System.currentTimeMillis());
         Toast.makeText(this, added
                 ? getString(R.string.reminder_added, programme.getTitle(),
                         ReminderAlerts.when(programme.getStartMillis()))
@@ -3363,7 +3405,8 @@ public final class MainActivity extends Activity {
             String detail = playbackOption.detail;
             String label = (playbackOption.selected ? "✓ " : "") + playbackOption.label;
             option.setText(AppStrings.isBlank(detail) ? label : label + "\n" + detail);
-            option.setTextColor(getColorStateList(R.color.focus_option_text));
+            option.setTextColor(getColorStateList(classicUi
+                    ? R.color.classic_focus_option_text : R.color.focus_option_text));
             option.setTextSize(
                     TypedValue.COMPLEX_UNIT_PX,
                     getResources().getDimension(R.dimen.settings_control_text_size)
@@ -3371,8 +3414,9 @@ public final class MainActivity extends Activity {
             option.setGravity(Gravity.CENTER_VERTICAL);
             option.setIncludeFontPadding(false);
             option.setLineSpacing(0f, 0.95f);
-            // Fila del estilo de la Guía: fondo tenue y velo cyan con foco.
-            option.setBackgroundResource(R.drawable.settings_section_card);
+            // Moderno: fila con velo cyan; clásico: botón plano de 0.5.40.
+            option.setBackgroundResource(classicUi
+                    ? R.drawable.classic_focus_button : R.drawable.settings_section_card);
             option.setPadding(dp(14), dp(6), dp(14), dp(6));
             option.setFocusable(true);
             option.setFocusableInTouchMode(true);
@@ -3720,7 +3764,7 @@ public final class MainActivity extends Activity {
         if (exiting || (exitDialog != null && exitDialog.isShowing())) return;
 
         exitDialog = new Dialog(this);
-        exitDialog.setContentView(R.layout.dialog_exit);
+        exitDialog.setContentView(classicUi ? R.layout.classic_dialog_exit : R.layout.dialog_exit);
         exitDialog.setCanceledOnTouchOutside(false);
 
         Button stayButton = exitDialog.findViewById(R.id.stay_button);
@@ -4106,6 +4150,39 @@ public final class MainActivity extends Activity {
         return capabilities != null && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
     }
 
+    private static String initials(String name) {
+        if (name == null || AppStrings.isBlank(name)) return "TV";
+        StringBuilder result = new StringBuilder(2);
+        for (String word : name.trim().split("\\s+")) {
+            if (!word.isEmpty()) result.append(Character.toUpperCase(word.charAt(0)));
+            if (result.length() == 2) break;
+        }
+        return result.length() == 0 ? "TV" : result.toString();
+    }
+
+    /** Estilo clásico (0.5.40): reloj en pastilla, carga en texto y selector en panel. */
+    private void applyClassicChrome() {
+        clock.setBackgroundResource(R.drawable.classic_panel_background);
+        clock.setPadding(dpToPx(16), dpToPx(9), dpToPx(16), dpToPx(9));
+        clock.setTextColor(getColor(R.color.white));
+        clock.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f);
+        clock.setShadowLayer(4f, 1f, 2f, 0xA0000000);
+        FrameLayout.LayoutParams clockParams = (FrameLayout.LayoutParams) clock.getLayoutParams();
+        clockParams.topMargin = dpToPx(24);
+        clock.setLayoutParams(clockParams);
+        View loadingProgress = findViewById(R.id.loading_progress);
+        if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
+        loadingText.setTextColor(getColor(R.color.white));
+        loadingText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);
+        View selectorPanel = findViewById(R.id.source_selector_panel);
+        if (selectorPanel != null) {
+            selectorPanel.setBackgroundResource(R.drawable.classic_source_selector_background);
+        }
+        sourceSelectorTitle.setTextColor(getColor(R.color.cyan));
+        sourceSelectorCloseButton.setBackgroundResource(R.drawable.classic_focus_button);
+        sourceSelectorCloseButton.setTextColor(getColorStateList(R.color.classic_focus_button_text));
+    }
+
     private static String codecName(String mimeType) {
         if (mimeType == null) return "—";
         return switch (mimeType) {
@@ -4208,6 +4285,11 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (UiStyle.isClassic(this) != classicUi) {
+            // Se cambió el estilo en Opciones: se recarga la pantalla con el nuevo.
+            recreate();
+            return;
+        }
         enterImmersiveMode();
         if (appUpdater != null) appUpdater.onHostResume();
         if (refreshAfterSettings) {

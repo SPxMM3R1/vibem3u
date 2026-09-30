@@ -33,6 +33,7 @@
             android:orientation="vertical">
 
             <ProgressBar
+                android:id="@+id/loading_progress"
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="180dp"
                 android:layout_height="3dp"
@@ -68,205 +69,23 @@
         android:textSize="13sp"
         android:visibility="gone" />
 
-    <include layout="@layout/programme_detail_overlay" />
+    <!-- Detalle del programa: MainActivity elige el layout según el estilo. -->
+    <ViewStub
+        android:id="@+id/programme_detail_stub"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:inflatedId="@+id/programme_detail_overlay" />
 
     <!-- OSD con el lenguaje de la Guía: pantalla completa, degradado abajo a la izquierda,
          logo con tamaño óptico, título grande, descripción, avance y «Después». Los datos
          técnicos van chicos abajo a la derecha. -->
+    <!-- El contenido lo infla MainActivity según el estilo: osd_modern o classic_osd. -->
     <FrameLayout
         android:id="@+id/channel_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:visibility="gone">
-
-        <cl.streambox.tv.OsdScrimView
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
-        <LinearLayout
-            android:id="@+id/osd_hero"
-            android:layout_width="500dp"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|start"
-            android:layout_marginStart="@dimen/channel_overlay_horizontal_margin"
-            android:layout_marginBottom="46dp"
-            android:orientation="vertical">
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="32dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <FrameLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:layout_marginEnd="9dp">
-
-                    <ImageView
-                        android:id="@+id/channel_logo"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center_vertical|start"
-                        android:contentDescription="Logo del canal"
-                        android:scaleType="fitCenter" />
-
-                    <TextView
-                        android:id="@+id/channel_logo_fallback"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center_vertical|start"
-                        android:ellipsize="end"
-                        android:includeFontPadding="false"
-                        android:maxWidth="220dp"
-                        android:maxLines="1"
-                        android:textColor="@color/white"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-                </FrameLayout>
-
-                <TextView
-                    android:id="@+id/channel_number"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:includeFontPadding="false"
-                    android:maxLines="1"
-                    android:textColor="@color/osd_muted"
-                    android:textSize="10.5sp" />
-            </LinearLayout>
-
-            <!-- Solo para accesibilidad y respaldo: el logo reemplaza al nombre. -->
-            <TextView
-                android:id="@+id/channel_name"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:visibility="gone" />
-
-            <cl.streambox.tv.ContinuousMarqueeTextView
-                android:id="@+id/content_title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:maxLines="1"
-                android:text="@string/live_content"
-                android:textColor="@color/white"
-                android:textSize="29sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/osd_description"
-                android:layout_width="450dp"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="7dp"
-                android:ellipsize="end"
-                android:lineSpacingMultiplier="1.3"
-                android:maxLines="2"
-                android:textColor="@color/osd_muted"
-                android:textSize="11sp"
-                android:visibility="gone" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="11dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <ProgressBar
-                    android:id="@+id/live_progress"
-                    style="?android:attr/progressBarStyleHorizontal"
-                    android:layout_width="200dp"
-                    android:layout_height="3dp"
-                    android:indeterminate="true"
-                    android:indeterminateTint="@color/cyan"
-                    android:progressBackgroundTint="#24FFFFFF"
-                    android:progressTint="@color/cyan" />
-
-                <TextView
-                    android:id="@+id/programme_time"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="9dp"
-                    android:includeFontPadding="false"
-                    android:maxLines="1"
-                    android:textColor="@color/osd_muted"
-                    android:textSize="10sp"
-                    android:visibility="gone" />
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/osd_next"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="7dp"
-                android:drawablePadding="4dp"
-                android:ellipsize="end"
-                android:gravity="center_vertical"
-                android:includeFontPadding="false"
-                android:maxLines="1"
-                android:textColor="@color/osd_muted"
-                android:textSize="10sp"
-                android:visibility="gone" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|end"
-            android:layout_marginEnd="@dimen/channel_overlay_horizontal_margin"
-            android:layout_marginBottom="20dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/video_info"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:includeFontPadding="false"
-                android:maxLines="1"
-                android:text="— · —"
-                android:textColor="@color/osd_muted"
-                android:textSize="9sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:includeFontPadding="false"
-                android:text="  ·  "
-                android:textColor="@color/osd_muted"
-                android:textSize="9sp" />
-
-            <TextView
-                android:id="@+id/codec_info"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:includeFontPadding="false"
-                android:maxWidth="360dp"
-                android:maxLines="1"
-                android:text="— · — · —"
-                android:textColor="@color/osd_muted"
-                android:textSize="9sp" />
-
-            <TextView
-                android:id="@+id/status_dot"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="5dp"
-                android:includeFontPadding="false"
-                android:text="●"
-                android:textColor="@color/amber"
-                android:textSize="9sp" />
-
-            <!-- El punto de color reemplaza al texto de estado (se conserva para lectores). -->
-            <TextView
-                android:id="@+id/stream_status"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:visibility="gone" />
-        </LinearLayout>
-    </FrameLayout>
+        android:visibility="gone" />
 
     <!-- Guía completa (D-pad izquierda): pantalla completa; dibuja su propio fondo y deja
          asomar el video a la derecha del hero. -->
@@ -274,6 +93,19 @@
         android:id="@+id/guide_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:focusable="false"
+        android:visibility="gone" />
+
+    <!-- Guía clásica (0.5.40): se usa en vez de la moderna si el estilo es clásico. -->
+    <cl.streambox.tv.EpgGuideClassicView
+        android:id="@+id/guide_overlay_classic"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginStart="@dimen/channel_overlay_horizontal_margin"
+        android:layout_marginTop="24dp"
+        android:layout_marginEnd="@dimen/channel_overlay_horizontal_margin"
+        android:layout_marginBottom="@dimen/channel_overlay_edge_margin"
+        android:background="@drawable/classic_panel_background"
         android:focusable="false"
         android:visibility="gone" />
 

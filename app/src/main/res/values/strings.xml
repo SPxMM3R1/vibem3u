@@ -117,6 +117,11 @@
     <string name="epg_no_next_programme">No hay información siguiente</string>
     <string name="light_epg_live">● EN VIVO</string>
     <string name="guide_title">Guía</string>
+    <string name="guide_classic_hints">OK ver canal · Mantén OK recordar · ◀▶ hora · BACK cerrar</string>
+    <string name="guide_classic_live">en vivo</string>
+    <string name="settings_ui_style_title">Estilo de la interfaz</string>
+    <string name="settings_ui_classic">Interfaz clásica</string>
+    <string name="settings_ui_classic_description">Activada: Guía, OSD y menús con el diseño anterior (0.5.40). Desactivada: el diseño moderno. La app se recarga al cambiarla.</string>
     <string name="guide_filter_all">Todos</string>
     <string name="guide_next">Después · %1$s</string>
     <string name="guide_remaining">quedan %1$s</string>

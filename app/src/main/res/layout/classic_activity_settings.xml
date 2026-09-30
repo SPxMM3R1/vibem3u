@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Estilo clásico (VibeM3U 0.5.40), elegible en Opciones › Interfaz. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/settings_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/menu_backdrop"
+    android:background="@android:color/transparent"
     android:clipChildren="false"
     android:paddingTop="@dimen/channel_overlay_edge_margin"
     android:paddingBottom="@dimen/channel_overlay_edge_margin">
@@ -14,7 +15,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_gravity="center"
-        android:background="@android:color/transparent"
+        android:background="@drawable/classic_panel_background"
         android:orientation="vertical"
         android:paddingStart="@dimen/settings_panel_padding_horizontal"
         android:paddingEnd="@dimen/settings_panel_padding_horizontal">
@@ -38,8 +39,7 @@
                 android:layout_height="match_parent"
                 android:gravity="center"
                 android:text="◉"
-                android:visibility="gone"
-                android:textColor="@color/osd_muted"
+                android:textColor="@color/cyan"
                 android:textSize="@dimen/settings_header_icon_text_size"
                 android:textStyle="bold" />
 
@@ -57,15 +57,6 @@
                 android:layout_height="1dp"
                 android:layout_weight="1" />
 
-            <TextView
-                android:id="@+id/settings_clock"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/clock_background"
-                android:includeFontPadding="false"
-                android:textColor="@color/clock_day"
-                android:textSize="13sp" />
-
         </LinearLayout>
 
         <LinearLayout
@@ -79,12 +70,10 @@
 
             <TextView
                 android:id="@+id/tab_general"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_marginEnd="11dp"
-                android:background="@drawable/settings_tab"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
+                android:layout_weight="1"
+                android:background="@drawable/classic_settings_tab"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
@@ -97,12 +86,10 @@
 
             <TextView
                 android:id="@+id/tab_playback"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_marginEnd="11dp"
-                android:background="@drawable/settings_tab"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
+                android:layout_weight="1"
+                android:background="@drawable/classic_settings_tab"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
@@ -115,12 +102,10 @@
 
             <TextView
                 android:id="@+id/tab_source"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_marginEnd="11dp"
-                android:background="@drawable/settings_tab"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
+                android:layout_weight="1"
+                android:background="@drawable/classic_settings_tab"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
@@ -133,12 +118,10 @@
 
             <TextView
                 android:id="@+id/tab_interface"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_marginEnd="11dp"
-                android:background="@drawable/settings_tab"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
+                android:layout_weight="1"
+                android:background="@drawable/classic_settings_tab"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
@@ -151,12 +134,10 @@
 
             <TextView
                 android:id="@+id/tab_updates"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_marginEnd="11dp"
-                android:background="@drawable/settings_tab"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
+                android:layout_weight="1"
+                android:background="@drawable/classic_settings_tab"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
@@ -196,7 +177,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/settings_general_heading"
-                        android:textColor="@color/osd_muted"
+                        android:textColor="@color/cyan"
                         android:textSize="@dimen/settings_heading_text_size"
                         android:textStyle="bold" />
 
@@ -215,7 +196,7 @@
                             <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:background="@drawable/settings_section_card"
+                                android:background="@drawable/classic_settings_section_card"
                                 android:orientation="vertical"
                                 android:padding="@dimen/settings_card_padding">
 
@@ -223,7 +204,7 @@
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:text="@string/audio_settings_title"
-                                    android:textColor="@color/osd_muted"
+                                    android:textColor="@color/cyan"
                                     android:textSize="@dimen/settings_card_title_text_size"
                                     android:textStyle="bold" />
 
@@ -232,7 +213,7 @@
                                     android:layout_width="match_parent"
                                     android:layout_height="@dimen/settings_control_height"
                                     android:layout_marginTop="8dp"
-                                    android:background="@drawable/menu_control"
+                                    android:background="@drawable/classic_settings_section_card"
                                     android:focusable="true"
                                     android:nextFocusUp="@id/tab_general"
                                     android:nextFocusDown="@id/save_button"
@@ -257,7 +238,7 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="10dp"
-                                android:background="@drawable/settings_section_card"
+                                android:background="@drawable/classic_settings_section_card"
                                 android:orientation="vertical"
                                 android:padding="@dimen/settings_card_padding">
 
@@ -265,7 +246,7 @@
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_cache_title"
-                                    android:textColor="@color/osd_muted"
+                                    android:textColor="@color/cyan"
                                     android:textSize="@dimen/settings_card_title_text_size"
                                     android:textStyle="bold" />
 
@@ -291,7 +272,7 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:text="◌"
-                                android:textColor="@color/osd_muted"
+                                android:textColor="@color/cyan"
                                 android:textSize="@dimen/settings_help_icon_text_size"
                                 android:textStyle="bold" />
 
@@ -300,7 +281,7 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="8dp"
                                 android:text="@string/settings_tip_title"
-                                android:textColor="@color/osd_muted"
+                                android:textColor="@color/cyan"
                                 android:textSize="@dimen/settings_help_title_text_size"
                                 android:textStyle="bold" />
 
@@ -328,7 +309,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/settings_playback_heading"
-                        android:textColor="@color/osd_muted"
+                        android:textColor="@color/cyan"
                         android:textSize="@dimen/settings_heading_text_size"
                         android:textStyle="bold" />
 
@@ -337,7 +318,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/settings_section_margin_top"
-                        android:background="@drawable/settings_section_card"
+                        android:background="@drawable/classic_settings_section_card"
                         android:orientation="vertical"
                         android:padding="@dimen/settings_card_padding">
 
@@ -345,7 +326,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:text="@string/settings_current_channel_title"
-                            android:textColor="@color/osd_muted"
+                            android:textColor="@color/cyan"
                             android:textSize="@dimen/settings_card_title_text_size"
                             android:textStyle="bold" />
 
@@ -375,7 +356,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
                             android:text="@string/settings_quality_title"
-                            android:textColor="@color/osd_muted"
+                            android:textColor="@color/cyan"
                             android:textSize="@dimen/settings_card_title_text_size"
                             android:textStyle="bold" />
 
@@ -401,7 +382,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="12dp"
                             android:text="@string/settings_subtitles_title"
-                            android:textColor="@color/osd_muted"
+                            android:textColor="@color/cyan"
                             android:textSize="@dimen/settings_card_title_text_size"
                             android:textStyle="bold" />
 
@@ -410,7 +391,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="@dimen/settings_control_height"
                             android:layout_marginTop="7dp"
-                            android:background="@drawable/menu_control"
+                            android:background="@drawable/classic_settings_section_card"
                             android:focusable="true"
                             android:nextFocusDown="@id/invert_channel_keys"
                             android:paddingStart="12dp"
@@ -435,7 +416,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/settings_section_margin_top"
-                        android:background="@drawable/settings_section_card"
+                        android:background="@drawable/classic_settings_section_card"
                         android:orientation="vertical"
                         android:padding="@dimen/settings_card_padding">
 
@@ -443,7 +424,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:text="@string/channel_controls_title"
-                            android:textColor="@color/osd_muted"
+                            android:textColor="@color/cyan"
                             android:textSize="@dimen/settings_card_title_text_size"
                             android:textStyle="bold" />
 
@@ -452,7 +433,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="@dimen/settings_control_height"
                             android:layout_marginTop="10dp"
-                            android:background="@drawable/menu_control"
+                            android:background="@drawable/classic_settings_section_card"
                             android:focusable="true"
                             android:nextFocusUp="@id/tab_playback"
                             android:nextFocusDown="@id/save_button"
@@ -487,7 +468,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/settings_source_heading"
-                        android:textColor="@color/osd_muted"
+                        android:textColor="@color/cyan"
                         android:textSize="@dimen/settings_heading_text_size"
                         android:textStyle="bold" />
 
@@ -495,7 +476,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/settings_section_margin_top"
-                        android:background="@drawable/settings_section_card"
+                        android:background="@drawable/classic_settings_section_card"
                         android:orientation="vertical"
                         android:padding="@dimen/settings_card_padding">
 
@@ -503,7 +484,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:text="@string/settings_source_title"
-                            android:textColor="@color/osd_muted"
+                            android:textColor="@color/cyan"
                             android:textSize="@dimen/settings_card_title_text_size"
                             android:textStyle="bold" />
 
@@ -520,7 +501,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="@dimen/settings_control_height"
                             android:layout_marginTop="12dp"
-                            android:background="@drawable/settings_input"
+                            android:background="@drawable/classic_settings_input"
                             android:hint="@string/playlist_url_hint"
                             android:imeOptions="actionDone"
                             android:inputType="textUri"
@@ -536,7 +517,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="@dimen/settings_control_height"
                             android:layout_marginTop="6dp"
-                            android:background="@drawable/settings_input"
+                            android:background="@drawable/classic_settings_input"
                             android:hint="@string/playlist_url_2_hint"
                             android:imeOptions="actionDone"
                             android:inputType="textUri"
@@ -552,7 +533,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="12dp"
                             android:text="@string/resolver_groups_title"
-                            android:textColor="@color/osd_muted"
+                            android:textColor="@color/cyan"
                             android:textSize="@dimen/settings_card_title_text_size"
                             android:textStyle="bold" />
 
@@ -575,7 +556,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="12dp"
                             android:text="@string/highfly_manifest_title"
-                            android:textColor="@color/osd_muted"
+                            android:textColor="@color/cyan"
                             android:textSize="@dimen/settings_card_title_text_size"
                             android:textStyle="bold" />
 
@@ -592,7 +573,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="@dimen/settings_control_height"
                             android:layout_marginTop="6dp"
-                            android:background="@drawable/settings_input"
+                            android:background="@drawable/classic_settings_input"
                             android:hint="@string/highfly_manifest_url_hint"
                             android:imeOptions="actionDone"
                             android:inputType="textUri"
@@ -607,7 +588,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="16dp"
-                            android:background="@drawable/settings_section_card"
+                            android:background="@drawable/classic_settings_section_card"
                             android:padding="@dimen/settings_info_padding"
                             android:text="@string/settings_provider_selection_web"
                             android:textColor="@color/muted"
@@ -618,7 +599,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="@dimen/settings_action_height"
                             android:layout_marginTop="8dp"
-                            android:background="@drawable/focus_button"
+                            android:background="@drawable/classic_focus_button"
                             android:focusable="true"
                             android:includeFontPadding="false"
                             android:minHeight="0dp"
@@ -626,7 +607,7 @@
                             android:nextFocusUp="@id/highfly_manifest_url"
                             android:nextFocusDown="@id/save_button"
                             android:text="@string/mediaflow_open_settings"
-                            android:textColor="@color/focus_button_text"
+                            android:textColor="@color/classic_focus_button_text"
                             android:textSize="@dimen/settings_action_text_size" />
 
                         <TextView
@@ -653,7 +634,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/settings_interface_heading"
-                        android:textColor="@color/osd_muted"
+                        android:textColor="@color/cyan"
                         android:textSize="@dimen/settings_heading_text_size"
                         android:textStyle="bold" />
 
@@ -662,7 +643,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/settings_section_margin_top"
-                        android:background="@drawable/settings_section_card"
+                        android:background="@drawable/classic_settings_section_card"
                         android:focusable="true"
                         android:nextFocusUp="@id/tab_interface"
                         android:padding="@dimen/settings_info_padding"
@@ -674,7 +655,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/settings_section_margin_top"
-                        android:background="@drawable/settings_section_card"
+                        android:background="@drawable/classic_settings_section_card"
                         android:orientation="vertical"
                         android:padding="@dimen/settings_card_padding">
 
@@ -682,7 +663,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:text="@string/settings_ui_style_title"
-                            android:textColor="@color/osd_muted"
+                            android:textColor="@color/cyan"
                             android:textSize="@dimen/settings_card_title_text_size"
                             android:textStyle="bold" />
 
@@ -691,7 +672,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="@dimen/settings_control_height"
                             android:layout_marginTop="10dp"
-                            android:background="@drawable/menu_control"
+                            android:background="@drawable/classic_settings_section_card"
                             android:focusable="true"
                             android:paddingStart="12dp"
                             android:paddingEnd="12dp"
@@ -714,7 +695,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/settings_section_margin_top"
-                        android:background="@drawable/settings_section_card"
+                        android:background="@drawable/classic_settings_section_card"
                         android:orientation="vertical"
                         android:padding="@dimen/settings_card_padding">
 
@@ -755,14 +736,14 @@
                             android:layout_width="match_parent"
                             android:layout_height="@dimen/settings_action_height"
                             android:layout_marginTop="14dp"
-                            android:background="@drawable/focus_button"
+                            android:background="@drawable/classic_focus_button"
                             android:focusable="true"
                             android:includeFontPadding="false"
                             android:minHeight="0dp"
                             android:minWidth="0dp"
                             android:nextFocusDown="@id/reminder_test_button"
                             android:text="@string/settings_reminders_permission"
-                            android:textColor="@color/focus_button_text"
+                            android:textColor="@color/classic_focus_button_text"
                             android:textSize="@dimen/settings_action_text_size" />
 
                         <Button
@@ -770,7 +751,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="@dimen/settings_action_height"
                             android:layout_marginTop="10dp"
-                            android:background="@drawable/focus_button"
+                            android:background="@drawable/classic_focus_button"
                             android:focusable="true"
                             android:includeFontPadding="false"
                             android:minHeight="0dp"
@@ -778,7 +759,7 @@
                             android:nextFocusUp="@id/reminder_permission_button"
                             android:nextFocusDown="@id/save_button"
                             android:text="@string/settings_reminders_test"
-                            android:textColor="@color/focus_button_text"
+                            android:textColor="@color/classic_focus_button_text"
                             android:textSize="@dimen/settings_action_text_size" />
 
                         <TextView
@@ -805,7 +786,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/settings_updates_heading"
-                        android:textColor="@color/osd_muted"
+                        android:textColor="@color/cyan"
                         android:textSize="@dimen/settings_heading_text_size"
                         android:textStyle="bold" />
 
@@ -813,7 +794,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/settings_section_margin_top"
-                        android:background="@drawable/settings_section_card"
+                        android:background="@drawable/classic_settings_section_card"
                         android:orientation="vertical"
                         android:padding="@dimen/settings_card_padding">
 
@@ -838,7 +819,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="@dimen/settings_action_height"
                             android:layout_marginTop="14dp"
-                            android:background="@drawable/focus_button"
+                            android:background="@drawable/classic_focus_button"
                             android:focusable="true"
                             android:includeFontPadding="false"
                             android:minHeight="0dp"
@@ -846,7 +827,7 @@
                             android:nextFocusUp="@id/tab_updates"
                             android:nextFocusDown="@id/save_button"
                             android:text="@string/check_updates"
-                            android:textColor="@color/focus_button_text"
+                            android:textColor="@color/classic_focus_button_text"
                             android:textSize="@dimen/settings_action_text_size" />
 
                         <TextView
@@ -874,28 +855,28 @@
                 android:layout_width="@dimen/settings_save_button_width"
                 android:layout_height="@dimen/settings_footer_button_height"
                 android:layout_marginEnd="8dp"
-                android:background="@drawable/focus_button"
+                android:background="@drawable/classic_focus_button"
                 android:focusable="true"
                 android:includeFontPadding="false"
                 android:minHeight="0dp"
                 android:minWidth="0dp"
                 android:nextFocusRight="@id/cancel_button"
                 android:text="@string/save_and_play"
-                android:textColor="@color/focus_button_text"
+                android:textColor="@color/classic_focus_button_text"
                 android:textSize="@dimen/settings_footer_text_size" />
 
             <Button
                 android:id="@+id/cancel_button"
                 android:layout_width="@dimen/settings_cancel_button_width"
                 android:layout_height="@dimen/settings_footer_button_height"
-                android:background="@drawable/focus_button"
+                android:background="@drawable/classic_focus_button"
                 android:focusable="true"
                 android:includeFontPadding="false"
                 android:minHeight="0dp"
                 android:minWidth="0dp"
                 android:nextFocusLeft="@id/save_button"
                 android:text="@string/cancel"
-                android:textColor="@color/focus_button_text"
+                android:textColor="@color/classic_focus_button_text"
                 android:textSize="@dimen/settings_footer_text_size" />
         </LinearLayout>
         </LinearLayout>

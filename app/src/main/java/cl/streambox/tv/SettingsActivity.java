@@ -104,6 +104,7 @@ public final class SettingsActivity extends Activity {
     private ScrollView settingsContent;
     private ViewTreeObserver.OnGlobalFocusChangeListener focusVisibilityListener;
     private int selectedTabIndex;
+    private boolean classicUi;
     private TextView currentChannelName;
     private LinearLayout qualityOptionsContainer;
     private TextView qualityStatus;
@@ -217,7 +218,24 @@ public final class SettingsActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_settings);
+        classicUi = UiStyle.isClassic(this);
+        setContentView(classicUi ? R.layout.classic_activity_settings : R.layout.activity_settings);
+        if (classicUi) {
+            // El clásico oscurecía el video detrás del panel (el moderno usa su propio fondo).
+            getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            getWindow().setDimAmount(0.66f);
+        }
+        Switch uiClassicSwitch = findViewById(R.id.ui_classic_switch);
+        if (uiClassicSwitch != null) {
+            uiClassicSwitch.setChecked(classicUi);
+            uiClassicSwitch.setOnCheckedChangeListener((button, checked) -> {
+                if (checked == classicUi) return;
+                UiStyle.setClassic(this, checked);
+                // Se recarga Opciones con el nuevo estilo, en la misma pestaña.
+                getIntent().putExtra(EXTRA_INITIAL_TAB, selectedTabIndex);
+                recreate();
+            });
+        }
         enterImmersiveMode();
 
         settingsRoot = findViewById(R.id.settings_root);
@@ -442,13 +460,15 @@ public final class SettingsActivity extends Activity {
         params.bottomMargin = dp(6);
         button.setLayoutParams(params);
         button.setId(View.generateViewId());
-        button.setBackgroundResource(R.drawable.settings_section_card);
+        button.setBackgroundResource(classicUi
+                ? R.drawable.classic_settings_section_card : R.drawable.settings_section_card);
         button.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         button.setIncludeFontPadding(false);
         button.setMinHeight(0);
         button.setMinWidth(0);
         button.setPadding(dp(12), 0, dp(12), 0);
-        button.setTextColor(getColorStateList(R.color.focus_option_text));
+        button.setTextColor(getColorStateList(classicUi
+                ? R.color.classic_focus_option_text : R.color.focus_option_text));
         button.setTextSize(
                 TypedValue.COMPLEX_UNIT_PX,
                 getResources().getDimension(R.dimen.settings_control_text_size)
@@ -507,9 +527,13 @@ public final class SettingsActivity extends Activity {
         for (int index = 0; index < tabs.length; index++) {
             boolean selected = index == safeIndex;
             tabs[index].setSelected(selected);
-            tabs[index].setTextColor(getColorStateList(R.color.settings_tab_text));
-            tabs[index].setTypeface(null, selected ? android.graphics.Typeface.BOLD
-                    : android.graphics.Typeface.NORMAL);
+            if (classicUi) {
+                tabs[index].setTextColor(getColor(selected ? R.color.cyan : R.color.muted));
+            } else {
+                tabs[index].setTextColor(getColorStateList(R.color.settings_tab_text));
+                tabs[index].setTypeface(null, selected ? android.graphics.Typeface.BOLD
+                        : android.graphics.Typeface.NORMAL);
+            }
             tabPages[index].setVisibility(selected ? View.VISIBLE : View.GONE);
         }
         if (requestFocus) tabs[safeIndex].requestFocus();
@@ -530,11 +554,13 @@ public final class SettingsActivity extends Activity {
         for (ProgramReminder reminder : reminders) {
             Button item = new Button(this);
             // Fila del estilo de la Guía, con la campana cyan del recordatorio.
-            item.setBackgroundResource(R.drawable.settings_section_card);
-            item.setTextColor(getColorStateList(R.color.focus_option_text));
+            item.setBackgroundResource(classicUi
+                    ? R.drawable.classic_focus_button : R.drawable.settings_section_card);
+            item.setTextColor(getColorStateList(classicUi
+                    ? R.color.classic_focus_button_text : R.color.focus_option_text));
             item.setPadding(Math.round(14 * density), 0, Math.round(14 * density), 0);
             android.graphics.drawable.Drawable bell = getDrawable(R.drawable.ic_reminder_bell);
-            if (bell != null) {
+            if (bell != null && !classicUi) {
                 int size = Math.round(12 * density);
                 bell.setBounds(0, 0, size, size);
                 item.setCompoundDrawablesRelative(bell, null, null, null);
@@ -662,7 +688,8 @@ public final class SettingsActivity extends Activity {
         );
         params.topMargin = dp(7);
         groupSwitch.setLayoutParams(params);
-        groupSwitch.setBackgroundResource(R.drawable.settings_section_card);
+        groupSwitch.setBackgroundResource(classicUi
+                ? R.drawable.classic_settings_section_card : R.drawable.settings_section_card);
         groupSwitch.setFocusable(true);
         groupSwitch.setGravity(Gravity.CENTER_VERTICAL);
         groupSwitch.setPadding(dp(12), 0, dp(12), 0);

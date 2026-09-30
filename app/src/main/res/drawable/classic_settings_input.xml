@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Estilo clásico (VibeM3U 0.5.40), elegible en Opciones › Interfaz. -->
+<!-- Campo plano: fondo tenue, sin borde; con foco el velo sube. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#1AFFFFFF" />
+            <corners android:radius="8dp" />
+            <padding android:left="16dp" android:top="0dp" android:right="16dp" android:bottom="0dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#0AFFFFFF" />
+            <corners android:radius="8dp" />
+            <padding android:left="16dp" android:top="0dp" android:right="16dp" android:bottom="0dp" />
+        </shape>
+    </item>
+</selector>
