@@ -11,7 +11,7 @@
 
 ## Hoy, en una mirada
 
-- **Versión publicada**: 0.5.43 (`versionCode` 152). Se publica con tag `vX.Y.Z` y el
+- **Versión publicada**: 0.5.44 (`versionCode` 153). Se publica con tag `vX.Y.Z` y el
   workflow «Publicar APK». No hay SDK Android local: compila «Android CI».
 - **Estado visual**: el usuario aprobó todo el estilo nuevo, pero la 0.5.42 y la 0.5.43 aún no
   se han visto en la TV. Pedir revisión antes de seguir iterando el diseño.
