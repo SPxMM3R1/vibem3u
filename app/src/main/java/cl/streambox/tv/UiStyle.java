@@ -11,6 +11,7 @@ import android.content.SharedPreferences;
 final class UiStyle {
     private static final String PREFS = "interface";
     private static final String KEY_CLASSIC = "classic_ui";
+    private static final String KEY_CLASSIC_STARTING = "classic_ui_starting";
 
     private UiStyle() {}
 
@@ -20,6 +21,27 @@ final class UiStyle {
 
     static void setClassic(Context context, boolean classic) {
         prefs(context).edit().putBoolean(KEY_CLASSIC, classic).apply();
+    }
+
+    /**
+     * Estilo con que arranca la pantalla principal. Si el arranque anterior en estilo clásico
+     * no terminó (la app se cerró al preparar la pantalla), vuelve al moderno: el estilo nunca
+     * debe impedir que la app abra.
+     */
+    static boolean beginStart(Context context) {
+        SharedPreferences prefs = prefs(context);
+        boolean classic = prefs.getBoolean(KEY_CLASSIC, false);
+        if (classic && prefs.getBoolean(KEY_CLASSIC_STARTING, false)) {
+            prefs.edit().putBoolean(KEY_CLASSIC, false).putBoolean(KEY_CLASSIC_STARTING, false).commit();
+            return false;
+        }
+        if (classic) prefs.edit().putBoolean(KEY_CLASSIC_STARTING, true).commit();
+        return classic;
+    }
+
+    /** La pantalla principal terminó de prepararse con el estilo elegido. */
+    static void startCompleted(Context context) {
+        prefs(context).edit().putBoolean(KEY_CLASSIC_STARTING, false).apply();
     }
 
     private static SharedPreferences prefs(Context context) {

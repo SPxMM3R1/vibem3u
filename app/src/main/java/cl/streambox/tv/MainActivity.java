@@ -358,7 +358,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        classicUi = UiStyle.isClassic(this);
+        classicUi = UiStyle.beginStart(this);
         consumeReminderIntent(getIntent());
         // Android borra las alarmas si la app fue detenida: se reponen al abrirla.
         ReminderAlerts.rescheduleAll(this);
@@ -379,6 +379,8 @@ public final class MainActivity extends Activity {
         new TvVooSourceHistory(this);
         reloadResolverRegistry();
         bindViews();
+        // Si en 5 s la pantalla sigue viva, el estilo elegido arrancó bien (ver UiStyle).
+        mainHandler.postDelayed(() -> UiStyle.startCompleted(this), 5_000L);
         registerBackCallback();
         enterImmersiveMode();
         createPlayer();
@@ -452,7 +454,6 @@ public final class MainActivity extends Activity {
         detailAfterTitle = findViewById(R.id.detail_after_title);
         guideView = findViewById(classicUi ? R.id.guide_overlay_classic : R.id.guide_overlay);
         guideSurface = (GuideSurface) guideView;
-        if (classicUi) applyClassicChrome();
         sourceSelectorOverlay = findViewById(R.id.source_selector_overlay);
         sourceSelectorTitle = findViewById(R.id.source_selector_title);
         sourceSelectorChannel = findViewById(R.id.source_selector_channel);
@@ -477,6 +478,8 @@ public final class MainActivity extends Activity {
         codecInfo = findViewById(R.id.codec_info);
         statusDot = findViewById(R.id.status_dot);
         streamStatus = findViewById(R.id.stream_status);
+        // Al final: el estilo clásico toca vistas del selector que se buscan más arriba.
+        if (classicUi) applyClassicChrome();
     }
 
     private void createPlayer() {
