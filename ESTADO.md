@@ -82,7 +82,8 @@
 ## Bitácora (más reciente arriba)
 
 - **2026-09-30**: `AGENTS.md` y este `ESTADO.md` pasan a ser la puesta al día obligatoria;
-  punteros para cualquier proveedor de IA.
+  punteros para cualquier proveedor de IA. Codex y OpenCode leen `AGENTS.md` directo; `opencode.json`
+  hace que OpenCode cargue también `ESTADO.md`.
 - **2026-09-29**:
   - 0.5.43: Guía con el foco en el programa, reloj en recuadro, sin atajos; bordes del título
     del OSD difuminados; todos los menús en el estilo nuevo.
