@@ -21,6 +21,7 @@ val resolverFiles = listOf(
     "Playlist.java",
     "PublicStreamPolicy.java",
     "ProviderStreamParsers.java",
+    "PublishedHighflyLinks.java",
     "ResolutionContext.java",
     "ResolutionDeadline.java",
     "ResolutionProgress.java",

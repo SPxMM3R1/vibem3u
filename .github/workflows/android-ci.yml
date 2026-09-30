@@ -52,7 +52,7 @@ jobs:
             testDebugUnitTest \
             testExperimentalUnitTest testReleaseUnitTest \
             lintDebug lintExperimental lintRelease \
-            assembleDebug assembleExperimental assembleRelease
+            assembleDebug assembleExperimental assembleRelease             :local-catalog:test :local-catalog:installDist
 
       - name: Verificar firma compatible
         if: ${{ env.ANDROID_DEBUG_KEYSTORE_BASE64 != '' }}
