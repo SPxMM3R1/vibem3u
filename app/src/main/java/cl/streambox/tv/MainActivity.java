@@ -2275,7 +2275,7 @@ public final class MainActivity extends Activity {
         EpgProgramme current = first != null && first.getStartMillis() <= now ? first : null;
 
         if (first == null) {
-            detailLive.setVisibility(View.VISIBLE);
+            detailLive.setVisibility(View.GONE); // Sin «EN VIVO», como en la Guía.
             detailLabel.setText(AppStrings.isBlank(channel.getGroup())
                     ? getString(R.string.live_content) : channel.getGroup());
             detailTitle.setText(R.string.epg_no_information);
@@ -2286,7 +2286,7 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        detailLive.setVisibility(current != null ? View.VISIBLE : View.GONE);
+        detailLive.setVisibility(View.GONE);
         detailLabel.setText(current != null
                 ? getString(R.string.light_epg_now)
                 : getString(R.string.light_epg_next_at,
@@ -3371,7 +3371,8 @@ public final class MainActivity extends Activity {
             option.setGravity(Gravity.CENTER_VERTICAL);
             option.setIncludeFontPadding(false);
             option.setLineSpacing(0f, 0.95f);
-            option.setBackgroundResource(R.drawable.focus_button);
+            // Fila del estilo de la Guía: fondo tenue y velo cyan con foco.
+            option.setBackgroundResource(R.drawable.settings_section_card);
             option.setPadding(dp(14), dp(6), dp(14), dp(6));
             option.setFocusable(true);
             option.setFocusableInTouchMode(true);

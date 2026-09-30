@@ -23,19 +23,36 @@
         android:background="@android:color/transparent"
         android:gravity="center">
 
-        <TextView
-            android:id="@+id/loading_text"
+        <!-- Carga con el estilo de la Guía: barra cyan fina y el paso actual en gris. El
+             logo y el nombre del canal los muestra el OSD mientras el canal arranca. -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
-            android:ellipsize="end"
-            android:gravity="center"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:text="@string/loading_playlist"
-            android:textColor="@color/white"
-            android:paddingHorizontal="32dp"
-            android:textSize="18sp" />
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <ProgressBar
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="180dp"
+                android:layout_height="3dp"
+                android:indeterminate="true"
+                android:indeterminateTint="@color/cyan" />
+
+            <TextView
+                android:id="@+id/loading_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:paddingHorizontal="32dp"
+                android:text="@string/loading_playlist"
+                android:textColor="@color/osd_muted"
+                android:textSize="11sp" />
+        </LinearLayout>
     </FrameLayout>
 
     <TextView
@@ -43,14 +60,11 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
-        android:layout_marginTop="27dp"
+        android:layout_marginTop="20dp"
         android:layout_marginEnd="@dimen/channel_overlay_horizontal_margin"
+        android:background="@drawable/clock_background"
         android:includeFontPadding="false"
-        android:shadowColor="#A0000000"
-        android:shadowDx="0"
-        android:shadowDy="1"
-        android:shadowRadius="4"
-        android:textColor="@color/osd_muted"
+        android:textColor="@color/clock_day"
         android:textSize="13sp"
         android:visibility="gone" />
 

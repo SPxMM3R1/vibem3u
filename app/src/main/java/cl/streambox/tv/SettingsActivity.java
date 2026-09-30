@@ -507,7 +507,9 @@ public final class SettingsActivity extends Activity {
         for (int index = 0; index < tabs.length; index++) {
             boolean selected = index == safeIndex;
             tabs[index].setSelected(selected);
-            tabs[index].setTextColor(getColor(selected ? R.color.cyan : R.color.muted));
+            tabs[index].setTextColor(getColorStateList(R.color.settings_tab_text));
+            tabs[index].setTypeface(null, selected ? android.graphics.Typeface.BOLD
+                    : android.graphics.Typeface.NORMAL);
             tabPages[index].setVisibility(selected ? View.VISIBLE : View.GONE);
         }
         if (requestFocus) tabs[safeIndex].requestFocus();
@@ -527,8 +529,17 @@ public final class SettingsActivity extends Activity {
         float density = getResources().getDisplayMetrics().density;
         for (ProgramReminder reminder : reminders) {
             Button item = new Button(this);
-            item.setBackgroundResource(R.drawable.focus_button);
-            item.setTextColor(getColorStateList(R.color.focus_button_text));
+            // Fila del estilo de la Guía, con la campana cyan del recordatorio.
+            item.setBackgroundResource(R.drawable.settings_section_card);
+            item.setTextColor(getColorStateList(R.color.focus_option_text));
+            item.setPadding(Math.round(14 * density), 0, Math.round(14 * density), 0);
+            android.graphics.drawable.Drawable bell = getDrawable(R.drawable.ic_reminder_bell);
+            if (bell != null) {
+                int size = Math.round(12 * density);
+                bell.setBounds(0, 0, size, size);
+                item.setCompoundDrawablesRelative(bell, null, null, null);
+                item.setCompoundDrawablePadding(Math.round(8 * density));
+            }
             item.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX,
                     getResources().getDimension(R.dimen.settings_action_text_size));
             item.setAllCaps(false);
@@ -927,9 +938,34 @@ public final class SettingsActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
     }
 
+    /** Reloj con fecha como en la Guía: «Lunes 28 · 21:38», la hora en blanco. */
+    private final Runnable updateSettingsClock = new Runnable() {
+        @Override public void run() {
+            android.widget.TextView clock = findViewById(R.id.settings_clock);
+            if (clock == null) return;
+            java.util.Date now = new java.util.Date();
+            String time = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                    .format(now);
+            String day = new java.text.SimpleDateFormat("EEEE d",
+                    java.util.Locale.forLanguageTag("es-CL")).format(now);
+            if (!day.isEmpty()) {
+                day = day.substring(0, 1).toUpperCase(java.util.Locale.ROOT) + day.substring(1);
+            }
+            android.text.SpannableString text = new android.text.SpannableString(
+                    day + "  ·  " + time);
+            text.setSpan(new android.text.style.ForegroundColorSpan(getColor(R.color.white)),
+                    text.length() - time.length(), text.length(),
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            clock.setText(text);
+            mainHandler.postDelayed(this, 30_000);
+        }
+    };
+
     @Override
     protected void onResume() {
         super.onResume();
+        mainHandler.removeCallbacks(updateSettingsClock);
+        updateSettingsClock.run();
         refreshReminderStatus();
         refreshReminderList();
         enterImmersiveMode();
@@ -938,6 +974,7 @@ public final class SettingsActivity extends Activity {
 
     @Override
     protected void onPause() {
+        mainHandler.removeCallbacks(updateSettingsClock);
         if (appUpdater != null) appUpdater.onHostPause();
         super.onPause();
     }

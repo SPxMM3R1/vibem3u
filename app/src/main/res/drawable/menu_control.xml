@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Fila del estilo de la Guía: fondo tenue sin borde; con foco, el velo cyan. -->
+<!-- Control dentro de una fila: transparente; con foco, el velo cyan. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
@@ -7,10 +7,5 @@
             <corners android:radius="6dp" />
         </shape>
     </item>
-    <item>
-        <shape android:shape="rectangle">
-            <solid android:color="@color/menu_row" />
-            <corners android:radius="6dp" />
-        </shape>
-    </item>
+    <item android:drawable="@android:color/transparent" />
 </selector>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pestañas de Opciones: la activa es una píldora cyan con texto oscuro. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true" android:color="@color/on_cyan" />
+    <item android:state_focused="true" android:color="@color/white" />
+    <item android:color="@color/osd_muted" />
+</selector>

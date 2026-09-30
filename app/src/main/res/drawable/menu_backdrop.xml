@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fondo de los menús: oscuro a la izquierda y el video asomando a la derecha. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="0"
+        android:centerColor="#E605080A"
+        android:centerX="0.5"
+        android:endColor="#6605080A"
+        android:startColor="#F805080A"
+        android:type="linear" />
+</shape>

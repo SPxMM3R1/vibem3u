@@ -22,7 +22,8 @@ import android.widget.TextView;
  * translation, layout or callback is posted to the Activity's UI thread.</p>
  */
 public final class ContinuousMarqueeTextView extends FrameLayout implements SurfaceHolder.Callback {
-    private static final float GAP_DP = 12f;
+    /** Separación entre repeticiones: deja espacio para el difuminado de los bordes. */
+    private static final float GAP_DP = 40f;
     private static final float SPEED_DP_PER_SECOND = 40f;
     private static final int MAX_TITLE_WIDTH_PX = 32_768;
 

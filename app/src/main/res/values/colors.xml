@@ -10,4 +10,14 @@
     <color name="muted">#B8C4C9</color>
     <!-- Gris de textos secundarios de la Guía y el OSD. -->
     <color name="osd_muted">#9FB0B7</color>
+    <!-- Estilo de la Guía para menús: filas tenues, foco con velo cyan, texto sobre cyan. -->
+    <color name="menu_row">#0DFFFFFF</color>
+    <color name="menu_focus">#3800B8E6</color>
+    <color name="menu_pill">#14FFFFFF</color>
+    <color name="on_cyan">#021015</color>
+    <color name="menu_text">#E9F1F4</color>
+    <!-- Recuadro del reloj con fecha (Guía, OSD y Opciones). -->
+    <color name="clock_box">#9E3A444A</color>
+    <color name="clock_day">#C9D3D7</color>
+    <color name="menu_card">#F2141B1F</color>
 </resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tarjeta «A continuación» del detalle: fondo tenue, sin borde. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#14FFFFFF" />
+    <corners android:radius="8dp" />
+    <padding android:left="15dp" android:top="13dp" android:right="15dp" android:bottom="13dp" />
+</shape>

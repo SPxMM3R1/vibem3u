@@ -30,7 +30,7 @@
             android:layout_height="wrap_content"
             android:includeFontPadding="false"
             android:text="Fuentes disponibles"
-            android:textColor="@color/cyan"
+            android:textColor="@color/white"
             android:textSize="@dimen/settings_heading_text_size"
             android:textStyle="bold" />
 

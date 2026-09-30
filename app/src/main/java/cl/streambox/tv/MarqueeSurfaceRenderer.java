@@ -56,6 +56,8 @@ final class MarqueeSurfaceRenderer implements Choreographer.FrameCallback, AutoC
     private final HandlerThread thread = new HandlerThread("VibeM3U-Marquee");
     private final Handler handler;
     private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    /** Máscara de los bordes: el texto aparece y desaparece difuminado, sin corte en seco. */
+    private final Paint fadePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private volatile boolean closed;
 
     // All the following state belongs exclusively to the drawing thread.
@@ -86,6 +88,11 @@ final class MarqueeSurfaceRenderer implements Choreographer.FrameCallback, AutoC
                     .setMaxLines(1)
                     .build();
             textTop = spec.baseline - layout.getLineBaseline(0);
+            float fade = Math.min(spec.width * 0.12f, spec.height * 0.6f) / Math.max(1f, spec.width);
+            fadePaint.setShader(new android.graphics.LinearGradient(0f, 0f, spec.width, 0f,
+                    new int[] {0x00000000, 0xFF000000, 0xFF000000, 0x00000000},
+                    new float[] {0f, fade, 1f - fade, 1f}, android.graphics.Shader.TileMode.CLAMP));
+            fadePaint.setXfermode(new android.graphics.PorterDuffXfermode(PorterDuff.Mode.DST_IN));
             // Most titles fit this small cache. Unusually long titles use the prepared layout
             // directly on this worker instead of allocating an oversized GPU texture.
             if (spec.titleWidth <= MAX_CACHED_WIDTH_PX && spec.height <= MAX_CACHED_HEIGHT_PX) {
@@ -119,8 +126,11 @@ final class MarqueeSurfaceRenderer implements Choreographer.FrameCallback, AutoC
                     // small surface, not the Activity/video, including after a surface resize.
                     canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
                     canvas.clipRect(0, 0, spec.width, spec.height);
+                    int layer = canvas.saveLayer(0f, 0f, spec.width, spec.height, null);
                     drawCopy(canvas, -offset);
                     drawCopy(canvas, spec.cycleWidth - offset);
+                    canvas.drawRect(0f, 0f, spec.width, spec.height, fadePaint);
+                    canvas.restoreToCount(layer);
                 } finally {
                     surface.unlockCanvasAndPost(canvas);
                 }

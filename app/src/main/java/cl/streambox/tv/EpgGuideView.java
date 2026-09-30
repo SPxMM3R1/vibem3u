@@ -60,7 +60,11 @@ public final class EpgGuideView extends View {
     private static final int BLOCK_ON_AIR = 0x16FFFFFF;
     private static final int BLOCK_PAST = 0x08FFFFFF;
     private static final int BLOCK_FUTURE = 0x0DFFFFFF;
-    private static final int SELECTED_CHANNEL = 0x2900B8E6;
+    /** Velo cyan del programa enfocado (se mueve con ◀ ▶). */
+    private static final int FOCUSED_PROGRAMME = 0x3800B8E6;
+    /** Recuadro gris semitransparente del reloj, para leerlo sobre cualquier imagen. */
+    private static final int CLOCK_BOX = 0x9E3A444A;
+    private static final int CLOCK_DAY = 0xFFC9D3D7;
     private static final int TICK = 0x2EFFFFFF;
     private static final int TRACK = 0x24FFFFFF;
     /** Cyan al 45 %: la línea de la hora actual no compite con los títulos. */
@@ -185,14 +189,13 @@ public final class EpgGuideView extends View {
             shaderPaint.setShader(null);
         }
 
-        // Pie: la última fila se funde con el fondo y los atajos quedan abajo a la derecha.
+        // Pie: la última fila se funde con el fondo.
         float footerTop = height - dp(32);
         shaderPaint.setShader(new LinearGradient(0f, footerTop, 0f, height,
                 new int[] {BASE & 0x00FFFFFF, BASE, BASE}, new float[] {0f, 0.6f, 1f},
                 Shader.TileMode.CLAMP));
         canvas.drawRect(0f, footerTop, width, height, shaderPaint);
         shaderPaint.setShader(null);
-        drawHints(canvas, right, height - dp(13), filtersFocused);
     }
 
     private void drawBackground(Canvas canvas, float width, float height, float rowsTop) {
@@ -231,11 +234,17 @@ public final class EpgGuideView extends View {
         String day = capitalize(dayFormat.format(new Date(navigator.getFocusMillis()))) + "  ·  ";
         float timeWidth = textPaint.measureText(time);
         float dayWidth = textPaint.measureText(day);
+        float boxPadding = dp(12);
+        float textRight = right - boxPadding;
+        rect.set(textRight - timeWidth - dayWidth - boxPadding, baseline - sp(13) - dp(4),
+                right, baseline + dp(9));
+        fillPaint.setColor(CLOCK_BOX);
+        canvas.drawRoundRect(rect, dp(8), dp(8), fillPaint);
         textPaint.setColor(WHITE);
-        canvas.drawText(time, right - timeWidth, baseline, textPaint);
-        textPaint.setColor(MUTED);
-        canvas.drawText(day, right - timeWidth - dayWidth, baseline, textPaint);
-        float chipsRight = right - timeWidth - dayWidth - dp(24);
+        canvas.drawText(time, textRight - timeWidth, baseline, textPaint);
+        textPaint.setColor(CLOCK_DAY);
+        canvas.drawText(day, textRight - timeWidth - dayWidth, baseline, textPaint);
+        float chipsRight = rect.left - dp(24);
 
         // Filtros: el activo en cyan; con foco en ellos, además un anillo blanco.
         List<String> filters = source.filters();
@@ -419,13 +428,9 @@ public final class EpgGuideView extends View {
     private void drawRow(Canvas canvas, int row, float rowTop, float rowHeight, float left, float right,
                          float gridLeft, float gridWidth, long windowStart, long windowEnd,
                          boolean selected) {
-        // Canal: número y logo; el seleccionado con un velo cyan.
+        // Canal: número y logo. El foco no marca el canal (solo su número en blanco),
+        // sino el programa enfocado de esa fila.
         float cellWidth = dp(110);
-        if (selected) {
-            rect.set(left, rowTop, left + cellWidth, rowTop + rowHeight);
-            fillPaint.setColor(SELECTED_CHANNEL);
-            canvas.drawRoundRect(rect, dp(6), dp(6), fillPaint);
-        }
         textPaint.setTypeface(regular);
         textPaint.setTextSize(sp(10));
         textPaint.setColor(selected ? WHITE : row == source.playingRow() ? CYAN : MUTED);
@@ -444,6 +449,9 @@ public final class EpgGuideView extends View {
         }
 
         List<EpgProgramme> programmes = source.programmes(row, windowStart, windowEnd);
+        EpgProgramme focusedProgramme = selected
+                ? EpgGuideNavigator.programmeAt(programmes, navigator.getFocusMillis())
+                : null;
         if (programmes.isEmpty()) {
             textPaint.setColor(MUTED);
             canvas.drawText(getContext().getString(R.string.epg_no_information),
@@ -457,7 +465,9 @@ public final class EpgGuideView extends View {
             boolean past = programme.getStopMillis() <= nowMillis;
             boolean onAir = programme.getStartMillis() <= nowMillis && !past;
             rect.set(blockLeft, rowTop, blockRight, rowTop + rowHeight);
-            fillPaint.setColor(onAir ? BLOCK_ON_AIR : past ? BLOCK_PAST : BLOCK_FUTURE);
+            boolean focused = programme == focusedProgramme;
+            fillPaint.setColor(focused ? FOCUSED_PROGRAMME
+                    : onAir ? BLOCK_ON_AIR : past ? BLOCK_PAST : BLOCK_FUTURE);
             canvas.drawRoundRect(rect, dp(6), dp(6), fillPaint);
 
             float textLeft = blockLeft + dp(9);
@@ -473,38 +483,17 @@ public final class EpgGuideView extends View {
             String title = programme.getStartMillis() < windowStart
                     ? "‹ " + programme.getTitle() : programme.getTitle();
             textPaint.setTextSize(sp(11));
-            textPaint.setColor(past ? MUTED : TEXT);
+            textPaint.setTypeface(focused ? bold : regular);
+            textPaint.setColor(focused ? WHITE : past ? MUTED : TEXT);
             canvas.drawText(TextUtils.ellipsize(title, textPaint, textWidth,
                     TextUtils.TruncateAt.END).toString(), textLeft, titleBaseline, textPaint);
+            textPaint.setTypeface(regular);
             smallPaint.setTypeface(regular);
             smallPaint.setTextSize(sp(8.5f));
             smallPaint.setColor(MUTED);
             canvas.drawText(TextUtils.ellipsize(range(programme), smallPaint, textWidth,
                     TextUtils.TruncateAt.END).toString(), textLeft, rowTop + dp(27), smallPaint);
         }
-    }
-
-    /** Atajos «tecla acción» separados por «|», con la tecla en blanco. */
-    private void drawHints(Canvas canvas, float right, float baseline, boolean filtersFocused) {
-        String[] items = getContext().getString(filtersFocused
-                ? R.string.guide_hints_filters : R.string.guide_hints).split("\\|");
-        smallPaint.setTextSize(sp(9));
-        float x = right;
-        for (int i = items.length - 1; i >= 0; i--) {
-            String[] parts = items[i].split(":", 2);
-            String key = parts[0];
-            String action = parts.length > 1 ? " " + parts[1] : "";
-            smallPaint.setTypeface(regular);
-            float actionWidth = smallPaint.measureText(action);
-            smallPaint.setColor(MUTED);
-            canvas.drawText(action, x - actionWidth, baseline, smallPaint);
-            smallPaint.setTypeface(bold);
-            float keyWidth = smallPaint.measureText(key);
-            smallPaint.setColor(WHITE);
-            canvas.drawText(key, x - actionWidth - keyWidth, baseline, smallPaint);
-            x -= actionWidth + keyWidth + dp(17);
-        }
-        smallPaint.setTypeface(regular);
     }
 
     /** Dibuja la campana con la base en {@code baseline}; devuelve el ancho usado. */

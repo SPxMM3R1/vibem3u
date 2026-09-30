@@ -19,8 +19,8 @@
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowIsFloating">false</item>
-        <item name="android:backgroundDimEnabled">true</item>
-        <item name="android:backgroundDimAmount">0.66</item>
+        <!-- El fondo lo da menu_backdrop (oscuro a la izquierda, video a la derecha). -->
+        <item name="android:backgroundDimEnabled">false</item>
         <item name="android:colorAccent">@color/cyan</item>
     </style>
 </resources>
