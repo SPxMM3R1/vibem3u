@@ -1054,9 +1054,13 @@ public final class SettingsActivity extends Activity {
                 && uri.getHost() != null;
     }
 
-    /** Atrás aplica los cambios y vuelve al canal; sin lista configurada no se sale. */
+    /**
+     * Atrás aplica los cambios y vuelve al canal; sin lista configurada no se sale. Desde
+     * Android 13 lo hace el {@code OnBackInvokedCallback} registrado en {@code onCreate}.
+     */
     @Override
     @SuppressWarnings("deprecation")
+    @android.annotation.SuppressLint("GestureBackNavigation")
     public void onBackPressed() {
         if (hasExistingUrl) save();
     }
