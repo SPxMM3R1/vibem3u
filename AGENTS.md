@@ -57,6 +57,7 @@ agente debe poder retomar el trabajo solo con lo que está en el repositorio.
 
 ## Reglas de reproducción y OSD
 
+- Arranque: la primera lista se muestra solo con el catálogo publicado ya aplicado (`isWaitingForPublishedCatalog`, máx. `PUBLISHED_CATALOG_WAIT_MS`); si no, los canales de proveedor llegan después y renumeran todo. No mostrar la M3U sola antes del catálogo.
 - Highfly abre primero con el enlace directo que publica Lista M3U (`data/highfly-live.json`, `PublishedHighflyLinks`); si falla, se marca y se usa el resolutor.
 - Recuperación automática: 3 intentos con esperas de 2, 5 y 10 s (`PlaybackRecoveryBudget`); desde el segundo se renueva la fuente.
 - `ResolverCatalog` rechaza el catálogo completo si un host no está en su lista permitida (así se cayeron todos los resolutores en la 0.5.37). Al cambiar un host de proveedor, agregarlo a la lista en el mismo cambio; lo cubre `ResolverCatalogTest.bundledCatalogLoadsWithEveryProvider`.

@@ -119,6 +119,18 @@ public final class MainActivity extends Activity {
     private PublishedPlaybackCatalogRepository publishedPlaybackCatalogRepository;
     private PublishedPlaybackCatalog publishedPlaybackCatalog = PublishedPlaybackCatalog.empty();
     private boolean publishedCatalogRefreshPending;
+    /**
+     * Al arrancar, la lista no se muestra hasta tener el catálogo publicado: él trae
+     * los canales de proveedor y la numeración final. Sin esto, la lista M3U aparecía
+     * primero y un segundo después todos los canales se corrían de número.
+     */
+    private static final long PUBLISHED_CATALOG_WAIT_MS = 6_000L;
+    private boolean publishedCatalogWaitExpired;
+    private final Runnable publishedCatalogWaitTimeout = () -> {
+        // Sin catálogo a tiempo (sin red, servidor lento): se muestra lo que hay.
+        publishedCatalogWaitExpired = true;
+        applyPlaylistsAfterCatalogWait();
+    };
     private StreamResolverRegistry streamResolverRegistry;
     private Map<String, Integer> resolverChannelCounts = Collections.emptyMap();
     private final List<Channel> channels = new ArrayList<>();
@@ -802,6 +814,8 @@ public final class MainActivity extends Activity {
 
     private void finishPlaylistRefreshIfReady(PlaylistRefreshState refresh) {
         if (!isCurrentPlaylistRefresh(refresh) || !refresh.isComplete()) return;
+        // La lista ya llegó, pero espera al catálogo: la carga sigue en pantalla.
+        if (isWaitingForPublishedCatalog() && !refresh.latest.isEmpty()) return;
         if (!refresh.latest.isEmpty()) {
             hidePlaylistLoadingIfPlaybackPending();
         } else if (!channels.isEmpty()) {
@@ -988,6 +1002,19 @@ public final class MainActivity extends Activity {
 
         playlistsBySource.clear();
         if (playlists != null) playlistsBySource.putAll(playlists);
+        if (isWaitingForPublishedCatalog()) {
+            loadedPlaylistSignature = sourceSignature;
+            // La guía se sigue descargando mientras tanto: sus fuentes ya quedan
+            // registradas para no descartar lo que llegue antes que el catálogo.
+            for (Map.Entry<Integer, Playlist> entry : orderedPlaylistEntries(playlistsBySource)) {
+                Playlist playlist = entry.getValue();
+                if (playlist == null) continue;
+                for (URI epgUri : playlist.getEpgUris()) activeEpgUrls.add(epgUri.toString());
+            }
+            mainHandler.removeCallbacks(publishedCatalogWaitTimeout);
+            mainHandler.postDelayed(publishedCatalogWaitTimeout, PUBLISHED_CATALOG_WAIT_MS);
+            return;
+        }
         List<Channel> sourceChannels = buildOrderedChannelList(playlistsBySource);
         resolverChannelCounts = streamResolverRegistry.countChannels(sourceChannels);
         List<Channel> enabledChannels = new ArrayList<>();
@@ -1170,6 +1197,25 @@ public final class MainActivity extends Activity {
                 publishedProviderChannels
         ));
         return publishedPlaybackCatalog.applyToPlayback(result);
+    }
+
+    private boolean isWaitingForPublishedCatalog() {
+        return publishedCatalogRefreshPending && !publishedCatalogWaitExpired && channels.isEmpty();
+    }
+
+    /** Muestra la lista guardada mientras se esperaba el catálogo, si aún no hay canales. */
+    private void applyPlaylistsAfterCatalogWait() {
+        mainHandler.removeCallbacks(publishedCatalogWaitTimeout);
+        if (isFinishing() || isDestroyed() || !channels.isEmpty() || playlistsBySource.isEmpty()) {
+            return;
+        }
+        applyPlaylists(
+                new LinkedHashMap<>(playlistsBySource),
+                loadedPlaylistSignature,
+                playlistGeneration,
+                false
+        );
+        if (!channels.isEmpty()) hidePlaylistLoadingIfPlaybackPending();
     }
 
     private boolean hasPublishedProviderChannels() {
@@ -3539,7 +3585,11 @@ public final class MainActivity extends Activity {
                     if (isFinishing() || isDestroyed()) return;
                     publishedPlaybackCatalog = PublishedPlaybackCatalog.empty();
                     publishedCatalogRefreshPending = false;
-                    if (getPlaylistSources().isEmpty() && !settingsOpen) openSettings();
+                    if (getPlaylistSources().isEmpty() && !settingsOpen) {
+                        openSettings();
+                        return;
+                    }
+                    applyPlaylistsAfterCatalogWait();
                 });
                 return;
             }
@@ -3548,6 +3598,7 @@ public final class MainActivity extends Activity {
                 if (isFinishing() || isDestroyed()) return;
                 publishedPlaybackCatalog = result;
                 publishedCatalogRefreshPending = false;
+                mainHandler.removeCallbacks(publishedCatalogWaitTimeout);
                 catalogUpdatedAtMillis = System.currentTimeMillis();
                 List<PlaylistSource> sources = getPlaylistSources();
                 if (sources.isEmpty() && !hasPublishedProviderChannels()) {
@@ -3555,12 +3606,14 @@ public final class MainActivity extends Activity {
                     return;
                 }
                 if (playlistsBySource.isEmpty() && !hasPublishedProviderChannels()) return;
+                boolean firstList = channels.isEmpty();
                 applyPlaylists(
                         new LinkedHashMap<>(playlistsBySource),
                         loadedPlaylistSignature,
                         playlistGeneration,
                         false
                 );
+                if (firstList && !channels.isEmpty()) hidePlaylistLoadingIfPlaybackPending();
             });
         });
     }

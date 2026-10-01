@@ -101,6 +101,7 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-01**: al abrir, la lista ya no cambia de números un segundo después. La app mostraba primero la lista M3U guardada y luego el catálogo publicado agregaba los canales de proveedor (Sky 21–23), corriendo todos los siguientes. Ahora el primer arranque espera el catálogo (máx. 6 s; sin red, muestra lo que hay) y la carga sigue en pantalla mientras tanto.
 - **2026-10-01**: 0.5.47. Opciones compacto con el sistema de espacios de la Guía (tras tres
   rondas de mockups: el usuario rechazó tarjetas estiradas y contenido de relleno); Guía y
   fondo de menús en negro puro; la onda de carga ya no parte desde el medio.
