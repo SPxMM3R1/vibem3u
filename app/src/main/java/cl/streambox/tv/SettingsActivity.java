@@ -1054,16 +1054,15 @@ public final class SettingsActivity extends Activity {
                 && uri.getHost() != null;
     }
 
+    /** Atrás aplica los cambios y vuelve al canal; sin lista configurada no se sale. */
+    @Override
+    @SuppressWarnings("deprecation")
+    public void onBackPressed() {
+        if (hasExistingUrl) save();
+    }
+
     @Override
     public boolean dispatchKeyEvent(android.view.KeyEvent event) {
-        if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_BACK) {
-            // Atrás aplica los cambios y vuelve al canal; sin lista configurada no se sale.
-            if (hasExistingUrl && event.getAction() == android.view.KeyEvent.ACTION_UP
-                    && !event.isCanceled()) {
-                save();
-            }
-            return true;
-        }
         if (event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
             boolean horizontalKey = event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_LEFT
                     || event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_RIGHT;
