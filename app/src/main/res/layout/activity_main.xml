@@ -23,7 +23,7 @@
         android:background="@android:color/transparent"
         android:gravity="center">
 
-        <!-- Carga con el estilo de la Guía: barra cyan fina y el paso actual en gris. El
+        <!-- Carga con el estilo de la Guía: onda cyan y el paso actual en gris. El
              logo y el nombre del canal los muestra el OSD mientras el canal arranca. -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -32,13 +32,11 @@
             android:gravity="center_horizontal"
             android:orientation="vertical">
 
-            <ProgressBar
+            <!-- Onda de Material 3 (sin pista recta, extremos difuminados). -->
+            <cl.streambox.tv.WavyProgressView
                 android:id="@+id/loading_progress"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="180dp"
-                android:layout_height="3dp"
-                android:indeterminate="true"
-                android:indeterminateTint="@color/cyan" />
+                android:layout_width="230dp"
+                android:layout_height="14dp" />
 
             <TextView
                 android:id="@+id/loading_text"

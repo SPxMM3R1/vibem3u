@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pista del control segmentado (Moderno | Clásico, Estándar | Invertidos). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/menu_row" />
+    <corners android:radius="999dp" />
+</shape>

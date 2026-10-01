@@ -35,11 +35,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class SettingsActivity extends Activity {
-    public static final int TAB_GENERAL = 0;
-    public static final int TAB_PLAYBACK = 1;
-    public static final int TAB_SOURCE = 2;
-    public static final int TAB_INTERFACE = 3;
-    public static final int TAB_UPDATES = 4;
+    // Orden de las pestañas: En reproducción · Video y audio · Interfaz · Recordatorios ·
+    // Canales · Sistema.
+    public static final int TAB_PLAYBACK = 0;
+    public static final int TAB_GENERAL = 1;
+    public static final int TAB_INTERFACE = 2;
+    public static final int TAB_REMINDERS = 3;
+    public static final int TAB_SOURCE = 4;
+    public static final int TAB_UPDATES = 5;
     /** Source model that derives each M3U list from its address instead of a switch. */
     private static final int SOURCE_MODEL_URLS = 2;
     public static final String PREFS = "streambox_settings";
@@ -60,6 +63,7 @@ public final class SettingsActivity extends Activity {
     public static final String KEY_SOURCE_MODEL = "source_model";
     public static final String KEY_INVERT_CHANNEL_KEYS = "invert_channel_keys";
     public static final String KEY_NORMALIZE_VOLUME = "normalize_volume";
+    public static final String KEY_AUTO_RECONNECT = "auto_reconnect";
     public static final String EXTRA_INITIAL_TAB = "initial_tab";
     public static final String EXTRA_HAS_PUBLISHED_PROVIDER_CHANNELS =
             "has_published_provider_channels";
@@ -79,6 +83,15 @@ public final class SettingsActivity extends Activity {
     public static final String EXTRA_SUBTITLES_ENABLED = "subtitles_enabled";
     public static final String EXTRA_RESOLVER_IDS = "resolver_ids";
     public static final String EXTRA_RESOLVER_COUNTS = "resolver_counts";
+    public static final String EXTRA_SIGNAL_VIDEO = "signal_video";
+    public static final String EXTRA_SIGNAL_CODECS = "signal_codecs";
+    public static final String EXTRA_STATUS_CHANNELS = "status_channels";
+    public static final String EXTRA_STATUS_CATALOG_AT = "status_catalog_at";
+    public static final String EXTRA_STATUS_EPG_AT = "status_epg_at";
+    public static final String EXTRA_STATUS_HIGHFLY_COUNT = "status_highfly_count";
+    public static final String EXTRA_STATUS_HIGHFLY_AT = "status_highfly_at";
+    /** Resultado: abrir el selector de fuente del canal al volver al reproductor. */
+    public static final String EXTRA_OPEN_SOURCE_SELECTOR = "open_source_selector";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService updateExecutor = Executors.newSingleThreadExecutor();
@@ -90,6 +103,9 @@ public final class SettingsActivity extends Activity {
     private Button mediaFlowSettingsButton;
     private Switch invertChannelKeys;
     private Switch normalizeVolume;
+    private Switch autoReconnect;
+    private Button openSourceSelectorButton;
+    private boolean openSourceSelectorOnSave;
     private Button updateButton;
     private TextView updateStatus;
     private TextView reminderStatus;
@@ -225,17 +241,12 @@ public final class SettingsActivity extends Activity {
             getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             getWindow().setDimAmount(0.66f);
         }
-        Switch uiClassicSwitch = findViewById(R.id.ui_classic_switch);
-        if (uiClassicSwitch != null) {
-            uiClassicSwitch.setChecked(classicUi);
-            uiClassicSwitch.setOnCheckedChangeListener((button, checked) -> {
-                if (checked == classicUi) return;
-                UiStyle.setClassic(this, checked);
-                // Se recarga Opciones con el nuevo estilo, en la misma pestaña.
-                getIntent().putExtra(EXTRA_INITIAL_TAB, selectedTabIndex);
-                recreate();
-            });
-        }
+        View styleModern = findViewById(R.id.ui_style_modern);
+        View styleClassic = findViewById(R.id.ui_style_classic);
+        styleModern.setSelected(!classicUi);
+        styleClassic.setSelected(classicUi);
+        styleModern.setOnClickListener(view -> setUiStyle(false));
+        styleClassic.setOnClickListener(view -> setUiStyle(true));
         enterImmersiveMode();
 
         settingsRoot = findViewById(R.id.settings_root);
@@ -256,7 +267,7 @@ public final class SettingsActivity extends Activity {
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
                     android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,
                     () -> {
-                        if (hasExistingUrl) finish();
+                        if (hasExistingUrl) save();
                     });
         }
 
@@ -267,6 +278,8 @@ public final class SettingsActivity extends Activity {
         mediaFlowSettingsButton = findViewById(R.id.mediaflow_settings_button);
         invertChannelKeys = findViewById(R.id.invert_channel_keys);
         normalizeVolume = findViewById(R.id.normalize_volume);
+        autoReconnect = findViewById(R.id.auto_reconnect);
+        openSourceSelectorButton = findViewById(R.id.open_source_selector);
         updateButton = findViewById(R.id.check_updates_button);
         updateStatus = findViewById(R.id.update_status);
         reminderStatus = findViewById(R.id.reminder_status);
@@ -284,17 +297,19 @@ public final class SettingsActivity extends Activity {
         subtitlesStatus = findViewById(R.id.settings_subtitles_status);
         resolverGroupsContainer = findViewById(R.id.resolver_groups_container);
         tabs = new TextView[]{
-                findViewById(R.id.tab_general),
                 findViewById(R.id.tab_playback),
-                findViewById(R.id.tab_source),
+                findViewById(R.id.tab_general),
                 findViewById(R.id.tab_interface),
+                findViewById(R.id.tab_reminders),
+                findViewById(R.id.tab_source),
                 findViewById(R.id.tab_updates)
         };
         tabPages = new View[]{
-                findViewById(R.id.tab_page_general),
                 findViewById(R.id.tab_page_playback),
-                findViewById(R.id.tab_page_source),
+                findViewById(R.id.tab_page_general),
                 findViewById(R.id.tab_page_interface),
+                findViewById(R.id.tab_page_reminders),
+                findViewById(R.id.tab_page_source),
                 findViewById(R.id.tab_page_updates)
         };
 
@@ -313,15 +328,32 @@ public final class SettingsActivity extends Activity {
                 : initialHighflyManifest);
         invertChannelKeys.setChecked(prefs.getBoolean(KEY_INVERT_CHANNEL_KEYS, false));
         normalizeVolume.setChecked(prefs.getBoolean(KEY_NORMALIZE_VOLUME, false));
+        autoReconnect.setChecked(prefs.getBoolean(KEY_AUTO_RECONNECT, true));
+        // Los interruptores se guardan al instante; las listas, con Guardar.
+        normalizeVolume.setOnCheckedChangeListener((button, checked) ->
+                persistToggle(KEY_NORMALIZE_VOLUME, checked));
+        autoReconnect.setOnCheckedChangeListener((button, checked) ->
+                persistToggle(KEY_AUTO_RECONNECT, checked));
+        findViewById(R.id.channel_keys_standard).setOnClickListener(view ->
+                setChannelKeysInverted(false));
+        findViewById(R.id.channel_keys_inverted).setOnClickListener(view ->
+                setChannelKeysInverted(true));
+        updateChannelKeysSelection();
         TextView versionText = findViewById(R.id.current_version);
         versionText.setText(getString(R.string.current_version, BuildConfig.VERSION_NAME));
+        bindSystemStatus(getIntent());
         initializeCurrentChannelOptions(getIntent());
+        bindSignalInfo(getIntent());
+        openSourceSelectorButton.setOnClickListener(view -> {
+            openSourceSelectorOnSave = true;
+            save();
+        });
         initializeResolverOptions(getIntent());
         mediaFlowSettingsButton.setOnClickListener(view ->
                 startActivity(new Intent(this, MediaFlowSettingsActivity.class)));
 
-        cancelButton.setVisibility(hasExistingUrl ? View.VISIBLE : View.GONE);
-        cancelButton.setOnClickListener(v -> finish());
+        // Cancelar deshace lo escrito en las listas; no cierra Opciones.
+        cancelButton.setOnClickListener(v -> revertPlaylistFields());
         saveButton.setOnClickListener(v -> save());
         if (BuildConfig.ENABLE_APP_UPDATES) {
             updateButton.setOnClickListener(v -> checkForUpdates());
@@ -351,10 +383,95 @@ public final class SettingsActivity extends Activity {
         getWindow().getDecorView().getViewTreeObserver()
                 .addOnGlobalFocusChangeListener(focusVisibilityListener);
 
-        int defaultTab = hasExistingUrl ? TAB_GENERAL : TAB_SOURCE;
+        int defaultTab = hasExistingUrl ? TAB_PLAYBACK : TAB_SOURCE;
         int initialTab = getIntent().getIntExtra(EXTRA_INITIAL_TAB, defaultTab);
         showTab(initialTab, false);
         tabs[selectedTabIndex].requestFocus();
+    }
+
+    private void persistToggle(String key, boolean value) {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(key, value).apply();
+    }
+
+    private void setUiStyle(boolean classic) {
+        if (classic == classicUi) return;
+        UiStyle.setClassic(this, classic);
+        // Se recarga Opciones con el nuevo estilo, en la misma pestaña.
+        getIntent().putExtra(EXTRA_INITIAL_TAB, selectedTabIndex);
+        recreate();
+    }
+
+    private void setChannelKeysInverted(boolean inverted) {
+        invertChannelKeys.setChecked(inverted);
+        persistToggle(KEY_INVERT_CHANNEL_KEYS, inverted);
+        updateChannelKeysSelection();
+    }
+
+    private void updateChannelKeysSelection() {
+        boolean inverted = invertChannelKeys.isChecked();
+        findViewById(R.id.channel_keys_standard).setSelected(!inverted);
+        findViewById(R.id.channel_keys_inverted).setSelected(inverted);
+    }
+
+    private void revertPlaylistFields() {
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        urlInput.setText(prefs.getString(KEY_PLAYLIST_URL, ""));
+        urlInput2.setText(prefs.getString(KEY_PLAYLIST_URL_2, ""));
+        String manifest = prefs.getString(KEY_HIGHFLY_MANIFEST_URL, DEFAULT_HIGHFLY_MANIFEST_URL);
+        highflyManifestUrlInput.setText(AppStrings.isBlank(manifest)
+                ? DEFAULT_HIGHFLY_MANIFEST_URL : manifest);
+        errorText.setVisibility(View.GONE);
+    }
+
+    /** En reproducción: imagen y códecs que muestra el OSD; la fuente solo con un canal. */
+    private void bindSignalInfo(Intent intent) {
+        String video = safeString(intent.getStringExtra(EXTRA_SIGNAL_VIDEO));
+        String codecs = safeString(intent.getStringExtra(EXTRA_SIGNAL_CODECS));
+        String unavailable = getString(R.string.settings_signal_unavailable);
+        ((TextView) findViewById(R.id.signal_video))
+                .setText(AppStrings.isBlank(video) ? unavailable : video);
+        ((TextView) findViewById(R.id.signal_codecs))
+                .setText(AppStrings.isBlank(codecs) ? unavailable : codecs);
+        int visibility = hasCurrentChannel ? View.VISIBLE : View.GONE;
+        findViewById(R.id.signal_info_card).setVisibility(visibility);
+        ((View) openSourceSelectorButton.getParent()).setVisibility(visibility);
+    }
+
+    /** Sistema › Estado del servicio e Información. */
+    private void bindSystemStatus(Intent intent) {
+        int channelCount = intent.getIntExtra(EXTRA_STATUS_CHANNELS, 0);
+        long catalogAt = intent.getLongExtra(EXTRA_STATUS_CATALOG_AT, 0L);
+        long epgAt = intent.getLongExtra(EXTRA_STATUS_EPG_AT, 0L);
+        int highflyCount = intent.getIntExtra(EXTRA_STATUS_HIGHFLY_COUNT, 0);
+        long highflyAt = intent.getLongExtra(EXTRA_STATUS_HIGHFLY_AT, 0L);
+        String unknown = getString(R.string.settings_status_unknown);
+        ((TextView) findViewById(R.id.status_catalog)).setText(channelCount > 0
+                ? getString(R.string.settings_status_channels, channelCount,
+                        catalogAt > 0 ? statusTime(catalogAt) : "—")
+                : unknown);
+        ((TextView) findViewById(R.id.status_epg)).setText(epgAt > 0
+                ? getString(R.string.settings_status_updated, statusTime(epgAt))
+                : unknown);
+        ((TextView) findViewById(R.id.status_highfly)).setText(highflyCount > 0 && highflyAt > 0
+                ? getString(R.string.settings_status_links, highflyCount, statusTime(highflyAt))
+                : unknown);
+        ((TextView) findViewById(R.id.info_app)).setText(getString(R.string.settings_info_app_value,
+                BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE));
+        ((TextView) findViewById(R.id.info_device)).setText(getString(
+                R.string.settings_info_device_value, Build.MANUFACTURER, Build.MODEL,
+                Build.VERSION.RELEASE));
+    }
+
+    /** «hoy 21:38» o «28 sep 21:38». */
+    private static String statusTime(long millis) {
+        java.util.Calendar then = java.util.Calendar.getInstance();
+        then.setTimeInMillis(millis);
+        java.util.Calendar now = java.util.Calendar.getInstance();
+        boolean today = then.get(java.util.Calendar.YEAR) == now.get(java.util.Calendar.YEAR)
+                && then.get(java.util.Calendar.DAY_OF_YEAR) == now.get(java.util.Calendar.DAY_OF_YEAR);
+        String pattern = today ? "'hoy' HH:mm" : "d MMM HH:mm";
+        return new java.text.SimpleDateFormat(pattern, Locale.forLanguageTag("es-CL"))
+                .format(new java.util.Date(millis));
     }
 
     private void updateSettingsPanelWidth() {
@@ -504,11 +621,11 @@ public final class SettingsActivity extends Activity {
             playbackFirstFocus = qualityFocusButtons.get(0);
         } else if (subtitlesAvailable) {
             playbackFirstFocus = subtitlesSwitch;
+        } else if (hasCurrentChannel) {
+            playbackFirstFocus = openSourceSelectorButton;
         } else {
-            playbackFirstFocus = invertChannelKeys;
-        }
-        if (tabs != null && tabs.length > TAB_PLAYBACK) {
-            tabs[TAB_PLAYBACK].setNextFocusDownId(playbackFirstFocus.getId());
+            // Sin canal en reproducción la pestaña no tiene controles: el foco queda en ella.
+            playbackFirstFocus = null;
         }
     }
 
@@ -535,6 +652,8 @@ public final class SettingsActivity extends Activity {
                         : android.graphics.Typeface.NORMAL);
             }
             tabPages[index].setVisibility(selected ? View.VISIBLE : View.GONE);
+            View first = firstFocusForTab(index);
+            if (first != null) tabs[index].setNextFocusDownId(first.getId());
         }
         if (requestFocus) tabs[safeIndex].requestFocus();
     }
@@ -626,16 +745,22 @@ public final class SettingsActivity extends Activity {
 
     private View firstFocusForTab(int tabIndex) {
         switch (tabIndex) {
-            case 1:
-                return playbackFirstFocus == null ? invertChannelKeys : playbackFirstFocus;
-            case 2:
+            case TAB_GENERAL:
+                return normalizeVolume;
+            case TAB_INTERFACE:
+                return findViewById(classicUi ? R.id.ui_style_classic : R.id.ui_style_modern);
+            case TAB_REMINDERS: {
+                LinearLayout list = findViewById(R.id.reminders_list);
+                return list != null && list.getChildCount() > 0
+                        ? list.getChildAt(0)
+                        : findViewById(R.id.reminder_permission_button);
+            }
+            case TAB_SOURCE:
                 return urlInput;
-            case 3:
-                return findViewById(R.id.interface_info);
-            case 4:
+            case TAB_UPDATES:
                 return updateButton;
             default:
-                return normalizeVolume;
+                return playbackFirstFocus == null ? tabs[TAB_PLAYBACK] : playbackFirstFocus;
         }
     }
 
@@ -833,24 +958,28 @@ public final class SettingsActivity extends Activity {
         if (!enabled1 && !enabled2 && !hasPublishedProviderChannels) {
             errorText.setText(R.string.playlist_source_required);
             errorText.setVisibility(View.VISIBLE);
+            showTab(TAB_SOURCE, false);
             urlInput.requestFocus();
             return;
         }
         if (enabled1 && !isValidPlaylistUrl(value)) {
             errorText.setText(R.string.url_required);
             errorText.setVisibility(View.VISIBLE);
+            showTab(TAB_SOURCE, false);
             urlInput.requestFocus();
             return;
         }
         if (enabled2 && !isValidPlaylistUrl(value2)) {
             errorText.setText(R.string.url_required);
             errorText.setVisibility(View.VISIBLE);
+            showTab(TAB_SOURCE, false);
             urlInput2.requestFocus();
             return;
         }
         if (!HighflyStreamResolver.isAllowedManifestUrl(highflyManifest)) {
             errorText.setText(R.string.highfly_manifest_url_required);
             errorText.setVisibility(View.VISIBLE);
+            showTab(TAB_SOURCE, false);
             highflyManifestUrlInput.requestFocus();
             return;
         }
@@ -863,6 +992,7 @@ public final class SettingsActivity extends Activity {
                 .putBoolean(KEY_PLAYLIST_ENABLED_2, enabled2)
                 .putBoolean(KEY_INVERT_CHANNEL_KEYS, invertChannelKeys.isChecked())
                 .putBoolean(KEY_NORMALIZE_VOLUME, normalizeVolume.isChecked())
+                .putBoolean(KEY_AUTO_RECONNECT, autoReconnect.isChecked())
                 .apply();
         for (Map.Entry<String, Switch> entry : resolverGroupSwitches.entrySet()) {
             ResolverDefinition definition = resolverCatalog == null
@@ -876,7 +1006,9 @@ public final class SettingsActivity extends Activity {
                 .putExtra(KEY_PLAYLIST_URL, value)
                 .putExtra(KEY_PLAYLIST_URL_2, value2)
                 .putExtra(KEY_PLAYLIST_ENABLED, enabled1)
-                .putExtra(KEY_PLAYLIST_ENABLED_2, enabled2);
+                .putExtra(KEY_PLAYLIST_ENABLED_2, enabled2)
+                .putExtra(EXTRA_OPEN_SOURCE_SELECTOR, openSourceSelectorOnSave);
+        openSourceSelectorOnSave = false;
         if (hasCurrentChannel) {
             result.putExtra(EXTRA_CHANNEL_INDEX, currentChannelIndex)
                     .putExtra(EXTRA_CHANNEL_TVG_ID, currentChannelTvgId)
@@ -924,7 +1056,12 @@ public final class SettingsActivity extends Activity {
 
     @Override
     public boolean dispatchKeyEvent(android.view.KeyEvent event) {
-        if (!hasExistingUrl && event.getKeyCode() == android.view.KeyEvent.KEYCODE_BACK) {
+        if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_BACK) {
+            // Atrás aplica los cambios y vuelve al canal; sin lista configurada no se sale.
+            if (hasExistingUrl && event.getAction() == android.view.KeyEvent.ACTION_UP
+                    && !event.isCanceled()) {
+                save();
+            }
             return true;
         }
         if (event.getAction() == android.view.KeyEvent.ACTION_DOWN) {

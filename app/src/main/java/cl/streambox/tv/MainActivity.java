@@ -175,6 +175,12 @@ public final class MainActivity extends Activity {
     private View osdHero;
     private TextView osdDescription;
     private TextView osdNext;
+    private View osdScrim;
+    private View osdTech;
+    private View osdClock;
+    private TextView osdClockTime;
+    private TextView osdClockDate;
+    private View loadingProgress;
     private TextView videoInfo;
     private TextView codecInfo;
     private TextView statusDot;
@@ -193,6 +199,10 @@ public final class MainActivity extends Activity {
     private String resolverSettingsSnapshotBeforeSettings = "";
     private String playlistSourcesSnapshotBeforeSettings = "";
     private boolean refreshAfterSettings;
+    /** Opciones › En reproducción pidió el selector de fuente; se abre al recuperar el foco. */
+    private boolean openSourceSelectorAfterSettings;
+    private long catalogUpdatedAtMillis;
+    private long epgUpdatedAtMillis;
     private boolean overlayAwaitingPlayback;
     private boolean exiting;
     private boolean resourcesReleased;
@@ -286,20 +296,16 @@ public final class MainActivity extends Activity {
             Date nowDate = new Date();
             String currentTime = new SimpleDateFormat("HH:mm", Locale.getDefault())
                     .format(nowDate);
-            String day = new SimpleDateFormat("EEEE d", Locale.forLanguageTag("es-CL"))
-                    .format(nowDate);
-            if (!day.isEmpty()) {
-                day = day.substring(0, 1).toUpperCase(Locale.ROOT) + day.substring(1);
-            }
             if (classicUi) {
                 clock.setText(currentTime);
-            } else {
-                android.text.SpannableString text = new android.text.SpannableString(
-                        day + "  ·  " + currentTime);
-                text.setSpan(new android.text.style.ForegroundColorSpan(getColor(R.color.white)),
-                        text.length() - currentTime.length(), text.length(),
-                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                clock.setText(text);
+            } else if (osdClockTime != null && osdClockDate != null) {
+                String date = new SimpleDateFormat("EEEE d 'de' MMMM", Locale.forLanguageTag("es-CL"))
+                        .format(nowDate);
+                if (!date.isEmpty()) {
+                    date = date.substring(0, 1).toUpperCase(Locale.ROOT) + date.substring(1);
+                }
+                osdClockTime.setText(currentTime);
+                osdClockDate.setText(date);
             }
             // La línea de la hora actual de la Guía avanza con el reloj.
             if (isGuideVisible()) guideSurface.refresh(System.currentTimeMillis());
@@ -474,6 +480,12 @@ public final class MainActivity extends Activity {
         osdHero = findViewById(R.id.osd_hero);
         osdDescription = findViewById(R.id.osd_description);
         osdNext = findViewById(R.id.osd_next);
+        osdScrim = findViewById(R.id.osd_scrim);
+        osdTech = findViewById(R.id.osd_tech);
+        osdClock = findViewById(R.id.osd_clock);
+        osdClockTime = findViewById(R.id.osd_clock_time);
+        osdClockDate = findViewById(R.id.osd_clock_date);
+        loadingProgress = findViewById(R.id.loading_progress);
         videoInfo = findViewById(R.id.video_info);
         codecInfo = findViewById(R.id.codec_info);
         statusDot = findViewById(R.id.status_dot);
@@ -948,6 +960,7 @@ public final class MainActivity extends Activity {
                         || mergeGeneration != epgMergeGeneration
                         || isFinishing()) return;
                 epgData = merged;
+                epgUpdatedAtMillis = System.currentTimeMillis();
                 mainHandler.removeCallbacks(updateProgramme);
                 updateProgramme.run();
             });
@@ -1169,6 +1182,10 @@ public final class MainActivity extends Activity {
         clearResourceWarning();
         stopLoadingTextAnimation();
         loadingPanel.setVisibility(View.VISIBLE);
+        if (!classicUi && loadingProgress != null) loadingProgress.setVisibility(View.GONE);
+        loadingText.animate().cancel();
+        loadingText.setAlpha(1f);
+        loadingText.setTranslationY(0f);
         String message = getString(R.string.playlist_error);
         if (detail != null && !AppStrings.isBlank(detail)) {
             message += " · " + SafePlaybackText.detail(detail.replace('\n', ' '));
@@ -1336,6 +1353,10 @@ public final class MainActivity extends Activity {
         clearResourceWarning();
         loadingPanel.setVisibility(View.VISIBLE);
         String safeMessage = SafePlaybackText.detail(message == null ? "" : message.trim());
+        if (!classicUi) {
+            showModernLoadingStep(stripTrailingEllipsis(safeMessage));
+            return;
+        }
         boolean animate = safeMessage.endsWith("…") || safeMessage.endsWith("...");
         String base = stripTrailingEllipsis(safeMessage);
         boolean sameAnimatedMessage = animate
@@ -1485,6 +1506,43 @@ public final class MainActivity extends Activity {
         clearResourceWarning();
         stopLoadingTextAnimation();
         if (loadingPanel != null) loadingPanel.setVisibility(View.GONE);
+        setOsdLoadingAppearance(false);
+    }
+
+    /**
+     * Moderno: la onda anima la espera, así que el paso va sin puntos y entra con el
+     * movimiento enfatizado de Material (sube y aparece). Mientras carga, el OSD se atenúa.
+     */
+    private void showModernLoadingStep(String step) {
+        if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
+        setOsdLoadingAppearance(true);
+        if (step.equals(loadingMessageBase)) return;
+        loadingMessageBase = step;
+        loadingText.animate().cancel();
+        loadingText.setText(step);
+        loadingText.setAlpha(0f);
+        loadingText.setTranslationY(dpToPx(5));
+        loadingText.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(400L)
+                .setInterpolator(new android.view.animation.PathInterpolator(0.2f, 0f, 0f, 1f))
+                .start();
+    }
+
+    /**
+     * Mientras la pantalla está negra (carga), el OSD moderno no dibuja su degradado y baja
+     * sus textos al 70 %: así una tele mini-LED no enciende sus zonas de luz detrás del OSD.
+     * Al aparecer la imagen vuelve a su brillo con una transición suave.
+     */
+    private void setOsdLoadingAppearance(boolean loading) {
+        if (classicUi) return;
+        float content = loading ? 0.7f : 1f;
+        long duration = loading ? 0L : 350L;
+        if (osdScrim != null) osdScrim.animate().alpha(loading ? 0f : 1f).setDuration(duration).start();
+        if (osdHero != null) osdHero.animate().alpha(content).setDuration(duration).start();
+        if (osdTech != null) osdTech.animate().alpha(content).setDuration(duration).start();
+        if (osdClock != null) osdClock.animate().alpha(content).setDuration(duration).start();
     }
 
     private void hidePlaylistLoadingIfPlaybackPending() {
@@ -1785,6 +1843,11 @@ public final class MainActivity extends Activity {
         if (playbackAutoRecoveryInFlight || playbackChannel == null) return;
         if (!keepDiagnosticCode && reason != null && !"error de reproducción".equals(reason)) {
             lastPlaybackDiagnosticCode = PlaybackDiagnosticCode.forWatchdog(reason);
+        }
+        if (!isAutoReconnectEnabled()) {
+            // Video y audio › Reconexión automática apagada: se muestra el error y OK reintenta.
+            showPlaybackFailure();
+            return;
         }
         if (!playbackRecoveryBudget.hasAttemptLeft()) {
             if (lastPlaybackDiagnosticCode <= 0) {
@@ -2831,7 +2894,8 @@ public final class MainActivity extends Activity {
         hideProgrammeDetail.run();
         mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
         channelOverlay.setVisibility(View.VISIBLE);
-        clock.setVisibility(View.VISIBLE);
+        // Moderno: la hora y la fecha van dentro del OSD; el reloj aparte es del clásico.
+        clock.setVisibility(classicUi ? View.VISIBLE : View.GONE);
         updateDiagnosticsVisibility();
         maybeActivatePlaybackDiagnostics();
         updateDiagnostics();
@@ -3484,6 +3548,7 @@ public final class MainActivity extends Activity {
                 if (isFinishing() || isDestroyed()) return;
                 publishedPlaybackCatalog = result;
                 publishedCatalogRefreshPending = false;
+                catalogUpdatedAtMillis = System.currentTimeMillis();
                 List<PlaylistSource> sources = getPlaylistSources();
                 if (sources.isEmpty() && !hasPublishedProviderChannels()) {
                     if (!settingsOpen) openSettings();
@@ -3923,7 +3988,17 @@ public final class MainActivity extends Activity {
             resolverCounts.add(count == null ? 0 : count);
         }
         intent.putStringArrayListExtra(SettingsActivity.EXTRA_RESOLVER_IDS, resolverIds)
-                .putIntegerArrayListExtra(SettingsActivity.EXTRA_RESOLVER_COUNTS, resolverCounts);
+                .putIntegerArrayListExtra(SettingsActivity.EXTRA_RESOLVER_COUNTS, resolverCounts)
+                .putExtra(SettingsActivity.EXTRA_STATUS_CHANNELS, channels.size())
+                .putExtra(SettingsActivity.EXTRA_STATUS_CATALOG_AT, catalogUpdatedAtMillis)
+                .putExtra(SettingsActivity.EXTRA_STATUS_EPG_AT, epgUpdatedAtMillis)
+                .putExtra(SettingsActivity.EXTRA_STATUS_HIGHFLY_COUNT, PublishedHighflyLinks.count())
+                .putExtra(SettingsActivity.EXTRA_STATUS_HIGHFLY_AT,
+                        PublishedHighflyLinks.generatedAtMillis());
+        if (playbackDiagnosticsActive && videoInfo != null && codecInfo != null) {
+            intent.putExtra(SettingsActivity.EXTRA_SIGNAL_VIDEO, videoInfo.getText().toString())
+                    .putExtra(SettingsActivity.EXTRA_SIGNAL_CODECS, codecInfo.getText().toString());
+        }
         if (channels.isEmpty()
                 || channelIndex < 0
                 || channelIndex >= channels.size()) return intent;
@@ -4061,7 +4136,9 @@ public final class MainActivity extends Activity {
                 if (resolverConfigurationChanged || playlistConfigurationChanged) {
                     resolverCoordinator.clear();
                 }
-                if (playerUsesVolumeNormalization != isVolumeNormalizationEnabled()) {
+                boolean normalizationChanged =
+                        playerUsesVolumeNormalization != isVolumeNormalizationEnabled();
+                if (normalizationChanged) {
                     if (playbackBitrateMeter != null) {
                         playbackBitrateMeter.close();
                         playbackBitrateMeter = null;
@@ -4079,7 +4156,11 @@ public final class MainActivity extends Activity {
                     epgRequests.clear();
                     epgData = EpgData.empty();
                 }
-                refreshAfterSettings = true;
+                // Salir de Opciones sin cambiar listas ni proveedores no recarga nada.
+                refreshAfterSettings = resolverConfigurationChanged || playlistConfigurationChanged
+                        || normalizationChanged || channels.isEmpty();
+                openSourceSelectorAfterSettings = data != null && data.getBooleanExtra(
+                        SettingsActivity.EXTRA_OPEN_SOURCE_SELECTOR, false);
             } else if (sources.isEmpty() && !hasPublishedProviderChannels()) {
                 openSettings();
             }
@@ -4142,6 +4223,11 @@ public final class MainActivity extends Activity {
     private boolean isVolumeNormalizationEnabled() {
         return getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE)
                 .getBoolean(SettingsActivity.KEY_NORMALIZE_VOLUME, false);
+    }
+
+    private boolean isAutoReconnectEnabled() {
+        return getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE)
+                .getBoolean(SettingsActivity.KEY_AUTO_RECONNECT, true);
     }
 
     private boolean isNetworkAvailable() {
@@ -4306,6 +4392,10 @@ public final class MainActivity extends Activity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && openSourceSelectorAfterSettings && !settingsOpen) {
+            openSourceSelectorAfterSettings = false;
+            mainHandler.post(this::openPlaybackSourceSelector);
+        }
         updateDiagnosticsVisibility();
         if (hasFocus && !resourcesReleased) {
             maybeActivatePlaybackDiagnostics();

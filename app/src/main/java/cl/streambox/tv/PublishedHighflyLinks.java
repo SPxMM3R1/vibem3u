@@ -31,6 +31,8 @@ final class PublishedHighflyLinks {
     private static final String LINK_PREFIX = "https://papacito.cfd/m3u/";
 
     private static volatile Map<String, URI> links = Collections.emptyMap();
+    /** Fecha de la publicación vigente (0 si no hay); se muestra en Opciones › Sistema. */
+    private static volatile long generatedAtMillis;
     private static final Set<String> failed = Collections.synchronizedSet(new HashSet<>());
 
     private PublishedHighflyLinks() {
@@ -38,7 +40,25 @@ final class PublishedHighflyLinks {
 
     /** Reemplaza los enlaces vigentes; un documento inválido o viejo los deja vacíos. */
     static void update(String json, long nowMillis) {
-        links = parse(json, nowMillis);
+        Map<String, URI> parsed = parse(json, nowMillis);
+        links = parsed;
+        generatedAtMillis = parsed.isEmpty() ? 0L : generatedAt(json);
+    }
+
+    private static long generatedAt(String json) {
+        try {
+            return Instant.parse(new JSONObject(json).optString("generatedAt", "")).toEpochMilli();
+        } catch (JSONException | DateTimeParseException invalid) {
+            return 0L;
+        }
+    }
+
+    static int count() {
+        return links.size();
+    }
+
+    static long generatedAtMillis() {
+        return generatedAtMillis;
     }
 
     static Map<String, URI> parse(String json, long nowMillis) {
@@ -82,6 +102,7 @@ final class PublishedHighflyLinks {
 
     static void resetForTests() {
         links = Collections.emptyMap();
+        generatedAtMillis = 0L;
         failed.clear();
     }
 }

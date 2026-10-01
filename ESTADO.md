@@ -21,28 +21,39 @@
     - ventana de 150 min;
     - el velo cyan marca el programa enfocado y se mueve con ◀ ▶;
     - reloj con fecha en recuadro gris y sin atajos abajo.
-  - **OSD**: pantalla completa con degradado (`OsdScrimView`), logo y «025 · Categoría»,
-    título grande, descripción, avance, «Después» y datos técnicos abajo a la derecha. El
-    título que se desplaza se difumina en los bordes.
+  - **OSD**: pantalla completa con degradado negro puro y fuerte (`OsdScrimView`), logo y
+    «025 · Categoría», título grande, descripción, avance, «Después»; abajo a la derecha la
+    hora grande con la fecha larga y debajo los datos técnicos (ya no hay reloj aparte arriba
+    en el moderno). El título que se desplaza se difumina en los bordes.
+  - **Carga** (moderno): onda Material 3 sin pista recta y con los extremos difuminados
+    (`WavyProgressView`); los pasos van sin «…» y entran con la transición enfatizada.
+    Mientras la pantalla está negra, el OSD no dibuja su degradado y sus textos bajan al 70 %
+    (no enciende la atenuación local de teles mini-LED); al aparecer la imagen vuelve suave.
   - **Logos** (`LogoFit`): se recorta el borde transparente y todos ocupan la misma superficie
     visual, en el OSD y en la Guía.
   - **Menús**: Opciones, selector de fuentes, detalle del programa, diálogos, carga y
     MediaFlow usan filas tenues con foco cyan y píldoras.
-- **Dos estilos** elegibles en Opciones › Interfaz › «Interfaz clásica»: moderno (por defecto) y clásico (Guía, OSD, detalle, menús y diálogos de la 0.5.40). Al cambiarlo, la app se recarga.
+  - **Opciones** (0.5.46), 6 pestañas: En reproducción (calidad, subtítulos, fuente de la
+    señal, información de la señal) · Video y audio (nivelación de volumen, reconexión
+    automática) · Interfaz (estilo Moderno|Clásico, botones de canal Estándar|Invertidos,
+    atajos del control) · Recordatorios · Canales (listas, Guardar/Cancelar, avanzado:
+    proveedores, catálogo Highfly, MediaFlow) · Sistema (actualización, estado del servicio,
+    almacenamiento, información). Los interruptores se guardan al instante; Atrás aplica y
+    sale; Cancelar deshace lo escrito en las listas. Volver de Opciones solo recarga canales
+    si cambiaron las listas, los proveedores o la nivelación.
+- **Dos estilos** elegibles en Opciones › Interfaz › Estilo: moderno (por defecto) y clásico (Guía, OSD, detalle, menús y diálogos de la 0.5.40). Al cambiarlo, la app se recarga.
 - **Reproducción**:
   - Highfly abre con el enlace directo que publica Lista M3U (`PublishedHighflyLinks`) y usa
     el resolutor solo de respaldo.
   - Recuperación automática con 3 reintentos (2, 5 y 10 s; `PlaybackRecoveryBudget`).
   - TVN descubre su reproductor en vivo donde lo publique.
 - **Recordatorios**: en la Guía se mantiene OK sobre un programa. El aviso llega con la app
-  cerrada si tiene el permiso «Mostrar sobre otras apps». Se gestionan en Opciones › Interfaz.
+  cerrada si tiene el permiso «Mostrar sobre otras apps». Se gestionan en Opciones › Recordatorios.
 
 ## Pendientes y decisiones abiertas
 
-- **Opciones**:
-  - en el mockup aprobado, fecha y pestañas iban en una sola fila y el contenido en dos
-    columnas; se aplicó en dos filas y a ancho completo, para no rehacer la pantalla;
-  - faltan los mockups de las pestañas General y MediaFlow.
+- **Opciones**: la estructura de 6 pestañas (0.5.46) aún no se ha visto en la TV; pedir
+  revisión. La reconexión automática apagada muestra el error de inmediato (OK reintenta).
 - **Pantalla de error** con ícono ámbar y «Reintentar»: aprobada en mockup, no implementada
   (hoy el error es texto en la pantalla de carga).
 - **Deuda técnica**: `MainActivity.java` tiene ~4.000 líneas; conviene partirla en OSD,
@@ -82,6 +93,10 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-09-30**: 0.5.46 aplica los mockups aprobados: Opciones en 6 pestañas con nombres
+  profesionales (En reproducción, Video y audio, Interfaz, Recordatorios, Canales, Sistema),
+  reconexión automática opcional, estado del servicio; OSD con degradado negro más fuerte y
+  hora/fecha dentro del OSD; carga con onda Material 3 sin «…» y OSD atenuado sobre negro.
 - **2026-09-30**: 0.5.45 corrige la 0.5.44, que no abría tras elegir la interfaz clásica (el estilo clásico usaba vistas del selector antes de buscarlas). Red de seguridad en `UiStyle`: si el arranque en clásico no llega a 5 s, el siguiente inicio vuelve al moderno.
 - **2026-09-30**: estilo clásico elegible (diseño 0.5.40) junto al moderno, pedido por el usuario; recursos `classic_*`, `EpgGuideClassicView`, `UiStyle`.
 - **2026-09-30 (estabilidad)**: el editor local no compilaba desde la 0.5.40 (faltaba `PublishedHighflyLinks` en `local-catalog/build.gradle.kts`); arreglado y el CI ahora compila y prueba `local-catalog`. Hallazgo de una revisión externa (Sol).

@@ -3,6 +3,7 @@
 <merge xmlns:android="http://schemas.android.com/apk/res/android">
 
     <cl.streambox.tv.OsdScrimView
+        android:id="@+id/osd_scrim"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
@@ -133,7 +134,38 @@
             android:visibility="gone" />
     </LinearLayout>
 
+    <!-- Reloj y fecha dentro del OSD, sobre los datos técnicos. -->
     <LinearLayout
+        android:id="@+id/osd_clock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="@dimen/channel_overlay_horizontal_margin"
+        android:layout_marginBottom="42dp"
+        android:gravity="end"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/osd_clock_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-light"
+            android:includeFontPadding="false"
+            android:textColor="@color/white"
+            android:textSize="32sp" />
+
+        <TextView
+            android:id="@+id/osd_clock_date"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:includeFontPadding="false"
+            android:textColor="@color/osd_muted"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/osd_tech"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"

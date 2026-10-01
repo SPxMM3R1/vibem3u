@@ -6,7 +6,6 @@ import android.graphics.ComposeShader;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.PorterDuff;
-import android.graphics.RadialGradient;
 import android.graphics.Shader;
 import android.util.AttributeSet;
 import android.util.TypedValue;
@@ -14,15 +13,18 @@ import android.view.View;
 
 /**
  * Fondo del OSD con el lenguaje de la Guía: oscuro abajo a la izquierda (donde va el
- * texto) y abriéndose hacia la derecha y hacia arriba para dejar ver el video, más una
- * sombra suave en la esquina superior derecha para la fecha y la hora.
+ * texto) y abriéndose hacia la derecha y hacia arriba para dejar ver el video. Es negro
+ * puro: sobre la pantalla negra de carga no aclara nada (en teles mini-LED, un gris
+ * azulado encendía las zonas de luz detrás del OSD).
  */
 public final class OsdScrimView extends View {
-    private static final int BASE = 0x05080A;
+    private static final int BASE = 0x000000;
+    /** Altura de la sombra lateral y de la inferior (dp). */
+    private static final float LEFT_HEIGHT_DP = 320f;
+    private static final float BOTTOM_HEIGHT_DP = 140f;
 
     private final Paint leftPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint bottomPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint cornerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     public OsdScrimView(Context context) { this(context, null); }
 
@@ -44,20 +46,17 @@ public final class OsdScrimView extends View {
     protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
         super.onSizeChanged(width, height, oldWidth, oldHeight);
         if (width <= 0 || height <= 0) return;
-        float leftTop = height - dp(280);
+        float leftTop = height - dp(LEFT_HEIGHT_DP);
         // De izquierda a derecha, enmascarado para que se desvanezca hacia arriba.
         Shader horizontal = new LinearGradient(0f, 0f, width, 0f,
-                new int[] {base(.92f), base(.80f), base(.35f), base(.10f)},
+                new int[] {base(.96f), base(.90f), base(.55f), base(.25f)},
                 new float[] {0f, .34f, .64f, 1f}, Shader.TileMode.CLAMP);
         Shader fadeUp = new LinearGradient(0f, leftTop, 0f, height,
                 new int[] {0x00000000, 0xFF000000, 0xFF000000},
-                new float[] {0f, .45f, 1f}, Shader.TileMode.CLAMP);
+                new float[] {0f, .38f, 1f}, Shader.TileMode.CLAMP);
         leftPaint.setShader(new ComposeShader(horizontal, fadeUp, PorterDuff.Mode.DST_IN));
-        bottomPaint.setShader(new LinearGradient(0f, height - dp(110), 0f, height,
-                base(0f), base(.85f), Shader.TileMode.CLAMP));
-        cornerPaint.setShader(new RadialGradient(width, 0f, dp(260),
-                new int[] {base(.75f), base(0f)}, new float[] {0f, .75f},
-                Shader.TileMode.CLAMP));
+        bottomPaint.setShader(new LinearGradient(0f, height - dp(BOTTOM_HEIGHT_DP), 0f, height,
+                base(0f), base(.92f), Shader.TileMode.CLAMP));
     }
 
     @Override
@@ -66,12 +65,7 @@ public final class OsdScrimView extends View {
         int width = getWidth();
         int height = getHeight();
         if (width <= 0 || height <= 0) return;
-        canvas.drawRect(0f, height - dp(280), width, height, leftPaint);
-        canvas.drawRect(0f, height - dp(110), width, height, bottomPaint);
-        // Elipse aplanada en la esquina: 260 dp de ancho por 85 dp de alto.
-        canvas.save();
-        canvas.scale(1f, 85f / 260f, width, 0f);
-        canvas.drawRect(width - dp(260), 0f, width, dp(260), cornerPaint);
-        canvas.restore();
+        canvas.drawRect(0f, height - dp(LEFT_HEIGHT_DP), width, height, leftPaint);
+        canvas.drawRect(0f, height - dp(BOTTOM_HEIGHT_DP), width, height, bottomPaint);
     }
 }
