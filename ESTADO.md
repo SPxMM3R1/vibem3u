@@ -7,15 +7,15 @@
 > actualiza este archivo en el mismo commit**: la sección «Hoy» si cambió el estado y una
 > línea nueva en «Bitácora».
 
-Última actualización: **2026-09-30**.
+Última actualización: **2026-10-01**.
 
 ## Hoy, en una mirada
 
-- **Versión publicada**: 0.5.46 (`versionCode` 155). Se publica con tag `vX.Y.Z` y el
+- **Versión publicada**: 0.5.47 (`versionCode` 156). Se publica con tag `vX.Y.Z` y el
   workflow «Publicar APK». No hay SDK Android local: compila «Android CI».
 - **Estado visual**: el usuario aprobó todo el estilo nuevo, pero la 0.5.42 y la 0.5.43 aún no
   se han visto en la TV. Pedir revisión antes de seguir iterando el diseño.
-  - **Guía** (`EpgGuideView`):
+  - **Guía** (`EpgGuideView`), sobre el mismo negro puro del OSD (antes era un negro azulado):
     - bloque de arriba (hero) con el programa enfocado;
     - filtros por categoría (▲ desde el primer canal);
     - ventana de 150 min;
@@ -26,13 +26,21 @@
     hora grande con la fecha larga y debajo los datos técnicos (ya no hay reloj aparte arriba
     en el moderno). El título que se desplaza se difumina en los bordes.
   - **Carga** (moderno): onda Material 3 sin pista recta y con los extremos difuminados
-    (`WavyProgressView`); los pasos van sin «…» y entran con la transición enfatizada.
+    (`WavyProgressView`); cada vuelta entra vacía por la izquierda y sale por la derecha, y
+    el reloj se reinicia al aparecer (antes podía empezar a mitad de camino). Los pasos van
+    sin «…» y entran con la transición enfatizada.
     Mientras la pantalla está negra, el OSD no dibuja su degradado y sus textos bajan al 70 %
     (no enciende la atenuación local de teles mini-LED); al aparecer la imagen vuelve suave.
   - **Logos** (`LogoFit`): se recorta el borde transparente y todos ocupan la misma superficie
     visual, en el OSD y en la Guía.
   - **Menús**: Opciones, selector de fuentes, detalle del programa, diálogos, carga y
     MediaFlow usan filas tenues con foco cyan y píldoras.
+  - **Opciones** (0.5.47, moderno): encabezado idéntico al de la Guía y una sola columna
+    de 452 dp que mide lo que su contenido necesita (sin relleno ni desplazamiento); fondo
+    `menu_backdrop` en negro puro. Espacios: 4 dp entre filas, 16 antes de cada sección y 6
+    después; filas con título 12sp y descripción 9sp; calidades y Moderno|Clásico en línea;
+    datos de solo lectura en rejilla. El layout sale de un generador (ver Bitácora); el
+    clásico conserva la versión 0.5.46.
   - **Opciones** (0.5.46), 6 pestañas: En reproducción (calidad, subtítulos, fuente de la
     señal, información de la señal) · Video y audio (nivelación de volumen, reconexión
     automática) · Interfaz (estilo Moderno|Clásico, botones de canal Estándar|Invertidos,
@@ -52,8 +60,8 @@
 
 ## Pendientes y decisiones abiertas
 
-- **Opciones**: la estructura de 6 pestañas (0.5.46) aún no se ha visto en la TV; pedir
-  revisión. La reconexión automática apagada muestra el error de inmediato (OK reintenta).
+- **Opciones**: el diseño compacto (0.5.47) aún no se ha visto en la TV; pedir revisión.
+  Regla del usuario: no agregar contenido de relleno para ocupar espacio. La reconexión automática apagada muestra el error de inmediato (OK reintenta).
 - **Pantalla de error** con ícono ámbar y «Reintentar»: aprobada en mockup, no implementada
   (hoy el error es texto en la pantalla de carga).
 - **Deuda técnica**: `MainActivity.java` tiene ~4.000 líneas; conviene partirla en OSD,
@@ -93,6 +101,9 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-01**: 0.5.47. Opciones compacto con el sistema de espacios de la Guía (tras tres
+  rondas de mockups: el usuario rechazó tarjetas estiradas y contenido de relleno); Guía y
+  fondo de menús en negro puro; la onda de carga ya no parte desde el medio.
 - **2026-09-30**: 0.5.46 aplica los mockups aprobados: Opciones en 6 pestañas con nombres
   profesionales (En reproducción, Video y audio, Interfaz, Recordatorios, Canales, Sistema),
   reconexión automática opcional, estado del servicio; OSD con degradado negro más fuerte y

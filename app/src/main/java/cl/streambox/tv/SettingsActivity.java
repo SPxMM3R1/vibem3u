@@ -100,11 +100,11 @@ public final class SettingsActivity extends Activity {
     private EditText urlInput2;
     private EditText highflyManifestUrlInput;
     private TextView errorText;
-    private Button mediaFlowSettingsButton;
+    private View mediaFlowSettingsButton;
     private Switch invertChannelKeys;
     private Switch normalizeVolume;
     private Switch autoReconnect;
-    private Button openSourceSelectorButton;
+    private View openSourceSelectorButton;
     private boolean openSourceSelectorOnSave;
     private Button updateButton;
     private TextView updateStatus;
@@ -329,6 +329,12 @@ public final class SettingsActivity extends Activity {
         invertChannelKeys.setChecked(prefs.getBoolean(KEY_INVERT_CHANNEL_KEYS, false));
         normalizeVolume.setChecked(prefs.getBoolean(KEY_NORMALIZE_VOLUME, false));
         autoReconnect.setChecked(prefs.getBoolean(KEY_AUTO_RECONNECT, true));
+        if (!classicUi) {
+            normalizeVolume.setText(twoLine(getString(R.string.normalize_volume),
+                    getString(R.string.normalize_volume_description)));
+            autoReconnect.setText(twoLine(getString(R.string.settings_auto_reconnect),
+                    getString(R.string.settings_auto_reconnect_description)));
+        }
         // Los interruptores se guardan al instante; las listas, con Guardar.
         normalizeVolume.setOnCheckedChangeListener((button, checked) ->
                 persistToggle(KEY_NORMALIZE_VOLUME, checked));
@@ -340,7 +346,8 @@ public final class SettingsActivity extends Activity {
                 setChannelKeysInverted(true));
         updateChannelKeysSelection();
         TextView versionText = findViewById(R.id.current_version);
-        versionText.setText(getString(R.string.current_version, BuildConfig.VERSION_NAME));
+        versionText.setText(getString(classicUi ? R.string.current_version
+                : R.string.settings_updated_title, BuildConfig.VERSION_NAME));
         bindSystemStatus(getIntent());
         initializeCurrentChannelOptions(getIntent());
         bindSignalInfo(getIntent());
@@ -389,6 +396,19 @@ public final class SettingsActivity extends Activity {
         tabs[selectedTabIndex].requestFocus();
     }
 
+    /** Título en blanco y, debajo, la descripción más chica y tenue (filas del estilo moderno). */
+    private CharSequence twoLine(String title, String description) {
+        android.text.SpannableStringBuilder text = new android.text.SpannableStringBuilder(title)
+                .append('\n');
+        int start = text.length();
+        text.append(description);
+        text.setSpan(new android.text.style.RelativeSizeSpan(0.75f), start, text.length(),
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        text.setSpan(new android.text.style.ForegroundColorSpan(getColor(R.color.osd_muted)),
+                start, text.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return text;
+    }
+
     private void persistToggle(String key, boolean value) {
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(key, value).apply();
     }
@@ -428,13 +448,34 @@ public final class SettingsActivity extends Activity {
         String video = safeString(intent.getStringExtra(EXTRA_SIGNAL_VIDEO));
         String codecs = safeString(intent.getStringExtra(EXTRA_SIGNAL_CODECS));
         String unavailable = getString(R.string.settings_signal_unavailable);
-        ((TextView) findViewById(R.id.signal_video))
-                .setText(AppStrings.isBlank(video) ? unavailable : video);
-        ((TextView) findViewById(R.id.signal_codecs))
-                .setText(AppStrings.isBlank(codecs) ? unavailable : codecs);
+        if (classicUi) {
+            ((TextView) findViewById(R.id.signal_video))
+                    .setText(AppStrings.isBlank(video) ? unavailable : video);
+            ((TextView) findViewById(R.id.signal_codecs))
+                    .setText(AppStrings.isBlank(codecs) ? unavailable : codecs);
+        } else {
+            // «1920 × 1080 · 50 FPS» y «H.264 · AAC · 8,0 Mbps», como en el OSD.
+            String[] picture = video.split(" · ");
+            String[] codec = codecs.split(" · ");
+            setSignalCell(R.id.signal_resolution, picture, 0);
+            setSignalCell(R.id.signal_frame_rate, picture, 1);
+            setSignalCell(R.id.signal_video, codec, 0);
+            setSignalCell(R.id.signal_codecs, codec, 1);
+            setSignalCell(R.id.signal_bitrate, codec, 2);
+        }
         int visibility = hasCurrentChannel ? View.VISIBLE : View.GONE;
         findViewById(R.id.signal_info_card).setVisibility(visibility);
-        ((View) openSourceSelectorButton.getParent()).setVisibility(visibility);
+        // En el clásico el botón vive en su tarjeta; en el moderno la fila es el botón.
+        (classicUi ? (View) openSourceSelectorButton.getParent() : openSourceSelectorButton)
+                .setVisibility(visibility);
+    }
+
+    private void setSignalCell(int viewId, String[] parts, int index) {
+        TextView cell = findViewById(viewId);
+        if (cell == null) return;
+        String value = index < parts.length ? parts[index].trim() : "";
+        cell.setText(AppStrings.isBlank(value) || value.startsWith("—")
+                ? getString(R.string.settings_signal_unavailable) : value);
     }
 
     /** Sistema › Estado del servicio e Información. */
@@ -495,6 +536,9 @@ public final class SettingsActivity extends Activity {
         currentChannelName.setText(hasCurrentChannel
                 ? channelName
                 : getString(R.string.settings_no_current_channel));
+        if (!classicUi && !hasCurrentChannel) {
+            findViewById(R.id.current_channel_playback_card).setVisibility(View.GONE);
+        }
 
         ArrayList<String> labels = intent.getStringArrayListExtra(EXTRA_QUALITY_LABELS);
         if (labels != null) qualityLabels = labels;
@@ -517,6 +561,10 @@ public final class SettingsActivity extends Activity {
         renderQualityOptions();
 
         subtitlesAvailable = intent.getBooleanExtra(EXTRA_SUBTITLES_AVAILABLE, false);
+        if (!classicUi) {
+            subtitlesStatus.setText(twoLine(getString(R.string.settings_subtitles_title),
+                    getString(R.string.subtitles_waiting_for_text)));
+        }
         subtitlesSwitch.setVisibility(subtitlesAvailable ? View.VISIBLE : View.GONE);
         subtitlesStatus.setVisibility(subtitlesAvailable ? View.GONE : View.VISIBLE);
         if (subtitlesAvailable) {
@@ -569,6 +617,7 @@ public final class SettingsActivity extends Activity {
     }
 
     private Button createQualityOptionButton(String text) {
+        if (!classicUi) return createQualityChip(text);
         Button button = new Button(this);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -595,6 +644,29 @@ public final class SettingsActivity extends Activity {
         return button;
     }
 
+    private Button createQualityChip(String text) {
+        Button chip = new Button(this);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dp(22));
+        params.setMarginStart(dp(4));
+        chip.setLayoutParams(params);
+        chip.setId(View.generateViewId());
+        chip.setBackgroundResource(R.drawable.segment_option);
+        chip.setTextColor(getColorStateList(R.color.segment_option_text));
+        chip.setGravity(Gravity.CENTER);
+        chip.setIncludeFontPadding(false);
+        chip.setMinHeight(0);
+        chip.setMinWidth(0);
+        chip.setMinimumHeight(0);
+        chip.setMinimumWidth(0);
+        chip.setPadding(dp(9), 0, dp(9), 0);
+        chip.setStateListAnimator(null);
+        chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
+        chip.setAllCaps(false);
+        chip.setText(text);
+        return chip;
+    }
+
     private void updateQualityOptionLabels() {
         if (automaticQualityButton != null) {
             automaticQualityButton.setText(
@@ -602,15 +674,24 @@ public final class SettingsActivity extends Activity {
                             + getString(R.string.stream_quality_automatic)
             );
         }
+        if (automaticQualityButton != null) automaticQualityButton.setSelected(automaticQuality);
         for (int index = 0; index < qualityOptionButtons.size(); index++) {
             qualityOptionButtons.get(index).setText(
                     (index == selectedQualityIndex ? "\u2713 " : "")
                             + qualityLabels.get(index)
             );
+            qualityOptionButtons.get(index).setSelected(!automaticQuality
+                    && index == selectedQualityIndex);
         }
     }
 
     private void updateSubtitleSwitchLabel() {
+        if (!classicUi) {
+            subtitlesSwitch.setText(twoLine(getString(R.string.settings_subtitles_title),
+                    getString(subtitlesSwitch.isChecked()
+                            ? R.string.settings_subtitles_on : R.string.settings_subtitles_off)));
+            return;
+        }
         subtitlesSwitch.setText(subtitlesSwitch.isChecked()
                 ? R.string.subtitles_enabled
                 : R.string.subtitles_disabled);
@@ -700,10 +781,13 @@ public final class SettingsActivity extends Activity {
                 ReminderAlerts.remove(this, reminder.id());
                 refreshReminderList();
             });
+            if (!classicUi) item.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
             android.widget.LinearLayout.LayoutParams params = new android.widget.LinearLayout.LayoutParams(
                     android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                    (int) getResources().getDimension(R.dimen.settings_action_height));
-            params.topMargin = Math.round(6 * density);
+                    classicUi ? (int) getResources().getDimension(R.dimen.settings_action_height)
+                            : Math.round(36 * density));
+            params.topMargin = Math.round((classicUi ? 6 : 0) * density);
+            params.bottomMargin = Math.round((classicUi ? 0 : 4) * density);
             list.addView(item, params);
         }
         if (focusedIndex >= 0) {
@@ -791,6 +875,28 @@ public final class SettingsActivity extends Activity {
         resolverGroupsContainer.removeAllViews();
         resolverGroupSwitches.clear();
 
+        if (!classicUi) {
+            LinearLayout line = null;
+            for (ResolverDefinition definition : resolverCatalog.getProviders()) {
+                if (line == null || line.getChildCount() == 2) {
+                    line = new LinearLayout(this);
+                    line.setOrientation(LinearLayout.HORIZONTAL);
+                    resolverGroupsContainer.addView(line, new LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT));
+                }
+                Switch groupSwitch = createResolverGroupSwitch(definition);
+                LinearLayout.LayoutParams cell = new LinearLayout.LayoutParams(0, dp(36), 1f);
+                cell.bottomMargin = dp(4);
+                if (line.getChildCount() == 1) cell.setMarginStart(dp(4));
+                line.addView(groupSwitch, cell);
+                resolverGroupSwitches.put(definition.getId(), groupSwitch);
+            }
+            if (line != null && line.getChildCount() == 1) {
+                line.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+            }
+            return;
+        }
         View previous = urlInput2;
         for (ResolverDefinition definition : resolverCatalog.getProviders()) {
             Switch groupSwitch = createResolverGroupSwitch(definition);
@@ -820,10 +926,14 @@ public final class SettingsActivity extends Activity {
         groupSwitch.setPadding(dp(12), 0, dp(12), 0);
         groupSwitch.setShowText(false);
         groupSwitch.setTextColor(getColor(R.color.white));
-        groupSwitch.setTextSize(
-                TypedValue.COMPLEX_UNIT_PX,
-                getResources().getDimension(R.dimen.settings_control_text_size)
-        );
+        if (classicUi) {
+            groupSwitch.setTextSize(
+                    TypedValue.COMPLEX_UNIT_PX,
+                    getResources().getDimension(R.dimen.settings_control_text_size)
+            );
+        } else {
+            groupSwitch.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+        }
         Integer storedCount = resolverGroupCounts.get(definition.getId());
         int channelCount = storedCount == null ? 0 : storedCount;
         groupSwitch.setText(getResources().getQuantityString(

@@ -54,7 +54,7 @@ public final class EpgGuideView extends View implements GuideSurface {
     private static final int WHITE = 0xFFFFFFFF;
     private static final int TEXT = 0xFFE9F1F4;
     private static final int MUTED = 0xFF9FB0B7;
-    private static final int BASE = 0xFF05080A;
+    private static final int BASE = 0xFF000000;
     private static final int CHIP = 0x0DFFFFFF;
     private static final int CHIP_ON_TEXT = 0xFF021015;
     private static final int BLOCK_ON_AIR = 0x16FFFFFF;
@@ -202,7 +202,7 @@ public final class EpgGuideView extends View implements GuideSurface {
         // Hero: oscuro a la izquierda y el video asomándose a la derecha.
         float heroBottom = rowsTop;
         shaderPaint.setShader(new LinearGradient(0f, 0f, width, 0f,
-                new int[] {BASE, 0xF005080A, 0x7305080A, 0x4005080A},
+                new int[] {BASE, 0xF5000000, 0x8C000000, 0x40000000},
                 new float[] {0f, 0.34f, 0.64f, 1f}, Shader.TileMode.CLAMP));
         canvas.drawRect(0f, 0f, width, heroBottom, shaderPaint);
         // ...que baja fundiéndose hacia la grilla.

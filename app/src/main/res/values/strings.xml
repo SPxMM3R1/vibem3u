@@ -222,4 +222,20 @@
     <string name="settings_info_device">Dispositivo</string>
     <string name="settings_info_app_value">VibeM3U %1$s (compilación %2$d)</string>
     <string name="settings_info_device_value">%1$s %2$s · Android %3$s</string>
+    <string name="settings_mediaflow_action">Configurar ›</string>
+    <string name="settings_mediaflow_description">Para TvVoo</string>
+    <string name="settings_reminders_add_hint">Para agregar uno, mantén OK sobre un programa en la Guía.</string>
+    <string name="settings_reminders_permission_action">Permitir ›</string>
+    <string name="settings_reminders_test_action">Enviar ›</string>
+    <string name="settings_reminders_test_description">Llega en 1 minuto</string>
+    <string name="settings_secondary_list_hint">Opcional · continúa la numeración</string>
+    <string name="settings_signal_audio_codec">Audio</string>
+    <string name="settings_signal_bitrate">Tasa de bits</string>
+    <string name="settings_signal_frame_rate">Cuadros</string>
+    <string name="settings_signal_resolution">Resolución</string>
+    <string name="settings_signal_video_codec">Video</string>
+    <string name="settings_signal_source_row_action">Elegir otra ›</string>
+    <string name="settings_updated_title">VibeM3U %1$s</string>
+    <string name="settings_subtitles_on">Activados</string>
+    <string name="settings_subtitles_off">Desactivados</string>
 </resources>

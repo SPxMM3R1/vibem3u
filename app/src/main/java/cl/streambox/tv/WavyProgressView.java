@@ -15,6 +15,11 @@ import android.view.View;
  * Indicador de carga ondulado (Material 3 Expressive), sin pista recta: una onda cyan que
  * avanza, se estira y se recoge, con los extremos difuminados como el título largo del OSD.
  * Solo anima mientras está en pantalla; es una vista chica que se usa durante la carga.
+ *
+ * <p>Cada vuelta entra por la izquierda vacía y sale por la derecha vacía: la cabeza y la
+ * cola recorren la vista con la misma curva, la cola con retraso, así el largo crece al
+ * entrar y se recoge al salir (como el indicador indeterminado de Material). El reloj se
+ * reinicia cada vez que la vista aparece, para que nunca empiece a mitad de camino.
  */
 public final class WavyProgressView extends View {
     private static final int CYAN = 0xFF00B8E6;
@@ -22,7 +27,13 @@ public final class WavyProgressView extends View {
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path path = new Path();
-    private final long startUptime = SystemClock.uptimeMillis();
+    /** Duración de una vuelta (ms). */
+    private static final float CYCLE_MS = 1700f;
+    /** Cuánto se atrasa la cola respecto de la cabeza (fracción de la vuelta). */
+    private static final float TAIL_DELAY = 0.3f;
+
+    private long startUptime = SystemClock.uptimeMillis();
+    private boolean wasVisible;
 
     public WavyProgressView(Context context) { this(context, null); }
 
@@ -55,11 +66,13 @@ public final class WavyProgressView extends View {
         float width = getWidth();
         float height = getHeight();
         if (width <= 0f || height <= 0f) return;
-        float t = (SystemClock.uptimeMillis() - startUptime) / 1000f;
-        float span = 0.35f + 0.3f * (0.5f + 0.5f * (float) Math.sin(t * 1.6f));
-        float start = ((t * 0.55f) % 1.4f) - 0.4f;
-        float from = Math.max(0f, start) * width;
-        float to = Math.min(1f, start + span) * width;
+        long elapsed = SystemClock.uptimeMillis() - startUptime;
+        float t = elapsed / 1000f;
+        float phase = (elapsed % (long) CYCLE_MS) / CYCLE_MS;
+        float head = ease(Math.min(1f, phase / (1f - TAIL_DELAY)));
+        float tail = ease(Math.max(0f, (phase - TAIL_DELAY) / (1f - TAIL_DELAY)));
+        float from = tail * width;
+        float to = head * width;
         float amplitude = Math.min(dp(3f), height / 2f - paint.getStrokeWidth());
         float middle = height / 2f;
         path.reset();
@@ -77,9 +90,16 @@ public final class WavyProgressView extends View {
         if (isShown()) postInvalidateOnAnimation();
     }
 
+    /** Curva suave al partir y al llegar (cúbica de entrada y salida). */
+    private static float ease(float x) {
+        return x < 0.5f ? 4f * x * x * x : 1f - (float) Math.pow(-2f * x + 2f, 3) / 2f;
+    }
+
     @Override
     public void onVisibilityAggregated(boolean isVisible) {
         super.onVisibilityAggregated(isVisible);
+        if (isVisible && !wasVisible) startUptime = SystemClock.uptimeMillis();
+        wasVisible = isVisible;
         if (isVisible) postInvalidateOnAnimation();
     }
 }
