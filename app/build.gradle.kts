@@ -30,8 +30,8 @@ android {
         minSdk = 29
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 155
-        versionName = "0.5.46"
+        versionCode = 156
+        versionName = "0.5.47"
         buildConfigField("boolean", "ENABLE_APP_UPDATES", "true")
     }
 
