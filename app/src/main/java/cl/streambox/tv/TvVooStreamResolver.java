@@ -33,14 +33,30 @@ public final class TvVooStreamResolver implements StreamResolver {
     static final String PLAYBACK_USER_AGENT = "VAVOO/2.6";
     private static final int DEFAULT_PARALLEL_ALIASES = 2;
     private static final int DEFAULT_PARALLEL_CANDIDATES = 3;
-    private static final int DEFAULT_RESOLUTION_BUDGET_MS = 8_000;
+    /** Margen para reintentar la consulta JSON cuando el addon responde vacío. */
+    private static final int DEFAULT_RESOLUTION_BUDGET_MS = 12_000;
+    /**
+     * El addon a veces responde ``streams: []`` o falla una vez y a la siguiente
+     * consulta entrega la señal (medido 2026-10-01: 4 de 45 consultas, 4 de 15 en
+     * Sky Sports F1 DE). Se reintenta la misma consulta antes de dar el canal por caído.
+     */
+    private static final int ALIAS_QUERY_ATTEMPTS = 3;
+    private static final long ALIAS_RETRY_DELAY_MS = 400L;
+    /** Las URL «Clean» (CDN de Vavoo) vencen a los ~20 min: se guardan menos. */
+    private static final long CDN_SOURCE_TTL_MS = 8L * 60L * 1000L;
+    private static final String NO_FREEZE_HOST = "tvvoo.hayd.uk";
     private static final int DEFAULT_BOTH_START_DELAY_MS = 600;
     private static final int DEFAULT_MAX_ALIASES = 6;
     private static final int DEFAULT_MAX_CANDIDATES = 8;
     static final String BOUNDED_PAYLOAD_RECIPE = "bounded-payload-v1";
     static final String MEDIA_SIGNATURE_VALIDATION = "media-signature-v1";
-    private static final String TVVOO_CDN_HOST_SUFFIX =
-            ".ngolpdkyoctjcddxshli469r.org";
+    /**
+     * El CDN de Vavoo rota de dominio (antes ``*.ngolpdkyoctjcddxshli469r.org``,
+     * en 2026-10 ``*.fu8oefd4v2dvlmaarur6crfp.com``). Se reconoce por su forma:
+     * nodo + dominio aleatorio de 20+ caracteres + TLD, con la ruta ``/sunshine/``.
+     */
+    private static final java.util.regex.Pattern TVVOO_CDN_HOST = java.util.regex.Pattern.compile(
+            "[a-z0-9-]+\\.[a-z0-9]{20,}\\.[a-z]{2,6}");
     private static final String TVVOO_CDN_PATH_PREFIX = "/sunshine/";
 
     private final ResolverDefinition definition;
@@ -298,7 +314,7 @@ public final class TvVooStreamResolver implements StreamResolver {
                                     attempt.getAccepted(),
                                     playbackHeaders,
                                     PLAYBACK_USER_AGENT,
-                                    expiresAt(),
+                                    expiresAt(attempt.getAccepted()),
                                     alias
                             )
                     ));
@@ -738,7 +754,7 @@ public final class TvVooStreamResolver implements StreamResolver {
                                 source,
                                 playbackHeaders,
                                 PLAYBACK_USER_AGENT,
-                                expiresAt(),
+                                expiresAt(source),
                                 alias
                         );
                     }
@@ -831,7 +847,7 @@ public final class TvVooStreamResolver implements StreamResolver {
                                     source,
                                     playbackHeaders,
                                     PLAYBACK_USER_AGENT,
-                                    expiresAt(),
+                                    expiresAt(source),
                                     alias
                             );
                         }
@@ -1073,8 +1089,7 @@ public final class TvVooStreamResolver implements StreamResolver {
         String path = candidate.getPath() == null
                 ? ""
                 : candidate.getPath().toLowerCase(Locale.ROOT);
-        return host.length() > TVVOO_CDN_HOST_SUFFIX.length()
-                && host.endsWith(TVVOO_CDN_HOST_SUFFIX)
+        return TVVOO_CDN_HOST.matcher(host).matches()
                 && path.startsWith(TVVOO_CDN_PATH_PREFIX);
     }
 
@@ -1134,26 +1149,54 @@ public final class TvVooStreamResolver implements StreamResolver {
                             "GET " + SafePlaybackText.url(endpoint)
                                     + " · JSON · streams[].url"
                     ));
-                    String response = httpClient.getText(endpoint, jsonHeaders);
-                    progress.onProgress(ResolutionProgress.of(
-                            ResolutionStage.CATALOG_PARSED,
-                            "JSON válido · extrayendo streams[].url · alias=" + alias
-                    ));
-                    LinkedHashSet<URI> candidates = new LinkedHashSet<>(
-                            ResolverPayloadParsers.parseTvVooCandidates(
+                    LinkedHashSet<URI> candidates = new LinkedHashSet<>();
+                    for (int attempt = 1; ; attempt++) {
+                        IOException queryError = null;
+                        try {
+                            String response = httpClient.getText(endpoint, jsonHeaders);
+                            progress.onProgress(ResolutionProgress.of(
+                                    ResolutionStage.CATALOG_PARSED,
+                                    "JSON válido · extrayendo streams[].url · alias=" + alias
+                            ));
+                            candidates.addAll(ResolverPayloadParsers.parseTvVooCandidates(
                                     response,
                                     definition.getConfig("streamsPath", "streams"),
                                     definition.getConfig("urlField", "url")
-                            )
-                    );
-                    if (boundedPayloadRecipe) {
-                        candidates.addAll(ResolverPayloadParsers.parseBoundedHlsCandidates(
-                                response,
-                                URI.create(endpoint),
-                                definition.getIntConfig("maxPayloadDepth", 6, 1, 8),
-                                definition.getIntConfig("maxExtractedStrings", 256, 8, 512),
-                                definition.getIntConfig("maxCandidates", 8, 1, 32)
+                            ));
+                            if (boundedPayloadRecipe) {
+                                candidates.addAll(ResolverPayloadParsers.parseBoundedHlsCandidates(
+                                        response,
+                                        URI.create(endpoint),
+                                        definition.getIntConfig("maxPayloadDepth", 6, 1, 8),
+                                        definition.getIntConfig("maxExtractedStrings", 256, 8, 512),
+                                        definition.getIntConfig("maxCandidates", 8, 1, 32)
+                                ));
+                            }
+                        } catch (IOException error) {
+                            queryError = error;
+                        }
+                        if (!candidates.isEmpty()) break;
+                        long pause = ALIAS_RETRY_DELAY_MS * attempt;
+                        if (attempt >= ALIAS_QUERY_ATTEMPTS
+                                || deadline.remainingMillis() < pause + 2_500L) {
+                            if (queryError != null) throw queryError;
+                            break;
+                        }
+                        // Respuesta vacía o error pasajero: el addon suele entregar la
+                        // señal en la consulta siguiente.
+                        progress.onProgress(ResolutionProgress.of(
+                                ResolutionStage.CATALOG_REQUEST,
+                                "alias=" + alias + " · sin fuentes, reintento " + (attempt + 1)
+                                        + " de " + ALIAS_QUERY_ATTEMPTS
                         ));
+                        try {
+                            Thread.sleep(pause);
+                        } catch (InterruptedException interrupted) {
+                            Thread.currentThread().interrupt();
+                            throw new IOException("Solicitud cancelada.", interrupted);
+                        }
+                        deadline.check();
+                        ResolutionContext.current().check();
                     }
                     return new AliasResult(
                             absoluteIndex,
@@ -1351,8 +1394,16 @@ public final class TvVooStreamResolver implements StreamResolver {
         return false;
     }
 
-    private long expiresAt() {
+    /**
+     * NoFreeze (``tvvoo.hayd.uk/live/``) se renueva en el servidor del addon y dura
+     * todo el TTL del catálogo; una URL directa del CDN vence antes y se guarda menos.
+     */
+    private long expiresAt(URI source) {
         long ttl = cacheTtlMillis();
-        return ttl <= 0L ? 0L : System.currentTimeMillis() + ttl;
+        if (ttl <= 0L) return 0L;
+        boolean noFreeze = source != null
+                && source.getHost() != null
+                && NO_FREEZE_HOST.equalsIgnoreCase(source.getHost());
+        return System.currentTimeMillis() + (noFreeze ? ttl : Math.min(ttl, CDN_SOURCE_TTL_MS));
     }
 }

@@ -101,6 +101,19 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-01**: TvVoo más fiable y sin falso «Memoria baja».
+  - Causa principal medida: el addon responde a veces `streams: []` (4 de 45 consultas; 4 de
+    15 en Sky Sports F1 DE) y cada fila TvVoo tiene un solo alias, así que el canal fallaba
+    y al volver a entrar funcionaba. Ahora la consulta se reintenta hasta 3 veces (400/800 ms)
+    y el presupuesto de resolución sube de 8 a 12 s.
+  - El CDN de Vavoo cambió de dominio (`*.fu8oefd4v2dvlmaarur6crfp.com`) y sus nodos dan
+    certificado vencido por HTTPS: el respaldo por HTTP se reconoce por la forma del dominio
+    y la ruta `/sunshine/`, ya no por un dominio fijo.
+  - La URL «Clean» del CDN se guarda 8 min (vence a los ~20); NoFreeze (`tvvoo.hayd.uk/live/`)
+    sigue con los 25 min del catálogo. Un canal TvVoo que falla pide fuente nueva desde el
+    primer reintento.
+  - «Memoria baja» salía solo con TvVoo porque el búfer llegaba a su tope en bytes (normal en
+    1080p50 con segmentos de 10–16 s). Ahora el búfer lleno solo avisa si el heap pasa el 75 %.
 - **2026-10-01**: al abrir, la lista ya no cambia de números un segundo después. La app mostraba primero la lista M3U guardada y luego el catálogo publicado agregaba los canales de proveedor (Sky 21–23), corriendo todos los siguientes. Ahora el primer arranque espera el catálogo (máx. 6 s; sin red, muestra lo que hay) y la carga sigue en pantalla mientras tanto.
 - **2026-10-01**: 0.5.47. Opciones compacto con el sistema de espacios de la Guía (tras tres
   rondas de mockups: el usuario rechazó tarjetas estiradas y contenido de relleno); Guía y

@@ -1903,7 +1903,11 @@ public final class MainActivity extends Activity {
             return;
         }
         int attempt = playbackRecoveryBudget.consume();
-        boolean renewSource = PlaybackRecoveryBudget.renewsSource(attempt);
+        // TvVoo: la URL que falló rara vez vuelve sola y pedir otra cuesta menos de
+        // un segundo, así que desde el primer reintento se resuelve de nuevo.
+        boolean renewSource = PlaybackRecoveryBudget.renewsSource(attempt)
+                || (currentPlaybackSource != null
+                && "tvvoo".equalsIgnoreCase(currentPlaybackSource.getResolverId()));
         long delayMs = immediate ? 0L : PlaybackRecoveryBudget.delayMsFor(attempt);
         playbackAutoRecoveryInFlight = true;
         playbackRecoveryFailed = false;

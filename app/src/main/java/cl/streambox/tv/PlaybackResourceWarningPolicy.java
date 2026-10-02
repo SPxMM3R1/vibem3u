@@ -13,6 +13,7 @@ final class PlaybackResourceWarningPolicy {
     static final int HEAP_WARNING_PERCENT = 88;
     static final int HEAP_CRITICAL_PERCENT = 94;
     static final int ALLOCATOR_WARNING_PERCENT = 92;
+    static final int HEAP_WITH_FULL_BUFFER_PERCENT = 75;
 
     enum Type {
         NONE,
@@ -62,9 +63,16 @@ final class PlaybackResourceWarningPolicy {
                 || heapPercent >= HEAP_CRITICAL_PERCENT;
         if (critical) return Type.MEMORY_CRITICAL;
 
+        // Un búfer lleno hasta su tope en bytes es el estado normal: el reproductor
+        // deja de descargar justo ahí. Las señales de alta tasa (TvVoo, deportes
+        // 1080p50 con segmentos de 10–16 s) lo llenan en segundos y avisaban
+        // «Memoria baja» sin que faltara memoria. Solo cuenta si el heap también
+        // está apretado.
+        boolean bufferFullWithTightHeap = allocatorPercent >= ALLOCATOR_WARNING_PERCENT
+                && heapPercent >= HEAP_WITH_FULL_BUFFER_PERCENT;
         boolean warning = memoryPressureLevel == RUNNING_LOW_MEMORY_LEVEL
                 || heapPercent >= HEAP_WARNING_PERCENT
-                || allocatorPercent >= ALLOCATOR_WARNING_PERCENT;
+                || bufferFullWithTightHeap;
         return warning ? Type.MEMORY : Type.NONE;
     }
 

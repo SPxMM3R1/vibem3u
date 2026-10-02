@@ -70,6 +70,13 @@ public final class HlsStreamValidatorTest {
         assertFalse(TvVooStreamResolver.isScopedTvVooHttpFallback(URI.create(
                 "https://ngolpdkyoctjcddxshli469r.org/sunshine/live/index.m3u8"
         )));
+        // El CDN rotó de dominio en 2026-10: se reconoce por su forma, no por el nombre.
+        assertTrue(TvVooStreamResolver.isScopedTvVooHttpFallback(URI.create(
+                "https://7jep2q6xee5pjrv.fu8oefd4v2dvlmaarur6crfp.com/sunshine/abc"
+        )));
+        assertFalse(TvVooStreamResolver.isScopedTvVooHttpFallback(URI.create(
+                "https://tvvoo.hayd.uk/sunshine/abc"
+        )));
     }
 
     @Test

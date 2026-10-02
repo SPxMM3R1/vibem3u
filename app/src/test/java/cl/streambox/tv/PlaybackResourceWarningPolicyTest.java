@@ -42,7 +42,16 @@ public final class PlaybackResourceWarningPolicyTest {
         assertEquals(
                 PlaybackResourceWarningPolicy.Type.MEMORY,
                 PlaybackResourceWarningPolicy.memoryType(
-                        true, 0, 1L, 100L, 92L, 100L));
+                        true, 0, 75L, 100L, 92L, 100L));
+    }
+
+    @Test
+    public void fullBufferAloneIsNormalForHighBitrateChannels() {
+        // TvVoo llena el búfer hasta su tope: sin presión de heap no es «Memoria baja».
+        assertEquals(
+                PlaybackResourceWarningPolicy.Type.NONE,
+                PlaybackResourceWarningPolicy.memoryType(
+                        true, 0, 40L, 100L, 100L, 100L));
     }
 
     @Test
