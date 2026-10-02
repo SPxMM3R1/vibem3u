@@ -101,6 +101,9 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-02**: las URL «Clean» de TvVoo que llegan como IP con puerto
+  (`http://109.205.187.150:8008/sunshine/…`) se descartaban siempre: la app las «subía» a
+  HTTPS y ese puerto no lo habla. Ahora `/sunshine/` sobre IP se prueba primero por HTTP.
 - **2026-10-02**: Opciones con proporciones corregidas y diálogo de salir moderno (mockup
   aprobado). Columna de 560 dp (antes 452) y letra un punto más grande (título 13sp,
   descripción 10sp). Las calidades van en su propia línea bajo el título, de a 5 por línea:

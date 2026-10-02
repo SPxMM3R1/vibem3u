@@ -58,6 +58,8 @@ public final class TvVooStreamResolver implements StreamResolver {
     private static final java.util.regex.Pattern TVVOO_CDN_HOST = java.util.regex.Pattern.compile(
             "[a-z0-9-]+\\.[a-z0-9]{20,}\\.[a-z]{2,6}");
     private static final String TVVOO_CDN_PATH_PREFIX = "/sunshine/";
+    private static final java.util.regex.Pattern TVVOO_CDN_IPV4 = java.util.regex.Pattern.compile(
+            "\\d{1,3}(?:\\.\\d{1,3}){3}");
 
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
@@ -1097,7 +1099,9 @@ public final class TvVooStreamResolver implements StreamResolver {
         String path = candidate.getPath() == null
                 ? ""
                 : candidate.getPath().toLowerCase(Locale.ROOT);
-        return TVVOO_CDN_HOST.matcher(host).matches()
+        // Los nodos de Vavoo también llegan como IP con puerto (http://109.205.187.150:8008/
+        // sunshine/…): ahí HTTPS no existe y «subir» a https los descartaba siempre.
+        return (TVVOO_CDN_HOST.matcher(host).matches() || TVVOO_CDN_IPV4.matcher(host).matches())
                 && path.startsWith(TVVOO_CDN_PATH_PREFIX);
     }
 

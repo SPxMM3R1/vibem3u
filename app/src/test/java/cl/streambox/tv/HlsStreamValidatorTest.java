@@ -77,6 +77,13 @@ public final class HlsStreamValidatorTest {
         assertFalse(TvVooStreamResolver.isScopedTvVooHttpFallback(URI.create(
                 "https://tvvoo.hayd.uk/sunshine/abc"
         )));
+        // Nodo como IP con puerto: se usa tal como viene, por HTTP.
+        assertTrue(TvVooStreamResolver.isScopedTvVooHttpFallback(URI.create(
+                "http://109.205.187.150:8008/sunshine/abc/index.m3u8"
+        )));
+        assertFalse(TvVooStreamResolver.isScopedTvVooHttpFallback(URI.create(
+                "http://109.205.187.150:8008/otra/index.m3u8"
+        )));
     }
 
     @Test
