@@ -3905,7 +3905,9 @@ public final class MainActivity extends Activity {
         Button exitButton = exitDialog.findViewById(R.id.exit_button);
         stayButton.setOnClickListener(view -> exitDialog.dismiss());
         exitButton.setOnClickListener(view -> exitApplication());
-        exitDialog.setOnShowListener(dialog -> exitButton.requestFocus());
+        // Moderno: el foco parte en «Seguir viendo» para no salir por un OK accidental.
+        exitDialog.setOnShowListener(dialog ->
+                (classicUi ? exitButton : stayButton).requestFocus());
         exitDialog.setOnDismissListener(dialog -> {
             exitDialog = null;
             if (!exiting) enterImmersiveMode();
@@ -3918,7 +3920,7 @@ public final class MainActivity extends Activity {
             WindowManager.LayoutParams attributes = window.getAttributes();
             attributes.width = WindowManager.LayoutParams.WRAP_CONTENT;
             attributes.height = WindowManager.LayoutParams.WRAP_CONTENT;
-            attributes.dimAmount = 0.68f;
+            attributes.dimAmount = classicUi ? 0.68f : 0.72f;
             window.setAttributes(attributes);
         }
         exitDialog.show();

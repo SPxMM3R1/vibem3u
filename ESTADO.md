@@ -36,7 +36,7 @@
   - **Menús**: Opciones, selector de fuentes, detalle del programa, diálogos, carga y
     MediaFlow usan filas tenues con foco cyan y píldoras.
   - **Opciones** (0.5.47, moderno): encabezado idéntico al de la Guía y una sola columna
-    de 452 dp que mide lo que su contenido necesita (sin relleno ni desplazamiento); fondo
+    de 560 dp que mide lo que su contenido necesita (sin relleno ni desplazamiento); fondo
     `menu_backdrop` en negro puro. Espacios: 4 dp entre filas, 16 antes de cada sección y 6
     después; filas con título 12sp y descripción 9sp; calidades y Moderno|Clásico en línea;
     datos de solo lectura en rejilla. El layout sale de un generador (ver Bitácora); el
@@ -101,6 +101,11 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-02**: Opciones con proporciones corregidas y diálogo de salir moderno (mockup
+  aprobado). Columna de 560 dp (antes 452) y letra un punto más grande (título 13sp,
+  descripción 10sp). Las calidades van en su propia línea bajo el título, de a 5 por línea:
+  antes compartían fila y aplastaban «Calidad de video». El diálogo de salir moderno ya no es
+  la barra antigua: tarjeta centrada en negro con «Seguir viendo» (foco por defecto) y «Salir».
 - **2026-10-01**: respaldo real entre versiones del mismo canal TvVoo. Lista M3U publica
   `data/tvvoo-variantes.json` (hermanas por canal y país: HD, FHD, BACKUP…; SPORT ≠ SPORTS).
   `PublishedTvVooVariants` lo lee junto a los enlaces Highfly y `TvVooStreamResolver` prueba

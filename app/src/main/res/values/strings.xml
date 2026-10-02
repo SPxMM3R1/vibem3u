@@ -238,4 +238,5 @@
     <string name="settings_updated_title">VibeM3U %1$s</string>
     <string name="settings_subtitles_on">Activados</string>
     <string name="settings_subtitles_off">Desactivados</string>
+    <string name="exit_dialog_message">El canal se detendrá y la app se cerrará.</string>
 </resources>

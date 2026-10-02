@@ -597,7 +597,7 @@ public final class SettingsActivity extends Activity {
                 selectedQualityIndex = -1;
                 updateQualityOptionLabels();
             });
-            qualityOptionsContainer.addView(automaticQualityButton);
+            addQualityOption(automaticQualityButton);
             qualityFocusButtons.add(automaticQualityButton);
         }
 
@@ -609,7 +609,7 @@ public final class SettingsActivity extends Activity {
                 selectedQualityIndex = optionIndex;
                 updateQualityOptionLabels();
             });
-            qualityOptionsContainer.addView(button);
+            addQualityOption(button);
             qualityOptionButtons.add(button);
             qualityFocusButtons.add(button);
         }
@@ -644,11 +644,36 @@ public final class SettingsActivity extends Activity {
         return button;
     }
 
+    /** Calidades por línea en el moderno: si el canal trae más, pasan a la línea siguiente. */
+    private static final int QUALITY_CHIPS_PER_LINE = 5;
+
+    private void addQualityOption(Button option) {
+        if (classicUi) {
+            qualityOptionsContainer.addView(option);
+            return;
+        }
+        int lines = qualityOptionsContainer.getChildCount();
+        LinearLayout line = lines == 0 ? null
+                : (LinearLayout) qualityOptionsContainer.getChildAt(lines - 1);
+        if (line == null || line.getChildCount() >= QUALITY_CHIPS_PER_LINE) {
+            line = new LinearLayout(this);
+            line.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            if (lines > 0) params.topMargin = dp(6);
+            qualityOptionsContainer.addView(line, params);
+        }
+        if (line.getChildCount() == 0) {
+            ((LinearLayout.LayoutParams) option.getLayoutParams()).setMarginStart(0);
+        }
+        line.addView(option);
+    }
+
     private Button createQualityChip(String text) {
         Button chip = new Button(this);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, dp(22));
-        params.setMarginStart(dp(4));
+                LinearLayout.LayoutParams.WRAP_CONTENT, dp(24));
+        params.setMarginStart(dp(6));
         chip.setLayoutParams(params);
         chip.setId(View.generateViewId());
         chip.setBackgroundResource(R.drawable.segment_option);
@@ -659,9 +684,9 @@ public final class SettingsActivity extends Activity {
         chip.setMinWidth(0);
         chip.setMinimumHeight(0);
         chip.setMinimumWidth(0);
-        chip.setPadding(dp(9), 0, dp(9), 0);
+        chip.setPadding(dp(11), 0, dp(11), 0);
         chip.setStateListAnimator(null);
-        chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
+        chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
         chip.setAllCaps(false);
         chip.setText(text);
         return chip;
@@ -781,7 +806,7 @@ public final class SettingsActivity extends Activity {
                 ReminderAlerts.remove(this, reminder.id());
                 refreshReminderList();
             });
-            if (!classicUi) item.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+            if (!classicUi) item.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
             android.widget.LinearLayout.LayoutParams params = new android.widget.LinearLayout.LayoutParams(
                     android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                     classicUi ? (int) getResources().getDimension(R.dimen.settings_action_height)
@@ -932,7 +957,7 @@ public final class SettingsActivity extends Activity {
                     getResources().getDimension(R.dimen.settings_control_text_size)
             );
         } else {
-            groupSwitch.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+            groupSwitch.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
         }
         Integer storedCount = resolverGroupCounts.get(definition.getId());
         int channelCount = storedCount == null ? 0 : storedCount;

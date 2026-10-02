@@ -158,7 +158,7 @@
 
         <ScrollView
             android:id="@+id/settings_content"
-            android:layout_width="452dp"
+            android:layout_width="560dp"
             android:layout_height="0dp"
             android:layout_marginTop="20dp"
             android:layout_weight="1"
@@ -187,7 +187,7 @@
                         android:text="@string/settings_no_current_channel"
                         android:textAllCaps="true"
                         android:textColor="@color/osd_muted"
-                        android:textSize="8sp" />
+                        android:textSize="8.5sp" />
                     <LinearLayout
                         android:id="@+id/current_channel_playback_card"
                         android:layout_width="match_parent"
@@ -196,15 +196,14 @@
                         android:background="@drawable/settings_section_card"
                         android:gravity="center_vertical"
                         android:minHeight="40dp"
-                        android:orientation="horizontal"
+                        android:orientation="vertical"
                         android:paddingStart="12dp"
                         android:paddingTop="8dp"
                         android:paddingEnd="12dp"
                         android:paddingBottom="8dp">
                         <LinearLayout
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
                             android:duplicateParentState="true"
                             android:orientation="vertical">
                             <TextView
@@ -214,7 +213,7 @@
                                 android:includeFontPadding="false"
                                 android:text="@string/settings_quality_title"
                                 android:textColor="@color/white"
-                                android:textSize="12sp" />
+                                android:textSize="13sp" />
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
@@ -222,14 +221,14 @@
                                 android:duplicateParentState="true"
                                 android:text="@string/settings_quality_remembered"
                                 android:textColor="@color/osd_muted"
-                                android:textSize="9sp" />
+                                android:textSize="10sp" />
                         </LinearLayout>
                         <LinearLayout
                             android:id="@+id/settings_quality_options"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            android:orientation="horizontal" />
+                            android:layout_marginTop="10dp"
+                            android:orientation="vertical" />
                     </LinearLayout>
                     <TextView
                         android:id="@+id/settings_quality_status"
@@ -241,7 +240,7 @@
                         android:paddingEnd="12dp"
                         android:text="@string/settings_quality_no_options"
                         android:textColor="@color/osd_muted"
-                        android:textSize="9sp"
+                        android:textSize="10sp"
                         android:visibility="gone" />
                     <Switch
                         android:id="@+id/settings_subtitles_switch"
@@ -257,7 +256,7 @@
                         android:paddingBottom="8dp"
                         android:showText="false"
                         android:textColor="@color/white"
-                        android:textSize="12sp"
+                        android:textSize="13sp"
                         android:thumbTint="@color/cyan"
                         android:visibility="gone" />
                     <TextView
@@ -273,7 +272,7 @@
                         android:paddingBottom="8dp"
                         android:text="@string/subtitles_waiting_for_text"
                         android:textColor="@color/white"
-                        android:textSize="12sp" />
+                        android:textSize="13sp" />
                     <LinearLayout
                         android:id="@+id/open_source_selector"
                         android:layout_width="match_parent"
@@ -302,7 +301,7 @@
                                 android:includeFontPadding="false"
                                 android:text="@string/settings_signal_source_title"
                                 android:textColor="@color/white"
-                                android:textSize="12sp" />
+                                android:textSize="13sp" />
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
@@ -310,7 +309,7 @@
                                 android:duplicateParentState="true"
                                 android:text="@string/settings_signal_source_description"
                                 android:textColor="@color/osd_muted"
-                                android:textSize="9sp" />
+                                android:textSize="10sp" />
                         </LinearLayout>
                         <TextView
                             android:layout_width="wrap_content"
@@ -319,7 +318,7 @@
                             android:duplicateParentState="true"
                             android:text="@string/settings_signal_source_row_action"
                             android:textColor="@color/osd_muted"
-                            android:textSize="9.5sp" />
+                            android:textSize="10.5sp" />
                     </LinearLayout>
                     <LinearLayout
                         android:id="@+id/signal_info_card"
@@ -337,7 +336,7 @@
                             android:text="@string/settings_section_signal_info"
                             android:textAllCaps="true"
                             android:textColor="@color/osd_muted"
-                            android:textSize="8sp" />
+                            android:textSize="8.5sp" />
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -364,14 +363,14 @@
                                         android:layout_height="wrap_content"
                                         android:text="@string/settings_signal_resolution"
                                         android:textColor="@color/osd_muted"
-                                        android:textSize="8sp" />
+                                        android:textSize="8.5sp" />
                                     <TextView
                                         android:id="@+id/signal_resolution"
                                         android:layout_width="match_parent"
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:textColor="@color/white"
-                                        android:textSize="10sp" />
+                                        android:textSize="11.5sp" />
                                 </LinearLayout>
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -383,14 +382,14 @@
                                         android:layout_height="wrap_content"
                                         android:text="@string/settings_signal_frame_rate"
                                         android:textColor="@color/osd_muted"
-                                        android:textSize="8sp" />
+                                        android:textSize="8.5sp" />
                                     <TextView
                                         android:id="@+id/signal_frame_rate"
                                         android:layout_width="match_parent"
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:textColor="@color/white"
-                                        android:textSize="10sp" />
+                                        android:textSize="11.5sp" />
                                 </LinearLayout>
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -402,14 +401,14 @@
                                         android:layout_height="wrap_content"
                                         android:text="@string/settings_signal_bitrate"
                                         android:textColor="@color/osd_muted"
-                                        android:textSize="8sp" />
+                                        android:textSize="8.5sp" />
                                     <TextView
                                         android:id="@+id/signal_bitrate"
                                         android:layout_width="match_parent"
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:textColor="@color/white"
-                                        android:textSize="10sp" />
+                                        android:textSize="11.5sp" />
                                 </LinearLayout>
                             </LinearLayout>
                             <LinearLayout
@@ -428,14 +427,14 @@
                                         android:layout_height="wrap_content"
                                         android:text="@string/settings_signal_video_codec"
                                         android:textColor="@color/osd_muted"
-                                        android:textSize="8sp" />
+                                        android:textSize="8.5sp" />
                                     <TextView
                                         android:id="@+id/signal_video"
                                         android:layout_width="match_parent"
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:textColor="@color/white"
-                                        android:textSize="10sp" />
+                                        android:textSize="11.5sp" />
                                 </LinearLayout>
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -447,14 +446,14 @@
                                         android:layout_height="wrap_content"
                                         android:text="@string/settings_signal_audio_codec"
                                         android:textColor="@color/osd_muted"
-                                        android:textSize="8sp" />
+                                        android:textSize="8.5sp" />
                                     <TextView
                                         android:id="@+id/signal_codecs"
                                         android:layout_width="match_parent"
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:textColor="@color/white"
-                                        android:textSize="10sp" />
+                                        android:textSize="11.5sp" />
                                 </LinearLayout>
                                 <Space
                                     android:layout_width="0dp"
@@ -486,7 +485,7 @@
                         android:showText="false"
                         android:text="@string/normalize_volume"
                         android:textColor="@color/white"
-                        android:textSize="12sp"
+                        android:textSize="13sp"
                         android:thumbTint="@color/cyan" />
                     <Switch
                         android:id="@+id/auto_reconnect"
@@ -503,7 +502,7 @@
                         android:showText="false"
                         android:text="@string/settings_auto_reconnect"
                         android:textColor="@color/white"
-                        android:textSize="12sp"
+                        android:textSize="13sp"
                         android:thumbTint="@color/cyan" />
                 </LinearLayout>
 
@@ -538,7 +537,7 @@
                                 android:includeFontPadding="false"
                                 android:text="@string/settings_ui_style_title"
                                 android:textColor="@color/white"
-                                android:textSize="12sp" />
+                                android:textSize="13sp" />
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
@@ -546,11 +545,11 @@
                                 android:duplicateParentState="true"
                                 android:text="@string/settings_ui_style_description"
                                 android:textColor="@color/osd_muted"
-                                android:textSize="9sp" />
+                                android:textSize="10sp" />
                         </LinearLayout>
                         <LinearLayout
                             android:layout_width="wrap_content"
-                            android:layout_height="22dp"
+                            android:layout_height="24dp"
                             android:layout_marginStart="12dp"
                             android:background="@drawable/segment_track"
                             android:orientation="horizontal"
@@ -568,7 +567,7 @@
                                 android:paddingEnd="9dp"
                                 android:text="@string/settings_ui_style_modern"
                                 android:textColor="@color/segment_option_text"
-                                android:textSize="9sp" />
+                                android:textSize="10sp" />
                             <TextView
                                 android:id="@+id/ui_style_classic"
                                 android:layout_width="wrap_content"
@@ -582,7 +581,7 @@
                                 android:paddingEnd="9dp"
                                 android:text="@string/settings_ui_style_classic"
                                 android:textColor="@color/segment_option_text"
-                                android:textSize="9sp" />
+                                android:textSize="10sp" />
                         </LinearLayout>
                     </LinearLayout>
                     <LinearLayout
@@ -610,7 +609,7 @@
                                 android:includeFontPadding="false"
                                 android:text="@string/settings_channel_buttons_title"
                                 android:textColor="@color/white"
-                                android:textSize="12sp" />
+                                android:textSize="13sp" />
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
@@ -618,11 +617,11 @@
                                 android:duplicateParentState="true"
                                 android:text="@string/invert_channel_keys_description"
                                 android:textColor="@color/osd_muted"
-                                android:textSize="9sp" />
+                                android:textSize="10sp" />
                         </LinearLayout>
                         <LinearLayout
                             android:layout_width="wrap_content"
-                            android:layout_height="22dp"
+                            android:layout_height="24dp"
                             android:layout_marginStart="12dp"
                             android:background="@drawable/segment_track"
                             android:orientation="horizontal"
@@ -640,7 +639,7 @@
                                 android:paddingEnd="9dp"
                                 android:text="@string/settings_channel_buttons_standard"
                                 android:textColor="@color/segment_option_text"
-                                android:textSize="9sp" />
+                                android:textSize="10sp" />
                             <TextView
                                 android:id="@+id/channel_keys_inverted"
                                 android:layout_width="wrap_content"
@@ -654,7 +653,7 @@
                                 android:paddingEnd="9dp"
                                 android:text="@string/settings_channel_buttons_inverted"
                                 android:textColor="@color/segment_option_text"
-                                android:textSize="9sp" />
+                                android:textSize="10sp" />
                         </LinearLayout>
                     </LinearLayout>
                     <Switch
@@ -672,7 +671,7 @@
                         android:showText="false"
                         android:text="@string/invert_channel_keys"
                         android:textColor="@color/white"
-                        android:textSize="12sp"
+                        android:textSize="13sp"
                         android:thumbTint="@color/cyan"
                         android:visibility="gone" />
                     <TextView
@@ -686,7 +685,7 @@
                         android:text="@string/settings_shortcuts_title"
                         android:textAllCaps="true"
                         android:textColor="@color/osd_muted"
-                        android:textSize="8sp" />
+                        android:textSize="8.5sp" />
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -713,14 +712,14 @@
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_shortcut_ok"
                                     android:textColor="@color/osd_muted"
-                                    android:textSize="8sp" />
+                                    android:textSize="8.5sp" />
                                 <TextView
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
                                     android:text="@string/settings_shortcut_ok_action"
                                     android:textColor="@color/white"
-                                    android:textSize="10sp" />
+                                    android:textSize="11.5sp" />
                             </LinearLayout>
                             <LinearLayout
                                 android:layout_width="0dp"
@@ -732,14 +731,14 @@
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_shortcut_ok_twice"
                                     android:textColor="@color/osd_muted"
-                                    android:textSize="8sp" />
+                                    android:textSize="8.5sp" />
                                 <TextView
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
                                     android:text="@string/settings_shortcut_ok_twice_action"
                                     android:textColor="@color/white"
-                                    android:textSize="10sp" />
+                                    android:textSize="11.5sp" />
                             </LinearLayout>
                             <LinearLayout
                                 android:layout_width="0dp"
@@ -751,14 +750,14 @@
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_shortcut_hold_ok"
                                     android:textColor="@color/osd_muted"
-                                    android:textSize="8sp" />
+                                    android:textSize="8.5sp" />
                                 <TextView
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
                                     android:text="@string/settings_shortcut_hold_ok_action"
                                     android:textColor="@color/white"
-                                    android:textSize="10sp" />
+                                    android:textSize="11.5sp" />
                             </LinearLayout>
                         </LinearLayout>
                         <LinearLayout
@@ -777,14 +776,14 @@
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_shortcut_left"
                                     android:textColor="@color/osd_muted"
-                                    android:textSize="8sp" />
+                                    android:textSize="8.5sp" />
                                 <TextView
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
                                     android:text="@string/settings_shortcut_left_action"
                                     android:textColor="@color/white"
-                                    android:textSize="10sp" />
+                                    android:textSize="11.5sp" />
                             </LinearLayout>
                             <LinearLayout
                                 android:layout_width="0dp"
@@ -796,14 +795,14 @@
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_shortcut_right"
                                     android:textColor="@color/osd_muted"
-                                    android:textSize="8sp" />
+                                    android:textSize="8.5sp" />
                                 <TextView
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
                                     android:text="@string/settings_shortcut_right_action"
                                     android:textColor="@color/white"
-                                    android:textSize="10sp" />
+                                    android:textSize="11.5sp" />
                             </LinearLayout>
                             <LinearLayout
                                 android:layout_width="0dp"
@@ -815,14 +814,14 @@
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_shortcut_up_down"
                                     android:textColor="@color/osd_muted"
-                                    android:textSize="8sp" />
+                                    android:textSize="8.5sp" />
                                 <TextView
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
                                     android:text="@string/settings_shortcut_up_down_action"
                                     android:textColor="@color/white"
-                                    android:textSize="10sp" />
+                                    android:textSize="11.5sp" />
                             </LinearLayout>
                         </LinearLayout>
                     </LinearLayout>
@@ -845,7 +844,7 @@
                         android:text="@string/settings_section_scheduled"
                         android:textAllCaps="true"
                         android:textColor="@color/osd_muted"
-                        android:textSize="8sp" />
+                        android:textSize="8.5sp" />
                     <TextView
                         android:id="@+id/reminders_empty"
                         android:layout_width="match_parent"
@@ -856,7 +855,7 @@
                         android:paddingEnd="12dp"
                         android:text="@string/settings_reminders_empty"
                         android:textColor="@color/osd_muted"
-                        android:textSize="9sp" />
+                        android:textSize="10sp" />
                     <LinearLayout
                         android:id="@+id/reminders_list"
                         android:layout_width="match_parent"
@@ -871,7 +870,7 @@
                         android:paddingEnd="12dp"
                         android:text="@string/settings_reminders_add_hint"
                         android:textColor="@color/osd_muted"
-                        android:textSize="9sp" />
+                        android:textSize="10sp" />
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -883,7 +882,7 @@
                         android:text="@string/settings_section_alerts"
                         android:textAllCaps="true"
                         android:textColor="@color/osd_muted"
-                        android:textSize="8sp" />
+                        android:textSize="8.5sp" />
                     <LinearLayout
                         android:id="@+id/reminder_permission_button"
                         android:layout_width="match_parent"
@@ -912,7 +911,7 @@
                                 android:includeFontPadding="false"
                                 android:text="@string/settings_reminders_overlay_title"
                                 android:textColor="@color/white"
-                                android:textSize="12sp" />
+                                android:textSize="13sp" />
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
@@ -920,7 +919,7 @@
                                 android:duplicateParentState="true"
                                 android:text="@string/settings_reminders_overlay_description"
                                 android:textColor="@color/osd_muted"
-                                android:textSize="9sp" />
+                                android:textSize="10sp" />
                         </LinearLayout>
                         <TextView
                             android:layout_width="wrap_content"
@@ -929,7 +928,7 @@
                             android:duplicateParentState="true"
                             android:text="@string/settings_reminders_permission_action"
                             android:textColor="@color/osd_muted"
-                            android:textSize="9.5sp" />
+                            android:textSize="10.5sp" />
                     </LinearLayout>
                     <LinearLayout
                         android:id="@+id/reminder_test_button"
@@ -959,7 +958,7 @@
                                 android:includeFontPadding="false"
                                 android:text="@string/settings_reminders_test"
                                 android:textColor="@color/white"
-                                android:textSize="12sp" />
+                                android:textSize="13sp" />
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
@@ -967,7 +966,7 @@
                                 android:duplicateParentState="true"
                                 android:text="@string/settings_reminders_test_description"
                                 android:textColor="@color/osd_muted"
-                                android:textSize="9sp" />
+                                android:textSize="10sp" />
                         </LinearLayout>
                         <TextView
                             android:layout_width="wrap_content"
@@ -976,7 +975,7 @@
                             android:duplicateParentState="true"
                             android:text="@string/settings_reminders_test_action"
                             android:textColor="@color/osd_muted"
-                            android:textSize="9.5sp" />
+                            android:textSize="10.5sp" />
                     </LinearLayout>
                     <TextView
                         android:id="@+id/reminder_status"
@@ -987,7 +986,7 @@
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:textColor="@color/osd_muted"
-                        android:textSize="9sp" />
+                        android:textSize="10sp" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -1007,7 +1006,7 @@
                         android:text="@string/settings_section_lists"
                         android:textAllCaps="true"
                         android:textColor="@color/osd_muted"
-                        android:textSize="8sp" />
+                        android:textSize="8.5sp" />
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -1025,11 +1024,11 @@
                             android:layout_height="wrap_content"
                             android:text="@string/settings_primary_list_title"
                             android:textColor="@color/white"
-                            android:textSize="12sp" />
+                            android:textSize="13sp" />
                         <EditText
                             android:id="@+id/playlist_url"
                             android:layout_width="0dp"
-                            android:layout_height="24dp"
+                            android:layout_height="26dp"
                             android:layout_weight="1"
                             android:background="@drawable/settings_input"
                             android:hint="@string/playlist_url_hint"
@@ -1039,7 +1038,7 @@
                             android:singleLine="true"
                             android:textColor="@color/white"
                             android:textColorHint="#78909C"
-                            android:textSize="9sp" />
+                            android:textSize="10sp" />
                     </LinearLayout>
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -1058,11 +1057,11 @@
                             android:layout_height="wrap_content"
                             android:text="@string/settings_secondary_list_title"
                             android:textColor="@color/white"
-                            android:textSize="12sp" />
+                            android:textSize="13sp" />
                         <EditText
                             android:id="@+id/playlist_url_2"
                             android:layout_width="0dp"
-                            android:layout_height="24dp"
+                            android:layout_height="26dp"
                             android:layout_weight="1"
                             android:background="@drawable/settings_input"
                             android:hint="@string/settings_secondary_list_hint"
@@ -1072,7 +1071,7 @@
                             android:singleLine="true"
                             android:textColor="@color/white"
                             android:textColorHint="#78909C"
-                            android:textSize="9sp" />
+                            android:textSize="10sp" />
                     </LinearLayout>
                     <LinearLayout
                         android:layout_width="wrap_content"
@@ -1082,7 +1081,7 @@
                         <Button
                             android:id="@+id/save_button"
                             android:layout_width="wrap_content"
-                            android:layout_height="26dp"
+                            android:layout_height="28dp"
                             android:layout_marginStart="0dp"
                             android:background="@drawable/focus_button"
                             android:focusable="true"
@@ -1095,11 +1094,11 @@
                             android:text="@string/save_and_play"
                             android:textAllCaps="false"
                             android:textColor="@color/focus_button_text"
-                            android:textSize="9.5sp" />
+                            android:textSize="10.5sp" />
                         <Button
                             android:id="@+id/cancel_button"
                             android:layout_width="wrap_content"
-                            android:layout_height="26dp"
+                            android:layout_height="28dp"
                             android:layout_marginStart="8dp"
                             android:background="@drawable/focus_button"
                             android:focusable="true"
@@ -1112,7 +1111,7 @@
                             android:text="@string/cancel"
                             android:textAllCaps="false"
                             android:textColor="@color/focus_button_text"
-                            android:textSize="9.5sp" />
+                            android:textSize="10.5sp" />
                     </LinearLayout>
                     <TextView
                         android:id="@+id/url_error"
@@ -1123,7 +1122,7 @@
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:textColor="@color/red"
-                        android:textSize="9sp"
+                        android:textSize="10sp"
                         android:visibility="gone" />
                     <TextView
                         android:layout_width="match_parent"
@@ -1136,7 +1135,7 @@
                         android:text="@string/resolver_groups_title"
                         android:textAllCaps="true"
                         android:textColor="@color/osd_muted"
-                        android:textSize="8sp" />
+                        android:textSize="8.5sp" />
                     <LinearLayout
                         android:id="@+id/resolver_groups_container"
                         android:layout_width="match_parent"
@@ -1151,7 +1150,7 @@
                         android:paddingEnd="12dp"
                         android:text="@string/settings_provider_selection_web"
                         android:textColor="@color/osd_muted"
-                        android:textSize="9sp" />
+                        android:textSize="10sp" />
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -1163,7 +1162,7 @@
                         android:text="@string/settings_section_advanced"
                         android:textAllCaps="true"
                         android:textColor="@color/osd_muted"
-                        android:textSize="8sp" />
+                        android:textSize="8.5sp" />
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -1181,11 +1180,11 @@
                             android:layout_height="wrap_content"
                             android:text="@string/highfly_manifest_title"
                             android:textColor="@color/white"
-                            android:textSize="12sp" />
+                            android:textSize="13sp" />
                         <EditText
                             android:id="@+id/highfly_manifest_url"
                             android:layout_width="0dp"
-                            android:layout_height="24dp"
+                            android:layout_height="26dp"
                             android:layout_weight="1"
                             android:background="@drawable/settings_input"
                             android:hint="@string/highfly_manifest_url_hint"
@@ -1195,7 +1194,7 @@
                             android:singleLine="true"
                             android:textColor="@color/white"
                             android:textColorHint="#78909C"
-                            android:textSize="9sp" />
+                            android:textSize="10sp" />
                     </LinearLayout>
                     <LinearLayout
                         android:id="@+id/mediaflow_settings_button"
@@ -1225,7 +1224,7 @@
                                 android:includeFontPadding="false"
                                 android:text="@string/mediaflow_open_settings"
                                 android:textColor="@color/white"
-                                android:textSize="12sp" />
+                                android:textSize="13sp" />
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
@@ -1233,7 +1232,7 @@
                                 android:duplicateParentState="true"
                                 android:text="@string/settings_mediaflow_description"
                                 android:textColor="@color/osd_muted"
-                                android:textSize="9sp" />
+                                android:textSize="10sp" />
                         </LinearLayout>
                         <TextView
                             android:layout_width="wrap_content"
@@ -1242,7 +1241,7 @@
                             android:duplicateParentState="true"
                             android:text="@string/settings_mediaflow_action"
                             android:textColor="@color/osd_muted"
-                            android:textSize="9.5sp" />
+                            android:textSize="10.5sp" />
                     </LinearLayout>
                 </LinearLayout>
 
@@ -1277,7 +1276,7 @@
                                 android:duplicateParentState="true"
                                 android:includeFontPadding="false"
                                 android:textColor="@color/white"
-                                android:textSize="12sp" />
+                                android:textSize="13sp" />
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
@@ -1285,12 +1284,12 @@
                                 android:duplicateParentState="true"
                                 android:text="@string/settings_updates_description"
                                 android:textColor="@color/osd_muted"
-                                android:textSize="9sp" />
+                                android:textSize="10sp" />
                         </LinearLayout>
                         <Button
                             android:id="@+id/check_updates_button"
                             android:layout_width="wrap_content"
-                            android:layout_height="26dp"
+                            android:layout_height="28dp"
                             android:layout_marginStart="12dp"
                             android:background="@drawable/focus_button"
                             android:focusable="true"
@@ -1303,7 +1302,7 @@
                             android:text="@string/check_updates"
                             android:textAllCaps="false"
                             android:textColor="@color/focus_button_text"
-                            android:textSize="9.5sp" />
+                            android:textSize="10.5sp" />
                     </LinearLayout>
                     <TextView
                         android:id="@+id/update_status"
@@ -1314,7 +1313,7 @@
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:textColor="@color/osd_muted"
-                        android:textSize="9sp"
+                        android:textSize="10sp"
                         android:visibility="gone" />
                     <TextView
                         android:layout_width="match_parent"
@@ -1327,7 +1326,7 @@
                         android:text="@string/settings_section_service"
                         android:textAllCaps="true"
                         android:textColor="@color/osd_muted"
-                        android:textSize="8sp" />
+                        android:textSize="8.5sp" />
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -1354,14 +1353,14 @@
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_status_catalog"
                                     android:textColor="@color/osd_muted"
-                                    android:textSize="8sp" />
+                                    android:textSize="8.5sp" />
                                 <TextView
                                     android:id="@+id/status_catalog"
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
                                     android:textColor="@color/white"
-                                    android:textSize="10sp" />
+                                    android:textSize="11.5sp" />
                             </LinearLayout>
                             <LinearLayout
                                 android:layout_width="0dp"
@@ -1373,14 +1372,14 @@
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_status_epg"
                                     android:textColor="@color/osd_muted"
-                                    android:textSize="8sp" />
+                                    android:textSize="8.5sp" />
                                 <TextView
                                     android:id="@+id/status_epg"
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
                                     android:textColor="@color/white"
-                                    android:textSize="10sp" />
+                                    android:textSize="11.5sp" />
                             </LinearLayout>
                             <LinearLayout
                                 android:layout_width="0dp"
@@ -1392,14 +1391,14 @@
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_status_highfly"
                                     android:textColor="@color/osd_muted"
-                                    android:textSize="8sp" />
+                                    android:textSize="8.5sp" />
                                 <TextView
                                     android:id="@+id/status_highfly"
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
                                     android:textColor="@color/white"
-                                    android:textSize="10sp" />
+                                    android:textSize="11.5sp" />
                             </LinearLayout>
                         </LinearLayout>
                     </LinearLayout>
@@ -1415,14 +1414,14 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:textColor="@color/osd_muted"
-                            android:textSize="9sp" />
+                            android:textSize="10sp" />
                         <TextView
                             android:id="@+id/info_device"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="10dp"
                             android:textColor="@color/osd_muted"
-                            android:textSize="9sp" />
+                            android:textSize="10sp" />
                     </LinearLayout>
                 </LinearLayout>
             </FrameLayout>
