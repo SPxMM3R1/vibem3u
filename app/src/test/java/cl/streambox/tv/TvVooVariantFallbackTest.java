@@ -40,8 +40,9 @@ public class TvVooVariantFallbackTest {
         ResolvedPlaybackSource source = resolver.resolve(channel());
 
         assertEquals("1.1.1.1", source.getPlaybackUri().getHost());
-        // La elegida se consultó y se reintentó antes de darla por vacía.
-        assertTrue(selectedQueries.get() >= 2);
+        // La elegida se consultó primero; si la hermana entrega video antes de que
+        // termine de reintentar, se usa la hermana sin esperar.
+        assertTrue(selectedQueries.get() >= 1);
     }
 
     @Test
