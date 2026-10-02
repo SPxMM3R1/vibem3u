@@ -15,6 +15,8 @@ final class PublishedPlaybackCatalogRepository {
     /** Enlaces directos Highfly que el runner renueva cada 30 minutos. */
     static final String HIGHFLY_LINKS_URL =
             "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/data/highfly-live.json";
+    static final String TVVOO_VARIANTS_URL =
+            "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/data/tvvoo-variantes.json";
     private static final Set<String> ALLOWED_HOSTS = Collections.unmodifiableSet(
             new HashSet<>(Collections.singletonList("raw.githubusercontent.com"))
     );
@@ -66,6 +68,17 @@ final class PublishedPlaybackCatalogRepository {
                 HIGHFLY_LINKS_URL,
                 Collections.singletonMap("Accept", "application/json"),
                 PublishedHighflyLinks.MAX_BYTES,
+                null,
+                ALLOWED_HOSTS
+        );
+        return new String(response.getBody(), StandardCharsets.UTF_8);
+    }
+
+    String fetchTvVooVariants() throws IOException {
+        TokenHttpClient.Response response = httpClient.getPublicOnHosts(
+                TVVOO_VARIANTS_URL,
+                Collections.singletonMap("Accept", "application/json"),
+                PublishedTvVooVariants.MAX_BYTES,
                 null,
                 ALLOWED_HOSTS
         );

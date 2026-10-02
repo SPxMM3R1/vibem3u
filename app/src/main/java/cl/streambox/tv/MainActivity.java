@@ -3581,6 +3581,15 @@ public final class MainActivity extends Activity {
                 // Sin enlaces publicados, Highfly se resuelve como siempre.
             }
             try {
+                // Hermanas de cada canal TvVoo (HD, FHD, BACKUP): respaldo si la elegida cae.
+                PublishedTvVooVariants.update(
+                        publishedPlaybackCatalogRepository.fetchTvVooVariants(),
+                        System.currentTimeMillis()
+                );
+            } catch (Exception ignored) {
+                // Sin variantes, cada canal TvVoo usa solo su versión elegida.
+            }
+            try {
                 refreshed = publishedPlaybackCatalogRepository.refresh();
             } catch (Exception ignored) {
                 // Local selection/cache data was retired; offline startup must

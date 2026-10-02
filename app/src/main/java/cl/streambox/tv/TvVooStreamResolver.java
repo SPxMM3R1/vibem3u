@@ -194,6 +194,10 @@ public final class TvVooStreamResolver implements StreamResolver {
 
         LinkedHashSet<String> aliases = new LinkedHashSet<>(definition.resolverAliases(channel));
         if (aliases.isEmpty()) aliases.addAll(generatedAliases(channel));
+        // Versiones hermanas del mismo canal y país (HD, FHD, BACKUP…), publicadas por
+        // Lista M3U: respaldo real si la elegida no entrega video. Van después de ella.
+        aliases.addAll(PublishedTvVooVariants.siblingsOf(
+                channel == null ? null : channel.getAttributes().get("x-resolver-stable-id")));
         List<String> orderedAliases = TvVooSourceHistory.orderAliases(
                 stableSourceId(channel),
                 new ArrayList<>(aliases)
@@ -643,6 +647,10 @@ public final class TvVooStreamResolver implements StreamResolver {
         // compatibility fallbacks; querying both delays the direct engine
         // behind unrelated dead candidates.
         if (aliases.isEmpty()) aliases.addAll(generatedAliases(channel));
+        // Versiones hermanas del mismo canal y país (HD, FHD, BACKUP…), publicadas por
+        // Lista M3U: respaldo real si la elegida no entrega video. Van después de ella.
+        aliases.addAll(PublishedTvVooVariants.siblingsOf(
+                channel == null ? null : channel.getAttributes().get("x-resolver-stable-id")));
         List<String> orderedAliases = TvVooSourceHistory.orderAliases(
                 stableSourceId(channel),
                 new ArrayList<>(aliases)

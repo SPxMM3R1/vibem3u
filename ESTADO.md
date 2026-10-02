@@ -101,6 +101,11 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-01**: respaldo real entre versiones del mismo canal TvVoo. Lista M3U publica
+  `data/tvvoo-variantes.json` (hermanas por canal y país: HD, FHD, BACKUP…; SPORT ≠ SPORTS).
+  `PublishedTvVooVariants` lo lee junto a los enlaces Highfly y `TvVooStreamResolver` prueba
+  primero la versión elegida y luego sus hermanas, con la validación HLS + segmento de siempre.
+  Sin archivo (o con uno de más de 7 días) funciona como antes. Prueba: `TvVooVariantFallbackTest`.
 - **2026-10-01**: TvVoo más fiable y sin falso «Memoria baja».
   - Causa principal medida: el addon responde a veces `streams: []` (4 de 45 consultas; 4 de
     15 en Sky Sports F1 DE) y cada fila TvVoo tiene un solo alias, así que el canal fallaba
