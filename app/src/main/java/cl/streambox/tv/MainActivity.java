@@ -2308,15 +2308,13 @@ public final class MainActivity extends Activity {
 
     private boolean handleQualityUpgradeKey(KeyEvent event) {
         int keyCode = event.getKeyCode();
+        // Atrás lo resuelve handleBackAction (callback de Atrás predictivo).
+        if (keyCode == KeyEvent.KEYCODE_BACK) return false;
         if (event.getAction() != KeyEvent.ACTION_DOWN) {
             return keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
-                    || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER
-                    || keyCode == KeyEvent.KEYCODE_BACK;
+                    || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER;
         }
         switch (keyCode) {
-            case KeyEvent.KEYCODE_BACK:
-                hideQualityUpgrade();
-                return true;
             case KeyEvent.KEYCODE_DPAD_LEFT:
                 qualityUpgradeSwitch.requestFocus();
                 return true;
@@ -4357,6 +4355,10 @@ public final class MainActivity extends Activity {
     }
 
     private void handleBackAction() {
+        if (isQualityUpgradeVisible()) {
+            hideQualityUpgrade();
+            return;
+        }
         if (isSourceSelectorVisible()) {
             closePlaybackSourceSelector();
             return;
