@@ -11,9 +11,8 @@
 
 ## Hoy, en una mirada
 
-- **Versión publicada**: 0.5.54 (`versionCode` 163); en curso la 0.5.55 con la carrera rápida
-  de TvVoo, calidad real, «Fuentes y calidades» nuevo, aviso de mejor calidad y reglas de
-  reconexión.
+- **Versión publicada**: 0.5.55 (`versionCode` 164): carrera rápida de TvVoo, calidad real,
+  «Fuentes y calidades» por versión, aviso de mejor calidad y reglas de reconexión.
   Verificar su publicación en Releases antes de dar la entrega por concluida. Se publica con tag `vX.Y.Z` y el
   workflow «Publicar APK». No hay SDK Android local: compila «Android CI».
 - **Estado visual**: el usuario aprobó todo el estilo nuevo, pero la 0.5.42 y la 0.5.43 aún no
