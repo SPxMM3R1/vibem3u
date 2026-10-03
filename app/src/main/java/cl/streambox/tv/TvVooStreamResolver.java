@@ -200,148 +200,103 @@ public final class TvVooStreamResolver implements StreamResolver {
         // Lista M3U: respaldo real si la elegida no entrega video. Van después de ella.
         aliases.addAll(PublishedTvVooVariants.siblingsOf(
                 channel == null ? null : channel.getAttributes().get("x-resolver-stable-id")));
-        List<String> orderedAliases = TvVooSourceHistory.orderAliases(
-                stableSourceId(channel),
-                new ArrayList<>(aliases)
-        );
-        aliases.clear();
-        aliases.addAll(orderedAliases);
+        // El selector muestra la versión del editor primero, sin reordenar por historial.
+        String preferred = aliases.isEmpty() ? "" : aliases.iterator().next();
         int maxAliases = definition.getIntConfig(
                 "maxAliases",
                 DEFAULT_MAX_ALIASES,
                 1,
                 12
         );
-        int maxCandidates = definition.getIntConfig(
-                "maxCandidates",
-                DEFAULT_MAX_CANDIDATES,
-                1,
-                32
-        );
+        List<String> scanAliases = new ArrayList<>(aliases);
+        if (scanAliases.size() > maxAliases) {
+            scanAliases = new ArrayList<>(scanAliases.subList(0, maxAliases));
+        }
         boolean allowHttpFallback = definition.getBooleanConfig("allowHttpFallback", true);
-        int parallelAliases = definition.getIntConfig(
-                "parallelAliases",
-                DEFAULT_PARALLEL_ALIASES,
-                1,
-                3
-        );
-        int parallelCandidates = definition.getIntConfig(
-                "parallelCandidates",
-                DEFAULT_PARALLEL_CANDIDATES,
-                1,
-                4
-        );
-        List<String> limitedAliases = new ArrayList<>();
-        int aliasIndex = 0;
-        for (String alias : aliases) {
-            if (aliasIndex++ >= maxAliases) break;
-            limitedAliases.add(alias);
-        }
-        if (limitedAliases.isEmpty()) {
-            throw new IOException("El canal no tiene aliases TvVoo.");
-        }
-
-        List<AliasResult> aliasResults = queryAliasResults(
-                limitedAliases,
-                endpointBase,
-                Collections.singletonMap("Accept", "application/json"),
-                definition,
-                boundedPayloadRecipe,
-                parallelAliases,
-                progress,
-                deadline
-        );
-        LinkedHashMap<URI, String> candidatesByAlias = new LinkedHashMap<>();
-        IOException lastError = null;
-        for (AliasResult result : aliasResults) {
-            String alias = result.index >= 0 && result.index < limitedAliases.size()
-                    ? limitedAliases.get(result.index)
-                    : "";
-            if (result.error != null) {
-                lastError = result.error;
-                TvVooSourceHistory.recordFailure(stableSourceId(channel), alias);
-            }
-            for (URI candidate : result.candidates) {
-                if (candidate != null && candidatesByAlias.size() < maxCandidates) {
-                    candidatesByAlias.putIfAbsent(candidate, alias);
-                }
-            }
-        }
-        if (candidatesByAlias.isEmpty()) {
-            throw new IOException("TvVoo no publicó URLs alternativas.", lastError);
-        }
-
+        Map<String, String> jsonHeaders = Collections.singletonMap("Accept", "application/json");
         Map<String, String> playbackHeaders = playbackHeaders();
-        List<ResolvedPlaybackCandidate> result = new ArrayList<>();
-        HlsCandidateRace.Streaming candidateRace = new HlsCandidateRace.Streaming(
-                candidatesByAlias.size(),
-                parallelCandidates,
+        String finalEndpoint = endpointBase;
+        String stableId = stableSourceId(channel);
+        TvVooFastRace.Result race = TvVooFastRace.run(
+                TvVooFastRace.Mode.SCAN,
+                scanAliases,
+                alias -> queryAlias(alias, finalEndpoint, jsonHeaders, definition, boundedPayloadRecipe,
+                        httpClient, ResolutionProgressListener.NONE, deadline),
+                published -> validateCandidate(validator, published, allowHttpFallback,
+                        playbackHeaders, false, ResolutionProgressListener.NONE),
+                source -> {
+                    validateHls(validator, source, playbackHeaders, true,
+                            ResolutionProgressListener.NONE);
+                    return HlsStreamValidator.takeLastSample();
+                },
                 deadline,
-                0,
-                candidatesByAlias.size(),
-                progress,
-                candidate -> validateCandidate(
-                        validator,
-                        candidate,
-                        allowHttpFallback,
-                        playbackHeaders,
-                        true,
-                        progress
-                )
+                (tested, total) -> progress.onProgress(ResolutionProgress.counted(
+                        ResolutionStage.SOURCE_CANDIDATE,
+                        Math.max(1, tested),
+                        Math.max(1, total),
+                        "TvVoo · probando versiones"
+                ))
         );
-        try {
-            for (URI candidate : candidatesByAlias.keySet()) {
-                candidateRace.submit(candidate);
+        recordRaceOutcome(stableId, race);
+        return versionRows(race.versions, preferred, stableId, playbackHeaders);
+    }
+
+    /**
+     * Una fila por versión: la del editor primero, luego las disponibles por calidad y al final
+     * las que no responden («Sin señal ahora»), para que la lista no cambie de largo.
+     */
+    private List<ResolvedPlaybackCandidate> versionRows(
+            List<TvVooFastRace.VersionReport> versions,
+            String preferred,
+            String stableId,
+            Map<String, String> playbackHeaders
+    ) {
+        List<TvVooFastRace.VersionReport> ordered = new ArrayList<>(versions);
+        ordered.sort((left, right) -> {
+            boolean leftPreferred = left.alias.equals(preferred);
+            boolean rightPreferred = right.alias.equals(preferred);
+            if (leftPreferred != rightPreferred) return leftPreferred ? -1 : 1;
+            if ((left.best == null) != (right.best == null)) return left.best == null ? 1 : -1;
+            if (left.best != null) {
+                int byQuality = TvVooFastRace.compare(left.best, right.best);
+                if (byQuality != 0) return byQuality;
             }
-            while (candidateRace.hasInFlight()) {
-                try {
-                    deadline.check();
-                } catch (IOException deadlineError) {
-                    if (result.isEmpty()) throw deadlineError;
-                    break;
-                }
-                HlsCandidateRace.Attempt attempt = candidateRace.poll(
-                        Math.min(250L, Math.max(1L, deadline.remainingMillis()))
-                );
-                if (attempt == null) continue;
-                if (attempt.getAccepted() != null) {
-                    String alias = candidatesByAlias.get(attempt.getCandidate());
-                    TvVooSourceHistory.recordSuccess(stableSourceId(channel), alias);
-                    int ordinal = result.size() + 1;
-                    String qualityHint = aliasQualityHint(alias);
-                    String label = "Fuente " + ordinal + " · " + qualityHint;
-                    String detail = "TvVoo · HLS validada";
-                    result.add(new ResolvedPlaybackCandidate(
-                            label,
-                            detail,
-                            ResolvedPlaybackSource.dynamic(
-                                    getId(),
-                                    stableSourceId(channel),
-                                    attempt.getAccepted(),
-                                    playbackHeaders,
-                                    PLAYBACK_USER_AGENT,
-                                    expiresAt(attempt.getAccepted()),
-                                    alias
-                            )
-                    ));
-                } else if (attempt.getError() != null) {
-                    lastError = attempt.getError();
-                    TvVooSourceHistory.recordFailure(
-                            stableSourceId(channel),
-                            candidatesByAlias.get(attempt.getCandidate())
-                    );
-                }
+            return Integer.compare(left.aliasIndex, right.aliasIndex);
+        });
+        List<ResolvedPlaybackCandidate> rows = new ArrayList<>();
+        for (TvVooFastRace.VersionReport version : ordered) {
+            boolean isPreferred = version.alias.equals(preferred);
+            if (version.best == null) {
+                rows.add(ResolvedPlaybackCandidate.version(
+                        versionName(version.alias), version.failure, null,
+                        version.alias, "—", false, isPreferred, 0));
+                continue;
             }
-        } finally {
-            candidateRace.close();
+            TvVooFastRace.Accepted best = version.best;
+            String detail = (best.link.noFreeze ? "Estable" : "Directo")
+                    + " · respondió en " + String.format(Locale.forLanguageTag("es-CL"), "%.1f s",
+                    Math.max(0L, version.respondedMillis) / 1000.0);
+            String quality = best.info == null ? "Calidad sin datos" : best.info.label();
+            rows.add(ResolvedPlaybackCandidate.version(
+                    versionName(version.alias),
+                    detail,
+                    ResolvedPlaybackSource.dynamic(
+                            getId(),
+                            stableId,
+                            best.source,
+                            playbackHeaders,
+                            PLAYBACK_USER_AGENT,
+                            expiresAt(best.source),
+                            version.alias
+                    ),
+                    version.alias,
+                    quality,
+                    true,
+                    isPreferred,
+                    best.info == null ? 0 : best.info.height
+            ));
         }
-        if (result.isEmpty()) {
-            throw new IOException(
-                    "TvVoo no validó ninguna fuente alternativa.",
-                    lastError
-            );
-        }
-        return Collections.unmodifiableList(result);
+        return Collections.unmodifiableList(rows);
     }
 
     private List<AliasResult> queryAliasResults(
@@ -665,222 +620,82 @@ public final class TvVooStreamResolver implements StreamResolver {
                 1,
                 12
         );
-        int maxCandidates = definition.getIntConfig(
-                "maxCandidates",
-                DEFAULT_MAX_CANDIDATES,
-                1,
-                32
-        );
         boolean allowHttpFallback = definition.getBooleanConfig("allowHttpFallback", true);
         Map<String, String> jsonHeaders = Collections.singletonMap("Accept", "application/json");
         Map<String, String> playbackHeaders = playbackHeaders();
-
-        int parallelAliases = definition.getIntConfig(
-                "parallelAliases",
-                DEFAULT_PARALLEL_ALIASES,
-                1,
-                3
-        );
-        int parallelCandidates = definition.getIntConfig(
-                "parallelCandidates",
-                DEFAULT_PARALLEL_CANDIDATES,
-                1,
-                4
-        );
-        int aliasTotal = Math.min(aliases.size(), maxAliases);
-        IOException lastError = null;
-        List<String> limitedAliases = new ArrayList<>();
-        int aliasIndex = 0;
-        for (String alias : aliases) {
-            if (aliasIndex++ >= maxAliases) break;
-            limitedAliases.add(alias);
-        }
-        ExecutorService aliasExecutor = Executors.newFixedThreadPool(
-                parallelAliases,
-                new NamedDaemonThreadFactory("vibem3u-tvvoo-alias")
-        );
-        CompletionService<AliasResult> aliasCompletion =
-                new ExecutorCompletionService<>(aliasExecutor);
-        List<AliasState> aliasStates = new ArrayList<>();
-        HlsCandidateRace.Streaming candidateRace = new HlsCandidateRace.Streaming(
-                maxCandidates,
-                parallelCandidates,
+        String stableId = stableSourceId(channel);
+        List<String> raceAliases = TvVooDeadVersions.order(
+                stableId, new ArrayList<>(aliases), maxAliases, System.currentTimeMillis());
+        String finalEndpoint = endpointBase;
+        boolean recipe = boundedPayloadRecipe;
+        TvVooFastRace.Result race = TvVooFastRace.run(
+                TvVooFastRace.Mode.PLAY,
+                raceAliases,
+                alias -> queryAlias(alias, finalEndpoint, jsonHeaders, definition, recipe,
+                        httpClient, ResolutionProgressListener.NONE, deadline),
+                published -> validateCandidate(validator, published, allowHttpFallback,
+                        playbackHeaders, false, ResolutionProgressListener.NONE),
+                source -> {
+                    validateHls(validator, source, playbackHeaders, true,
+                            ResolutionProgressListener.NONE);
+                    return HlsStreamValidator.takeLastSample();
+                },
                 deadline,
-                0,
-                maxCandidates,
-                progress,
-                candidate -> validateCandidate(
-                        validator,
-                        candidate,
-                        allowHttpFallback,
-                        playbackHeaders,
-                        true,
-                        progress
-                )
+                (tested, total) -> progress.onProgress(ResolutionProgress.counted(
+                        ResolutionStage.SOURCE_CANDIDATE,
+                        Math.max(1, tested),
+                        Math.max(1, total),
+                        "TvVoo · " + total + " enlaces probados a la vez"
+                ))
         );
-        LinkedHashSet<URI> globallySeenCandidates = new LinkedHashSet<>();
-        Map<URI, String> aliasesByCandidate = new LinkedHashMap<>();
-        int nextAlias = 0;
-        int inFlightAliases = 0;
-        int completedAliases = 0;
-        try {
-            while (nextAlias < limitedAliases.size()
-                    && inFlightAliases < parallelAliases
-                    && candidateRace.hasCapacity()) {
-                aliasStates.add(submitAlias(
-                        limitedAliases.get(nextAlias),
-                        nextAlias++,
-                        aliasTotal,
-                        endpointBase,
-                        jsonHeaders,
-                        definition,
-                        boundedPayloadRecipe,
-                        httpClient,
-                        progress,
-                        deadline,
-                        aliasCompletion
-                ));
-                inFlightAliases++;
-            }
-            while (inFlightAliases > 0 || candidateRace.hasInFlight()) {
-                deadline.check();
-                if (!candidateRace.hasCapacity() && !candidateRace.hasInFlight()) {
-                    break;
-                }
-                HlsCandidateRace.Attempt candidateAttempt = candidateRace.poll(1L);
-                if (candidateAttempt != null) {
-                    if (candidateAttempt.getAccepted() != null) {
-                        URI source = candidateAttempt.getAccepted();
-                        String alias = aliasesByCandidate.get(candidateAttempt.getCandidate());
-                        TvVooSourceHistory.recordSuccess(stableSourceId(channel), alias);
-                        progress.onProgress(ResolutionProgress.of(
-                                ResolutionStage.SOURCE_FOUND,
-                                "HLS válido · GET " + SafePlaybackText.url(source)
-                                        + " · candidato aceptado"
-                        ));
-                        return ResolvedPlaybackSource.dynamic(
-                                getId(),
-                                stableSourceId(channel),
-                                source,
-                                playbackHeaders,
-                                PLAYBACK_USER_AGENT,
-                                expiresAt(source),
-                                alias
-                        );
-                    }
-                    if (candidateAttempt.getError() != null) {
-                        lastError = candidateAttempt.getError();
-                        TvVooSourceHistory.recordFailure(
-                                stableSourceId(channel),
-                                aliasesByCandidate.get(candidateAttempt.getCandidate())
-                        );
-                    }
-                    continue;
-                }
-
-                Future<AliasResult> finished = aliasCompletion.poll();
-                if (finished != null) {
-                    inFlightAliases--;
-                    completedAliases++;
-                    AliasResult result;
-                    try {
-                        result = finished.get();
-                    } catch (InterruptedException error) {
-                        Thread.currentThread().interrupt();
-                        throw new IOException("Solicitud cancelada.", error);
-                    } catch (ExecutionException error) {
-                        Throwable cause = error.getCause();
-                        result = new AliasResult(
-                                completedAliases - 1,
-                                Collections.emptyList(),
-                                cause instanceof IOException
-                                        ? (IOException) cause
-                                        : new IOException("No se pudo consultar el alias.", cause)
-                        );
-                    }
-                    if (result.error != null) {
-                        lastError = result.error;
-                        String failedAlias = result.index >= 0
-                                && result.index < limitedAliases.size()
-                                ? limitedAliases.get(result.index)
-                                : "";
-                        TvVooSourceHistory.recordFailure(stableSourceId(channel), failedAlias);
-                    }
-                    for (URI candidate : result.candidates) {
-                        if (globallySeenCandidates.add(candidate)) {
-                            if (result.index >= 0 && result.index < limitedAliases.size()) {
-                                aliasesByCandidate.put(candidate, limitedAliases.get(result.index));
-                            }
-                            candidateRace.submit(candidate);
-                            if (!candidateRace.hasCapacity()) break;
-                        }
-                    }
-                    while (nextAlias < limitedAliases.size()
-                            && inFlightAliases < parallelAliases
-                            && candidateRace.hasCapacity()) {
-                        aliasStates.add(submitAlias(
-                                limitedAliases.get(nextAlias),
-                                nextAlias++,
-                                aliasTotal,
-                                endpointBase,
-                                jsonHeaders,
-                                definition,
-                                boundedPayloadRecipe,
-                                httpClient,
-                                progress,
-                                deadline,
-                                aliasCompletion
-                        ));
-                        inFlightAliases++;
-                    }
-                    continue;
-                }
-
-                // No completed event yet. A short poll lets either the next
-                // alias or the next HLS validation report without imposing a
-                // batch barrier on the other queue.
-                if (candidateRace.hasInFlight()) {
-                    HlsCandidateRace.Attempt attempt = candidateRace.poll(10L);
-                    if (attempt != null) {
-                        if (attempt.getAccepted() != null) {
-                            URI source = attempt.getAccepted();
-                            String alias = aliasesByCandidate.get(attempt.getCandidate());
-                            TvVooSourceHistory.recordSuccess(stableSourceId(channel), alias);
-                            progress.onProgress(ResolutionProgress.of(
-                                    ResolutionStage.SOURCE_FOUND,
-                                    "HLS válido · GET " + SafePlaybackText.url(source)
-                                            + " · candidato aceptado"
-                            ));
-                            return ResolvedPlaybackSource.dynamic(
-                                    getId(),
-                                    stableSourceId(channel),
-                                    source,
-                                    playbackHeaders,
-                                    PLAYBACK_USER_AGENT,
-                                    expiresAt(source),
-                                    alias
-                            );
-                        }
-                        if (attempt.getError() != null) {
-                            lastError = attempt.getError();
-                            TvVooSourceHistory.recordFailure(
-                                    stableSourceId(channel),
-                                    aliasesByCandidate.get(attempt.getCandidate())
-                            );
-                        }
-                    }
-                } else {
-                    Thread.yield();
-                }
-            }
-        } catch (IOException error) {
-            lastError = error;
-        } finally {
-            candidateRace.close();
-            for (AliasState state : aliasStates) state.cancel();
-            aliasExecutor.shutdownNow();
+        recordRaceOutcome(stableId, race);
+        TvVooFastRace.Accepted chosen = race.chosen;
+        if (chosen == null) {
+            throw new IOException("TvVoo no entregó una fuente reproducible.", race.lastError);
         }
-        throw new IOException("TvVoo no entregó una fuente reproducible.", lastError);
+        String quality = chosen.info == null ? "calidad sin datos" : chosen.info.label();
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.SOURCE_FOUND,
+                "TvVoo · " + versionName(chosen.link.alias) + " · " + quality
+        ));
+        return ResolvedPlaybackSource.dynamic(
+                getId(),
+                stableId,
+                chosen.source,
+                playbackHeaders,
+                PLAYBACK_USER_AGENT,
+                expiresAt(chosen.source),
+                chosen.link.alias
+        );
+    }
+
+    /** Recuerda versiones buenas y muertas para la próxima apertura (historial y 10 min). */
+    private static void recordRaceOutcome(String stableId, TvVooFastRace.Result race) {
+        long now = System.currentTimeMillis();
+        for (TvVooFastRace.VersionReport report : race.versions) {
+            if (report.best != null) {
+                TvVooDeadVersions.markAlive(stableId, report.alias);
+            } else if (report.failed && report.respondedMillis < 0) {
+                TvVooDeadVersions.markDead(stableId, report.alias, now);
+                TvVooSourceHistory.recordFailure(stableId, report.alias);
+            }
+        }
+        if (race.chosen != null) TvVooSourceHistory.recordSuccess(stableId, race.chosen.link.alias);
+    }
+
+    /** Nombre legible de una versión: «vavoo_TNT%20SPORTS%203%7Cgroup%3Auk» → «TNT SPORTS 3». */
+    static String versionName(String alias) {
+        if (alias == null || AppStrings.isBlank(alias)) return "TvVoo";
+        String decoded = alias;
+        try {
+            decoded = URLDecoder.decode(alias, StandardCharsets.UTF_8.name());
+        } catch (Exception ignored) {
+            // Se muestra tal cual.
+        }
+        if (decoded.startsWith("vavoo_")) decoded = decoded.substring(6);
+        int group = decoded.indexOf("|group");
+        if (group >= 0) decoded = decoded.substring(0, group);
+        return decoded.trim();
     }
 
     private ResolvedPlaybackSource resolveDirect(
@@ -1155,64 +970,11 @@ public final class TvVooStreamResolver implements StreamResolver {
                 try {
                     deadline.check();
                     ResolutionContext.current().check();
-                    String endpoint = endpointBase + "/" + encodedAlias(alias) + ".json";
-                    progress.onProgress(ResolutionProgress.of(
-                            ResolutionStage.CATALOG_REQUEST,
-                            "GET " + SafePlaybackText.url(endpoint)
-                                    + " · JSON · streams[].url"
-                    ));
-                    LinkedHashSet<URI> candidates = new LinkedHashSet<>();
-                    for (int attempt = 1; ; attempt++) {
-                        IOException queryError = null;
-                        try {
-                            String response = httpClient.getText(endpoint, jsonHeaders);
-                            progress.onProgress(ResolutionProgress.of(
-                                    ResolutionStage.CATALOG_PARSED,
-                                    "JSON válido · extrayendo streams[].url · alias=" + alias
-                            ));
-                            candidates.addAll(ResolverPayloadParsers.parseTvVooCandidates(
-                                    response,
-                                    definition.getConfig("streamsPath", "streams"),
-                                    definition.getConfig("urlField", "url")
-                            ));
-                            if (boundedPayloadRecipe) {
-                                candidates.addAll(ResolverPayloadParsers.parseBoundedHlsCandidates(
-                                        response,
-                                        URI.create(endpoint),
-                                        definition.getIntConfig("maxPayloadDepth", 6, 1, 8),
-                                        definition.getIntConfig("maxExtractedStrings", 256, 8, 512),
-                                        definition.getIntConfig("maxCandidates", 8, 1, 32)
-                                ));
-                            }
-                        } catch (IOException error) {
-                            queryError = error;
-                        }
-                        if (!candidates.isEmpty()) break;
-                        long pause = ALIAS_RETRY_DELAY_MS * attempt;
-                        if (attempt >= ALIAS_QUERY_ATTEMPTS
-                                || deadline.remainingMillis() < pause + 2_500L) {
-                            if (queryError != null) throw queryError;
-                            break;
-                        }
-                        // Respuesta vacía o error pasajero: el addon suele entregar la
-                        // señal en la consulta siguiente.
-                        progress.onProgress(ResolutionProgress.of(
-                                ResolutionStage.CATALOG_REQUEST,
-                                "alias=" + alias + " · sin fuentes, reintento " + (attempt + 1)
-                                        + " de " + ALIAS_QUERY_ATTEMPTS
-                        ));
-                        try {
-                            Thread.sleep(pause);
-                        } catch (InterruptedException interrupted) {
-                            Thread.currentThread().interrupt();
-                            throw new IOException("Solicitud cancelada.", interrupted);
-                        }
-                        deadline.check();
-                        ResolutionContext.current().check();
-                    }
+                    List<URI> candidates = queryAlias(alias, endpointBase, jsonHeaders,
+                            definition, boundedPayloadRecipe, httpClient, progress, deadline);
                     return new AliasResult(
                             absoluteIndex,
-                            Collections.unmodifiableList(new ArrayList<>(candidates)),
+                            candidates,
                             null
                     );
                 } catch (IOException error) {
@@ -1228,6 +990,75 @@ public final class TvVooStreamResolver implements StreamResolver {
         };
         Future<AliasResult> future = completion.submit(ResolutionContext.wrapCurrent(task));
         return new AliasState(aliasContext, future);
+    }
+
+    /** Pide los enlaces de una versión al addon; reintenta si llega vacía (pasa a menudo). */
+    private static List<URI> queryAlias(
+            String alias,
+            String endpointBase,
+            Map<String, String> jsonHeaders,
+            ResolverDefinition definition,
+            boolean boundedPayloadRecipe,
+            TokenHttpClient httpClient,
+            ResolutionProgressListener progress,
+            ResolutionDeadline deadline
+    ) throws IOException {
+        String endpoint = endpointBase + "/" + encodedAlias(alias) + ".json";
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.CATALOG_REQUEST,
+                "GET " + SafePlaybackText.url(endpoint)
+                        + " · JSON · streams[].url"
+        ));
+        LinkedHashSet<URI> candidates = new LinkedHashSet<>();
+        for (int attempt = 1; ; attempt++) {
+            IOException queryError = null;
+            try {
+                String response = httpClient.getText(endpoint, jsonHeaders);
+                progress.onProgress(ResolutionProgress.of(
+                        ResolutionStage.CATALOG_PARSED,
+                        "JSON válido · extrayendo streams[].url · alias=" + alias
+                ));
+                candidates.addAll(ResolverPayloadParsers.parseTvVooCandidates(
+                        response,
+                        definition.getConfig("streamsPath", "streams"),
+                        definition.getConfig("urlField", "url")
+                ));
+                if (boundedPayloadRecipe) {
+                    candidates.addAll(ResolverPayloadParsers.parseBoundedHlsCandidates(
+                            response,
+                            URI.create(endpoint),
+                            definition.getIntConfig("maxPayloadDepth", 6, 1, 8),
+                            definition.getIntConfig("maxExtractedStrings", 256, 8, 512),
+                            definition.getIntConfig("maxCandidates", 8, 1, 32)
+                    ));
+                }
+            } catch (IOException error) {
+                queryError = error;
+            }
+            if (!candidates.isEmpty()) break;
+            long pause = ALIAS_RETRY_DELAY_MS * attempt;
+            if (attempt >= ALIAS_QUERY_ATTEMPTS
+                    || deadline.remainingMillis() < pause + 2_500L) {
+                if (queryError != null) throw queryError;
+                break;
+            }
+            // Respuesta vacía o error pasajero: el addon suele entregar la
+            // señal en la consulta siguiente.
+            progress.onProgress(ResolutionProgress.of(
+                    ResolutionStage.CATALOG_REQUEST,
+                    "alias=" + alias + " · sin fuentes, reintento " + (attempt + 1)
+                            + " de " + ALIAS_QUERY_ATTEMPTS
+            ));
+            try {
+                Thread.sleep(pause);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Solicitud cancelada.", interrupted);
+            }
+            deadline.check();
+            ResolutionContext.current().check();
+        }
+        return Collections.unmodifiableList(new ArrayList<>(candidates));
     }
 
     private ResolutionDeadline newResolutionDeadline() {

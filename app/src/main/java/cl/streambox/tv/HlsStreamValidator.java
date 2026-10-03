@@ -15,7 +15,12 @@ import java.util.Set;
 /** Validates a master/media playlist and samples a recent media segment. */
 public final class HlsStreamValidator {
     private static final int MAX_PLAYLIST_BYTES = 1024 * 1024;
-    private static final int MAX_SEGMENT_PROBE_BYTES = 8 * 1024;
+    // 32 KB alcanzan para el SPS del primer cuadro: así se conoce la calidad real (2026-10-03).
+    private static final int MAX_SEGMENT_PROBE_BYTES = 32 * 1024;
+    private static final String SEGMENT_PROBE_RANGE = "bytes=0-32767";
+    private static final long MAX_SUSTAINED_SEGMENT_BYTES = 16L * 1024L * 1024L;
+    /** Calidad del último segmento validado en este hilo (la validación es síncrona). */
+    private static final ThreadLocal<VideoSampleInfo> LAST_SAMPLE = new ThreadLocal<>();
     private static final int MAX_PLAYLIST_DEPTH = 3;
 
     private final TokenHttpClient httpClient;
@@ -28,6 +33,110 @@ public final class HlsStreamValidator {
     public HlsStreamValidator(TokenHttpClient httpClient) {
         if (httpClient == null) throw new NullPointerException("httpClient");
         this.httpClient = httpClient;
+    }
+
+    /** Calidad leída en la última validación completa de este hilo, y la borra; null si no se supo. */
+    static VideoSampleInfo takeLastSample() {
+        VideoSampleInfo info = LAST_SAMPLE.get();
+        LAST_SAMPLE.remove();
+        return info;
+    }
+
+    /** Resultado de {@link #measureSustained}: velocidad frente a tiempo real y calidad. */
+    static final class Sustained {
+        final double speed;
+        final VideoSampleInfo info;
+
+        Sustained(double speed, VideoSampleInfo info) {
+            this.speed = speed;
+            this.info = info;
+        }
+    }
+
+    /**
+     * Prueba exigente para recomendar un cambio de fuente: baja completos los dos
+     * segmentos más recientes de la variante de más bitrate y mide cuántas veces más
+     * rápido que tiempo real llegan. Se usa en segundo plano, nunca al abrir un canal.
+     */
+    Sustained measureSustained(
+            URI playbackUri,
+            Map<String, String> headers,
+            ResolutionContext context
+    ) throws IOException {
+        Map<String, String> safeHeaders = headers == null
+                ? Collections.emptyMap()
+                : Collections.unmodifiableMap(new java.util.LinkedHashMap<>(headers));
+        PlaylistResponse current = loadPlaylist(playbackUri, safeHeaders, context);
+        for (int depth = 0; depth < MAX_PLAYLIST_DEPTH; depth++) {
+            URI best = bestVariant(current);
+            if (best == null) break;
+            current = loadPlaylist(best, safeHeaders, context);
+        }
+        List<Double> durations = new ArrayList<>();
+        List<String> segments = new ArrayList<>();
+        double pending = -1;
+        for (String line : current.lines) {
+            String value = line.trim();
+            if (value.toUpperCase(Locale.ROOT).startsWith("#EXTINF:")) {
+                try {
+                    pending = Double.parseDouble(value.substring(8).split(",")[0].trim());
+                } catch (NumberFormatException ignored) {
+                    pending = -1;
+                }
+            } else if (!value.isEmpty() && !value.startsWith("#") && pending > 0) {
+                segments.add(value);
+                durations.add(pending);
+                pending = -1;
+            }
+        }
+        if (segments.size() < 2) throw new IOException("El HLS no tiene segmentos suficientes.");
+        double slowest = Double.MAX_VALUE;
+        VideoSampleInfo info = null;
+        for (int index = segments.size() - 2; index < segments.size(); index++) {
+            check(context);
+            URI segmentUri = resolve(current.finalUri, segments.get(index));
+            PublicStreamPolicy.requirePublicHttp(segmentUri);
+            long started = System.nanoTime();
+            TokenHttpClient.Response response = httpClient.getPublicPrefix(
+                    segmentUri.toString(), safeHeaders, (int) MAX_SUSTAINED_SEGMENT_BYTES, null);
+            double seconds = Math.max(0.001, (System.nanoTime() - started) / 1e9);
+            if (response.getBody().length < 1024 || looksLikeErrorDocument(response.getBody())) {
+                throw new IOException("El segmento HLS no es reproducible.");
+            }
+            if (info == null) info = VideoSampleInfo.probe(response.getBody());
+            slowest = Math.min(slowest, durations.get(index) / seconds);
+        }
+        return new Sustained(slowest, info);
+    }
+
+    /** Variante de mayor BANDWIDTH declarado, o null si la lista ya es de medios. */
+    private static URI bestVariant(PlaylistResponse response) {
+        URI best = null;
+        long bestBandwidth = -1;
+        List<String> lines = response.lines;
+        for (int index = 0; index < lines.size(); index++) {
+            String line = lines.get(index).trim();
+            if (!line.toUpperCase(Locale.ROOT).startsWith("#EXT-X-STREAM-INF:")) continue;
+            java.util.regex.Matcher matcher = java.util.regex.Pattern
+                    .compile("(?:^|[,:])BANDWIDTH=(\\d+)").matcher(line);
+            long bandwidth = matcher.find() ? Long.parseLong(matcher.group(1)) : 0L;
+            for (int next = index + 1; next < lines.size(); next++) {
+                String value = lines.get(next).trim();
+                if (value.isEmpty() || value.startsWith("#")) continue;
+                if (bandwidth > bestBandwidth) {
+                    try {
+                        URI resolved = response.finalUri.resolve(value);
+                        PublicStreamPolicy.requirePublicHttp(resolved);
+                        best = resolved;
+                        bestBandwidth = bandwidth;
+                    } catch (IllegalArgumentException | IOException ignored) {
+                        // Variante malformada: se ignora.
+                    }
+                }
+                break;
+            }
+        }
+        return best;
     }
 
     public void validate(URI playbackUri, Map<String, String> headers) throws IOException {
@@ -226,13 +335,13 @@ public final class HlsStreamValidator {
                 progress.onProgress(ResolutionProgress.of(
                         ResolutionStage.HLS_SEGMENT,
                         "GET " + SafePlaybackText.url(segmentUri)
-                                + " · Range bytes=0-4095"
+                                + " · Range " + SEGMENT_PROBE_RANGE
                 ));
                 TokenHttpClient.Response response = httpClient.getPublicPrefix(
                         segmentUri.toString(),
                         headers,
                         MAX_SEGMENT_PROBE_BYTES,
-                        "bytes=0-4095"
+                        SEGMENT_PROBE_RANGE
                 );
                 check(context);
                 PublicStreamPolicy.requirePublicHttp(response.getFinalUri());
@@ -243,6 +352,7 @@ public final class HlsStreamValidator {
                         ))) {
                     throw new IOException("El segmento HLS no es reproducible.");
                 }
+                LAST_SAMPLE.set(encryptedSegments ? null : VideoSampleInfo.probe(response.getBody()));
                 progress.onProgress(ResolutionProgress.of(
                         ResolutionStage.HLS_SEGMENT,
                         "HTTP " + response.getStatusCode() + " · segmento reproducible"

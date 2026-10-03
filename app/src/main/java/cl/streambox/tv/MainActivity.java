@@ -221,6 +221,27 @@ public final class MainActivity extends Activity {
     private Dialog exitDialog;
     /** Escena de Highfly Premium abierta (token rechazado o vinculación). */
     private Dialog premiumSceneDialog;
+    /** Aviso «Mejor calidad disponible» (2026-10-03). */
+    private View qualityUpgradeOverlay;
+    private TextView qualityUpgradeTitle;
+    private TextView qualityUpgradeMessage;
+    private Button qualityUpgradeSwitch;
+    private Button qualityUpgradeDismiss;
+    private android.widget.ProgressBar qualityUpgradeTimer;
+    private android.animation.ObjectAnimator qualityUpgradeTimerAnimation;
+    private java.util.concurrent.Future<?> qualityUpgradeTask;
+    private ResolutionContext qualityUpgradeContext;
+    private long qualityUpgradeCheckedGeneration = -1L;
+    private ResolvedPlaybackSource qualityUpgradeOffer;
+    /** Fuente anterior a un cambio de calidad: si la nueva falla pronto, se vuelve a ella. */
+    private ResolvedPlaybackSource qualityRevertSource;
+    private long qualityRevertUntilElapsedRealtime;
+    /** Inicio de la fuente actual: los enlaces Clean de TvVoo vencen a los ~20 min. */
+    private long currentSourceStartedElapsedRealtime;
+    /** Sin internet: la reconexión espera a que vuelva la red, sin gastar intentos. */
+    private ConnectivityManager.NetworkCallback networkWaitCallback;
+    private boolean waitingForNetwork;
+    private long tvvooNoSignalToken;
     private String qualityPreferenceAppliedFor;
     private String subtitlePreferenceAppliedFor;
     private String subtitleTextObservedFor;
@@ -482,6 +503,14 @@ public final class MainActivity extends Activity {
         sourceSelectorStatus = findViewById(R.id.source_selector_status);
         sourceSelectorOptions = findViewById(R.id.source_selector_options);
         sourceSelectorCloseButton = findViewById(R.id.source_selector_close);
+        qualityUpgradeOverlay = findViewById(R.id.quality_upgrade_overlay);
+        qualityUpgradeTitle = findViewById(R.id.quality_upgrade_title);
+        qualityUpgradeMessage = findViewById(R.id.quality_upgrade_message);
+        qualityUpgradeSwitch = findViewById(R.id.quality_upgrade_switch);
+        qualityUpgradeDismiss = findViewById(R.id.quality_upgrade_dismiss);
+        qualityUpgradeTimer = findViewById(R.id.quality_upgrade_timer);
+        qualityUpgradeSwitch.setOnClickListener(view -> acceptQualityUpgrade());
+        qualityUpgradeDismiss.setOnClickListener(view -> hideQualityUpgrade());
         sourceSelectorCloseButton.setOnFocusChangeListener((view, focused) -> {
             if (focused) sourceSelectorCloseFocused = true;
         });
@@ -566,6 +595,7 @@ public final class MainActivity extends Activity {
                         playbackHasStarted = true;
                         playbackLoadingSinceElapsedRealtime = -1L;
                         maybeSchedulePlaybackSourceStability();
+                        maybeScheduleQualityUpgradeCheck();
                     } else if (playbackLoadingSinceElapsedRealtime < 0L) {
                         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
                     }
@@ -614,6 +644,14 @@ public final class MainActivity extends Activity {
             }
 
             @Override public void onPlayerError(PlaybackException error) {
+                if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW
+                        && player != null) {
+                    // Quedó atrás de la ventana en vivo: se vuelve al borde, no se reconecta.
+                    player.seekToDefaultPosition();
+                    player.prepare();
+                    return;
+                }
+                if (revertQualityUpgradeIfRecent()) return;
                 markPublishedHighflyLinkFailed();
                 settlePlaybackEpisode(false);
                 startupMetrics.failed(startupMetrics.currentId());
@@ -1612,6 +1650,9 @@ public final class MainActivity extends Activity {
     private void playChannel(int requestedIndex, boolean revalidateLogo) {
         if (channels.isEmpty()) return;
         closePlaybackSourceSelector();
+        cancelQualityUpgrade();
+        qualityRevertSource = null;
+        tvvooNoSignalToken++;
         channelIndex = (requestedIndex % channels.size() + channels.size()) % channels.size();
         Channel channel = channels.get(channelIndex);
         playbackGeneration++;
@@ -1817,6 +1858,10 @@ public final class MainActivity extends Activity {
      * through to the existing decoder-level full recovery path.
      */
     private boolean requestPlaybackSourceRecovery(PlaybackException error) {
+        if (isExpiredTvVooCleanSource()) {
+            // Los enlaces Clean de TvVoo duran ~20 min: vencer es normal, no una falla.
+            playbackSourceRecoveryAttempts = 0;
+        }
         if (playbackSourceRecoveryInFlight
                 || playbackSourceRecoveryAttempts >= 1
                 || playbackChannel == null
@@ -1860,6 +1905,18 @@ public final class MainActivity extends Activity {
         return true;
     }
 
+    private static final long TVVOO_CLEAN_LIFETIME_MS = 15L * 60_000L;
+
+    private boolean isExpiredTvVooCleanSource() {
+        ResolvedPlaybackSource source = currentPlaybackSource;
+        if (source == null || !"tvvoo".equalsIgnoreCase(source.getResolverId())) return false;
+        URI uri = source.getPlaybackUri();
+        String host = uri == null || uri.getHost() == null ? "" : uri.getHost();
+        boolean noFreeze = host.endsWith("hayd.uk");
+        return !noFreeze && SystemClock.elapsedRealtime() - currentSourceStartedElapsedRealtime
+                >= TVVOO_CLEAN_LIFETIME_MS;
+    }
+
     private static boolean isDecoderFailure(PlaybackException error) {
         if (error == null) return false;
         int code = error.errorCode;
@@ -1897,6 +1954,10 @@ public final class MainActivity extends Activity {
         if (!isAutoReconnectEnabled()) {
             // Video y audio › Reconexión automática apagada: se muestra el error y OK reintenta.
             showPlaybackFailure();
+            return;
+        }
+        if (!isNetworkAvailable()) {
+            waitForNetworkThenRecover();
             return;
         }
         if (!playbackRecoveryBudget.hasAttemptLeft()) {
@@ -2131,7 +2192,260 @@ public final class MainActivity extends Activity {
             showPlaybackFailure();
             return;
         }
+        if (resolver != null && "tvvoo".equalsIgnoreCase(resolver.getId())
+                && isNetworkAvailable() && playbackRecoveryBudget.used() > 0) {
+            // La carrera ya probó todas las versiones dos veces: el canal está caído en el
+            // origen. Sin reintentos ruidosos; se prueba en silencio cada minuto.
+            showTvVooNoSignal();
+            return;
+        }
         requestFullPlaybackRecovery("fuente no disponible", true, false);
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Mejor calidad disponible (TvVoo, 2026-10-03)
+    // ---------------------------------------------------------------------------------
+
+    private static final long QUALITY_UPGRADE_DELAY_MS = 15_000L;
+    private static final long QUALITY_UPGRADE_VISIBLE_MS = 12_000L;
+    private static final long QUALITY_REVERT_WINDOW_MS = 20_000L;
+    private static final double QUALITY_UPGRADE_MIN_SPEED = 1.5d;
+
+    private final Runnable qualityUpgradeCheck = this::startQualityUpgradeCheck;
+    private final Runnable hideQualityUpgradeRunnable = this::hideQualityUpgrade;
+
+    /** Una sola búsqueda por canal abierto, 15 s después de que el video arranca. */
+    private void maybeScheduleQualityUpgradeCheck() {
+        if (qualityUpgradeCheckedGeneration == playbackGeneration
+                || currentPlaybackSource == null
+                || !"tvvoo".equalsIgnoreCase(currentPlaybackSource.getResolverId())) return;
+        qualityUpgradeCheckedGeneration = playbackGeneration;
+        mainHandler.removeCallbacks(qualityUpgradeCheck);
+        mainHandler.postDelayed(qualityUpgradeCheck, QUALITY_UPGRADE_DELAY_MS);
+    }
+
+    private void startQualityUpgradeCheck() {
+        Channel channel = playbackChannel;
+        if (channel == null || player == null || !player.isPlaying() || exiting
+                || streamResolverRegistry == null || qualityUpgradeTask != null) return;
+        Format video = player.getVideoFormat();
+        int currentHeight = video == null ? 0 : Math.max(0, video.height);
+        ResolvedPlaybackSource current = currentPlaybackSource;
+        StreamResolver resolver = streamResolverRegistry.find(channel);
+        if (currentHeight <= 0 || current == null || resolver == null
+                || !"tvvoo".equalsIgnoreCase(resolver.getId())) return;
+        long generation = playbackGeneration;
+        ResolutionContext context = new ResolutionContext(30_000L);
+        qualityUpgradeContext = context;
+        qualityUpgradeTask = playbackExecutor.submit(() -> {
+            try (ResolutionContext.Scope ignored = context.activate()) {
+                List<ResolvedPlaybackCandidate> rows = resolver.resolvePlaybackCandidates(
+                        channel, ResolutionProgressListener.NONE);
+                ResolvedPlaybackCandidate best = null;
+                for (ResolvedPlaybackCandidate row : rows) {
+                    if (!row.isAvailable() || row.getSource() == null) continue;
+                    if (row.getQualityHeight() <= currentHeight) continue;
+                    if (row.getVariantId().equals(current.getVariantId())) continue;
+                    if (best == null || row.getQualityHeight() > best.getQualityHeight()) best = row;
+                }
+                if (best == null) return;
+                // Prueba exigente: dos segmentos completos, bien por sobre tiempo real.
+                HlsStreamValidator.Sustained sustained = new HlsStreamValidator(
+                        new TokenHttpClient(4_000, 10_000)).measureSustained(
+                        best.getSource().getPlaybackUri(),
+                        best.getSource().getRequestHeaders(),
+                        context);
+                if (sustained.speed < QUALITY_UPGRADE_MIN_SPEED) return;
+                if (sustained.info != null && sustained.info.height <= currentHeight) return;
+                ResolvedPlaybackCandidate offer = best;
+                mainHandler.post(() -> showQualityUpgrade(channel, generation, offer, currentHeight));
+            } catch (Exception ignored) {
+                // Sin oferta: se sigue viendo la fuente actual sin avisar nada.
+            } finally {
+                mainHandler.post(() -> {
+                    if (qualityUpgradeContext == context) {
+                        qualityUpgradeContext = null;
+                        qualityUpgradeTask = null;
+                    }
+                });
+            }
+        });
+    }
+
+    private void showQualityUpgrade(
+            Channel channel,
+            long generation,
+            ResolvedPlaybackCandidate offer,
+            int currentHeight
+    ) {
+        if (channel != playbackChannel || generation != playbackGeneration || exiting
+                || isSourceSelectorVisible() || isGuideVisible() || settingsOpen
+                || (exitDialog != null && exitDialog.isShowing())
+                || (premiumSceneDialog != null && premiumSceneDialog.isShowing())) return;
+        qualityUpgradeOffer = offer.getSource();
+        String quality = offer.getQuality();
+        String shortQuality = quality.contains(" · ") ? quality.substring(0, quality.indexOf(" · ")) : quality;
+        qualityUpgradeTitle.setText(getString(R.string.quality_upgrade_title,
+                channel.getName(), shortQuality));
+        qualityUpgradeMessage.setText(getString(R.string.quality_upgrade_message,
+                offer.getLabel(), quality.replace(" · ", " a "), currentHeight));
+        qualityUpgradeOverlay.setVisibility(View.VISIBLE);
+        qualityUpgradeSwitch.requestFocus();
+        if (qualityUpgradeTimerAnimation != null) qualityUpgradeTimerAnimation.cancel();
+        qualityUpgradeTimer.setProgress(1000);
+        qualityUpgradeTimerAnimation = android.animation.ObjectAnimator.ofInt(
+                qualityUpgradeTimer, "progress", 1000, 0);
+        qualityUpgradeTimerAnimation.setDuration(QUALITY_UPGRADE_VISIBLE_MS);
+        qualityUpgradeTimerAnimation.setInterpolator(new android.view.animation.LinearInterpolator());
+        qualityUpgradeTimerAnimation.start();
+        mainHandler.removeCallbacks(hideQualityUpgradeRunnable);
+        mainHandler.postDelayed(hideQualityUpgradeRunnable, QUALITY_UPGRADE_VISIBLE_MS);
+    }
+
+    private boolean isQualityUpgradeVisible() {
+        return qualityUpgradeOverlay != null && qualityUpgradeOverlay.getVisibility() == View.VISIBLE;
+    }
+
+    private boolean handleQualityUpgradeKey(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        if (event.getAction() != KeyEvent.ACTION_DOWN) {
+            return keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                    || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER
+                    || keyCode == KeyEvent.KEYCODE_BACK;
+        }
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_BACK:
+                hideQualityUpgrade();
+                return true;
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                qualityUpgradeSwitch.requestFocus();
+                return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                qualityUpgradeDismiss.requestFocus();
+                return true;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+                if (qualityUpgradeDismiss.isFocused()) hideQualityUpgrade();
+                else acceptQualityUpgrade();
+                return true;
+            default:
+                // Cualquier otra tecla (canal, guía…) cierra el aviso y sigue su curso.
+                hideQualityUpgrade();
+                return false;
+        }
+    }
+
+    private void hideQualityUpgrade() {
+        mainHandler.removeCallbacks(hideQualityUpgradeRunnable);
+        if (qualityUpgradeTimerAnimation != null) qualityUpgradeTimerAnimation.cancel();
+        qualityUpgradeOffer = null;
+        if (qualityUpgradeOverlay != null) qualityUpgradeOverlay.setVisibility(View.GONE);
+    }
+
+    private void cancelQualityUpgrade() {
+        mainHandler.removeCallbacks(qualityUpgradeCheck);
+        if (qualityUpgradeContext != null) qualityUpgradeContext.cancel();
+        if (qualityUpgradeTask != null) qualityUpgradeTask.cancel(true);
+        qualityUpgradeContext = null;
+        qualityUpgradeTask = null;
+        hideQualityUpgrade();
+    }
+
+    /** Cambia a la fuente mejor; si falla en los 20 s siguientes, vuelve sola a la anterior. */
+    private void acceptQualityUpgrade() {
+        ResolvedPlaybackSource offer = qualityUpgradeOffer;
+        Channel channel = playbackChannel;
+        hideQualityUpgrade();
+        if (offer == null || channel == null || player == null
+                || offer.isExpired(System.currentTimeMillis())) return;
+        qualityRevertSource = currentPlaybackSource;
+        qualityRevertUntilElapsedRealtime = SystemClock.elapsedRealtime() + QUALITY_REVERT_WINDOW_MS;
+        switchToSource(channel, offer);
+    }
+
+    private boolean revertQualityUpgradeIfRecent() {
+        ResolvedPlaybackSource previous = qualityRevertSource;
+        Channel channel = playbackChannel;
+        qualityRevertSource = null;
+        if (previous == null || channel == null || player == null
+                || SystemClock.elapsedRealtime() > qualityRevertUntilElapsedRealtime
+                || previous.isExpired(System.currentTimeMillis())) return false;
+        switchToSource(channel, previous);
+        return true;
+    }
+
+    private void switchToSource(Channel channel, ResolvedPlaybackSource source) {
+        if (!isCurrentPlayback(channel, playbackGeneration)) return;
+        playbackHasStarted = false;
+        playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
+        playbackAutoRecoveryInFlight = false;
+        playbackRecoveryFailed = false;
+        resetPlaybackBitrateMeter();
+        player.stop();
+        player.clearMediaItems();
+        discardCurrentPlaybackSource();
+        long requestId = ++playbackResolutionRequestId;
+        setStatus("CARGANDO", R.color.amber);
+        showLoadingState(getString(R.string.source_selector_switching));
+        startResolvedPlayback(channel, source, playbackGeneration, requestId);
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Reconexión: canal TvVoo sin señal y espera de red (2026-10-03)
+    // ---------------------------------------------------------------------------------
+
+    private static final long TVVOO_NO_SIGNAL_RETRY_MS = 60_000L;
+
+    private void showTvVooNoSignal() {
+        showPlaybackFailure();
+        setStatus("SIN SEÑAL", R.color.amber);
+        codecInfo.setText(getString(R.string.tvvoo_no_signal));
+        long token = ++tvvooNoSignalToken;
+        long generation = playbackGeneration;
+        mainHandler.postDelayed(() -> {
+            if (token != tvvooNoSignalToken || generation != playbackGeneration
+                    || exiting || isFinishing() || playbackChannel == null) return;
+            playbackRecoveryBudget.reset();
+            performFullPlaybackRecovery(true);
+        }, TVVOO_NO_SIGNAL_RETRY_MS);
+    }
+
+    private void waitForNetworkThenRecover() {
+        setStatus("SIN INTERNET", R.color.amber);
+        showLoadingState(getString(R.string.waiting_network));
+        if (waitingForNetwork) return;
+        waitingForNetwork = true;
+        ConnectivityManager manager = getSystemService(ConnectivityManager.class);
+        if (manager == null) return;
+        networkWaitCallback = new ConnectivityManager.NetworkCallback() {
+            @Override public void onAvailable(Network network) {
+                mainHandler.post(() -> {
+                    if (!waitingForNetwork || exiting || isFinishing()) return;
+                    stopWaitingForNetwork();
+                    playbackRecoveryBudget.reset();
+                    requestFullPlaybackRecovery("red recuperada", true, true);
+                });
+            }
+        };
+        try {
+            manager.registerDefaultNetworkCallback(networkWaitCallback);
+        } catch (RuntimeException ignored) {
+            waitingForNetwork = false;
+            networkWaitCallback = null;
+        }
+    }
+
+    private void stopWaitingForNetwork() {
+        waitingForNetwork = false;
+        ConnectivityManager manager = getSystemService(ConnectivityManager.class);
+        if (manager != null && networkWaitCallback != null) {
+            try {
+                manager.unregisterNetworkCallback(networkWaitCallback);
+            } catch (RuntimeException ignored) {
+                // Ya no estaba registrado.
+            }
+        }
+        networkWaitCallback = null;
     }
 
     private static boolean isPremiumRejection(Throwable error) {
@@ -2187,6 +2501,7 @@ public final class MainActivity extends Activity {
                 ? expectedResolutionRequestId
                 : NO_RESOLUTION_REQUEST;
         currentPlaybackSource = source;
+        currentSourceStartedElapsedRealtime = SystemClock.elapsedRealtime();
         playbackSourceRecoveryInFlight = false;
         playbackSourceStabilityScheduledFor = "";
         if (playbackManifestCache != null) {
@@ -3492,10 +3807,108 @@ public final class MainActivity extends Activity {
                     isCurrentSource(candidate.getSource())
             ));
         }
-        renderPlaybackOptions(getString(
-                R.string.source_selector_ready_count,
-                playbackOptions.size()
-        ));
+        int available = 0;
+        for (ResolvedPlaybackCandidate candidate : sourceCandidates) {
+            if (candidate.isAvailable()) available++;
+        }
+        renderPlaybackOptions(available == sourceCandidates.size()
+                ? getString(R.string.source_selector_ready_count, available)
+                : getString(R.string.source_selector_versions_count, available,
+                        sourceCandidates.size()));
+    }
+
+    /** Fila «escena» del selector: nombre (+ «TU VERSIÓN»), detalle, calidad y estado. */
+    private View sceneOptionRow(PlaybackOption option) {
+        ResolvedPlaybackCandidate candidate = option.sourceCandidate;
+        boolean available = candidate == null || candidate.isAvailable();
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setBackgroundResource(R.drawable.scene_row);
+        row.setPadding(dp(13), dp(7), dp(13), dp(7));
+        row.setMinimumHeight(dp(42));
+        row.setFocusable(true);
+        row.setFocusableInTouchMode(true);
+        if (!available) row.setAlpha(0.42f);
+
+        LinearLayout text = new LinearLayout(this);
+        text.setOrientation(LinearLayout.VERTICAL);
+        text.setDuplicateParentStateEnabled(true);
+        LinearLayout titleLine = new LinearLayout(this);
+        titleLine.setOrientation(LinearLayout.HORIZONTAL);
+        titleLine.setGravity(Gravity.CENTER_VERTICAL);
+        titleLine.setDuplicateParentStateEnabled(true);
+        TextView title = new TextView(this);
+        title.setText(option.label);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+        title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",
+                android.graphics.Typeface.NORMAL));
+        title.setTextColor(getColorStateList(R.color.scene_row_title));
+        title.setIncludeFontPadding(false);
+        title.setSingleLine(true);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        title.setDuplicateParentStateEnabled(true);
+        titleLine.addView(title);
+        if (candidate != null && candidate.isPreferred()) {
+            TextView badge = new TextView(this);
+            badge.setText(R.string.source_selector_your_version);
+            badge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 7.5f);
+            badge.setLetterSpacing(0.08f);
+            badge.setTextColor(getColorStateList(R.color.scene_row_detail));
+            badge.setBackgroundResource(R.drawable.scene_badge);
+            badge.setPadding(dp(5), dp(1), dp(5), dp(1));
+            badge.setIncludeFontPadding(false);
+            badge.setDuplicateParentStateEnabled(true);
+            LinearLayout.LayoutParams badgeParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            badgeParams.setMarginStart(dp(6));
+            titleLine.addView(badge, badgeParams);
+        }
+        text.addView(titleLine);
+        if (!AppStrings.isBlank(option.detail)) {
+            TextView detail = new TextView(this);
+            detail.setText(option.detail);
+            detail.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
+            detail.setTextColor(getColorStateList(R.color.scene_row_detail));
+            detail.setIncludeFontPadding(false);
+            detail.setSingleLine(true);
+            detail.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            detail.setDuplicateParentStateEnabled(true);
+            LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            detailParams.topMargin = dp(3);
+            text.addView(detail, detailParams);
+        }
+        row.addView(text, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        String qualityText = candidate == null ? "" : candidate.getQuality();
+        if (!AppStrings.isBlank(qualityText)) {
+            TextView quality = new TextView(this);
+            quality.setText(qualityText);
+            quality.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+            quality.setTextColor(getColorStateList(R.color.scene_row_title));
+            quality.setIncludeFontPadding(false);
+            quality.setDuplicateParentStateEnabled(true);
+            LinearLayout.LayoutParams qualityParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            qualityParams.setMarginStart(dp(10));
+            row.addView(quality, qualityParams);
+        }
+
+        TextView state = new TextView(this);
+        state.setText(option.selected ? getString(R.string.source_selector_in_use)
+                : available ? getString(R.string.source_selector_available)
+                : getString(R.string.source_selector_no_signal));
+        state.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
+        state.setTextColor(option.selected ? 0xFF5BE9A0 : getColor(R.color.osd_muted));
+        state.setBackgroundResource(option.selected ? R.drawable.scene_chip_ok : R.drawable.scene_chip);
+        state.setPadding(dp(7), dp(3), dp(7), dp(3));
+        state.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams stateParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        stateParams.setMarginStart(dp(10));
+        row.addView(state, stateParams);
+        return row;
     }
 
     private void renderDirectQualitySelector(Channel channel) {
@@ -3545,6 +3958,11 @@ public final class MainActivity extends Activity {
 
     private boolean isCurrentSource(ResolvedPlaybackSource source) {
         if (source == null || currentPlaybackSource == null) return false;
+        String currentVariant = currentPlaybackSource.getVariantId();
+        String candidateVariant = source.getVariantId();
+        if (!AppStrings.isBlank(currentVariant) && !AppStrings.isBlank(candidateVariant)) {
+            return currentVariant.equals(candidateVariant);
+        }
         URI currentUri = currentPlaybackSource.getPlaybackUri();
         URI candidateUri = source.getPlaybackUri();
         return currentUri != null && currentUri.equals(candidateUri);
@@ -3557,6 +3975,24 @@ public final class MainActivity extends Activity {
         for (int index = 0; index < playbackOptions.size(); index++) {
             final int candidateIndex = index;
             PlaybackOption playbackOption = playbackOptions.get(index);
+            if (!classicUi) {
+                View row = sceneOptionRow(playbackOption);
+                row.setOnFocusChangeListener((view, focused) -> {
+                    if (focused) {
+                        sourceCandidateFocusIndex = candidateIndex;
+                        sourceSelectorCloseFocused = false;
+                    }
+                });
+                row.setOnClickListener(view -> selectPlaybackOption(candidateIndex));
+                LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+                rowParams.setMargins(0, index == 0 ? 0 : dp(4), 0, 0);
+                sourceSelectorOptions.addView(row, rowParams);
+                sourceCandidateViews.add(row);
+                continue;
+            }
             TextView option = new TextView(this);
             String detail = playbackOption.detail;
             String label = (playbackOption.selected ? "✓ " : "") + playbackOption.label;
@@ -3594,8 +4030,16 @@ public final class MainActivity extends Activity {
         }
         sourceSelectorStatus.setText(status);
         if (!sourceCandidateViews.isEmpty()) {
-            sourceCandidateFocusIndex = 0;
-            sourceCandidateViews.get(0).requestFocus();
+            // El foco parte en la fila en uso, si la hay.
+            int focusIndex = 0;
+            for (int index = 0; index < playbackOptions.size(); index++) {
+                if (playbackOptions.get(index).selected) {
+                    focusIndex = index;
+                    break;
+                }
+            }
+            sourceCandidateFocusIndex = focusIndex;
+            sourceCandidateViews.get(focusIndex).requestFocus();
             View last = sourceCandidateViews.get(sourceCandidateViews.size() - 1);
             last.setNextFocusDownId(sourceSelectorCloseButton.getId());
             sourceSelectorCloseButton.setNextFocusUpId(last.getId());
@@ -3716,6 +4160,7 @@ public final class MainActivity extends Activity {
             requestDiagnosticsUpdate();
             return;
         }
+        if (option.sourceCandidate != null && !option.sourceCandidate.isAvailable()) return;
         int sourceIndex = sourceCandidates.indexOf(option.sourceCandidate);
         if (sourceIndex >= 0) selectSourceCandidate(sourceIndex);
     }
@@ -3773,6 +4218,7 @@ public final class MainActivity extends Activity {
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
         if (isGuideVisible() && handleGuideKey(event)) return true;
+        if (isQualityUpgradeVisible() && handleQualityUpgradeKey(event)) return true;
         if (isSourceSelectorVisible()) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 if (keyCode == KeyEvent.KEYCODE_BACK
@@ -4003,6 +4449,8 @@ public final class MainActivity extends Activity {
             premiumSceneDialog.dismiss();
             premiumSceneDialog = null;
         }
+        cancelQualityUpgrade();
+        stopWaitingForNetwork();
         HighflyPremiumCredentialStore premiumStore = HighflyPremiumCredentialStore.peek();
         if (premiumStore != null) premiumStore.clearSession();
         if (appUpdater != null) {
@@ -4384,10 +4832,32 @@ public final class MainActivity extends Activity {
         View selectorPanel = findViewById(R.id.source_selector_panel);
         if (selectorPanel != null) {
             selectorPanel.setBackgroundResource(R.drawable.classic_source_selector_background);
+            selectorPanel.setPadding(dpToPx(18), dpToPx(14), dpToPx(18), dpToPx(14));
+            FrameLayout.LayoutParams panelParams =
+                    (FrameLayout.LayoutParams) selectorPanel.getLayoutParams();
+            panelParams.width = dpToPx(500);
+            panelParams.gravity = Gravity.CENTER;
+            panelParams.setMargins(0, 0, 0, 0);
+            selectorPanel.setLayoutParams(panelParams);
         }
+        for (int id : new int[]{R.id.source_selector_dim, R.id.source_selector_scrim_start,
+                R.id.source_selector_scrim}) {
+            View scrim = findViewById(id);
+            if (scrim != null) scrim.setVisibility(View.GONE);
+        }
+        sourceSelectorChannel.setAllCaps(false);
+        sourceSelectorChannel.setLetterSpacing(0f);
+        sourceSelectorChannel.setTextColor(getColor(R.color.white));
+        sourceSelectorTitle.setTextSize(TypedValue.COMPLEX_UNIT_PX,
+                getResources().getDimension(R.dimen.settings_heading_text_size));
         sourceSelectorTitle.setTextColor(getColor(R.color.cyan));
         sourceSelectorCloseButton.setBackgroundResource(R.drawable.classic_focus_button);
         sourceSelectorCloseButton.setTextColor(getColorStateList(R.color.classic_focus_button_text));
+        LinearLayout.LayoutParams closeParams =
+                (LinearLayout.LayoutParams) sourceSelectorCloseButton.getLayoutParams();
+        closeParams.width = LinearLayout.LayoutParams.MATCH_PARENT;
+        closeParams.height = dpToPx(40);
+        sourceSelectorCloseButton.setLayoutParams(closeParams);
     }
 
     private static String codecName(String mimeType) {

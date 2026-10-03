@@ -204,9 +204,23 @@ final class AppUpdater {
         Button laterButton = dialog.findViewById(R.id.update_later_button);
         Button installButton = dialog.findViewById(R.id.update_install_button);
 
-        message.setText(statusMessage == null
-                ? activity.getString(R.string.update_available, update.getVersionName())
-                : statusMessage);
+        if (!classic) {
+            // Escena: el título dice la versión y el detalle cuánto pesa la descarga.
+            TextView title = dialog.findViewById(R.id.update_title);
+            if (title != null) {
+                title.setText(activity.getString(R.string.update_scene_title, update.getVersionName()));
+            }
+            long size = update.getSizeBytes();
+            String sceneMessage = size > 0
+                    ? activity.getString(R.string.update_scene_message, String.format(
+                            java.util.Locale.forLanguageTag("es-CL"), "%.1f MB", size / 1_048_576.0))
+                    : activity.getString(R.string.update_scene_message_unknown);
+            message.setText(statusMessage == null ? sceneMessage : statusMessage);
+        } else {
+            message.setText(statusMessage == null
+                    ? activity.getString(R.string.update_available, update.getVersionName())
+                    : statusMessage);
+        }
         progress.setVisibility(View.GONE);
         laterButton.setOnClickListener(view -> {
             deferredThisSession = true;

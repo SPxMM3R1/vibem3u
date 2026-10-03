@@ -63,7 +63,7 @@
     <string name="update_available">VibeM3U %1$s está lista para instalar.</string>
     <string name="update_later">Más tarde</string>
     <string name="update_now">Actualizar</string>
-    <string name="update_downloading">Descargando… %1$d%%</string>
+    <string name="update_downloading">Descargando · %1$d %%</string>
     <string name="update_downloading_background">Descargando actualización para instalarla al próximo inicio.</string>
     <string name="update_download_error">No se pudo actualizar: %1$s</string>
     <string name="update_permission_required">Activa “Permitir desde esta fuente” y vuelve para continuar.</string>
@@ -128,7 +128,7 @@
     <string name="source_selector_quality_count">%1$d calidades detectadas. Selecciona una para aplicarla.</string>
     <string name="source_selector_no_options">No se detectaron fuentes ni calidades disponibles.</string>
     <string name="source_selector_switching">Cambiando a la fuente seleccionada…</string>
-    <string name="source_selector_close">Cerrar selector</string>
+    <string name="source_selector_close">Cerrar</string>
     <string name="mediaflow_settings_title">MediaFlow Proxy</string>
     <string name="mediaflow_open_settings">Servidor MediaFlow</string>
     <string name="mediaflow_settings_description">Envía la resolución Vavoo por tu servidor MediaFlow. La contraseña se guarda cifrada en Android Keystore.</string>
@@ -287,4 +287,20 @@
     <string name="premium_manage_message">Puedes vincular otro token o quitar este de la TV. Al desvincular, Highfly vuelve a la señal gratuita.</string>
     <string name="premium_relink_other">Vincular otro token</string>
     <string name="premium_unlink">Desvincular</string>
+    <string name="source_selector_versions_count">%1$d de %2$d versiones con señal ahora. Elige una para cambiar.</string>
+    <string name="source_selector_your_version">TU VERSIÓN</string>
+    <string name="source_selector_in_use">✓ En uso</string>
+    <string name="source_selector_available">Disponible</string>
+    <string name="source_selector_no_signal">Sin señal ahora</string>
+    <!-- Aviso de mejor calidad y reconexión TvVoo (2026-10-03). -->
+    <string name="quality_upgrade_kicker">Mejor calidad disponible</string>
+    <string name="quality_upgrade_switch">Cambiar</string>
+    <string name="quality_upgrade_dismiss">Seguir así</string>
+    <string name="quality_upgrade_title">%1$s en %2$s</string>
+    <string name="quality_upgrade_message">La versión «%1$s» entrega %2$s de forma estable. Ahora ves %3$dp. Si el cambio falla, vuelves solo a la actual.</string>
+    <string name="tvvoo_no_signal">Sin señal en este momento · se vuelve a intentar cada minuto</string>
+    <string name="waiting_network">Esperando la conexión a internet…</string>
+    <string name="update_scene_title">VibeM3U %1$s</string>
+    <string name="update_scene_message">Hay una versión nueva lista para instalar. La descarga pesa %1$s y el canal sigue mientras tanto.</string>
+    <string name="update_scene_message_unknown">Hay una versión nueva lista para instalar. El canal sigue mientras la descarga.</string>
 </resources>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sombra difusa abajo a la izquierda: el aviso flota sin tapar el partido. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:centerColor="#BF000000"
+        android:centerX="0.0"
+        android:centerY="1.0"
+        android:endColor="#00000000"
+        android:gradientRadius="560dp"
+        android:startColor="#EB000000"
+        android:type="radial" />
+</shape>

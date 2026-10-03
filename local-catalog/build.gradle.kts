@@ -46,10 +46,13 @@ val resolverFiles = listOf(
     "TokenHttpClient.java",
     "TvnStreamResolver.java",
     "TvVooCatalogChannel.java",
+    "TvVooDeadVersions.java",
+    "TvVooFastRace.java",
     "TvVooSourceHistory.java",
     "TvVooStreamResolver.java",
     "VavooStreamResolver.java",
     "VavooSessionClient.java",
+    "VideoSampleInfo.java",
 )
 
 sourceSets {

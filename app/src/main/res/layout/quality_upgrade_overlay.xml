@@ -1,62 +1,63 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Diálogo de salir (moderno).
-     Estilo «escena» (2026-10-03): el video sigue vivo y atenuado, el degradado negro del OSD
-     sube desde abajo y el contenido va abajo a la izquierda con los márgenes del OSD. -->
+<!-- Aviso «Mejor calidad disponible» (2026-10-03): no detiene el video ni lo atenúa; solo una
+     sombra abajo a la izquierda. Se cierra solo; si el cambio falla, la app vuelve a la anterior. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/quality_upgrade_overlay"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:visibility="gone">
 
     <View
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="#61000000" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@drawable/scene_scrim_start" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="360dp"
-        android:layout_gravity="bottom"
-        android:background="@drawable/scene_scrim" />
+        android:layout_width="680dp"
+        android:layout_height="300dp"
+        android:layout_gravity="bottom|start"
+        android:background="@drawable/quality_toast_scrim" />
 
     <LinearLayout
-        android:layout_width="600dp"
+        android:layout_width="460dp"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|start"
         android:layout_marginStart="48dp"
-        android:layout_marginBottom="52dp"
+        android:layout_marginBottom="44dp"
         android:orientation="vertical">
 
         <TextView
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:includeFontPadding="false"
-            android:letterSpacing="-0.01"
-            android:text="@string/scene_exit_title"
+            android:letterSpacing="0.12"
+            android:text="@string/quality_upgrade_kicker"
+            android:textAllCaps="true"
+            android:textColor="@color/osd_muted"
+            android:textSize="10sp" />
+
+        <TextView
+            android:id="@+id/quality_upgrade_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:includeFontPadding="false"
             android:textColor="@color/white"
-            android:textSize="32sp"
+            android:textSize="23sp"
             android:textStyle="bold" />
 
         <TextView
-            android:layout_width="450dp"
+            android:id="@+id/quality_upgrade_message"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="9dp"
+            android:layout_marginTop="8dp"
             android:lineSpacingMultiplier="1.3"
-            android:text="@string/exit_dialog_message"
             android:textColor="#B7C4CA"
-            android:textSize="12.5sp" />
+            android:textSize="11.5sp" />
 
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="22dp"
+            android:layout_marginTop="16dp"
             android:orientation="horizontal">
 
             <Button
-                android:id="@+id/exit_button"
+                android:id="@+id/quality_upgrade_switch"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
                 android:layout_marginEnd="7dp"
@@ -68,13 +69,13 @@
                 android:paddingStart="19dp"
                 android:paddingEnd="19dp"
                 android:stateListAnimator="@null"
-                android:text="@string/exit"
+                android:text="@string/quality_upgrade_switch"
                 android:textAllCaps="false"
                 android:textColor="@color/scene_button_text"
                 android:textSize="12sp" />
 
             <Button
-                android:id="@+id/stay_button"
+                android:id="@+id/quality_upgrade_dismiss"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
                 android:background="@drawable/scene_button"
@@ -85,12 +86,21 @@
                 android:paddingStart="19dp"
                 android:paddingEnd="19dp"
                 android:stateListAnimator="@null"
-                android:text="@string/stay_watching"
+                android:text="@string/quality_upgrade_dismiss"
                 android:textAllCaps="false"
                 android:textColor="@color/scene_button_text"
                 android:textSize="12sp" />
-
         </LinearLayout>
 
+        <ProgressBar
+            android:id="@+id/quality_upgrade_timer"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="210dp"
+            android:layout_height="2dp"
+            android:layout_marginTop="13dp"
+            android:max="1000"
+            android:progress="1000"
+            android:progressBackgroundTint="#24FFFFFF"
+            android:progressTint="@color/cyan" />
     </LinearLayout>
 </FrameLayout>

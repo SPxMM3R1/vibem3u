@@ -109,4 +109,6 @@
 
     <include layout="@layout/source_selector_overlay" />
 
+    <include layout="@layout/quality_upgrade_overlay" />
+
 </FrameLayout>

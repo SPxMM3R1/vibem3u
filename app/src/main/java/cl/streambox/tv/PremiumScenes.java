@@ -150,7 +150,8 @@ final class PremiumScenes {
                 HighflyPremiumCredentialStore.getInstance(activity).state();
         Dialog dialog = SceneDialog.create(activity, R.layout.dialog_scene);
         boolean expired = state.expiresAtMillis > 0L && state.expiresAtMillis <= System.currentTimeMillis();
-        ((View) dialog.findViewById(R.id.scene_kicker_line)).setBackgroundColor(
+        // Sin línea de color: el aviso se marca con la etiqueta en ámbar.
+        ((TextView) dialog.findViewById(R.id.scene_kicker)).setTextColor(
                 activity.getColor(R.color.amber));
         String kicker = activity.getString(R.string.premium_kicker);
         if (!AppStrings.isBlank(channelName)) kicker += " · " + channelName.trim();

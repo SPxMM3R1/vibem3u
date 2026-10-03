@@ -11,8 +11,9 @@
 
 ## Hoy, en una mirada
 
-- **Versión publicada**: 0.5.54 (`versionCode` 163): diálogos «escena», OSD sin categoría y
-  Highfly Premium por QR.
+- **Versión publicada**: 0.5.54 (`versionCode` 163); en curso la 0.5.55 con la carrera rápida
+  de TvVoo, calidad real, «Fuentes y calidades» nuevo, aviso de mejor calidad y reglas de
+  reconexión.
   Verificar su publicación en Releases antes de dar la entrega por concluida. Se publica con tag `vX.Y.Z` y el
   workflow «Publicar APK». No hay SDK Android local: compila «Android CI».
 - **Estado visual**: el usuario aprobó todo el estilo nuevo, pero la 0.5.42 y la 0.5.43 aún no
@@ -120,6 +121,17 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-03**: aplicado lo aprobado para TvVoo y diálogos:
+  - Carrera rápida (`TvVooFastRace`) y calidad real del segmento (`VideoSampleInfo`, probado
+    con las 6 variantes del stream de prueba de Apple y un SPS HEVC 1080p). Medición previa en
+    Actions: enlaces vivos 0,3–1 s, muertos hasta 15 s; «TNT SPORTS 3 HD» es 576p y «TNT
+    SPORTS 3» 1080p50.
+  - «Fuentes y calidades» en estilo escena con una fila por versión; aviso de mejor calidad
+    con vuelta automática; reglas de reconexión (Clean, ventana en vivo, sin internet, sin
+    señal cada 60 s, versiones muertas 10 min).
+  - Diálogos sin la línea de color; salir sin etiqueta; actualización con versión y peso.
+  - Pruebas: `TvVooQualityTest` (9) más TvVoo, HLS, Highfly y Premium: 70 JVM locales OK.
+  - Hecho desde una copia en C: porque el disco D: del usuario está lleno.
 - **2026-10-03**: aplicado lo aprobado en mockups (OSD, diálogos «escena» y Premium):
   - OSD moderno sin categoría y número a la derecha a media altura.
   - Diálogos de salir y actualización como «escena» (`SceneDialog`, layouts generados desde el

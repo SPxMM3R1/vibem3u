@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fila de las listas «escena»: con foco, blanco sólido; si no, vidrio tenue. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/white" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#0FFFFFFF" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+</selector>
