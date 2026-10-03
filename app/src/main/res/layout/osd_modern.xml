@@ -48,16 +48,6 @@
                     android:textSize="14sp"
                     android:textStyle="bold" />
             </FrameLayout>
-
-            <TextView
-                android:id="@+id/channel_number"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:includeFontPadding="false"
-                android:maxLines="1"
-                android:textColor="@color/osd_muted"
-                android:textSize="10.5sp" />
         </LinearLayout>
 
         <!-- Solo para accesibilidad y respaldo: el logo reemplaza al nombre. -->
@@ -133,6 +123,24 @@
             android:textSize="10sp"
             android:visibility="gone" />
     </LinearLayout>
+
+    <!-- Número del canal: a la derecha, a media altura (2026-10-03). Va sobre el video,
+         por eso lleva sombra para leerse en imágenes claras. -->
+    <TextView
+        android:id="@+id/channel_number"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end|center_vertical"
+        android:layout_marginEnd="@dimen/channel_overlay_horizontal_margin"
+        android:fontFamily="sans-serif-light"
+        android:includeFontPadding="false"
+        android:letterSpacing="0.02"
+        android:maxLines="1"
+        android:shadowColor="#99000000"
+        android:shadowDy="1"
+        android:shadowRadius="6"
+        android:textColor="#C9D3D7"
+        android:textSize="23sp" />
 
     <!-- Reloj y fecha dentro del OSD, sobre los datos técnicos. -->
     <LinearLayout

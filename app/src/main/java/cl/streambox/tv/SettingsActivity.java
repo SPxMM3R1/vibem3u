@@ -24,9 +24,7 @@ import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
 
-import java.security.KeyStore;
 import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -153,8 +151,6 @@ public final class SettingsActivity extends Activity {
      */
     public static void ensureDefaultPlaylistConfigured(Context context) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        removeObsoleteHighflyCredentialState(prefs);
-        removeObsoleteHighflyKeyMaterial();
         boolean hasPlaylistPreferences = prefs.contains(KEY_PLAYLIST_URL)
                 || prefs.contains(KEY_PLAYLIST_URL_2)
                 || prefs.contains(KEY_PLAYLIST_ENABLED)
@@ -192,45 +188,6 @@ public final class SettingsActivity extends Activity {
         editor.apply();
     }
 
-    /** Removes credential state written by versions that exposed this provider separately. */
-    private static void removeObsoleteHighflyCredentialState(SharedPreferences preferences) {
-        SharedPreferences.Editor editor = null;
-        for (String key : preferences.getAll().keySet()) {
-            String normalized = key == null ? "" : key.toLowerCase(Locale.ROOT);
-            boolean obsoleteCredential = normalized.contains("highfly")
-                    && (normalized.contains("token")
-                    || normalized.contains("credential")
-                    || normalized.contains("storage_mode")
-                    || normalized.endsWith("_status")
-                    || normalized.endsWith("_plan")
-                    || normalized.endsWith("_expires_at"));
-            if (!obsoleteCredential) continue;
-            if (editor == null) editor = preferences.edit();
-            editor.remove(key);
-        }
-        if (editor != null) editor.commit();
-    }
-
-    /** Removes inert Android Keystore entries left by the retired provider integration. */
-    private static void removeObsoleteHighflyKeyMaterial() {
-        try {
-            KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
-            keyStore.load(null);
-            Enumeration<String> aliases = keyStore.aliases();
-            List<String> obsoleteAliases = new ArrayList<>();
-            while (aliases.hasMoreElements()) {
-                String alias = aliases.nextElement();
-                if (alias != null
-                        && alias.toLowerCase(Locale.ROOT).startsWith("vibem3u_highfly")) {
-                    obsoleteAliases.add(alias);
-                }
-            }
-            for (String alias : obsoleteAliases) keyStore.deleteEntry(alias);
-        } catch (Exception ignored) {
-            // A missing/unsupported keystore must not prevent the app from opening.
-        }
-    }
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -247,6 +204,7 @@ public final class SettingsActivity extends Activity {
         styleClassic.setSelected(classicUi);
         styleModern.setOnClickListener(view -> setUiStyle(false));
         styleClassic.setOnClickListener(view -> setUiStyle(true));
+        bindPremiumSection();
         enterImmersiveMode();
 
         settingsRoot = findViewById(R.id.settings_root);
@@ -1240,6 +1198,110 @@ public final class SettingsActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
     }
 
+    /** Sección «Highfly Premium» (solo en el estilo moderno). */
+    private void bindPremiumSection() {
+        View row = findViewById(R.id.premium_account_row);
+        if (row == null) return;
+        HighflyPremiumCredentialStore store = HighflyPremiumCredentialStore.getInstance(this);
+        row.setOnClickListener(view -> {
+            if (store.hasCredential() && store.isUsable()) {
+                PremiumScenes.showManage(this,
+                        () -> PremiumScenes.showPairing(this, this::refreshPremiumSection),
+                        this::refreshPremiumSection);
+            } else {
+                PremiumScenes.showPairing(this, this::refreshPremiumSection);
+            }
+        });
+        LinearLayout options = findViewById(R.id.premium_region_options);
+        int[] labels = {
+                R.string.premium_region_auto, R.string.premium_region_main,
+                R.string.premium_region_us1, R.string.premium_region_us2,
+                R.string.premium_region_eu1
+        };
+        HighflyPremiumRegion[] regions = HighflyPremiumRegion.values();
+        for (int index = 0; index < regions.length; index++) {
+            HighflyPremiumRegion region = regions[index];
+            TextView chip = new TextView(this);
+            chip.setLayoutParams(new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT));
+            chip.setBackgroundResource(R.drawable.segment_option);
+            chip.setTextColor(getColorStateList(R.color.segment_option_text));
+            chip.setGravity(Gravity.CENTER);
+            chip.setIncludeFontPadding(false);
+            chip.setPadding(dp(9), 0, dp(9), 0);
+            chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
+            chip.setText(labels[index]);
+            chip.setTag(region);
+            chip.setClickable(true);
+            chip.setFocusable(true);
+            chip.setOnClickListener(view -> {
+                store.setRegion(region);
+                refreshPremiumSection();
+            });
+            options.addView(chip);
+        }
+        refreshPremiumSection();
+    }
+
+    private void refreshPremiumSection() {
+        TextView title = findViewById(R.id.premium_account_title);
+        if (title == null) return;
+        TextView detail = findViewById(R.id.premium_account_detail);
+        TextView action = findViewById(R.id.premium_account_action);
+        View regionRow = findViewById(R.id.premium_region_row);
+        HighflyPremiumCredentialStore store = HighflyPremiumCredentialStore.getInstance(this);
+        HighflyPremiumCredentialStore.State state = store.state();
+        if (state.status == HighflyPremiumCredentialStore.Status.NOT_CONFIGURED) {
+            title.setText(R.string.premium_link_title);
+            detail.setText(R.string.premium_link_description);
+            action.setText(R.string.premium_link_action);
+            regionRow.setVisibility(View.GONE);
+            return;
+        }
+        boolean valid = state.status == HighflyPremiumCredentialStore.Status.VALID;
+        String headline;
+        if (valid) {
+            String plan = getString(planName(state.plan));
+            headline = state.expiresAtMillis > 0L
+                    ? getString(R.string.premium_plan_expires, plan, PremiumScenes.date(state.expiresAtMillis))
+                    : getString(R.string.premium_plan_renews, plan);
+        } else {
+            headline = getString(R.string.premium_status_rejected);
+        }
+        android.text.SpannableString text = new android.text.SpannableString("●  " + headline);
+        text.setSpan(new android.text.style.ForegroundColorSpan(
+                        getColor(valid ? R.color.green : R.color.amber)),
+                0, 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        title.setText(text);
+        if (valid) {
+            java.util.Date verified = new java.util.Date(state.verifiedAtMillis);
+            detail.setText(getString(R.string.premium_verified_detail,
+                    PremiumScenes.date(state.verifiedAtMillis),
+                    new java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(verified)));
+            action.setText(R.string.premium_manage_action);
+        } else {
+            detail.setText(R.string.premium_status_rejected_detail);
+            action.setText(R.string.premium_link_action);
+        }
+        regionRow.setVisibility(valid ? View.VISIBLE : View.GONE);
+        HighflyPremiumRegion selected = store.region();
+        LinearLayout options = findViewById(R.id.premium_region_options);
+        for (int index = 0; index < options.getChildCount(); index++) {
+            View chip = options.getChildAt(index);
+            chip.setSelected(chip.getTag() == selected);
+        }
+    }
+
+    private static int planName(HighflyPremiumAccount.Plan plan) {
+        switch (plan) {
+            case YEARLY: return R.string.premium_plan_yearly;
+            case MONTHLY: return R.string.premium_plan_monthly;
+            case STANDARD: return R.string.premium_plan_standard;
+            case PRO: return R.string.premium_plan_pro;
+            default: return R.string.premium_plan_premium;
+        }
+    }
+
     /** Reloj con fecha como en la Guía: «Lunes 28 · 21:38», la hora en blanco. */
     private final Runnable updateSettingsClock = new Runnable() {
         @Override public void run() {
@@ -1270,6 +1332,7 @@ public final class SettingsActivity extends Activity {
         updateSettingsClock.run();
         refreshReminderStatus();
         refreshReminderList();
+        refreshPremiumSection();
         enterImmersiveMode();
         if (appUpdater != null) appUpdater.onHostResume();
     }

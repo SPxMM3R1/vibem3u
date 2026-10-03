@@ -1,70 +1,120 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Diálogo de salir (moderno): tarjeta centrada con el lenguaje de Opciones y la Guía. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="380dp"
-    android:layout_height="wrap_content"
-    android:background="@drawable/exit_dialog_background"
-    android:orientation="vertical"
-    android:paddingStart="24dp"
-    android:paddingTop="22dp"
-    android:paddingEnd="24dp"
-    android:paddingBottom="20dp">
+<!-- Diálogo de salir (moderno).
+     Estilo «escena» (2026-10-03): el video sigue vivo y atenuado, el degradado negro del OSD
+     sube desde abajo y el contenido va abajo a la izquierda con los márgenes del OSD. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
 
-    <TextView
+    <View
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:includeFontPadding="false"
-        android:text="@string/exit_dialog_title"
-        android:textColor="@color/white"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+        android:layout_height="match_parent"
+        android:background="#61000000" />
 
-    <TextView
+    <View
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:text="@string/exit_dialog_message"
-        android:textColor="@color/osd_muted"
-        android:textSize="10.5sp" />
+        android:layout_height="match_parent"
+        android:background="@drawable/scene_scrim_start" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="360dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/scene_scrim" />
 
     <LinearLayout
-        android:layout_width="match_parent"
+        android:layout_width="600dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:gravity="end"
-        android:orientation="horizontal">
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="48dp"
+        android:layout_marginBottom="52dp"
+        android:orientation="vertical">
 
-        <Button
-            android:id="@+id/stay_button"
+        <LinearLayout
             android:layout_width="wrap_content"
-            android:layout_height="30dp"
-            android:layout_marginEnd="8dp"
-            android:background="@drawable/focus_button"
-            android:includeFontPadding="false"
-            android:minHeight="0dp"
-            android:minWidth="0dp"
-            android:paddingTop="0dp"
-            android:paddingBottom="0dp"
-            android:stateListAnimator="@null"
-            android:text="@string/stay_watching"
-            android:textAllCaps="false"
-            android:textColor="@color/focus_button_text"
-            android:textSize="11sp" />
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <Button
-            android:id="@+id/exit_button"
-            android:layout_width="wrap_content"
-            android:layout_height="30dp"
-            android:background="@drawable/focus_button"
+            <View
+                android:layout_width="14dp"
+                android:layout_height="1.5dp"
+                android:layout_marginEnd="7dp"
+                android:background="@color/cyan" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.12"
+                android:text="@string/app_name"
+                android:textAllCaps="true"
+                android:textColor="@color/osd_muted"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="9dp"
             android:includeFontPadding="false"
-            android:minHeight="0dp"
-            android:minWidth="0dp"
-            android:paddingTop="0dp"
-            android:paddingBottom="0dp"
-            android:stateListAnimator="@null"
-            android:text="@string/exit"
-            android:textAllCaps="false"
-            android:textColor="@color/focus_button_text"
-            android:textSize="11sp" />
+            android:letterSpacing="-0.01"
+            android:text="@string/scene_exit_title"
+            android:textColor="@color/white"
+            android:textSize="32sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="450dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="9dp"
+            android:lineSpacingMultiplier="1.3"
+            android:text="@string/exit_dialog_message"
+            android:textColor="#B7C4CA"
+            android:textSize="12.5sp" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/exit_button"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginEnd="7dp"
+                android:background="@drawable/scene_button"
+                android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="19dp"
+                android:paddingEnd="19dp"
+                android:stateListAnimator="@null"
+                android:text="@string/exit"
+                android:textAllCaps="false"
+                android:textColor="@color/scene_button_text"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/stay_button"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:background="@drawable/scene_button"
+                android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="19dp"
+                android:paddingEnd="19dp"
+                android:stateListAnimator="@null"
+                android:text="@string/stay_watching"
+                android:textAllCaps="false"
+                android:textColor="@color/scene_button_text"
+                android:textSize="12sp" />
+
+        </LinearLayout>
+
     </LinearLayout>
-</LinearLayout>
+</FrameLayout>

@@ -187,11 +187,17 @@ final class AppUpdater {
         availableUpdate = update;
         if (updateDialog != null) updateDialog.dismiss();
 
-        Dialog dialog = new Dialog(activity);
+        boolean classic = UiStyle.isClassic(activity);
+        Dialog dialog;
+        if (classic) {
+            dialog = new Dialog(activity);
+            dialog.setContentView(R.layout.classic_dialog_update);
+            dialog.setCanceledOnTouchOutside(false);
+        } else {
+            // Moderno: diálogo «escena» sobre el video (2026-10-03).
+            dialog = SceneDialog.create(activity, R.layout.dialog_update);
+        }
         updateDialog = dialog;
-        dialog.setContentView(UiStyle.isClassic(activity)
-                ? R.layout.classic_dialog_update : R.layout.dialog_update);
-        dialog.setCanceledOnTouchOutside(false);
 
         TextView message = dialog.findViewById(R.id.update_message);
         ProgressBar progress = dialog.findViewById(R.id.update_progress);
@@ -224,7 +230,7 @@ final class AppUpdater {
         });
 
         Window window = dialog.getWindow();
-        if (window != null) {
+        if (classic && window != null) {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             WindowManager.LayoutParams attributes = window.getAttributes();
@@ -234,6 +240,7 @@ final class AppUpdater {
             window.setAttributes(attributes);
         }
         dialog.show();
+        if (!classic) SceneDialog.hideSystemBars(dialog);
     }
 
     private void downloadAndInstall(

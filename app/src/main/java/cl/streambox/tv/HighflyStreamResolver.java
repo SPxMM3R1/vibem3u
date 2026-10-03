@@ -32,6 +32,7 @@ public final class HighflyStreamResolver implements StreamResolver {
     private final String configuredManifestUrl;
     private final TokenHttpClient httpClient;
     private final HlsCandidateValidator validator;
+    private final HighflyPremiumClient premiumClient;
 
     public HighflyStreamResolver(ResolverDefinition definition) {
         this(
@@ -87,6 +88,7 @@ public final class HighflyStreamResolver implements StreamResolver {
                 : "";
         this.httpClient = httpClient;
         this.validator = validator;
+        this.premiumClient = new HighflyPremiumClient(httpClient);
     }
 
     static boolean isAllowedManifestUrl(String value) {
@@ -188,6 +190,10 @@ public final class HighflyStreamResolver implements StreamResolver {
         ResolutionProgressListener progress = listener == null
                 ? ResolutionProgressListener.NONE
                 : listener;
+        // Con Premium vinculado, su fuente va primero; si no responde se sigue con la
+        // señal gratuita. Un token rechazado sí corta: MainActivity muestra el aviso.
+        ResolvedPlaybackSource premium = resolvePremium(channel, progress);
+        if (premium != null) return premium;
         // Camino rápido: el runner ya confirmó la hoja con señal y publicó su enlace
         // directo (sin token). Se entrega a Media3 sin consultar la API ni validar; si
         // no reproduce, MainActivity lo marca como fallido y el reintento resuelve.
@@ -236,6 +242,72 @@ public final class HighflyStreamResolver implements StreamResolver {
         source = resolveCandidateList(channel, progress, candidates);
         if (source != null) return source;
         return fallbackSource(channel, progress, alternativeError);
+    }
+
+    private ResolvedPlaybackSource resolvePremium(
+            Channel channel,
+            ResolutionProgressListener progress
+    ) throws IOException {
+        HighflyPremiumLink.Source store = HighflyPremiumLink.current();
+        if (store == null || !store.linked()) return null;
+        String slug = stableSlug(channel);
+        if (AppStrings.isBlank(slug) || HighflyPremiumSession.isFreeOnly(slug)) return null;
+        if (store.rejected()) throw new HighflyPremiumClient.RejectedException();
+        String token = store.token();
+        if (token == null) return null;
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.SOURCE_REQUEST,
+                "Highfly Premium · consultando fuentes"
+        ));
+        List<ResolverPayloadParsers.HighflyCandidate> candidates;
+        try {
+            candidates = premiumClient.streams(token, store.region(), slug);
+        } catch (HighflyPremiumClient.RejectedException rejected) {
+            store.markRejected();
+            throw rejected;
+        } catch (IOException unavailable) {
+            ResolutionContext active = ResolutionContext.current();
+            if (active != null) active.check();
+            progress.onProgress(ResolutionProgress.of(
+                    ResolutionStage.SOURCE_BUILDING,
+                    "Highfly Premium no respondió · usando la señal gratuita"
+            ));
+            return null;
+        }
+        // Las URL Premium pueden llevar firma: el progreso visible nunca las muestra.
+        ResolutionProgressListener quiet = event -> progress.onProgress(ResolutionProgress.of(
+                event.getStage(), "Highfly Premium · validando fuente"));
+        for (int index = 0; index < candidates.size(); index++) {
+            URI uri = candidates.get(index).getUri();
+            if (uri == null || uri.getHost() == null || uri.getUserInfo() != null
+                    || !"https".equalsIgnoreCase(uri.getScheme())) {
+                continue;
+            }
+            progress.onProgress(ResolutionProgress.counted(
+                    ResolutionStage.SOURCE_CANDIDATE, index + 1, candidates.size(),
+                    "Highfly Premium · " + candidates.get(index).displayLabel()));
+            try {
+                validator.validate(uri, HighflyPremiumClient.headers("*/*"), quiet);
+                progress.onProgress(ResolutionProgress.of(
+                        ResolutionStage.SOURCE_FOUND, "Highfly Premium · fuente válida"));
+                return ResolvedPlaybackSource.dynamic(
+                        getId(),
+                        stableSourceId(channel),
+                        uri,
+                        HighflyPremiumClient.headers("*/*"),
+                        PLAYBACK_USER_AGENT,
+                        expiresAt()
+                );
+            } catch (IOException invalid) {
+                ResolutionContext active = ResolutionContext.current();
+                if (active != null) active.check();
+            }
+        }
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.SOURCE_BUILDING,
+                "Highfly Premium sin fuente válida · usando la señal gratuita"
+        ));
+        return null;
     }
 
     private ResolvedPlaybackSource resolveCandidateList(
@@ -660,6 +732,11 @@ public final class HighflyStreamResolver implements StreamResolver {
             throw new IOException("Highfly publicó una URL que no es HLS.");
         }
         return candidate;
+    }
+
+    /** Slug con el que Premium identifica el canal (el mismo de la señal gratuita). */
+    static String premiumSlug(Channel channel) {
+        return stableSlug(channel);
     }
 
     private static String stableSlug(Channel channel) {

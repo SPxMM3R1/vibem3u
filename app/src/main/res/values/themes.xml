@@ -23,4 +23,23 @@
         <item name="android:backgroundDimEnabled">false</item>
         <item name="android:colorAccent">@color/cyan</item>
     </style>
+
+    <!-- Diálogos «escena» (2026-10-03): pantalla completa sobre el video, sin tarjeta ni
+         atenuado del sistema; el layout trae su propio velo y el degradado del OSD. -->
+    <style name="Theme.VibeM3U.Scene" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:colorAccent">@color/cyan</item>
+        <item name="android:windowAnimationStyle">@style/SceneFade</item>
+    </style>
+
+    <style name="SceneFade">
+        <item name="android:windowEnterAnimation">@android:anim/fade_in</item>
+        <item name="android:windowExitAnimation">@android:anim/fade_out</item>
+    </style>
 </resources>

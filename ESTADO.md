@@ -11,7 +11,8 @@
 
 ## Hoy, en una mirada
 
-- **Versión del código**: 0.5.53 (`versionCode` 162), con corrección del selector Highfly.
+- **Versión del código**: 0.5.53 (`versionCode` 162); en curso la 0.5.54 con diálogos «escena»,
+  OSD sin categoría y Highfly Premium por QR.
   Verificar su publicación en Releases antes de dar la entrega por concluida. Se publica con tag `vX.Y.Z` y el
   workflow «Publicar APK». No hay SDK Android local: compila «Android CI».
 - **Estado visual**: el usuario aprobó todo el estilo nuevo, pero la 0.5.42 y la 0.5.43 aún no
@@ -22,8 +23,9 @@
     - ventana de 150 min;
     - el velo cyan marca el programa enfocado y se mueve con ◀ ▶;
     - reloj con fecha en recuadro gris y sin atajos abajo.
-  - **OSD**: pantalla completa con degradado negro puro y fuerte (`OsdScrimView`), logo y
-    «025 · Categoría», título grande, descripción, avance, «Después»; abajo a la derecha la
+  - **OSD**: pantalla completa con degradado negro puro y fuerte (`OsdScrimView`), logo (sin
+    categoría desde 2026-10-03), título grande, descripción, avance, «Después»; el número del
+    canal va a la derecha a media altura, con sombra; abajo a la derecha la
     hora grande con la fecha larga y debajo los datos técnicos (ya no hay reloj aparte arriba
     en el moderno). El título que se desplaza se difumina en los bordes.
   - **Carga** (moderno): onda Material 3 sin pista recta y con los extremos difuminados
@@ -34,8 +36,13 @@
     (no enciende la atenuación local de teles mini-LED); al aparecer la imagen vuelve suave.
   - **Logos** (`LogoFit`): se recorta el borde transparente y todos ocupan la misma superficie
     visual, en el OSD y en la Guía.
-  - **Menús**: Opciones, selector de fuentes, detalle del programa, diálogos, carga y
-    MediaFlow usan filas tenues con foco cyan y píldoras.
+  - **Menús**: Opciones, selector de fuentes, detalle del programa, carga y MediaFlow usan
+    filas tenues con foco cyan y píldoras.
+  - **Diálogos «escena»** (2026-10-03, moderno): salir, actualización y Premium ocupan la
+    pantalla sobre el video atenuado, con el degradado del OSD desde abajo y el contenido abajo
+    a la izquierda (etiqueta con línea de color, título grande, detalle, píldoras con foco
+    blanco). Al salir, el foco parte en «Salir». Reloj de Opciones sin caja, sobre una sombra
+    difusa en la esquina.
   - **Opciones** (0.5.47, moderno): encabezado idéntico al de la Guía y una sola columna
     de 560 dp que mide lo que su contenido necesita (sin relleno ni desplazamiento); fondo
     `menu_backdrop` en negro puro. Espacios: 4 dp entre filas, 16 antes de cada sección y 6
@@ -60,6 +67,13 @@
     las pendientes al vencer. No guarda una preferencia de fuente ni cambia el arranque del runner.
   - Recuperación automática con 3 reintentos (2, 5 y 10 s; `PlaybackRecoveryBudget`).
   - TVN descubre su reproductor en vivo donde lo publique.
+- **Highfly Premium** (2026-10-03): Opciones › Canales › «Highfly Premium» › Vincular. La TV
+  muestra un QR y un código de 4 dígitos; el teléfono (misma red) abre la página que sirve la
+  TV, pega el token o el enlace de premium.highfly.to y la TV lo verifica y lo guarda cifrado.
+  Con Premium vinculado, los canales Highfly prueban primero su fuente Premium y, si no
+  responde, la gratuita. Si Highfly rechaza el token, aparece la escena «Tu token venció» con
+  «Vincular de nuevo» o «Ver señal gratuita». Región elegible (Automática por defecto). Solo en
+  el estilo moderno; sin prueba en TV ni con un token real todavía.
 - **Recordatorios**: en la Guía se mantiene OK sobre un programa. El aviso llega con la app
   cerrada si tiene el permiso «Mostrar sobre otras apps». Se gestionan en Opciones › Recordatorios.
 
@@ -106,6 +120,18 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-03**: aplicado lo aprobado en mockups (OSD, diálogos «escena» y Premium):
+  - OSD moderno sin categoría y número a la derecha a media altura.
+  - Diálogos de salir y actualización como «escena» (`SceneDialog`, layouts generados desde el
+    mockup aprobado con `scene_layouts.py` del scratchpad); foco inicial en «Salir».
+  - Reloj de Opciones sin recuadro (`corner_scrim`). `activity_settings.xml` ya tiene ediciones a
+    mano además del generador (`settings_compact_gen.py`): si se regenera, conservar el reloj, la
+    sombra y la sección Premium.
+  - Highfly Premium restaurado para el dominio `.to`: token cifrado, vinculación por QR con
+    servidor local (`PremiumPairingServer`, zxing core 3.5.3 para el QR), fuente Premium primero
+    en Highfly y escena de token vencido. Se quitó la limpieza que borraba claves `highfly_*` y
+    alias `vibem3u_highfly*` al abrir Opciones. Pruebas: `HighflyPremiumTest` (12) y
+    `HighflyStreamResolverTest` (13) pasan en JVM local; CI Android pendiente.
 - **2026-10-03**: corregido el timeout prematuro del selector Highfly en
   `HighflyStreamResolver.java`: un sondeo vacío de 250 ms continúa la espera en lugar de
   tirar error o devolver una lista incompleta. Se reprodujo el fallo con 4 regresiones antes

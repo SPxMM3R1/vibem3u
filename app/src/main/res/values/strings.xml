@@ -239,4 +239,52 @@
     <string name="settings_subtitles_on">Activados</string>
     <string name="settings_subtitles_off">Desactivados</string>
     <string name="exit_dialog_message">El canal se detendrá y la app se cerrará.</string>
+
+    <!-- Diálogos «escena» (2026-10-03). -->
+    <string name="scene_exit_title">¿Salir de la app?</string>
+    <string name="scene_update_kicker">Actualización</string>
+
+    <!-- Highfly Premium (2026-10-03). -->
+    <string name="premium_kicker">Highfly Premium</string>
+    <string name="premium_link_title">Vincular cuenta Premium</string>
+    <string name="premium_link_description">Escanea un QR con el teléfono y pega tu token. No hay que escribirlo en la TV.</string>
+    <string name="premium_link_action">Vincular ›</string>
+    <string name="premium_manage_action">Gestionar ›</string>
+    <string name="premium_region_title">Región</string>
+    <string name="premium_region_auto">Automática</string>
+    <string name="premium_region_main">Principal</string>
+    <string name="premium_region_us1">US-1</string>
+    <string name="premium_region_us2">US-2</string>
+    <string name="premium_region_eu1">Europa</string>
+    <string name="premium_plan_yearly">Plan anual</string>
+    <string name="premium_plan_monthly">Plan mensual</string>
+    <string name="premium_plan_standard">Plan Standard</string>
+    <string name="premium_plan_pro">Plan Pro</string>
+    <string name="premium_plan_premium">Premium</string>
+    <string name="premium_plan_expires">%1$s · vence el %2$s</string>
+    <string name="premium_plan_renews">%1$s · renovación automática</string>
+    <string name="premium_verified_detail">Token verificado el %1$s a las %2$s · guardado cifrado en esta TV</string>
+    <string name="premium_status_rejected">Token vencido o rechazado</string>
+    <string name="premium_status_rejected_detail">Vincula un token vigente para volver a ver las fuentes Premium.</string>
+    <string name="premium_pair_title">Vincula con tu teléfono</string>
+    <string name="premium_pair_message">Escanea el código, pega tu token o el enlace de premium.highfly.to y escribe este código. El token viaja por tu Wi-Fi, no por internet.</string>
+    <string name="premium_pair_qr_description">Código QR para vincular desde el teléfono</string>
+    <string name="premium_pair_address">o abre %1$s</string>
+    <string name="premium_pair_waiting">Esperando el teléfono · se cierra en %1$s</string>
+    <string name="premium_pair_verifying">Verificando el token con Highfly…</string>
+    <string name="premium_pair_rejected">Highfly rechazó el token: revisa que esté vigente.</string>
+    <string name="premium_pair_unreachable">No se pudo contactar a Highfly. Revisa la conexión e inténtalo otra vez.</string>
+    <string name="premium_pair_locked">Demasiados códigos incorrectos. Cierra y vuelve a abrir la vinculación.</string>
+    <string name="premium_pair_no_network">Conecta la TV a tu red Wi-Fi o por cable para vincular con el teléfono.</string>
+    <string name="premium_pair_phone_done">Token verificado. Ya puedes volver a la TV.</string>
+    <string name="premium_expired_title">Tu token venció</string>
+    <string name="premium_expired_message">Venció el %1$s. Renuévalo en premium.highfly.to; el token nuevo llega a tu correo y lo vinculas en un minuto.</string>
+    <string name="premium_rejected_title">Highfly rechazó tu token</string>
+    <string name="premium_rejected_message">El token ya no es válido. Renuévalo en premium.highfly.to y vincúlalo de nuevo.</string>
+    <string name="premium_relink">Vincular de nuevo</string>
+    <string name="premium_watch_free">Ver señal gratuita</string>
+    <string name="premium_manage_title">Tu cuenta Premium</string>
+    <string name="premium_manage_message">Puedes vincular otro token o quitar este de la TV. Al desvincular, Highfly vuelve a la señal gratuita.</string>
+    <string name="premium_relink_other">Vincular otro token</string>
+    <string name="premium_unlink">Desvincular</string>
 </resources>

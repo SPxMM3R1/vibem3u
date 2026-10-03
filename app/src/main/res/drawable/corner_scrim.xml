@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sombra difusa en la esquina superior derecha: deja leer el reloj sin caja sobre el video. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:centerColor="#A6000000"
+        android:centerX="1.0"
+        android:centerY="0.0"
+        android:endColor="#00000000"
+        android:gradientRadius="300dp"
+        android:startColor="#EB000000"
+        android:type="radial" />
+</shape>

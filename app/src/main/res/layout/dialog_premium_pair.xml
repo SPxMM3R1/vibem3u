@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Vincular Highfly Premium con el teléfono (QR y código de 4 dígitos).
+     Estilo «escena» (2026-10-03): el video sigue vivo y atenuado, el degradado negro del OSD
+     sube desde abajo y el contenido va abajo a la izquierda con los márgenes del OSD. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#61000000" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/scene_scrim_start" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="360dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/scene_scrim" />
+
+    <LinearLayout
+        android:layout_width="600dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="48dp"
+        android:layout_marginBottom="52dp"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <View
+                android:layout_width="14dp"
+                android:layout_height="1.5dp"
+                android:layout_marginEnd="7dp"
+                android:background="@color/cyan" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.12"
+                android:text="@string/premium_kicker"
+                android:textAllCaps="true"
+                android:textColor="@color/osd_muted"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="9dp"
+            android:includeFontPadding="false"
+            android:letterSpacing="-0.01"
+            android:text="@string/premium_pair_title"
+            android:textColor="@color/white"
+            android:textSize="32sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="500dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="9dp"
+            android:lineSpacingMultiplier="1.3"
+            android:text="@string/premium_pair_message"
+            android:textColor="#B7C4CA"
+            android:textSize="12.5sp" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="15dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/premium_pair_digit_0"
+                android:layout_width="37dp"
+                android:layout_height="44dp"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/scene_code_cell"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:textColor="@color/white"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/premium_pair_digit_1"
+                android:layout_width="37dp"
+                android:layout_height="44dp"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/scene_code_cell"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:textColor="@color/white"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/premium_pair_digit_2"
+                android:layout_width="37dp"
+                android:layout_height="44dp"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/scene_code_cell"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:textColor="@color/white"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/premium_pair_digit_3"
+                android:layout_width="37dp"
+                android:layout_height="44dp"
+                android:background="@drawable/scene_code_cell"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:textColor="@color/white"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/premium_pair_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="13dp"
+            android:includeFontPadding="false"
+            android:textColor="@color/osd_muted"
+            android:textSize="10.5sp" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/premium_pair_cancel_button"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:background="@drawable/scene_button"
+                android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="19dp"
+                android:paddingEnd="19dp"
+                android:stateListAnimator="@null"
+                android:text="@string/cancel"
+                android:textAllCaps="false"
+                android:textColor="@color/scene_button_text"
+                android:textSize="12sp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="48dp"
+        android:layout_marginBottom="52dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+        <ImageView
+            android:id="@+id/premium_pair_qr"
+            android:layout_width="150dp"
+            android:layout_height="150dp"
+            android:background="@drawable/scene_qr_background"
+            android:contentDescription="@string/premium_pair_qr_description"
+            android:padding="8dp"
+            android:scaleType="fitCenter" />
+
+        <TextView
+            android:id="@+id/premium_pair_address"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:includeFontPadding="false"
+            android:textColor="@color/osd_muted"
+            android:textSize="9.5sp" />
+    </LinearLayout>
+</FrameLayout>

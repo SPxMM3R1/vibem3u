@@ -219,6 +219,8 @@ public final class MainActivity extends Activity {
     private boolean exiting;
     private boolean resourcesReleased;
     private Dialog exitDialog;
+    /** Escena de Highfly Premium abierta (token rechazado o vinculación). */
+    private Dialog premiumSceneDialog;
     private String qualityPreferenceAppliedFor;
     private String subtitlePreferenceAppliedFor;
     private String subtitleTextObservedFor;
@@ -395,6 +397,8 @@ public final class MainActivity extends Activity {
         // Install the process-local alias learning store before any resolver
         // can be used. It persists aliases only, never resolved URLs/tokens.
         new TvVooSourceHistory(this);
+        // Deja disponible el token Premium cifrado para el resolutor de Highfly.
+        HighflyPremiumCredentialStore.getInstance(this);
         reloadResolverRegistry();
         bindViews();
         // Si en 5 s la pantalla sigue viva, el estilo elegido arrancó bien (ver UiStyle).
@@ -2113,6 +2117,13 @@ public final class MainActivity extends Activity {
         playbackSourceRecoveryInFlight = false;
         lastPlaybackDiagnosticCode = PlaybackDiagnosticCode.forResolverFailure(error);
         Log.i(PLAYBACK_HEALTH_TAG, "diagnostic code=" + lastPlaybackDiagnosticCode);
+        if (isPremiumRejection(error)) {
+            // Reintentar no sirve: Highfly rechazó el token. Se avisa con la escena.
+            playbackAutoRecoveryInFlight = false;
+            showPlaybackFailure();
+            showPremiumRejected(channel);
+            return;
+        }
         // TvVoo/Highfly can fail intermittently: retry with the bounded budget
         // (a fresh source from the second attempt) before reporting ERROR.
         playbackAutoRecoveryInFlight = false;
@@ -2121,6 +2132,37 @@ public final class MainActivity extends Activity {
             return;
         }
         requestFullPlaybackRecovery("fuente no disponible", true, false);
+    }
+
+    private static boolean isPremiumRejection(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof HighflyPremiumClient.RejectedException) return true;
+        }
+        return false;
+    }
+
+    /** Token Premium vencido o revocado: vincular de nuevo o ver la señal gratuita. */
+    private void showPremiumRejected(Channel channel) {
+        if (premiumSceneDialog != null && premiumSceneDialog.isShowing()) return;
+        String slug = HighflyStreamResolver.premiumSlug(channel);
+        premiumSceneDialog = PremiumScenes.showRejected(
+                this,
+                channel == null ? "" : channel.getName(),
+                () -> premiumSceneDialog = PremiumScenes.showPairing(
+                        this, this::retryAfterPremiumChange),
+                () -> {
+                    HighflyPremiumSession.useFreeFor(slug);
+                    retryAfterPremiumChange();
+                }
+        );
+    }
+
+    private void retryAfterPremiumChange() {
+        if (playbackChannel == null) return;
+        playbackRecoveryBudget.reset();
+        playbackRecoveryFailed = false;
+        playbackAutoRecoveryInFlight = false;
+        requestFullPlaybackRecovery("Highfly Premium", true, true);
     }
 
     private void startResolvedPlayback(
@@ -2323,12 +2365,9 @@ public final class MainActivity extends Activity {
         return path != null && path.toLowerCase(Locale.ROOT).contains(".m3u8");
     }
 
-    /** Línea del canal en el OSD: «025 · Deportes». El logo reemplaza al nombre. */
+    /** Número del canal en el OSD; el moderno ya no muestra la categoría. El logo reemplaza al nombre. */
     private void bindOsdChannel(int displayNumber, Channel channel) {
-        String number = String.format(Locale.ROOT, "%03d", displayNumber);
-        String group = channel.getGroup();
-        channelNumber.setText(classicUi || AppStrings.isBlank(group)
-                ? number : number + "  ·  " + group.trim());
+        channelNumber.setText(String.format(Locale.ROOT, "%03d", displayNumber));
         channelName.setText(channel.getName());
     }
 
@@ -3897,33 +3936,38 @@ public final class MainActivity extends Activity {
     private void showExitDialog() {
         if (exiting || (exitDialog != null && exitDialog.isShowing())) return;
 
-        exitDialog = new Dialog(this);
-        exitDialog.setContentView(classicUi ? R.layout.classic_dialog_exit : R.layout.dialog_exit);
-        exitDialog.setCanceledOnTouchOutside(false);
+        if (classicUi) {
+            exitDialog = new Dialog(this);
+            exitDialog.setContentView(R.layout.classic_dialog_exit);
+            exitDialog.setCanceledOnTouchOutside(false);
+        } else {
+            // Moderno: diálogo «escena» sobre el video (2026-10-03).
+            exitDialog = SceneDialog.create(this, R.layout.dialog_exit);
+        }
 
         Button stayButton = exitDialog.findViewById(R.id.stay_button);
         Button exitButton = exitDialog.findViewById(R.id.exit_button);
         stayButton.setOnClickListener(view -> exitDialog.dismiss());
         exitButton.setOnClickListener(view -> exitApplication());
-        // Moderno: el foco parte en «Seguir viendo» para no salir por un OK accidental.
-        exitDialog.setOnShowListener(dialog ->
-                (classicUi ? exitButton : stayButton).requestFocus());
+        // El foco parte en «Salir» en ambos estilos: Atrás dos veces sale.
+        exitDialog.setOnShowListener(dialog -> exitButton.requestFocus());
         exitDialog.setOnDismissListener(dialog -> {
             exitDialog = null;
             if (!exiting) enterImmersiveMode();
         });
 
         Window window = exitDialog.getWindow();
-        if (window != null) {
+        if (classicUi && window != null) {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             WindowManager.LayoutParams attributes = window.getAttributes();
             attributes.width = WindowManager.LayoutParams.WRAP_CONTENT;
             attributes.height = WindowManager.LayoutParams.WRAP_CONTENT;
-            attributes.dimAmount = classicUi ? 0.68f : 0.72f;
+            attributes.dimAmount = 0.68f;
             window.setAttributes(attributes);
         }
         exitDialog.show();
+        if (!classicUi) SceneDialog.hideSystemBars(exitDialog);
     }
 
     private void exitApplication() {
@@ -3955,6 +3999,12 @@ public final class MainActivity extends Activity {
             exitDialog.dismiss();
             exitDialog = null;
         }
+        if (premiumSceneDialog != null) {
+            premiumSceneDialog.dismiss();
+            premiumSceneDialog = null;
+        }
+        HighflyPremiumCredentialStore premiumStore = HighflyPremiumCredentialStore.peek();
+        if (premiumStore != null) premiumStore.clearSession();
         if (appUpdater != null) {
             appUpdater.destroy();
             appUpdater = null;

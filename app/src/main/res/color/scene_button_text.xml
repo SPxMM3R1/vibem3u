@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Texto de la píldora «escena»: oscuro sobre el blanco con foco. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:color="#05080A" />
+    <item android:state_enabled="false" android:color="#667F9096" />
+    <item android:color="@color/menu_text" />
+</selector>

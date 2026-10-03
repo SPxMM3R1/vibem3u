@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Diálogo de actualización (moderno).
+<!-- Escena genérica con dos acciones; MainActivity y Opciones ponen los textos.
      Estilo «escena» (2026-10-03): el video sigue vivo y atenuado, el degradado negro del OSD
      sube desde abajo y el contenido va abajo a la izquierda con los márgenes del OSD. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -37,53 +37,44 @@
             android:orientation="horizontal">
 
             <View
+                android:id="@+id/scene_kicker_line"
                 android:layout_width="14dp"
                 android:layout_height="1.5dp"
                 android:layout_marginEnd="7dp"
                 android:background="@color/cyan" />
 
             <TextView
+            android:id="@+id/scene_kicker"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:includeFontPadding="false"
                 android:letterSpacing="0.12"
-                android:text="@string/scene_update_kicker"
+                android:text="@string/premium_kicker"
                 android:textAllCaps="true"
                 android:textColor="@color/osd_muted"
                 android:textSize="10sp" />
         </LinearLayout>
 
         <TextView
+        android:id="@+id/scene_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="9dp"
             android:includeFontPadding="false"
             android:letterSpacing="-0.01"
-            android:text="@string/update_title"
+            android:text="@string/premium_kicker"
             android:textColor="@color/white"
             android:textSize="32sp"
             android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/update_message"
+            android:id="@+id/scene_message"
             android:layout_width="450dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="9dp"
             android:lineSpacingMultiplier="1.3"
             android:textColor="#B7C4CA"
-            android:maxLines="3"
             android:textSize="12.5sp" />
-
-        <ProgressBar
-            android:id="@+id/update_progress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="300dp"
-            android:layout_height="3dp"
-            android:layout_marginTop="12dp"
-            android:max="100"
-            android:progressBackgroundTint="#24FFFFFF"
-            android:progressTint="@color/cyan"
-            android:visibility="gone" />
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -92,7 +83,7 @@
             android:orientation="horizontal">
 
             <Button
-                android:id="@+id/update_install_button"
+                android:id="@+id/scene_primary"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
                 android:layout_marginEnd="7dp"
@@ -104,13 +95,13 @@
                 android:paddingStart="19dp"
                 android:paddingEnd="19dp"
                 android:stateListAnimator="@null"
-                android:text="@string/update_now"
+                android:text="@string/cancel"
                 android:textAllCaps="false"
                 android:textColor="@color/scene_button_text"
                 android:textSize="12sp" />
 
             <Button
-                android:id="@+id/update_later_button"
+                android:id="@+id/scene_secondary"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
                 android:background="@drawable/scene_button"
@@ -121,7 +112,7 @@
                 android:paddingStart="19dp"
                 android:paddingEnd="19dp"
                 android:stateListAnimator="@null"
-                android:text="@string/update_later"
+                android:text="@string/cancel"
                 android:textAllCaps="false"
                 android:textColor="@color/scene_button_text"
                 android:textSize="12sp" />
