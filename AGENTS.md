@@ -41,6 +41,7 @@ agente debe poder retomar el trabajo solo con lo que está en el repositorio.
 
 ## Cómo trabajar
 
+- Entrega 0.5.53 (`versionCode` 162): corrige solo la espera del selector Highfly. La publicación requiere CI verde y APK verificado del tag `v0.5.53`; no confundir el commit/push con la entrega del APK. Sin cambio relacionado en Lista M3U.
 - No hay SDK Android local en el equipo: los cambios se validan con CI ("Android CI"). No prometer builds locales.
 - Release:
   1. Actualizar `versionCode` (+1) y `versionName` en `app/build.gradle.kts`.
