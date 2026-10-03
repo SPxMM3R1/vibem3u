@@ -11,8 +11,8 @@
 
 ## Hoy, en una mirada
 
-- **Versión del código**: 0.5.53 (`versionCode` 162); en curso la 0.5.54 con diálogos «escena»,
-  OSD sin categoría y Highfly Premium por QR.
+- **Versión publicada**: 0.5.54 (`versionCode` 163): diálogos «escena», OSD sin categoría y
+  Highfly Premium por QR.
   Verificar su publicación en Releases antes de dar la entrega por concluida. Se publica con tag `vX.Y.Z` y el
   workflow «Publicar APK». No hay SDK Android local: compila «Android CI».
 - **Estado visual**: el usuario aprobó todo el estilo nuevo, pero la 0.5.42 y la 0.5.43 aún no

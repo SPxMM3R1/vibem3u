@@ -3949,7 +3949,7 @@ public final class MainActivity extends Activity {
         Button exitButton = exitDialog.findViewById(R.id.exit_button);
         stayButton.setOnClickListener(view -> exitDialog.dismiss());
         exitButton.setOnClickListener(view -> exitApplication());
-        // El foco parte en «Salir» en ambos estilos: Atrás dos veces sale.
+        // El foco parte en «Salir» en ambos estilos (pedido del usuario, 2026-10-03).
         exitDialog.setOnShowListener(dialog -> exitButton.requestFocus());
         exitDialog.setOnDismissListener(dialog -> {
             exitDialog = null;
