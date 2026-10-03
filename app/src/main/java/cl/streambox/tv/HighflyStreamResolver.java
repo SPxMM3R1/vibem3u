@@ -323,10 +323,11 @@ public final class HighflyStreamResolver implements StreamResolver {
                         Math.min(250L, Math.max(1L, deadline.remainingMillis()))
                 );
                 if (attempt == null) {
-                    if (acceptedUris.isEmpty()) {
-                        throw new IOException("Tiempo de resolución agotado.");
-                    }
-                    break;
+                    // A short poll is only a cancellation checkpoint, not the
+                    // resolution deadline. Keep pending validations alive; the
+                    // next deadline.check() bounds the total wait and preserves
+                    // already accepted sources when the real budget expires.
+                    continue;
                 }
                 if (attempt.getAccepted() != null) {
                     acceptedUris.add(attempt.getAccepted());

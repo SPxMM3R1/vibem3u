@@ -7,7 +7,7 @@
 > actualiza este archivo en el mismo commit**: la sección «Hoy» si cambió el estado y una
 > línea nueva en «Bitácora».
 
-Última actualización: **2026-10-01**.
+Última actualización: **2026-10-03**.
 
 ## Hoy, en una mirada
 
@@ -53,6 +53,10 @@
 - **Reproducción**:
   - Highfly abre con el enlace directo que publica Lista M3U (`PublishedHighflyLinks`) y usa
     el resolutor solo de respaldo.
+  - Selector manual Highfly (▶, «Fuentes y calidades»): consulta y valida las alternativas
+    actuales del proveedor. Ya no corta la consulta tras 250 ms sin resultados; espera hasta
+    completar las validaciones o agotar el plazo real. Conserva las fuentes válidas y cancela
+    las pendientes al vencer. No guarda una preferencia de fuente ni cambia el arranque del runner.
   - Recuperación automática con 3 reintentos (2, 5 y 10 s; `PlaybackRecoveryBudget`).
   - TVN descubre su reproductor en vivo donde lo publique.
 - **Recordatorios**: en la Guía se mantiene OK sobre un programa. El aviso llega con la app
@@ -101,6 +105,15 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-03**: corregido el timeout prematuro del selector Highfly en
+  `HighflyStreamResolver.java`: un sondeo vacío de 250 ms continúa la espera en lugar de
+  tirar error o devolver una lista incompleta. Se reprodujo el fallo con 4 regresiones antes
+  del arreglo; después, `HighflyStreamResolverTest` pasa 13/13 (6 casos nuevos: primera fuente
+  lenta, alternativa lenta, rechazo previo, plazo con resultado parcial, plazo sin resultados
+  y cancelación). Batería JVM de Highfly y carrera HLS: 26/26; selector repetido: 13/13.
+  Compilación Android/lint/instrumentadas se verifican
+  en el CI de la publicación. Pendiente comprobar interacción con el control en TV física.
+  No cambia Lista M3U, el contrato de identidad, la caché ni la persistencia de preferencias.
 - **2026-10-02**: las URL «Clean» de TvVoo que llegan como IP con puerto
   (`http://109.205.187.150:8008/sunshine/…`) se descartaban siempre: la app las «subía» a
   HTTPS y ese puerto no lo habla. Ahora `/sunshine/` sobre IP se prueba primero por HTTP.

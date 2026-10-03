@@ -10,9 +10,12 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public final class HighflyStreamResolverTest {
@@ -124,6 +127,149 @@ public final class HighflyStreamResolverTest {
         assertEquals(2, attempts.size());
         assertTrue(candidates.get(0).getSource().isDynamicallyResolved());
         assertTrue(candidates.get(1).getSource().isDynamicallyResolved());
+    }
+
+    @Test(timeout = 5000)
+    public void selectorWaitsForFirstValidationBeyondOnePollInterval() throws Exception {
+        HighflyStreamResolver resolver = selectorResolver(Collections.emptyMap(),
+                (uri, headers, listener) -> waitForValidation(650));
+
+        List<ResolvedPlaybackCandidate> candidates = resolver.resolvePlaybackCandidates(
+                channel(), ResolutionProgressListener.NONE);
+
+        assertEquals(2, candidates.size());
+        assertEquals("~4.9 Mbps", candidates.get(0).getLabel());
+        assertEquals("~3.8 Mbps", candidates.get(1).getLabel());
+    }
+
+    @Test(timeout = 5000)
+    public void selectorKeepsWaitingAfterAnEarlyValidSource() throws Exception {
+        HighflyStreamResolver resolver = selectorResolver(Collections.emptyMap(),
+                (uri, headers, listener) -> {
+                    if (uri.getPath().contains("low")) waitForValidation(650);
+                });
+
+        List<ResolvedPlaybackCandidate> candidates = resolver.resolvePlaybackCandidates(
+                channel(), ResolutionProgressListener.NONE);
+
+        assertEquals(2, candidates.size());
+        assertEquals("~3.8 Mbps", candidates.get(1).getLabel());
+    }
+
+    @Test(timeout = 5000)
+    public void selectorKeepsWaitingAfterAnEarlyRejectedSource() throws Exception {
+        HighflyStreamResolver resolver = selectorResolver(Collections.emptyMap(),
+                (uri, headers, listener) -> {
+                    if (uri.getPath().contains("high")) {
+                        throw new IOException("synthetic HLS failure");
+                    }
+                    waitForValidation(650);
+                });
+
+        List<ResolvedPlaybackCandidate> candidates = resolver.resolvePlaybackCandidates(
+                channel(), ResolutionProgressListener.NONE);
+
+        assertEquals(1, candidates.size());
+        assertEquals("~3.8 Mbps", candidates.get(0).getLabel());
+    }
+
+    @Test(timeout = 5000)
+    public void selectorReturnsValidatedSourcesAtDeadlineAndCancelsPendingWork()
+            throws Exception {
+        CountDownLatch slowStarted = new CountDownLatch(1);
+        CountDownLatch slowCancelled = new CountDownLatch(1);
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("resolutionBudgetMs", "1000");
+        HighflyStreamResolver resolver = selectorResolver(config,
+                (uri, headers, listener) -> {
+                    if (uri.getPath().contains("high")) {
+                        try {
+                            if (!slowStarted.await(2, TimeUnit.SECONDS)) {
+                                throw new IOException("Pending validator did not start");
+                            }
+                        } catch (InterruptedException error) {
+                            Thread.currentThread().interrupt();
+                            throw new IOException("Interrupted test validator", error);
+                        }
+                    } else {
+                        slowStarted.countDown();
+                        try {
+                            waitForValidation(5000);
+                        } finally {
+                            slowCancelled.countDown();
+                        }
+                    }
+                });
+        long started = System.nanoTime();
+
+        List<ResolvedPlaybackCandidate> candidates = resolver.resolvePlaybackCandidates(
+                channel(), ResolutionProgressListener.NONE);
+
+        long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+        assertEquals(1, candidates.size());
+        assertEquals("~4.9 Mbps", candidates.get(0).getLabel());
+        assertTrue("Must wait for the real deadline, not one poll", elapsedMs >= 800);
+        assertTrue("Must remain bounded", elapsedMs < 3000);
+        assertTrue("Pending validation must be cancelled",
+                slowCancelled.await(1, TimeUnit.SECONDS));
+    }
+
+    @Test(timeout = 5000)
+    public void selectorFailsAtRealDeadlineWhenNoSourceHasValidated() throws Exception {
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("resolutionBudgetMs", "1000");
+        HighflyStreamResolver resolver = selectorResolver(config,
+                (uri, headers, listener) -> waitForValidation(5000));
+        long started = System.nanoTime();
+
+        assertThrows(IOException.class, () -> resolver.resolvePlaybackCandidates(
+                channel(), ResolutionProgressListener.NONE));
+
+        long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+        assertTrue("Must not fail after one empty poll", elapsedMs >= 800);
+        assertTrue("Must remain bounded", elapsedMs < 3000);
+    }
+
+    @Test(timeout = 5000)
+    public void selectorHonorsParentCancellationWhileValidationsArePending() throws Exception {
+        ResolutionContext parent = new ResolutionContext(12000);
+        HighflyStreamResolver resolver = selectorResolver(Collections.emptyMap(),
+                (uri, headers, listener) -> {
+                    parent.cancel();
+                    waitForValidation(5000);
+                });
+        long started = System.nanoTime();
+
+        try (ResolutionContext.Scope ignored = parent.activate()) {
+            assertThrows(IOException.class, () -> resolver.resolvePlaybackCandidates(
+                    channel(), ResolutionProgressListener.NONE));
+        }
+
+        assertTrue(parent.isCancelled());
+        assertTrue("Cancellation must not wait for the full budget",
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 2000);
+    }
+
+    private static HighflyStreamResolver selectorResolver(
+            Map<String, String> config,
+            HighflyStreamResolver.HlsCandidateValidator validator
+    ) {
+        return new HighflyStreamResolver(definition(config), new StubHttpClient(
+                "{\"streams\":["
+                        + "{\"title\":\"~4.9 Mbps\","
+                        + "\"url\":\"https://papacito.cfd/high.m3u8\"},"
+                        + "{\"title\":\"~3.8 Mbps\","
+                        + "\"url\":\"https://leaf.highfly.dev/low.m3u8\"}]}"
+        ), validator);
+    }
+
+    private static void waitForValidation(long milliseconds) throws IOException {
+        try {
+            Thread.sleep(milliseconds);
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted test validator", error);
+        }
     }
 
     @Test
