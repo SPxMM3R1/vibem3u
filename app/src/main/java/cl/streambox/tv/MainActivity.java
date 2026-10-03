@@ -2308,8 +2308,7 @@ public final class MainActivity extends Activity {
 
     private boolean handleQualityUpgradeKey(KeyEvent event) {
         int keyCode = event.getKeyCode();
-        // Atrás lo resuelve handleBackAction (callback de Atrás predictivo).
-        if (keyCode == KeyEvent.KEYCODE_BACK) return false;
+        // Solo se toman ◀ ▶ y OK. Atrás sigue su curso normal y handleBackAction cierra el aviso.
         if (event.getAction() != KeyEvent.ACTION_DOWN) {
             return keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
                     || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER;
@@ -2327,8 +2326,7 @@ public final class MainActivity extends Activity {
                 else acceptQualityUpgrade();
                 return true;
             default:
-                // Cualquier otra tecla (canal, guía…) cierra el aviso y sigue su curso.
-                hideQualityUpgrade();
+                // Las demás teclas siguen su curso; cambiar de canal cancela el aviso.
                 return false;
         }
     }
