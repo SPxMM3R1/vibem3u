@@ -184,11 +184,6 @@ public final class MainActivity extends Activity {
     private View logoSizeAdjust;
     private TextView logoSizeValue;
     private boolean logoSizeAdjusting;
-    /**
-     * Ya se ve imagen de la reproducción actual (primer fotograma). Desde ahí el OSD tiene su
-     * degradado aunque el reproductor siga llenando el búfer (0.5.61).
-     */
-    private boolean osdVideoVisible;
     private boolean adjustLogoSizeAfterSettings;
     private String logoSizeKey;
     private float logoSizeOriginal = 1f;
@@ -203,9 +198,6 @@ public final class MainActivity extends Activity {
     private View osdHero;
     private TextView osdDescription;
     private TextView osdNext;
-    private View osdScrim;
-    private View osdTech;
-    private View osdClock;
     private TextView osdClockTime;
     private TextView osdClockDate;
     private View loadingProgress;
@@ -552,9 +544,6 @@ public final class MainActivity extends Activity {
         osdHero = findViewById(R.id.osd_hero);
         osdDescription = findViewById(R.id.osd_description);
         osdNext = findViewById(R.id.osd_next);
-        osdScrim = findViewById(R.id.osd_scrim);
-        osdTech = findViewById(R.id.osd_tech);
-        osdClock = findViewById(R.id.osd_clock);
         osdClockTime = findViewById(R.id.osd_clock_time);
         osdClockDate = findViewById(R.id.osd_clock_date);
         loadingProgress = findViewById(R.id.loading_progress);
@@ -608,13 +597,6 @@ public final class MainActivity extends Activity {
                     .send();
         }
         player.addListener(new Player.Listener() {
-            @Override public void onRenderedFirstFrame() {
-                // La imagen aparece antes de STATE_READY (el búfer sigue llenándose): el
-                // degradado del OSD no puede llegar un segundo después que el video.
-                osdVideoVisible = true;
-                if (!loadFailed) setOsdLoadingAppearance(false);
-            }
-
             @Override public void onIsPlayingChanged(boolean isPlaying) {
                 settlePlaybackEpisode(isPlaying);
                 if (isPlaying) maybeSchedulePlaybackSourceStability();
@@ -1628,7 +1610,6 @@ public final class MainActivity extends Activity {
         clearResourceWarning();
         stopLoadingTextAnimation();
         if (loadingPanel != null) loadingPanel.setVisibility(View.GONE);
-        setOsdLoadingAppearance(false);
     }
 
     /**
@@ -1637,7 +1618,6 @@ public final class MainActivity extends Activity {
      */
     private void showModernLoadingStep(String step) {
         if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
-        setOsdLoadingAppearance(true);
         if (step.equals(loadingMessageBase)) return;
         loadingMessageBase = step;
         loadingText.animate().cancel();
@@ -1652,21 +1632,6 @@ public final class MainActivity extends Activity {
                 .start();
     }
 
-    /**
-     * Mientras la pantalla está negra (carga), el OSD moderno no dibuja su degradado y baja
-     * sus textos al 70 %: así una tele mini-LED no enciende sus zonas de luz detrás del OSD.
-     * Al aparecer la imagen vuelve a su brillo con una transición suave.
-     */
-    private void setOsdLoadingAppearance(boolean loading) {
-        if (classicUi) return;
-        if (loading && osdVideoVisible) return;
-        float content = loading ? 0.7f : 1f;
-        long duration = loading ? 0L : 350L;
-        if (osdScrim != null) osdScrim.animate().alpha(loading ? 0f : 1f).setDuration(duration).start();
-        if (osdHero != null) osdHero.animate().alpha(content).setDuration(duration).start();
-        if (osdTech != null) osdTech.animate().alpha(content).setDuration(duration).start();
-        if (osdClock != null) osdClock.animate().alpha(content).setDuration(duration).start();
-    }
 
     private void hidePlaylistLoadingIfPlaybackPending() {
         if (playbackChannel != null) {
@@ -1693,7 +1658,6 @@ public final class MainActivity extends Activity {
         playbackGeneration++;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
         playbackHasStarted = false;
-        osdVideoVisible = false;
         playbackRecoveryCooldownUntilElapsedRealtime = 0L;
         playbackAutoRecoveryInFlight = false;
         playbackRecoveryBudget.reset();
@@ -1919,7 +1883,6 @@ public final class MainActivity extends Activity {
         playbackSourceRecoveryInFlight = true;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
         playbackHasStarted = false;
-        osdVideoVisible = false;
         playbackAutoRecoveryInFlight = false;
         setStatus("RENOVANDO", R.color.amber);
         showLoadingState(getString(R.string.loading_reopening_source));
@@ -2410,7 +2373,6 @@ public final class MainActivity extends Activity {
     private void switchToSource(Channel channel, ResolvedPlaybackSource source) {
         if (!isCurrentPlayback(channel, playbackGeneration)) return;
         playbackHasStarted = false;
-        osdVideoVisible = false;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
         playbackAutoRecoveryInFlight = false;
         playbackRecoveryFailed = false;
@@ -2678,7 +2640,6 @@ public final class MainActivity extends Activity {
         resolverCoordinator.clearForPlaybackPause();
         playbackGeneration++;
         playbackHasStarted = false;
-        osdVideoVisible = false;
         playbackLoadingSinceElapsedRealtime = -1L;
         playbackAutoRecoveryInFlight = false;
         playbackRecoveryFailed = false;
@@ -4394,8 +4355,6 @@ public final class MainActivity extends Activity {
         if (!isCurrentPlayback(channel, playbackGeneration)) return;
 
         playbackHasStarted = false;
-
-        osdVideoVisible = false;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
         playbackAutoRecoveryInFlight = false;
         playbackRecoveryFailed = false;

@@ -11,9 +11,9 @@
 
 ## Hoy, en una mirada
 
-- **Versión publicada**: 0.5.61 (`versionCode` 170): el degradado del OSD vuelve con el primer
-  fotograma (`onRenderedFirstFrame`), no al llegar a STATE_READY, que tardaba ~1 s más. La
-  0.5.60 trajo el difuminado del OSD con curva suave y
+- **Versión publicada**: 0.5.62 (`versionCode` 171): el OSD moderno se ve igual cargando y con
+  imagen (degradado siempre visible y textos a pleno brillo): como el degradado es negro puro,
+  ocultarlo durante la carga ya no servía y llegaba tarde. La 0.5.60 trajo el difuminado del OSD con curva suave y
   sombra difusa tras la hora; descripción solo en el detalle (OK) y detalle sin «A
   continuación»; logos corregidos por tinta y tamaño ajustable en vivo por logo. La 0.5.59
   agrandó los logos 30 % (`LogoFit.LOGO_SCALE`) con mipmaps. La 0.5.58 centró Opciones. La 0.5.57 ancló «Fuentes y calidades». La 0.5.56 igualó el alto de los logos UHD con su versión normal. La 0.5.55 trajo la carrera rápida de TvVoo, calidad real, «Fuentes y
@@ -40,8 +40,8 @@
     (`WavyProgressView`); cada vuelta entra vacía por la izquierda y sale por la derecha, y
     el reloj se reinicia al aparecer (antes podía empezar a mitad de camino). Los pasos van
     sin «…» y entran con la transición enfatizada.
-    Mientras la pantalla está negra, el OSD no dibuja su degradado y sus textos bajan al 70 %
-    (no enciende la atenuación local de teles mini-LED); al aparecer la imagen vuelve suave.
+    Desde la 0.5.62 el OSD se ve igual con la pantalla negra de carga que con imagen: el
+    degradado es negro puro, así que no enciende la atenuación local de teles mini-LED.
   - **Logos** (`LogoFit`, desde 0.5.59 un 30 % más grandes: superficie 97,5×29,9 dp, tope
     136,5×41,6 dp; bitmaps con mipmaps para que la TV los achique sin bordes dentados): se recorta el borde transparente y todos ocupan la misma superficie
     visual, en el OSD y en la Guía. Desde la 0.5.60 se corrige por tinta (fracción pintada,
