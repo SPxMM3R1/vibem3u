@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -181,12 +182,24 @@ final class PublishedPlaybackCatalog {
         Map<String, Row> rowsByKey = new LinkedHashMap<>();
         for (Row row : rows) rowsByKey.put(row.appKey(), row);
         Set<String> excluded = new HashSet<>(excludedM3u);
+        // Señales preferidas de otro canal: no se muestran solas, viajan dentro de ese canal.
+        Set<String> preferredIds = new HashSet<>();
+        for (Row row : rows) {
+            if ("active".equals(row.state) && !row.preferredM3u.isEmpty()) {
+                preferredIds.add(row.preferredM3u);
+            }
+        }
+        Map<String, Channel> preferredChannels = new HashMap<>();
         Map<String, List<Channel>> byKey = new LinkedHashMap<>();
         List<Channel> unlisted = new ArrayList<>();
         for (Channel channel : input) {
             if (channel == null) continue;
             String tvgId = channel.getTvgId() == null ? "" : channel.getTvgId().trim();
             if (excluded.contains(tvgId)) continue;
+            if (preferredIds.contains(tvgId) && !TvVooChannelMerge.isTvVoo(channel)) {
+                preferredChannels.putIfAbsent(tvgId, channel);
+                continue;
+            }
             String key = keyFor(channel);
             Row configured = rowsByKey.get(key);
             if (configured != null && !"active".equals(configured.state)) continue;
@@ -204,6 +217,8 @@ final class PublishedPlaybackCatalog {
             if (matches != null) {
                 for (Channel channel : matches) {
                     Channel named = withDisplayName(channel, row.displayName);
+                    Channel preferred = preferredChannels.get(row.preferredM3u);
+                    if (preferred != null) named = TvVooBackup.withPreferredStream(named, preferred);
                     result.add(row.backupTvVoo.isEmpty()
                             ? named : TvVooBackup.withBackup(named, row.backupTvVoo));
                 }
@@ -330,6 +345,8 @@ final class PublishedPlaybackCatalog {
         final int number;
         /** Canal directo: catalogKey TvVoo de la misma señal, usado como respaldo. */
         final String backupTvVoo;
+        /** Canal directo: tvg-id de otra fila M3U con la misma señal, que se abre primero. */
+        final String preferredM3u;
 
         private Row(
                 String kind,
@@ -350,7 +367,8 @@ final class PublishedPlaybackCatalog {
                 String logo,
                 int order,
                 int number,
-                String backupTvVoo
+                String backupTvVoo,
+                String preferredM3u
         ) {
             this.kind = kind;
             this.provider = provider;
@@ -371,6 +389,7 @@ final class PublishedPlaybackCatalog {
             this.order = order;
             this.number = number;
             this.backupTvVoo = backupTvVoo == null ? "" : backupTvVoo;
+            this.preferredM3u = preferredM3u == null ? "" : preferredM3u;
         }
 
         static Row parse(JSONObject value) throws IOException {
@@ -395,11 +414,15 @@ final class PublishedPlaybackCatalog {
             String identityState = "";
             List<String> aliases = Collections.emptyList();
             String backupTvVoo = "";
+            String preferredM3u = "";
             if (kind.equals("m3u")) {
                 stableId = safeText(value, "tvgId", true);
                 String backup = value.optString("backupTvVoo", "").trim();
                 // Un respaldo mal formado se ignora: el canal directo sigue funcionando.
                 if (TvVooCatalogChannel.isStableId(backup)) backupTvVoo = backup;
+                String preferred = value.optString("preferredM3u", "").trim();
+                if (!preferred.isEmpty() && !preferred.contains("://") && preferred.length() <= 512
+                        && !preferred.equals(stableId)) preferredM3u = preferred;
                 if (stableId.contains("://") || stableId.startsWith("leaf:")) {
                     throw new IOException("tvg-id web no es una identidad pública estable.");
                 }
@@ -454,7 +477,7 @@ final class PublishedPlaybackCatalog {
             return new Row(
                     kind, provider, stableId, state, name, displayName, group, category, country,
                     countryKey, alias, resourceId, resolverSlug, identityState, aliases, logo, order,
-                    number, backupTvVoo
+                    number, backupTvVoo, preferredM3u
             );
         }
 

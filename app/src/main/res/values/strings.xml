@@ -311,7 +311,7 @@
     <string name="logo_size_title">Tamaño del logo</string>
     <string name="logo_size_description">%1$s · se ajusta en vivo sobre el video</string>
     <string name="logo_size_action">%1$d %% ›</string>
-    <string name="loading_backup_source">Abriendo el respaldo TvVoo…</string>
+    <string name="loading_backup_source">Abriendo la señal de respaldo…</string>
     <string name="source_selector_direct_label">Directo</string>
     <string name="source_selector_direct_detail">Señal principal del canal</string>
 </resources>

@@ -271,6 +271,31 @@ public final class PublishedPlaybackCatalogTest {
         assertFalse(TvVooBackup.has(played));
     }
 
+    @Test
+    public void preferredM3uPlaysFirstAndKeepsOwnStreamAsBackup() throws Exception {
+        String edited = document()
+                .replace("\"name\":\"TVN\",", "\"name\":\"TVN\",\"preferredM3u\":\"TVN.cl@Direct138\",")
+                .replace("{\"kind\":\"provider\",\"provider\":\"highfly\"",
+                        "{\"kind\":\"m3u\",\"tvgId\":\"TVN.cl@Direct138\",\"name\":\"TVN [IP 138]\","
+                                + "\"group\":\"Nacionales\",\"sourceList\":\"1.m3u\","
+                                + "\"order\":9,\"number\":79,\"state\":\"active\"},"
+                                + "{\"kind\":\"provider\",\"provider\":\"highfly\"");
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);
+        Channel tvn = new Channel("TVN", java.net.URI.create("https://example.org/tvn.m3u8"),
+                null, "Nacionales", Collections.singletonMap("tvg-id", "0104"));
+        Channel better = new Channel("TVN [IP 138]", java.net.URI.create("http://example.org/hd.m3u8"),
+                null, "Nacionales", Collections.singletonMap("tvg-id", "TVN.cl@Direct138"));
+
+        List<Channel> playback = catalog.applyToPlayback(Arrays.asList(tvn, better));
+
+        assertEquals(1, playback.size());
+        Channel played = playback.get(0);
+        assertEquals("0104", played.getTvgId());
+        assertEquals(better.getStreamUri(), played.getStreamUri());
+        assertEquals(tvn.getStreamUri(), TvVooBackup.directBackupOf(played));
+        assertEquals(tvn.getStreamUri(), TvVooBackup.resolutionChannel(played).getStreamUri());
+    }
+
     private static String document() {
         return "{\"schemaVersion\":1,\"channels\":["
                 + "{\"kind\":\"m3u\",\"tvgId\":\"0104\",\"name\":\"TVN\","

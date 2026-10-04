@@ -11,7 +11,9 @@
 
 ## Hoy, en una mirada
 
-- **Versión publicada**: 0.5.64 (`versionCode` 173): un canal directo puede traer un respaldo
+- **Versión publicada**: 0.5.65 (`versionCode` 174): señal preferida entre dos directos: con
+  `preferredM3u` en el layout, el canal abre primero esa otra fila M3U (que la app ya no muestra
+  sola) y deja su propia señal como respaldo (`x-backup-stream`, `TvVooBackup`). La 0.5.64: un canal directo puede traer un respaldo
   TvVoo de la misma señal (`backupTvVoo` en el layout, `TvVooBackup`): abre el directo y, si no se
   recupera, pasa solo a TvVoo; «Fuentes y calidades» muestra «Directo» (principal) y las versiones
   TvVoo. Opciones con difuminado parejo a pantalla completa. La 0.5.63: OK abre la descripción en el mismo OSD

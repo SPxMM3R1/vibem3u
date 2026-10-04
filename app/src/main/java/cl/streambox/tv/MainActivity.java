@@ -2173,7 +2173,7 @@ public final class MainActivity extends Activity {
             showLoadingState(getString(R.string.loading_direct_source));
             startResolvedPlayback(
                     channel,
-                    ResolvedPlaybackSource.direct(channel, PLAYER_USER_AGENT),
+                    ResolvedPlaybackSource.direct(resolutionChannel, PLAYER_USER_AGENT),
                     expectedGeneration,
                     NO_RESOLUTION_REQUEST
             );
@@ -3863,7 +3863,7 @@ public final class MainActivity extends Activity {
                 || !hasWindowFocus() || playbackChannel == null
                 || playbackResolutionTask != null
                 || streamResolverRegistry == null) return;
-        Channel versionsChannel = TvVooBackup.has(playbackChannel)
+        Channel versionsChannel = TvVooBackup.hasTvVoo(playbackChannel)
                 ? TvVooBackup.resolutionChannel(playbackChannel) : playbackChannel;
         if (versionsChannel == null) versionsChannel = playbackChannel;
         StreamResolver resolver = streamResolverRegistry.find(versionsChannel);
@@ -4455,7 +4455,7 @@ public final class MainActivity extends Activity {
         if (candidate.isStale()
                 || candidate.getSource() == null
                 || candidate.getSource().isExpired(System.currentTimeMillis())) {
-            Channel versions = TvVooBackup.has(playbackChannel)
+            Channel versions = TvVooBackup.hasTvVoo(playbackChannel)
                     ? TvVooBackup.resolutionChannel(playbackChannel) : playbackChannel;
             StreamResolver resolver = versions == null ? null : streamResolverRegistry.find(versions);
             if (resolver != null) startSourceSelectorQuery(playbackChannel, versions, resolver);
@@ -4466,7 +4466,7 @@ public final class MainActivity extends Activity {
         ResolvedPlaybackSource source = candidate.getSource();
         closePlaybackSourceSelector();
         if (!isCurrentPlayback(channel, playbackGeneration)) return;
-        if (TvVooBackup.has(channel)) tvvooBackupActive = source.hasResolver();
+        if (TvVooBackup.hasTvVoo(channel)) tvvooBackupActive = source.hasResolver();
 
         playbackHasStarted = false;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
