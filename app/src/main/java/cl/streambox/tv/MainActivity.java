@@ -3665,11 +3665,56 @@ public final class MainActivity extends Activity {
         sourceSelectorTitle.setText(getString(R.string.source_selector_title));
         sourceSelectorChannel.setText(playbackChannel.getName());
         sourceSelectorOverlay.setVisibility(View.VISIBLE);
+        sourceSelectorFixedHint = !classicUi && resolver instanceof TvVooStreamResolver;
         if (resolver != null && supportsSourceSelector(resolver)) {
             startSourceSelectorQuery(playbackChannel, resolver);
+            if (sourceSelectorFixedHint) {
+                renderSourcePlaceholders(((TvVooStreamResolver) resolver).plannedVersions(playbackChannel));
+            }
         } else {
             renderDirectQualitySelector(playbackChannel);
         }
+    }
+
+    /** TvVoo moderno: el subtítulo no cambia y las filas no se mueven mientras carga. */
+    private boolean sourceSelectorFixedHint;
+    private static final int SOURCE_ROW_HEIGHT_DP = 42;
+    private static final int SOURCE_ROW_GAP_DP = 4;
+    private static final int SOURCE_ROWS_VISIBLE = 5;
+
+    /** Una fila por versión conocida, con «Probando…», en el mismo lugar que tendrá al final. */
+    private void renderSourcePlaceholders(List<TvVooStreamResolver.PlannedVersion> versions) {
+        if (versions == null || versions.isEmpty() || !isSourceSelectorVisible()) return;
+        sourceSelectorOptions.removeAllViews();
+        sourceCandidateViews.clear();
+        sourceSelectorStatus.setText(R.string.source_selector_versions_hint);
+        for (int index = 0; index < versions.size(); index++) {
+            TvVooStreamResolver.PlannedVersion version = versions.get(index);
+            View row = sceneRow(version.name, getString(R.string.source_selector_consulting_row), "—",
+                    getString(R.string.source_selector_testing), false, true, version.preferred);
+            sourceSelectorOptions.addView(row, sourceRowParams(index));
+            sourceCandidateViews.add(row);
+        }
+        fitSourceSelectorList(versions.size());
+        sourceCandidateFocusIndex = 0;
+        sourceCandidateViews.get(0).requestFocus();
+    }
+
+    private LinearLayout.LayoutParams sourceRowParams(int index) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(SOURCE_ROW_HEIGHT_DP));
+        params.setMargins(0, index == 0 ? 0 : dp(SOURCE_ROW_GAP_DP), 0, 0);
+        return params;
+    }
+
+    /** La lista mide lo que ocupan sus filas (hasta 5 visibles; más, se desplaza). */
+    private void fitSourceSelectorList(int rows) {
+        View scroll = findViewById(R.id.source_selector_scroll);
+        if (scroll == null || classicUi) return;
+        int visible = Math.max(1, Math.min(rows, SOURCE_ROWS_VISIBLE));
+        ViewGroup.LayoutParams params = scroll.getLayoutParams();
+        params.height = dp(visible * SOURCE_ROW_HEIGHT_DP + (visible - 1) * SOURCE_ROW_GAP_DP);
+        scroll.setLayoutParams(params);
     }
 
     private static boolean supportsSourceSelector(StreamResolver resolver) {
@@ -3690,7 +3735,8 @@ public final class MainActivity extends Activity {
         sourceCandidateFocusIndex = -1;
         sourceSelectorCloseFocused = false;
         sourceSelectorOptions.removeAllViews();
-        sourceSelectorStatus.setText(getString(R.string.source_selector_consulting));
+        sourceSelectorStatus.setText(getString(sourceSelectorFixedHint
+                ? R.string.source_selector_versions_hint : R.string.source_selector_consulting));
 
         long requestId = ++sourceCandidateRequestId;
         long expectedGeneration = playbackGeneration;
@@ -3700,7 +3746,9 @@ public final class MainActivity extends Activity {
             if (requestId != sourceCandidateRequestId
                     || !isSourceSelectorVisible()
                     || !isCurrentPlayback(channel, expectedGeneration)) return;
-            sourceSelectorStatus.setText(sourceSelectorProgressText(progress));
+            if (!sourceSelectorFixedHint) {
+                sourceSelectorStatus.setText(sourceSelectorProgressText(progress));
+            }
         });
         sourceCandidateTask = playbackExecutor.submit(() -> {
             try (ResolutionContext.Scope ignored = context.activate()) {
@@ -3808,16 +3856,28 @@ public final class MainActivity extends Activity {
         for (ResolvedPlaybackCandidate candidate : sourceCandidates) {
             if (candidate.isAvailable()) available++;
         }
-        renderPlaybackOptions(available == sourceCandidates.size()
+        renderPlaybackOptions(sourceSelectorFixedHint
+                ? getString(R.string.source_selector_versions_hint)
+                : available == sourceCandidates.size()
                 ? getString(R.string.source_selector_ready_count, available)
                 : getString(R.string.source_selector_versions_count, available,
                         sourceCandidates.size()));
     }
 
-    /** Fila «escena» del selector: nombre (+ «TU VERSIÓN»), detalle, calidad y estado. */
+    /** Fila «escena» del selector: nombre (+ «PRINCIPAL»), detalle, calidad y estado. */
     private View sceneOptionRow(PlaybackOption option) {
         ResolvedPlaybackCandidate candidate = option.sourceCandidate;
         boolean available = candidate == null || candidate.isAvailable();
+        String stateText = option.selected ? getString(R.string.source_selector_in_use)
+                : available ? getString(R.string.source_selector_available)
+                : getString(R.string.source_selector_no_signal);
+        return sceneRow(option.label, option.detail,
+                candidate == null ? "" : candidate.getQuality(), stateText,
+                option.selected, available, candidate != null && candidate.isPreferred());
+    }
+
+    private View sceneRow(String label, String detailText, String qualityText, String stateText,
+                          boolean selected, boolean available, boolean preferred) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -3836,7 +3896,7 @@ public final class MainActivity extends Activity {
         titleLine.setGravity(Gravity.CENTER_VERTICAL);
         titleLine.setDuplicateParentStateEnabled(true);
         TextView title = new TextView(this);
-        title.setText(option.label);
+        title.setText(label);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
         title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",
                 android.graphics.Typeface.NORMAL));
@@ -3846,7 +3906,7 @@ public final class MainActivity extends Activity {
         title.setEllipsize(android.text.TextUtils.TruncateAt.END);
         title.setDuplicateParentStateEnabled(true);
         titleLine.addView(title);
-        if (candidate != null && candidate.isPreferred()) {
+        if (preferred) {
             TextView badge = new TextView(this);
             badge.setText(R.string.source_selector_your_version);
             badge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 7.5f);
@@ -3862,9 +3922,9 @@ public final class MainActivity extends Activity {
             titleLine.addView(badge, badgeParams);
         }
         text.addView(titleLine);
-        if (!AppStrings.isBlank(option.detail)) {
+        if (!AppStrings.isBlank(detailText)) {
             TextView detail = new TextView(this);
-            detail.setText(option.detail);
+            detail.setText(detailText);
             detail.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
             detail.setTextColor(getColorStateList(R.color.scene_row_detail));
             detail.setIncludeFontPadding(false);
@@ -3878,7 +3938,6 @@ public final class MainActivity extends Activity {
         }
         row.addView(text, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        String qualityText = candidate == null ? "" : candidate.getQuality();
         if (!AppStrings.isBlank(qualityText)) {
             TextView quality = new TextView(this);
             quality.setText(qualityText);
@@ -3893,12 +3952,10 @@ public final class MainActivity extends Activity {
         }
 
         TextView state = new TextView(this);
-        state.setText(option.selected ? getString(R.string.source_selector_in_use)
-                : available ? getString(R.string.source_selector_available)
-                : getString(R.string.source_selector_no_signal));
+        state.setText(stateText);
         state.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
-        state.setTextColor(option.selected ? 0xFF5BE9A0 : getColor(R.color.osd_muted));
-        state.setBackgroundResource(option.selected ? R.drawable.scene_chip_ok : R.drawable.scene_chip);
+        state.setTextColor(selected ? 0xFF5BE9A0 : getColor(R.color.osd_muted));
+        state.setBackgroundResource(selected ? R.drawable.scene_chip_ok : R.drawable.scene_chip);
         state.setPadding(dp(7), dp(3), dp(7), dp(3));
         state.setIncludeFontPadding(false);
         LinearLayout.LayoutParams stateParams = new LinearLayout.LayoutParams(
@@ -3985,7 +4042,8 @@ public final class MainActivity extends Activity {
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT
                 );
-                rowParams.setMargins(0, index == 0 ? 0 : dp(4), 0, 0);
+                rowParams.setMargins(0, index == 0 ? 0 : dp(SOURCE_ROW_GAP_DP), 0, 0);
+                rowParams.height = dp(SOURCE_ROW_HEIGHT_DP);
                 sourceSelectorOptions.addView(row, rowParams);
                 sourceCandidateViews.add(row);
                 continue;
@@ -4026,6 +4084,7 @@ public final class MainActivity extends Activity {
             sourceCandidateViews.add(option);
         }
         sourceSelectorStatus.setText(status);
+        if (!classicUi) fitSourceSelectorList(sourceCandidateViews.size());
         if (!sourceCandidateViews.isEmpty()) {
             // El foco parte en la fila en uso, si la hay.
             int focusIndex = 0;
@@ -4113,12 +4172,14 @@ public final class MainActivity extends Activity {
 
     private void moveSourceSelectorFocus(int delta) {
         if (!isSourceSelectorVisible()) return;
+        boolean hasClose = sourceSelectorCloseButton.getVisibility() == View.VISIBLE;
         if (sourceCandidateViews.isEmpty()) {
+            if (!hasClose) return;
             sourceSelectorCloseFocused = true;
             sourceSelectorCloseButton.requestFocus();
             return;
         }
-        int size = sourceCandidateViews.size() + 1;
+        int size = sourceCandidateViews.size() + (hasClose ? 1 : 0);
         int index = sourceSelectorCloseFocused
                 ? sourceCandidateViews.size()
                 : Math.max(0, sourceCandidateFocusIndex);
@@ -4852,6 +4913,7 @@ public final class MainActivity extends Activity {
         sourceSelectorTitle.setTextSize(TypedValue.COMPLEX_UNIT_PX,
                 getResources().getDimension(R.dimen.settings_heading_text_size));
         sourceSelectorTitle.setTextColor(getColor(R.color.cyan));
+        sourceSelectorCloseButton.setVisibility(View.VISIBLE);
         sourceSelectorCloseButton.setBackgroundResource(R.drawable.classic_focus_button);
         sourceSelectorCloseButton.setTextColor(getColorStateList(R.color.classic_focus_button_text));
         LinearLayout.LayoutParams closeParams =

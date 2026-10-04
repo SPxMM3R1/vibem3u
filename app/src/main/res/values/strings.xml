@@ -288,10 +288,13 @@
     <string name="premium_relink_other">Vincular otro token</string>
     <string name="premium_unlink">Desvincular</string>
     <string name="source_selector_versions_count">%1$d de %2$d versiones con señal ahora. Elige una para cambiar.</string>
-    <string name="source_selector_your_version">TU VERSIÓN</string>
+    <string name="source_selector_your_version">PRINCIPAL</string>
     <string name="source_selector_in_use">✓ En uso</string>
     <string name="source_selector_available">Disponible</string>
     <string name="source_selector_no_signal">Sin señal ahora</string>
+    <string name="source_selector_versions_hint">Una fila por versión, con la calidad real del video.</string>
+    <string name="source_selector_testing">Probando…</string>
+    <string name="source_selector_consulting_row">Consultando…</string>
     <!-- Aviso de mejor calidad y reconexión TvVoo (2026-10-03). -->
     <string name="quality_upgrade_kicker">Mejor calidad disponible</string>
     <string name="quality_upgrade_switch">Cambiar</string>

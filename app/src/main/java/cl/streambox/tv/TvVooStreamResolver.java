@@ -242,8 +242,8 @@ public final class TvVooStreamResolver implements StreamResolver {
     }
 
     /**
-     * Una fila por versión: la del editor primero, luego las disponibles por calidad y al final
-     * las que no responden («Sin señal ahora»), para que la lista no cambie de largo.
+     * Una fila por versión, la del editor primero y el resto en el orden de las filas de carga;
+     * las que no responden quedan en su lugar como «Sin señal ahora».
      */
     private List<ResolvedPlaybackCandidate> versionRows(
             List<TvVooFastRace.VersionReport> versions,
@@ -252,15 +252,11 @@ public final class TvVooStreamResolver implements StreamResolver {
             Map<String, String> playbackHeaders
     ) {
         List<TvVooFastRace.VersionReport> ordered = new ArrayList<>(versions);
+        // Mismo orden que las filas de carga (la principal primero): nada salta al terminar.
         ordered.sort((left, right) -> {
             boolean leftPreferred = left.alias.equals(preferred);
             boolean rightPreferred = right.alias.equals(preferred);
             if (leftPreferred != rightPreferred) return leftPreferred ? -1 : 1;
-            if ((left.best == null) != (right.best == null)) return left.best == null ? 1 : -1;
-            if (left.best != null) {
-                int byQuality = TvVooFastRace.compare(left.best, right.best);
-                if (byQuality != 0) return byQuality;
-            }
             return Integer.compare(left.aliasIndex, right.aliasIndex);
         });
         List<ResolvedPlaybackCandidate> rows = new ArrayList<>();
@@ -681,6 +677,36 @@ public final class TvVooStreamResolver implements StreamResolver {
             }
         }
         if (race.chosen != null) TvVooSourceHistory.recordSuccess(stableId, race.chosen.link.alias);
+    }
+
+    /** Versión conocida antes de probarla (para dibujar el selector sin saltos). */
+    static final class PlannedVersion {
+        final String alias;
+        final String name;
+        final boolean preferred;
+
+        PlannedVersion(String alias, String name, boolean preferred) {
+            this.alias = alias;
+            this.name = name;
+            this.preferred = preferred;
+        }
+    }
+
+    /** Las mismas versiones, en el mismo orden, que mostrará «Fuentes y calidades». */
+    List<PlannedVersion> plannedVersions(Channel channel) {
+        List<PlannedVersion> result = new ArrayList<>();
+        if (channel == null) return result;
+        LinkedHashSet<String> aliases = new LinkedHashSet<>(definition.resolverAliases(channel));
+        if (aliases.isEmpty()) aliases.addAll(generatedAliases(channel));
+        aliases.addAll(PublishedTvVooVariants.siblingsOf(
+                channel.getAttributes().get("x-resolver-stable-id")));
+        int maxAliases = definition.getIntConfig("maxAliases", DEFAULT_MAX_ALIASES, 1, 12);
+        String preferred = aliases.isEmpty() ? "" : aliases.iterator().next();
+        for (String alias : aliases) {
+            if (result.size() >= maxAliases) break;
+            result.add(new PlannedVersion(alias, versionName(alias), alias.equals(preferred)));
+        }
+        return result;
     }
 
     /** Nombre legible de una versión: «vavoo_TNT%20SPORTS%203%7Cgroup%3Auk» → «TNT SPORTS 3». */
