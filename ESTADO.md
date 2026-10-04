@@ -11,7 +11,9 @@
 
 ## Hoy, en una mirada
 
-- **Versión publicada**: 0.5.60 (`versionCode` 169): difuminado del OSD con curva suave y
+- **Versión publicada**: 0.5.61 (`versionCode` 170): el degradado del OSD vuelve con el primer
+  fotograma (`onRenderedFirstFrame`), no al llegar a STATE_READY, que tardaba ~1 s más. La
+  0.5.60 trajo el difuminado del OSD con curva suave y
   sombra difusa tras la hora; descripción solo en el detalle (OK) y detalle sin «A
   continuación»; logos corregidos por tinta y tamaño ajustable en vivo por logo. La 0.5.59
   agrandó los logos 30 % (`LogoFit.LOGO_SCALE`) con mipmaps. La 0.5.58 centró Opciones. La 0.5.57 ancló «Fuentes y calidades». La 0.5.56 igualó el alto de los logos UHD con su versión normal. La 0.5.55 trajo la carrera rápida de TvVoo, calidad real, «Fuentes y

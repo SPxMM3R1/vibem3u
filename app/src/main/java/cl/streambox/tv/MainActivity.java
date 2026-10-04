@@ -184,6 +184,11 @@ public final class MainActivity extends Activity {
     private View logoSizeAdjust;
     private TextView logoSizeValue;
     private boolean logoSizeAdjusting;
+    /**
+     * Ya se ve imagen de la reproducción actual (primer fotograma). Desde ahí el OSD tiene su
+     * degradado aunque el reproductor siga llenando el búfer (0.5.61).
+     */
+    private boolean osdVideoVisible;
     private boolean adjustLogoSizeAfterSettings;
     private String logoSizeKey;
     private float logoSizeOriginal = 1f;
@@ -603,6 +608,13 @@ public final class MainActivity extends Activity {
                     .send();
         }
         player.addListener(new Player.Listener() {
+            @Override public void onRenderedFirstFrame() {
+                // La imagen aparece antes de STATE_READY (el búfer sigue llenándose): el
+                // degradado del OSD no puede llegar un segundo después que el video.
+                osdVideoVisible = true;
+                if (!loadFailed) setOsdLoadingAppearance(false);
+            }
+
             @Override public void onIsPlayingChanged(boolean isPlaying) {
                 settlePlaybackEpisode(isPlaying);
                 if (isPlaying) maybeSchedulePlaybackSourceStability();
@@ -1647,6 +1659,7 @@ public final class MainActivity extends Activity {
      */
     private void setOsdLoadingAppearance(boolean loading) {
         if (classicUi) return;
+        if (loading && osdVideoVisible) return;
         float content = loading ? 0.7f : 1f;
         long duration = loading ? 0L : 350L;
         if (osdScrim != null) osdScrim.animate().alpha(loading ? 0f : 1f).setDuration(duration).start();
@@ -1680,6 +1693,7 @@ public final class MainActivity extends Activity {
         playbackGeneration++;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
         playbackHasStarted = false;
+        osdVideoVisible = false;
         playbackRecoveryCooldownUntilElapsedRealtime = 0L;
         playbackAutoRecoveryInFlight = false;
         playbackRecoveryBudget.reset();
@@ -1905,6 +1919,7 @@ public final class MainActivity extends Activity {
         playbackSourceRecoveryInFlight = true;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
         playbackHasStarted = false;
+        osdVideoVisible = false;
         playbackAutoRecoveryInFlight = false;
         setStatus("RENOVANDO", R.color.amber);
         showLoadingState(getString(R.string.loading_reopening_source));
@@ -2395,6 +2410,7 @@ public final class MainActivity extends Activity {
     private void switchToSource(Channel channel, ResolvedPlaybackSource source) {
         if (!isCurrentPlayback(channel, playbackGeneration)) return;
         playbackHasStarted = false;
+        osdVideoVisible = false;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
         playbackAutoRecoveryInFlight = false;
         playbackRecoveryFailed = false;
@@ -2662,6 +2678,7 @@ public final class MainActivity extends Activity {
         resolverCoordinator.clearForPlaybackPause();
         playbackGeneration++;
         playbackHasStarted = false;
+        osdVideoVisible = false;
         playbackLoadingSinceElapsedRealtime = -1L;
         playbackAutoRecoveryInFlight = false;
         playbackRecoveryFailed = false;
@@ -4377,6 +4394,8 @@ public final class MainActivity extends Activity {
         if (!isCurrentPlayback(channel, playbackGeneration)) return;
 
         playbackHasStarted = false;
+
+        osdVideoVisible = false;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
         playbackAutoRecoveryInFlight = false;
         playbackRecoveryFailed = false;
