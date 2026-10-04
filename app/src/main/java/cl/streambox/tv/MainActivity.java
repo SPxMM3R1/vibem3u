@@ -4190,6 +4190,28 @@ public final class MainActivity extends Activity {
     private void renderDirectQualitySelector(Channel channel) {
         sourceCandidates.clear();
         playbackOptions.clear();
+        // Canal con señal preferida (0.5.66): las dos señales arriba y, debajo, sus calidades.
+        URI directBackup = TvVooBackup.directBackupOf(channel);
+        if (directBackup != null) {
+            ResolvedPlaybackSource principal = ResolvedPlaybackSource.direct(channel, PLAYER_USER_AGENT);
+            Channel backupChannel = TvVooBackup.resolutionChannel(channel);
+            ResolvedPlaybackSource backup = backupChannel == null ? null
+                    : ResolvedPlaybackSource.direct(backupChannel, PLAYER_USER_AGENT);
+            sourceCandidates.add(ResolvedPlaybackCandidate.version(
+                    getString(R.string.source_selector_direct_label),
+                    getString(R.string.source_selector_direct_detail),
+                    principal, "direct-principal", "", true, true, 0));
+            if (backup != null) {
+                sourceCandidates.add(ResolvedPlaybackCandidate.version(
+                        getString(R.string.source_selector_backup_label),
+                        getString(R.string.source_selector_backup_detail),
+                        backup, "direct-backup", "", true, false, 0));
+            }
+            for (ResolvedPlaybackCandidate candidate : sourceCandidates) {
+                playbackOptions.add(PlaybackOption.source(
+                        candidate, isCurrentSource(candidate.getSource())));
+            }
+        }
         List<VideoTrackOption> qualities = player == null
                 ? Collections.emptyList()
                 : collectVideoTrackOptions(player.getCurrentTracks());
@@ -4466,7 +4488,12 @@ public final class MainActivity extends Activity {
         ResolvedPlaybackSource source = candidate.getSource();
         closePlaybackSourceSelector();
         if (!isCurrentPlayback(channel, playbackGeneration)) return;
-        if (TvVooBackup.hasTvVoo(channel)) tvvooBackupActive = source.hasResolver();
+        if (TvVooBackup.hasTvVoo(channel)) {
+            tvvooBackupActive = source.hasResolver();
+        } else if (TvVooBackup.directBackupOf(channel) != null) {
+            // Elegir la señal de respaldo la deja fija también para las reconexiones.
+            tvvooBackupActive = TvVooBackup.directBackupOf(channel).equals(source.getPlaybackUri());
+        }
 
         playbackHasStarted = false;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();

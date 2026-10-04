@@ -11,7 +11,9 @@
 
 ## Hoy, en una mirada
 
-- **Versión publicada**: 0.5.65 (`versionCode` 174): señal preferida entre dos directos: con
+- **Versión publicada**: 0.5.66 (`versionCode` 175): en un canal con señal preferida (p. ej.
+  Canal 13), «Fuentes y calidades» muestra «Directo» (la preferida) y «Respaldo» (la propia) y,
+  debajo, las calidades; elegir el respaldo lo deja fijo en las reconexiones. La 0.5.65: señal preferida entre dos directos: con
   `preferredM3u` en el layout, el canal abre primero esa otra fila M3U (que la app ya no muestra
   sola) y deja su propia señal como respaldo (`x-backup-stream`, `TvVooBackup`). La 0.5.64: un canal directo puede traer un respaldo
   TvVoo de la misma señal (`backupTvVoo` en el layout, `TvVooBackup`): abre el directo y, si no se

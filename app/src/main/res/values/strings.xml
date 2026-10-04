@@ -314,4 +314,6 @@
     <string name="loading_backup_source">Abriendo la señal de respaldo…</string>
     <string name="source_selector_direct_label">Directo</string>
     <string name="source_selector_direct_detail">Señal principal del canal</string>
+    <string name="source_selector_backup_label">Respaldo</string>
+    <string name="source_selector_backup_detail">Señal propia del canal</string>
 </resources>
