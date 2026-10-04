@@ -294,7 +294,7 @@ public final class EpgGuideView extends View implements GuideSurface {
 
         // Logo + número · categoría.
         float logoTop = dp(74);
-        float logoHeight = dp(29);
+        float logoHeight = dp(29 * LogoFit.LOGO_SCALE);
         Bitmap logo = source.logo(row);
         float metaLeft = left;
         if (logo != null) {
@@ -437,11 +437,12 @@ public final class EpgGuideView extends View implements GuideSurface {
         float centerBaseline = rowTop + rowHeight / 2f + sp(3.5f);
         canvas.drawText(source.number(row), left + dp(8), centerBaseline, textPaint);
         float logoLeft = left + dp(38);
-        float logoWidth = dp(60);
+        float logoWidth = dp(60 * LogoFit.LOGO_SCALE);
         Bitmap logo = source.logo(row);
         if (logo != null) {
             drawBitmapFit(canvas, logo, logoLeft, rowTop, rowHeight,
-                    dp(44) * dp(15), logoWidth, dp(22), true);
+                    dp(44 * LogoFit.LOGO_SCALE) * dp(15 * LogoFit.LOGO_SCALE), logoWidth,
+                    dp(22 * LogoFit.LOGO_SCALE), true);
         } else {
             textPaint.setColor(selected ? WHITE : MUTED);
             canvas.drawText(TextUtils.ellipsize(source.name(row), textPaint, cellWidth - dp(42),

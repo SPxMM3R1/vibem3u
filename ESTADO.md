@@ -11,8 +11,8 @@
 
 ## Hoy, en una mirada
 
-- **Versión publicada**: 0.5.58 (`versionCode` 167): Opciones centrado (título y hora arriba,
-  pestañas centradas, columna al centro). La 0.5.57 ancló «Fuentes y calidades». La 0.5.56 igualó el alto de los logos UHD con su versión normal. La 0.5.55 trajo la carrera rápida de TvVoo, calidad real, «Fuentes y
+- **Versión publicada**: 0.5.59 (`versionCode` 168): logos 30 % más grandes en OSD y Guía
+  (`LogoFit.LOGO_SCALE`) y achicados con mipmaps. La 0.5.58 centró Opciones. La 0.5.57 ancló «Fuentes y calidades». La 0.5.56 igualó el alto de los logos UHD con su versión normal. La 0.5.55 trajo la carrera rápida de TvVoo, calidad real, «Fuentes y
   calidades» por versión, aviso de mejor calidad y reglas de reconexión.
   Verificar su publicación en Releases antes de dar la entrega por concluida. Se publica con tag `vX.Y.Z` y el
   workflow «Publicar APK». No hay SDK Android local: compila «Android CI».
@@ -35,7 +35,8 @@
     sin «…» y entran con la transición enfatizada.
     Mientras la pantalla está negra, el OSD no dibuja su degradado y sus textos bajan al 70 %
     (no enciende la atenuación local de teles mini-LED); al aparecer la imagen vuelve suave.
-  - **Logos** (`LogoFit`): se recorta el borde transparente y todos ocupan la misma superficie
+  - **Logos** (`LogoFit`, desde 0.5.59 un 30 % más grandes: superficie 97,5×29,9 dp, tope
+    136,5×41,6 dp; bitmaps con mipmaps para que la TV los achique sin bordes dentados): se recorta el borde transparente y todos ocupan la misma superficie
     visual, en el OSD y en la Guía.
   - **Menús**: Opciones, selector de fuentes, detalle del programa, carga y MediaFlow usan
     filas tenues con foco cyan y píldoras.

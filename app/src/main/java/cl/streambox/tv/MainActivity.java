@@ -3398,8 +3398,8 @@ public final class MainActivity extends Activity {
         String key = logoUri.toString();
         android.graphics.Bitmap bitmap = guideLogos.get(key);
         if (bitmap != null || !guideLogoRequests.add(key)) return bitmap;
-        int width = dpToPx(90);
-        int height = dpToPx(36);
+        int width = dpToPx(90 * LogoFit.LOGO_SCALE);
+        int height = dpToPx(36 * LogoFit.LOGO_SCALE);
         logoCacheExecutor.submit(() -> {
             android.graphics.Bitmap loaded = channelLogoCache.loadCached(logoUri, width, height);
             if (loaded == null) {

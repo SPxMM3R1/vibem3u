@@ -15,11 +15,15 @@ import java.util.WeakHashMap;
  * para que ese margen no achique el logo.
  */
 final class LogoFit {
-    /** Logo del OSD y del bloque de arriba de la Guía (dp): superficie 75×23, tope 105×32. */
-    static final float OSD_LOGO_AREA_WIDTH_DP = 75f;
-    static final float OSD_LOGO_AREA_HEIGHT_DP = 23f;
-    static final float OSD_LOGO_MAX_WIDTH_DP = 105f;
-    static final float OSD_LOGO_MAX_HEIGHT_DP = 32f;
+    /**
+     * Logo del OSD y del bloque de arriba de la Guía (dp). Desde la 0.5.59, 30 % más grande
+     * que antes (75×23, tope 105×32): superficie 97,5×29,9 y tope 136,5×41,6.
+     */
+    static final float LOGO_SCALE = 1.3f;
+    static final float OSD_LOGO_AREA_WIDTH_DP = 75f * LOGO_SCALE;
+    static final float OSD_LOGO_AREA_HEIGHT_DP = 23f * LOGO_SCALE;
+    static final float OSD_LOGO_MAX_WIDTH_DP = 105f * LOGO_SCALE;
+    static final float OSD_LOGO_MAX_HEIGHT_DP = 32f * LOGO_SCALE;
     /** Alfa mínimo para considerar un píxel parte del logo. */
     private static final int ALPHA_THRESHOLD = 16;
     /**
@@ -108,6 +112,9 @@ final class LogoFit {
     /** Recorta y recuerda el factor de familia del logo (por su nombre de archivo). */
     static Bitmap trim(Bitmap bitmap, URI logoUri) {
         Bitmap trimmed = trim(bitmap);
+        // El logo se muestra 2–3 veces más chico que el bitmap: con mipmaps la TV lo achica
+        // con buen filtro y no salta píxeles (líneas finas dentadas).
+        if (trimmed != null) trimmed.setHasMipMap(true);
         float factor = familyWidthFactor(logoUri);
         if (trimmed != null && factor > 1f) WIDTH_FACTORS.put(trimmed, factor);
         return trimmed;
