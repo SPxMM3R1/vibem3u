@@ -1,22 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Opciones (moderno): encabezado igual al de la Guía y una columna que mide lo que necesita.
+<!-- Opciones (moderno, centrado desde 2026-10-03): columna de 560 dp al centro con título y hora
+     arriba y pestañas centradas; el video asoma a los lados.
      Generado desde el mockup aprobado; el estilo clásico vive en classic_activity_settings.xml. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/settings_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/menu_backdrop"
+    android:background="@drawable/menu_backdrop_center"
     android:clipChildren="false"
     android:paddingTop="24dp"
     android:paddingBottom="16dp">
 
-    <!-- Reloj sin caja (2026-10-03): flota sobre esta sombra difusa, como el del OSD. -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_marginTop="-24dp"
-        android:layout_marginBottom="-16dp"
-        android:background="@drawable/corner_scrim" />
 
     <LinearLayout
         android:id="@+id/settings_panel"
@@ -24,22 +18,45 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
+
+        <!-- Título y hora sobre la columna; las pestañas van centradas debajo. -->
         <LinearLayout
-            android:id="@+id/settings_tabs"
             android:layout_width="match_parent"
-            android:layout_height="32dp"
+            android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
                 android:includeFontPadding="false"
                 android:text="@string/settings_title"
                 android:textColor="@color/white"
-                android:textSize="16sp"
+                android:textSize="18sp"
                 android:textStyle="bold" />
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/settings_clock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:textColor="@color/clock_day"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/settings_tabs"
+            android:layout_width="match_parent"
+            android:layout_height="32dp"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
 
             <TextView
                 android:id="@+id/tab_playback"
@@ -149,26 +166,11 @@
                 android:textColor="@color/white"
                 android:textSize="11sp" />
 
-            <Space
-                android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
-
-            <TextView
-                android:id="@+id/settings_clock"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:includeFontPadding="false"
-                android:shadowColor="#99000000"
-                android:shadowDy="1"
-                android:shadowRadius="6"
-                android:textColor="@color/clock_day"
-                android:textSize="13sp" />
         </LinearLayout>
 
         <ScrollView
             android:id="@+id/settings_content"
-            android:layout_width="560dp"
+            android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_marginTop="20dp"
             android:layout_weight="1"

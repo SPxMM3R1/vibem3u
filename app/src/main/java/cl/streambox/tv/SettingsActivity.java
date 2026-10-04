@@ -475,14 +475,16 @@ public final class SettingsActivity extends Activity {
 
     private void updateSettingsPanelWidth() {
         if (settingsRoot == null || settingsPanel == null || settingsRoot.getWidth() <= 0) return;
-        int width = OverlayPanelWidth.resolveWidthPx(
-                settingsRoot.getWidth(),
-                getResources().getDisplayMetrics().density
-        );
+        // Moderno: columna de 560 dp centrada arriba; clásico: ancho de pantalla con márgenes.
+        int width = classicUi
+                ? OverlayPanelWidth.resolveWidthPx(
+                        settingsRoot.getWidth(), getResources().getDisplayMetrics().density)
+                : Math.min(dp(560), settingsRoot.getWidth());
+        int gravity = classicUi ? Gravity.CENTER : Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) settingsPanel.getLayoutParams();
-        if (params.width == width && params.gravity == Gravity.CENTER) return;
+        if (params.width == width && params.gravity == gravity) return;
         params.width = width;
-        params.gravity = Gravity.CENTER;
+        params.gravity = gravity;
         settingsPanel.setLayoutParams(params);
     }
 

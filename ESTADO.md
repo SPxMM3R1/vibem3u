@@ -11,8 +11,8 @@
 
 ## Hoy, en una mirada
 
-- **Versión publicada**: 0.5.57 (`versionCode` 166): «Fuentes y calidades» anclado y sin
-  saltos. La 0.5.56 igualó el alto de los logos UHD con su versión normal. La 0.5.55 trajo la carrera rápida de TvVoo, calidad real, «Fuentes y
+- **Versión publicada**: 0.5.58 (`versionCode` 167): Opciones centrado (título y hora arriba,
+  pestañas centradas, columna al centro). La 0.5.57 ancló «Fuentes y calidades». La 0.5.56 igualó el alto de los logos UHD con su versión normal. La 0.5.55 trajo la carrera rápida de TvVoo, calidad real, «Fuentes y
   calidades» por versión, aviso de mejor calidad y reglas de reconexión.
   Verificar su publicación en Releases antes de dar la entrega por concluida. Se publica con tag `vX.Y.Z` y el
   workflow «Publicar APK». No hay SDK Android local: compila «Android CI».
@@ -42,11 +42,13 @@
   - **Diálogos «escena»** (2026-10-03, moderno): salir, actualización y Premium ocupan la
     pantalla sobre el video atenuado, con el degradado del OSD desde abajo y el contenido abajo
     a la izquierda (etiqueta con línea de color, título grande, detalle, píldoras con foco
-    blanco). Al salir, el foco parte en «Salir». Reloj de Opciones sin caja, sobre una sombra
-    difusa en la esquina.
-  - **Opciones** (0.5.47, moderno): encabezado idéntico al de la Guía y una sola columna
+    blanco). Al salir, el foco parte en «Salir». Reloj de Opciones sin caja, a la derecha del
+    título.
+  - **Opciones** (0.5.58, moderno): columna de 560 dp centrada arriba con «Opciones» a la
+    izquierda y la hora a la derecha, pestañas centradas debajo y fondo radial
+    `menu_backdrop_center` (negro al centro, el video asoma a los lados). Desde la 0.5.47, una sola columna
     de 560 dp que mide lo que su contenido necesita (sin relleno ni desplazamiento); fondo
-    `menu_backdrop` en negro puro. Espacios: 4 dp entre filas, 16 antes de cada sección y 6
+    Espacios: 4 dp entre filas, 16 antes de cada sección y 6
     después; filas con título 12sp y descripción 9sp; calidades y Moderno|Clásico en línea;
     datos de solo lectura en rejilla. El layout sale de un generador (ver Bitácora); el
     clásico conserva la versión 0.5.46.
@@ -145,9 +147,10 @@
   - OSD moderno sin categoría y número a la derecha a media altura.
   - Diálogos de salir y actualización como «escena» (`SceneDialog`, layouts generados desde el
     mockup aprobado con `scene_layouts.py` del scratchpad); foco inicial en «Salir».
-  - Reloj de Opciones sin recuadro (`corner_scrim`). `activity_settings.xml` ya tiene ediciones a
-    mano además del generador (`settings_compact_gen.py`): si se regenera, conservar el reloj, la
-    sombra y la sección Premium.
+  - Opciones centrado (0.5.58): sin `corner_scrim`; `SettingsActivity.updateSettingsPanelWidth`
+    da 560 dp centrados al moderno y el ancho de pantalla al clásico. `activity_settings.xml` ya tiene ediciones a
+    mano además del generador (`settings_compact_gen.py`): si se regenera, conservar el encabezado
+    centrado y la sección Premium.
   - Highfly Premium restaurado para el dominio `.to`: token cifrado, vinculación por QR con
     servidor local (`PremiumPairingServer`, zxing core 3.5.3 para el QR), fuente Premium primero
     en Highfly y escena de token vencido. Se quitó la limpieza que borraba claves `highfly_*` y
