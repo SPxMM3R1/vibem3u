@@ -79,7 +79,7 @@
             android:layout_marginTop="7dp"
             android:ellipsize="end"
             android:lineSpacingMultiplier="1.3"
-            android:maxLines="2"
+            android:maxLines="4"
             android:textColor="@color/osd_muted"
             android:textSize="11sp"
             android:visibility="gone" />

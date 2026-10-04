@@ -11,7 +11,9 @@
 
 ## Hoy, en una mirada
 
-- **Versión publicada**: 0.5.62 (`versionCode` 171): el OSD moderno se ve igual cargando y con
+- **Versión publicada**: 0.5.63 (`versionCode` 172): OK abre la descripción en el mismo OSD
+  (logo, título, descripción y avance; sin «Ahora» ni «Después», sin tocar la hora); sin
+  descripción OK no hace nada. La 0.5.62: el OSD moderno se ve igual cargando y con
   imagen (degradado siempre visible y textos a pleno brillo): como el degradado es negro puro,
   ocultarlo durante la carga ya no servía y llegaba tarde. La 0.5.60 trajo el difuminado del OSD con curva suave y
   sombra difusa tras la hora; descripción solo en el detalle (OK) y detalle sin «A
@@ -31,7 +33,7 @@
   - **OSD**: pantalla completa con degradado negro puro y fuerte (`OsdScrimView`; desde la
     0.5.60 con curva suave smoothstep, sombra lateral de 400 dp e inferior de 190 dp, y una
     sombra elíptica difusa tras la hora), logo (sin categoría desde 2026-10-03), título
-    grande, avance, «Después» (la descripción solo va en el detalle, con OK, desde la 0.5.60;
+    grande, avance, «Después» (la descripción solo aparece con OK, en el mismo OSD, desde la 0.5.63;
     el detalle moderno ya no muestra «A continuación»); el número del
     canal va a la derecha a media altura, con sombra; abajo a la derecha la
     hora grande con la fecha larga y debajo los datos técnicos (ya no hay reloj aparte arriba

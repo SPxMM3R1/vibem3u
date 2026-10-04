@@ -184,6 +184,11 @@ public final class MainActivity extends Activity {
     private View logoSizeAdjust;
     private TextView logoSizeValue;
     private boolean logoSizeAdjusting;
+    /**
+     * Moderno (0.5.63): el detalle con OK ya no es otra pantalla; el mismo OSD muestra la
+     * descripción bajo el título (con logo y avance, sin «Ahora» ni «Después»).
+     */
+    private boolean osdDescriptionOpen;
     private boolean adjustLogoSizeAfterSettings;
     private String logoSizeKey;
     private float logoSizeOriginal = 1f;
@@ -328,6 +333,10 @@ public final class MainActivity extends Activity {
             programmeDetailOverlay.setVisibility(View.GONE);
         }
         if (osdHero != null) osdHero.setVisibility(View.VISIBLE);
+        if (osdDescriptionOpen) {
+            osdDescriptionOpen = false;
+            updateProgrammeInfo();
+        }
     };
     /** Timeout del detalle: se cierra junto con el OSD que lo acompaña. */
     private final Runnable hideProgrammeDetailWithOverlay = () -> {
@@ -2713,8 +2722,10 @@ public final class MainActivity extends Activity {
         if (osdDescription != null) {
             // Moderno (0.5.60): la descripción solo va en el detalle, que se abre con OK.
             osdDescription.setText(description);
-            osdDescription.setVisibility(!classicUi || AppStrings.isBlank(description)
-                    ? View.GONE : View.VISIBLE);
+            boolean blank = AppStrings.isBlank(description);
+            if (blank) osdDescriptionOpen = false;
+            osdDescription.setVisibility(!blank && (classicUi || osdDescriptionOpen)
+                    ? View.VISIBLE : View.GONE);
         }
 
         long duration = programme.getStopMillis() - programme.getStartMillis();
@@ -2724,7 +2735,10 @@ public final class MainActivity extends Activity {
         liveProgress.setMax(1000);
         liveProgress.setProgress(progress);
 
-        if (osdNext != null) bindOsdNext(channel, programme, timeFormat);
+        if (osdNext != null) {
+            if (osdDescriptionOpen) osdNext.setVisibility(View.GONE);
+            else bindOsdNext(channel, programme, timeFormat);
+        }
         updateProgrammeDetail();
     }
 
@@ -3423,8 +3437,8 @@ public final class MainActivity extends Activity {
     }
 
     private boolean isProgrammeDetailVisible() {
-        return programmeDetailOverlay != null
-                && programmeDetailOverlay.getVisibility() == View.VISIBLE;
+        return osdDescriptionOpen || (programmeDetailOverlay != null
+                && programmeDetailOverlay.getVisibility() == View.VISIBLE);
     }
 
     private boolean isGuideVisible() {
@@ -3747,6 +3761,10 @@ public final class MainActivity extends Activity {
 
     private void showProgrammeDetail() {
         if (channels.isEmpty() || channelIndex < 0 || channelIndex >= channels.size()) return;
+        if (!classicUi) {
+            showOsdDescription();
+            return;
+        }
         mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
         // El detalle se apoya sobre el OSD: ambos quedan visibles y se cierran juntos.
         showOverlay(true);
@@ -3754,6 +3772,19 @@ public final class MainActivity extends Activity {
         if (osdHero != null) osdHero.setVisibility(View.INVISIBLE);
         programmeDetailOverlay.setVisibility(View.VISIBLE);
         updateProgrammeDetail();
+        mainHandler.postDelayed(hideProgrammeDetailWithOverlay, PROGRAMME_DETAIL_TIMEOUT_MS);
+    }
+
+    /** Moderno: OK abre la descripción en el mismo OSD; sin descripción no pasa nada. */
+    private void showOsdDescription() {
+        if (osdDescription == null) return;
+        EpgProgramme programme = epgData.findCurrent(
+                channels.get(channelIndex).getTvgId(), System.currentTimeMillis());
+        if (programme == null || AppStrings.isBlank(programme.getDescription())) return;
+        mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
+        showOverlay(true);
+        osdDescriptionOpen = true;
+        updateProgrammeInfo();
         mainHandler.postDelayed(hideProgrammeDetailWithOverlay, PROGRAMME_DETAIL_TIMEOUT_MS);
     }
 
@@ -4535,7 +4566,7 @@ public final class MainActivity extends Activity {
             closePlaybackSourceSelector();
             return;
         }
-        if (programmeDetailOverlay.getVisibility() == View.VISIBLE) {
+        if (isProgrammeDetailVisible()) {
             mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
             hideProgrammeDetail.run();
             overlayAwaitingPlayback = false;
