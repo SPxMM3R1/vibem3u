@@ -31,6 +31,25 @@ public class LogoFitTest {
     }
 
     @Test
+    public void uhdLogosKeepTheHeightOfTheirNormalVersion() {
+        // Sky Sports F1 recortado (846×353) y su UHD (la caja agrega ~30 % de ancho).
+        float[] normal = LogoFit.opticalSize(846, 353, AREA, 105f, 32f);
+        float[] uhd = LogoFit.opticalSize(1098, 353, AREA, 105f, 32f, LogoFit.UHD_WIDTH_FACTOR);
+
+        assertEquals(normal[1], uhd[1], 0.3f);
+        assertTrue(uhd[0] > normal[0] * 1.25f);
+    }
+
+    @Test
+    public void onlyUhdFileNamesGetTheFamilyFactor() {
+        assertEquals(LogoFit.UHD_WIDTH_FACTOR, LogoFit.familyWidthFactor(java.net.URI.create(
+                "https://raw.githubusercontent.com/x/lista-m3u/main/logos/sky-sports-f1-uhd.png")), 0f);
+        assertEquals(1f, LogoFit.familyWidthFactor(java.net.URI.create(
+                "https://raw.githubusercontent.com/x/lista-m3u/main/logos/sky-sports-f1.png")), 0f);
+        assertEquals(1f, LogoFit.familyWidthFactor(null), 0f);
+    }
+
+    @Test
     public void invalidSizesDrawNothing() {
         assertArrayEquals(new float[] {0f, 0f}, LogoFit.opticalSize(0, 10, AREA, 105f, 32f), 0f);
         assertArrayEquals(new float[] {0f, 0f}, LogoFit.opticalSize(10, 10, 0f, 105f, 32f), 0f);

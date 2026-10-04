@@ -11,8 +11,9 @@
 
 ## Hoy, en una mirada
 
-- **Versión publicada**: 0.5.55 (`versionCode` 164): carrera rápida de TvVoo, calidad real,
-  «Fuentes y calidades» por versión, aviso de mejor calidad y reglas de reconexión.
+- **Versión publicada**: 0.5.56 (`versionCode` 165): logos UHD con el mismo alto que su
+  versión normal. La 0.5.55 trajo la carrera rápida de TvVoo, calidad real, «Fuentes y
+  calidades» por versión, aviso de mejor calidad y reglas de reconexión.
   Verificar su publicación en Releases antes de dar la entrega por concluida. Se publica con tag `vX.Y.Z` y el
   workflow «Publicar APK». No hay SDK Android local: compila «Android CI».
 - **Estado visual**: el usuario aprobó todo el estilo nuevo, pero la 0.5.42 y la 0.5.43 aún no
@@ -120,6 +121,10 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-03**: los logos UHD de Sky se veían más bajos que su versión normal porque
+  `LogoFit` iguala la superficie. Ahora un archivo `…-uhd.*` se dimensiona con el alto de su
+  versión normal (factor de ancho 1,30, medido: 1101 px contra 846) y solo se alarga, en el OSD
+  y en la Guía. Pruebas `LogoFitTest` (8) OK en JVM.
 - **2026-10-03**: aplicado lo aprobado para TvVoo y diálogos:
   - Carrera rápida (`TvVooFastRace`) y calidad real del segmento (`VideoSampleInfo`, probado
     con las 6 variantes del stream de prueba de Apple y un SPS HEVC 1080p). Medición previa en

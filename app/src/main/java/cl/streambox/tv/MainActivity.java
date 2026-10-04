@@ -2877,7 +2877,7 @@ public final class MainActivity extends Activity {
                     targetHeightPx
             );
             if (cached != null) {
-                android.graphics.Bitmap trimmedCached = classicUi ? cached : LogoFit.trim(cached);
+                android.graphics.Bitmap trimmedCached = classicUi ? cached : LogoFit.trim(cached, logoUri);
                 mainHandler.post(() -> showChannelLogo(
                         trimmedCached,
                         expectedIndex,
@@ -2895,7 +2895,7 @@ public final class MainActivity extends Activity {
                 );
                 if (cached != null && !refreshed.isChanged()) return;
                 android.graphics.Bitmap trimmedRefreshed = classicUi
-                        ? refreshed.getBitmap() : LogoFit.trim(refreshed.getBitmap());
+                        ? refreshed.getBitmap() : LogoFit.trim(refreshed.getBitmap(), logoUri);
                 mainHandler.post(() -> showChannelLogo(
                         trimmedRefreshed,
                         expectedIndex,
@@ -2926,8 +2926,9 @@ public final class MainActivity extends Activity {
             displayedLogoIdentity = expectedIdentity;
             return;
         }
-        // Tamaño óptico: la misma superficie visual para todos los logos.
-        float[] size = LogoFit.opticalSize(bitmap.getWidth(), bitmap.getHeight(),
+        // Tamaño óptico: la misma superficie visual para todos los logos (los UHD, igual de
+        // altos que su versión normal).
+        float[] size = LogoFit.opticalSize(bitmap,
                 dpToPx(LogoFit.OSD_LOGO_AREA_WIDTH_DP) * (float) dpToPx(LogoFit.OSD_LOGO_AREA_HEIGHT_DP),
                 dpToPx(LogoFit.OSD_LOGO_MAX_WIDTH_DP), dpToPx(LogoFit.OSD_LOGO_MAX_HEIGHT_DP));
         ViewGroup.LayoutParams logoParams = channelLogo.getLayoutParams();
@@ -3408,7 +3409,7 @@ public final class MainActivity extends Activity {
                     // Sin logo: la guía muestra el nombre del canal.
                 }
             }
-            android.graphics.Bitmap result = LogoFit.trim(loaded);
+            android.graphics.Bitmap result = LogoFit.trim(loaded, logoUri);
             mainHandler.post(() -> {
                 if (result == null) {
                     guideLogoRequests.remove(key);

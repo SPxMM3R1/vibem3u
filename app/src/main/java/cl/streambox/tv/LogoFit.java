@@ -2,6 +2,12 @@ package cl.streambox.tv;
 
 import android.graphics.Bitmap;
 
+import java.net.URI;
+import java.util.Collections;
+import java.util.Locale;
+import java.util.Map;
+import java.util.WeakHashMap;
+
 /**
  * Tamaño óptico de logos: todos ocupan la misma superficie visual según su
  * proporción (un logo ancho queda más bajo, uno cuadrado más alto), con topes de
@@ -16,6 +22,14 @@ final class LogoFit {
     static final float OSD_LOGO_MAX_HEIGHT_DP = 32f;
     /** Alfa mínimo para considerar un píxel parte del logo. */
     private static final int ALPHA_THRESHOLD = 16;
+    /**
+     * Logos «…-uhd» (2026-10-03): son su logo normal más la caja «UHD», ~30 % más anchos.
+     * Deben verse igual de altos que su versión normal y solo más largos, así que su alto se
+     * calcula como si no tuvieran esa caja.
+     */
+    static final float UHD_WIDTH_FACTOR = 1.30f;
+    private static final Map<Bitmap, Float> WIDTH_FACTORS =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     private LogoFit() {}
 
@@ -24,9 +38,20 @@ final class LogoFit {
      * {@code width}×{@code height}, limitado a {@code maxWidth}×{@code maxHeight}.
      */
     static float[] opticalSize(int width, int height, float area, float maxWidth, float maxHeight) {
+        return opticalSize(width, height, area, maxWidth, maxHeight, 1f);
+    }
+
+    /**
+     * Como {@link #opticalSize(int, int, float, float, float)}, pero el alto se calcula con el
+     * ancho dividido por {@code familyWidthFactor}: un logo que es «su versión normal más algo
+     * a la derecha» queda igual de alto que esa versión y solo más largo.
+     */
+    static float[] opticalSize(int width, int height, float area, float maxWidth, float maxHeight,
+                               float familyWidthFactor) {
         if (width <= 0 || height <= 0 || area <= 0f) return new float[] {0f, 0f};
         float aspect = width / (float) height;
-        float h = (float) Math.sqrt(area / aspect);
+        float factor = familyWidthFactor >= 1f ? familyWidthFactor : 1f;
+        float h = (float) Math.sqrt(area / (aspect / factor));
         float w = aspect * h;
         if (h > maxHeight) {
             h = maxHeight;
@@ -59,6 +84,33 @@ final class LogoFit {
         }
         if (right < 0) return null;
         return new int[] {left, top, right + 1, bottom + 1};
+    }
+
+    /** Tamaño óptico de un logo ya recortado, respetando si es la versión UHD de otro. */
+    static float[] opticalSize(Bitmap bitmap, float area, float maxWidth, float maxHeight) {
+        if (bitmap == null) return new float[] {0f, 0f};
+        Float factor = WIDTH_FACTORS.get(bitmap);
+        return opticalSize(bitmap.getWidth(), bitmap.getHeight(), area, maxWidth, maxHeight,
+                factor == null ? 1f : factor);
+    }
+
+    /** Factor de ancho de familia según el archivo: «…-uhd.png» → {@link #UHD_WIDTH_FACTOR}. */
+    static float familyWidthFactor(URI logoUri) {
+        String path = logoUri == null || logoUri.getPath() == null
+                ? "" : logoUri.getPath().toLowerCase(Locale.ROOT);
+        int slash = path.lastIndexOf('/');
+        String name = slash >= 0 ? path.substring(slash + 1) : path;
+        int dot = name.lastIndexOf('.');
+        String base = dot > 0 ? name.substring(0, dot) : name;
+        return base.endsWith("-uhd") ? UHD_WIDTH_FACTOR : 1f;
+    }
+
+    /** Recorta y recuerda el factor de familia del logo (por su nombre de archivo). */
+    static Bitmap trim(Bitmap bitmap, URI logoUri) {
+        Bitmap trimmed = trim(bitmap);
+        float factor = familyWidthFactor(logoUri);
+        if (trimmed != null && factor > 1f) WIDTH_FACTORS.put(trimmed, factor);
+        return trimmed;
     }
 
     /** Devuelve el logo sin borde transparente (el mismo bitmap si no hay nada que recortar). */

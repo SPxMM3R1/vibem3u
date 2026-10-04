@@ -514,8 +514,7 @@ public final class EpgGuideView extends View implements GuideSurface {
     private float drawBitmapFit(Canvas canvas, Bitmap bitmap, float x, float y, float bandHeight,
                                 float area, float maxWidth, float maxHeight, boolean center) {
         if (bitmap.getWidth() <= 0 || bitmap.getHeight() <= 0) return 0f;
-        float[] size = LogoFit.opticalSize(bitmap.getWidth(), bitmap.getHeight(), area,
-                maxWidth, maxHeight);
+        float[] size = LogoFit.opticalSize(bitmap, area, maxWidth, maxHeight);
         float drawWidth = size[0];
         float drawHeight = size[1];
         float drawLeft = center ? x + (maxWidth - drawWidth) / 2f : x;
