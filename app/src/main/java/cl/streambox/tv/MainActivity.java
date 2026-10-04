@@ -189,6 +189,12 @@ public final class MainActivity extends Activity {
      * descripción bajo el título (con logo y avance, sin «Ahora» ni «Después»).
      */
     private boolean osdDescriptionOpen;
+    /**
+     * Respaldo TvVoo de un canal directo (0.5.64): activo para la reproducción actual, y la
+     * identidad que debe seguir en respaldo cuando una recuperación vuelve a abrir el canal.
+     */
+    private boolean tvvooBackupActive;
+    private String pendingTvVooBackupIdentity;
     private boolean adjustLogoSizeAfterSettings;
     private String logoSizeKey;
     private float logoSizeOriginal = 1f;
@@ -1664,6 +1670,9 @@ public final class MainActivity extends Activity {
         tvvooNoSignalToken++;
         channelIndex = (requestedIndex % channels.size() + channels.size()) % channels.size();
         Channel channel = channels.get(channelIndex);
+        tvvooBackupActive = PlaybackPreferences.channelIdentity(channel)
+                .equals(pendingTvVooBackupIdentity) && TvVooBackup.has(channel);
+        pendingTvVooBackupIdentity = null;
         playbackGeneration++;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
         playbackHasStarted = false;
@@ -1969,6 +1978,7 @@ public final class MainActivity extends Activity {
             waitForNetworkThenRecover();
             return;
         }
+        if (switchToTvVooBackup(reason)) return;
         if (!playbackRecoveryBudget.hasAttemptLeft()) {
             if (lastPlaybackDiagnosticCode <= 0) {
                 lastPlaybackDiagnosticCode = PlaybackDiagnosticCode.recoveryExhausted();
@@ -2007,6 +2017,57 @@ public final class MainActivity extends Activity {
         }
     }
 
+    /** Canal con el que se resuelve la reproducción: el de respaldo si está activo. */
+    private Channel resolutionChannelFor(Channel channel) {
+        if (!tvvooBackupActive || channel == null) return channel;
+        Channel backup = TvVooBackup.resolutionChannel(channel);
+        return backup == null ? channel : backup;
+    }
+
+    /**
+     * Un canal directo con respaldo TvVoo que falla pasa al respaldo antes de gastar
+     * reintentos en el directo. Devuelve true si tomó el control de la recuperación.
+     */
+    private boolean switchToTvVooBackup(String reason) {
+        Channel channel = playbackChannel;
+        if (tvvooBackupActive || channel == null || !TvVooBackup.has(channel)) return false;
+        Log.i(PLAYBACK_HEALTH_TAG, "backup tvvoo reason=" + reason);
+        pendingTvVooBackupIdentity = PlaybackPreferences.channelIdentity(channel);
+        tvvooBackupActive = true;
+        playbackAutoRecoveryInFlight = true;
+        playbackRecoveryFailed = false;
+        setStatus("RESPALDO", R.color.amber);
+        showLoadingState(getString(R.string.loading_backup_source));
+        long generation = playbackGeneration;
+        mainHandler.post(() -> {
+            if (generation != playbackGeneration || exiting || isFinishing()) return;
+            performFullPlaybackRecovery(false);
+        });
+        return true;
+    }
+
+    /** Antepone el directo («Principal») a las versiones TvVoo de su respaldo. */
+    private List<ResolvedPlaybackCandidate> withDirectPrincipal(
+            Channel channel,
+            Channel resolutionChannel,
+            List<ResolvedPlaybackCandidate> versions
+    ) {
+        if (channel == resolutionChannel || versions == null) return versions;
+        List<ResolvedPlaybackCandidate> result = new ArrayList<>(versions.size() + 1);
+        result.add(ResolvedPlaybackCandidate.version(
+                getString(R.string.source_selector_direct_label),
+                getString(R.string.source_selector_direct_detail),
+                ResolvedPlaybackSource.direct(channel, PLAYER_USER_AGENT),
+                "direct",
+                "",
+                true,
+                true,
+                0
+        ));
+        result.addAll(versions);
+        return result;
+    }
+
     private void performFullPlaybackRecovery(boolean renewSource) {
         Channel channel = playbackChannel;
         if (channel == null) {
@@ -2021,15 +2082,17 @@ public final class MainActivity extends Activity {
         int targetIndex = findChannelIndexByIdentity(channels, identity);
 
         cancelPlaybackResolution();
+        Channel resolutionChannel = resolutionChannelFor(channel);
         StreamResolver resolver = streamResolverRegistry == null
                 ? null
-                : streamResolverRegistry.find(channel);
+                : streamResolverRegistry.find(resolutionChannel);
         if (renewSource) markPublishedHighflyLinkFailed();
         if (renewSource && resolver != null) {
             // The previous restart reused the validated source and failed
             // again: it may have expired, so ask the resolver for a new one.
-            resolverCoordinator.invalidate(channel, resolver);
+            resolverCoordinator.invalidate(resolutionChannel, resolver);
         }
+        if (tvvooBackupActive) pendingTvVooBackupIdentity = identity;
         // A first watchdog/decoder recovery recreates ExoPlayer but keeps the
         // validated TvVoo/MediaFlow source in the process-only coordinator
         // cache so the new player can attach to it immediately.
@@ -2102,7 +2165,8 @@ public final class MainActivity extends Activity {
             boolean forceRefresh
     ) {
         if (player == null || !isCurrentPlayback(channel, expectedGeneration)) return;
-        StreamResolver resolver = streamResolverRegistry.find(channel);
+        Channel resolutionChannel = resolutionChannelFor(channel);
+        StreamResolver resolver = streamResolverRegistry.find(resolutionChannel);
         if (resolver == null) {
             startupMetrics.dequeued(startupMetrics.currentId());
             startupMetrics.resolved(startupMetrics.currentId());
@@ -2145,7 +2209,7 @@ public final class MainActivity extends Activity {
                     }
                 });
                 ResolvedPlaybackSource source = resolverCoordinator.resolve(
-                        channel,
+                        resolutionChannel,
                         resolver,
                         forceRefresh,
                         progressListener
@@ -3799,7 +3863,10 @@ public final class MainActivity extends Activity {
                 || !hasWindowFocus() || playbackChannel == null
                 || playbackResolutionTask != null
                 || streamResolverRegistry == null) return;
-        StreamResolver resolver = streamResolverRegistry.find(playbackChannel);
+        Channel versionsChannel = TvVooBackup.has(playbackChannel)
+                ? TvVooBackup.resolutionChannel(playbackChannel) : playbackChannel;
+        if (versionsChannel == null) versionsChannel = playbackChannel;
+        StreamResolver resolver = streamResolverRegistry.find(versionsChannel);
         if (isSourceSelectorVisible() || sourceCandidateTask != null) return;
 
         mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
@@ -3809,9 +3876,9 @@ public final class MainActivity extends Activity {
         sourceSelectorOverlay.setVisibility(View.VISIBLE);
         sourceSelectorFixedHint = !classicUi && resolver instanceof TvVooStreamResolver;
         if (resolver != null && supportsSourceSelector(resolver)) {
-            startSourceSelectorQuery(playbackChannel, resolver);
+            startSourceSelectorQuery(playbackChannel, versionsChannel, resolver);
             if (sourceSelectorFixedHint) {
-                renderSourcePlaceholders(((TvVooStreamResolver) resolver).plannedVersions(playbackChannel));
+                renderSourcePlaceholders(((TvVooStreamResolver) resolver).plannedVersions(versionsChannel));
             }
         } else {
             renderDirectQualitySelector(playbackChannel);
@@ -3866,6 +3933,18 @@ public final class MainActivity extends Activity {
     }
 
     private void startSourceSelectorQuery(Channel channel, StreamResolver resolver) {
+        startSourceSelectorQuery(channel, channel, resolver);
+    }
+
+    /**
+     * Consulta las versiones de {@code resolutionChannel} para el canal en reproducción
+     * {@code channel} (distintos solo cuando un canal directo tiene respaldo TvVoo).
+     */
+    private void startSourceSelectorQuery(
+            Channel channel,
+            Channel resolutionChannel,
+            StreamResolver resolver
+    ) {
         if (channel == null || resolver == null || !isSourceSelectorVisible()) return;
         if (sourceCandidateContext != null) sourceCandidateContext.cancel();
         if (sourceCandidateTask != null) sourceCandidateTask.cancel(true);
@@ -3895,9 +3974,10 @@ public final class MainActivity extends Activity {
         sourceCandidateTask = playbackExecutor.submit(() -> {
             try (ResolutionContext.Scope ignored = context.activate()) {
                 context.check();
-                List<ResolvedPlaybackCandidate> resolved = resolver.resolvePlaybackCandidates(
+                List<ResolvedPlaybackCandidate> resolved = withDirectPrincipal(
                         channel,
-                        listener
+                        resolutionChannel,
+                        resolver.resolvePlaybackCandidates(resolutionChannel, listener)
                 );
                 context.check();
                 mainHandler.post(() -> finishSourceSelectorQuery(
@@ -4375,8 +4455,10 @@ public final class MainActivity extends Activity {
         if (candidate.isStale()
                 || candidate.getSource() == null
                 || candidate.getSource().isExpired(System.currentTimeMillis())) {
-            StreamResolver resolver = streamResolverRegistry.find(playbackChannel);
-            if (resolver != null) startSourceSelectorQuery(playbackChannel, resolver);
+            Channel versions = TvVooBackup.has(playbackChannel)
+                    ? TvVooBackup.resolutionChannel(playbackChannel) : playbackChannel;
+            StreamResolver resolver = versions == null ? null : streamResolverRegistry.find(versions);
+            if (resolver != null) startSourceSelectorQuery(playbackChannel, versions, resolver);
             return;
         }
 
@@ -4384,6 +4466,7 @@ public final class MainActivity extends Activity {
         ResolvedPlaybackSource source = candidate.getSource();
         closePlaybackSourceSelector();
         if (!isCurrentPlayback(channel, playbackGeneration)) return;
+        if (TvVooBackup.has(channel)) tvvooBackupActive = source.hasResolver();
 
         playbackHasStarted = false;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();

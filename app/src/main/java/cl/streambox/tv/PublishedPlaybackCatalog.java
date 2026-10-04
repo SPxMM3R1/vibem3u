@@ -202,7 +202,11 @@ final class PublishedPlaybackCatalog {
             if (!"active".equals(row.state)) continue;
             List<Channel> matches = byKey.get(row.appKey());
             if (matches != null) {
-                for (Channel channel : matches) result.add(withDisplayName(channel, row.displayName));
+                for (Channel channel : matches) {
+                    Channel named = withDisplayName(channel, row.displayName);
+                    result.add(row.backupTvVoo.isEmpty()
+                            ? named : TvVooBackup.withBackup(named, row.backupTvVoo));
+                }
             }
         }
         for (Channel channel : unlisted) result.add(channel);
@@ -324,6 +328,8 @@ final class PublishedPlaybackCatalog {
         final String logo;
         final int order;
         final int number;
+        /** Canal directo: catalogKey TvVoo de la misma señal, usado como respaldo. */
+        final String backupTvVoo;
 
         private Row(
                 String kind,
@@ -343,7 +349,8 @@ final class PublishedPlaybackCatalog {
                 List<String> aliases,
                 String logo,
                 int order,
-                int number
+                int number,
+                String backupTvVoo
         ) {
             this.kind = kind;
             this.provider = provider;
@@ -363,6 +370,7 @@ final class PublishedPlaybackCatalog {
             this.logo = logo;
             this.order = order;
             this.number = number;
+            this.backupTvVoo = backupTvVoo == null ? "" : backupTvVoo;
         }
 
         static Row parse(JSONObject value) throws IOException {
@@ -386,8 +394,12 @@ final class PublishedPlaybackCatalog {
             String resolverSlug = "";
             String identityState = "";
             List<String> aliases = Collections.emptyList();
+            String backupTvVoo = "";
             if (kind.equals("m3u")) {
                 stableId = safeText(value, "tvgId", true);
+                String backup = value.optString("backupTvVoo", "").trim();
+                // Un respaldo mal formado se ignora: el canal directo sigue funcionando.
+                if (TvVooCatalogChannel.isStableId(backup)) backupTvVoo = backup;
                 if (stableId.contains("://") || stableId.startsWith("leaf:")) {
                     throw new IOException("tvg-id web no es una identidad pública estable.");
                 }
@@ -442,7 +454,7 @@ final class PublishedPlaybackCatalog {
             return new Row(
                     kind, provider, stableId, state, name, displayName, group, category, country,
                     countryKey, alias, resourceId, resolverSlug, identityState, aliases, logo, order,
-                    number
+                    number, backupTvVoo
             );
         }
 

@@ -11,7 +11,10 @@
 
 ## Hoy, en una mirada
 
-- **Versión publicada**: 0.5.63 (`versionCode` 172): OK abre la descripción en el mismo OSD
+- **Versión publicada**: 0.5.64 (`versionCode` 173): un canal directo puede traer un respaldo
+  TvVoo de la misma señal (`backupTvVoo` en el layout, `TvVooBackup`): abre el directo y, si no se
+  recupera, pasa solo a TvVoo; «Fuentes y calidades» muestra «Directo» (principal) y las versiones
+  TvVoo. Opciones con difuminado parejo a pantalla completa. La 0.5.63: OK abre la descripción en el mismo OSD
   (logo, título, descripción y avance; sin «Ahora» ni «Después», sin tocar la hora); sin
   descripción OK no hace nada. La 0.5.62: el OSD moderno se ve igual cargando y con
   imagen (degradado siempre visible y textos a pleno brillo): como el degradado es negro puro,

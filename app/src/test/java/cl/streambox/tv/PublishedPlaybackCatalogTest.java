@@ -241,6 +241,36 @@ public final class PublishedPlaybackCatalogTest {
         }
     }
 
+    @Test
+    public void directChannelCarriesItsTvVooBackupForPlayback() throws Exception {
+        String edited = document().replace(
+                "\"name\":\"TVN\",",
+                "\"name\":\"TVN\",\"backupTvVoo\":\"arabia|vavoo_ESPN%203%7Cgroup%3Aar\",");
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);
+        Channel tvn = new Channel("TVN", java.net.URI.create("https://example.org/tvn.m3u8"),
+                null, "Nacionales", Collections.singletonMap("tvg-id", "0104"));
+
+        Channel played = catalog.applyToPlayback(Collections.singletonList(tvn)).get(0);
+
+        assertTrue(TvVooBackup.has(played));
+        assertEquals("arabia|vavoo_ESPN%203%7Cgroup%3Aar", TvVooBackup.stableIdOf(played));
+        assertEquals("0104", played.getTvgId());
+        assertEquals(tvn.getStreamUri(), played.getStreamUri());
+    }
+
+    @Test
+    public void malformedBackupIsIgnoredAndTheDirectChannelStillPlays() throws Exception {
+        String edited = document().replace(
+                "\"name\":\"TVN\",", "\"name\":\"TVN\",\"backupTvVoo\":\"https://x\",");
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);
+        Channel tvn = new Channel("TVN", java.net.URI.create("https://example.org/tvn.m3u8"),
+                null, "Nacionales", Collections.singletonMap("tvg-id", "0104"));
+
+        Channel played = catalog.applyToPlayback(Collections.singletonList(tvn)).get(0);
+
+        assertFalse(TvVooBackup.has(played));
+    }
+
     private static String document() {
         return "{\"schemaVersion\":1,\"channels\":["
                 + "{\"kind\":\"m3u\",\"tvgId\":\"0104\",\"name\":\"TVN\","
