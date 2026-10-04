@@ -11,8 +11,10 @@
 
 ## Hoy, en una mirada
 
-- **Versión publicada**: 0.5.59 (`versionCode` 168): logos 30 % más grandes en OSD y Guía
-  (`LogoFit.LOGO_SCALE`) y achicados con mipmaps. La 0.5.58 centró Opciones. La 0.5.57 ancló «Fuentes y calidades». La 0.5.56 igualó el alto de los logos UHD con su versión normal. La 0.5.55 trajo la carrera rápida de TvVoo, calidad real, «Fuentes y
+- **Versión publicada**: 0.5.60 (`versionCode` 169): difuminado del OSD con curva suave y
+  sombra difusa tras la hora; descripción solo en el detalle (OK) y detalle sin «A
+  continuación»; logos corregidos por tinta y tamaño ajustable en vivo por logo. La 0.5.59
+  agrandó los logos 30 % (`LogoFit.LOGO_SCALE`) con mipmaps. La 0.5.58 centró Opciones. La 0.5.57 ancló «Fuentes y calidades». La 0.5.56 igualó el alto de los logos UHD con su versión normal. La 0.5.55 trajo la carrera rápida de TvVoo, calidad real, «Fuentes y
   calidades» por versión, aviso de mejor calidad y reglas de reconexión.
   Verificar su publicación en Releases antes de dar la entrega por concluida. Se publica con tag `vX.Y.Z` y el
   workflow «Publicar APK». No hay SDK Android local: compila «Android CI».
@@ -24,8 +26,11 @@
     - ventana de 150 min;
     - el velo cyan marca el programa enfocado y se mueve con ◀ ▶;
     - reloj con fecha en recuadro gris y sin atajos abajo.
-  - **OSD**: pantalla completa con degradado negro puro y fuerte (`OsdScrimView`), logo (sin
-    categoría desde 2026-10-03), título grande, descripción, avance, «Después»; el número del
+  - **OSD**: pantalla completa con degradado negro puro y fuerte (`OsdScrimView`; desde la
+    0.5.60 con curva suave smoothstep, sombra lateral de 400 dp e inferior de 190 dp, y una
+    sombra elíptica difusa tras la hora), logo (sin categoría desde 2026-10-03), título
+    grande, avance, «Después» (la descripción solo va en el detalle, con OK, desde la 0.5.60;
+    el detalle moderno ya no muestra «A continuación»); el número del
     canal va a la derecha a media altura, con sombra; abajo a la derecha la
     hora grande con la fecha larga y debajo los datos técnicos (ya no hay reloj aparte arriba
     en el moderno). El título que se desplaza se difumina en los bordes.
@@ -37,7 +42,12 @@
     (no enciende la atenuación local de teles mini-LED); al aparecer la imagen vuelve suave.
   - **Logos** (`LogoFit`, desde 0.5.59 un 30 % más grandes: superficie 97,5×29,9 dp, tope
     136,5×41,6 dp; bitmaps con mipmaps para que la TV los achique sin bordes dentados): se recorta el borde transparente y todos ocupan la misma superficie
-    visual, en el OSD y en la Guía.
+    visual, en el OSD y en la Guía. Desde la 0.5.60 se corrige por tinta (fracción pintada,
+    mediana 0,44 en 108 logos; escala (0,44 ÷ tinta)^¼ entre 0,8 y 1,25) y cada logo admite un
+    ajuste a mano (50–160 %) desde Opciones › En reproducción › Tamaño del logo: vuelve al
+    video con el OSD, ◀ ▶ de 5 en 5 % en vivo, ▼ automático, OK guarda, otra tecla cancela.
+    Se guarda en la TV (`LogoScales`, preferencias `logo_scales`, clave = dirección del
+    logo) y vale para OSD y Guía (en la Guía, sin salirse de su franja).
   - **Menús**: Opciones, selector de fuentes, detalle del programa, carga y MediaFlow usan
     filas tenues con foco cyan y píldoras.
   - **Diálogos «escena»** (2026-10-03, moderno): salir, actualización y Premium ocupan la

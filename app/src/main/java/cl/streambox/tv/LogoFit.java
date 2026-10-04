@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Tamaño óptico de logos: todos ocupan la misma superficie visual según su
@@ -34,6 +35,23 @@ final class LogoFit {
     static final float UHD_WIDTH_FACTOR = 1.30f;
     private static final Map<Bitmap, Float> WIDTH_FACTORS =
             Collections.synchronizedMap(new WeakHashMap<>());
+    /**
+     * Corrección por tinta (0.5.60): dos logos con el mismo rectángulo no pesan lo mismo si
+     * uno es sólido y otro de trazos finos. Se mide qué fracción del área queda pintada y se
+     * acerca a medias a la mediana del catálogo (0,44, medida en 108 logos el 2026-10-04),
+     * entre {@link #AUTO_SCALE_MIN} y {@link #AUTO_SCALE_MAX}.
+     */
+    static final float INK_MEDIAN_FRACTION = 0.44f;
+    static final float AUTO_SCALE_MIN = 0.8f;
+    static final float AUTO_SCALE_MAX = 1.25f;
+    /** Ajuste a mano por logo (Opciones › En reproducción › Tamaño del logo). */
+    static final float USER_SCALE_MIN = 0.5f;
+    static final float USER_SCALE_MAX = 1.6f;
+    private static final Map<Bitmap, Float> COVERAGE =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<Bitmap, String> LOGO_KEYS =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<String, Float> USER_SCALES = new ConcurrentHashMap<>();
 
     private LogoFit() {}
 
@@ -90,12 +108,86 @@ final class LogoFit {
         return new int[] {left, top, right + 1, bottom + 1};
     }
 
-    /** Tamaño óptico de un logo ya recortado, respetando si es la versión UHD de otro. */
+    /**
+     * Tamaño óptico de un logo ya recortado: respeta si es la versión UHD de otro, la
+     * corrección por tinta y el ajuste a mano guardado para ese logo.
+     */
     static float[] opticalSize(Bitmap bitmap, float area, float maxWidth, float maxHeight) {
         if (bitmap == null) return new float[] {0f, 0f};
         Float factor = WIDTH_FACTORS.get(bitmap);
-        return opticalSize(bitmap.getWidth(), bitmap.getHeight(), area, maxWidth, maxHeight,
-                factor == null ? 1f : factor);
+        Float coverage = COVERAGE.get(bitmap);
+        String key = LOGO_KEYS.get(bitmap);
+        return scaledSize(bitmap.getWidth(), bitmap.getHeight(), area, maxWidth, maxHeight,
+                factor == null ? 1f : factor, coverage == null ? -1f : coverage, userScale(key));
+    }
+
+    /**
+     * Tamaño base, luego corregido por tinta ({@code coverage} menor que 0: sin medir) y por
+     * el ajuste a mano. Superficie y topes crecen o se achican juntos, sin deformar.
+     */
+    static float[] scaledSize(int width, int height, float area, float maxWidth, float maxHeight,
+                              float familyWidthFactor, float coverage, float userScale) {
+        float[] base = opticalSize(width, height, area, maxWidth, maxHeight, familyWidthFactor);
+        float scale = userScale;
+        if (coverage >= 0f && area > 0f) {
+            scale *= autoScale(coverage * base[0] * base[1] / area);
+        }
+        if (Math.abs(scale - 1f) < 0.001f) return base;
+        return opticalSize(width, height, area * scale * scale, maxWidth * scale,
+                maxHeight * scale, familyWidthFactor);
+    }
+
+    /** Escala automática para un logo que pinta {@code inkFraction} de su superficie. */
+    static float autoScale(float inkFraction) {
+        if (!(inkFraction > 0f)) return AUTO_SCALE_MAX;
+        float value = (float) Math.pow(INK_MEDIAN_FRACTION / inkFraction, 0.25);
+        return Math.max(AUTO_SCALE_MIN, Math.min(AUTO_SCALE_MAX, value));
+    }
+
+    /** Fracción pintada (alfa promedio) de un logo ya recortado; muestrea a lo más ~40 000 px. */
+    static float inkCoverage(int[] argb, int width, int height) {
+        if (argb == null || width <= 0 || height <= 0 || argb.length < width * height) return -1f;
+        int step = Math.max(1, (int) Math.sqrt((width * (long) height) / 40_000.0));
+        double ink = 0;
+        long samples = 0;
+        for (int y = 0; y < height; y += step) {
+            int row = y * width;
+            for (int x = 0; x < width; x += step) {
+                ink += (argb[row + x] >>> 24) / 255.0;
+                samples++;
+            }
+        }
+        return samples == 0 ? -1f : (float) (ink / samples);
+    }
+
+    /** Ajuste a mano de un logo (1 = sin ajuste). */
+    static float userScale(String logoKey) {
+        if (logoKey == null) return 1f;
+        Float value = USER_SCALES.get(logoKey);
+        return value == null ? 1f : value;
+    }
+
+    /** Cambia el ajuste en memoria (en vivo); 1 lo quita. Lo guarda LogoScales. */
+    static void setUserScale(String logoKey, float scale) {
+        if (logoKey == null) return;
+        float clamped = Math.max(USER_SCALE_MIN, Math.min(USER_SCALE_MAX, scale));
+        if (Math.abs(clamped - 1f) < 0.001f) USER_SCALES.remove(logoKey);
+        else USER_SCALES.put(logoKey, clamped);
+    }
+
+    static void replaceUserScales(Map<String, Float> scales) {
+        USER_SCALES.clear();
+        if (scales == null) return;
+        for (Map.Entry<String, Float> entry : scales.entrySet()) {
+            if (entry.getKey() != null && entry.getValue() != null) {
+                setUserScale(entry.getKey(), entry.getValue());
+            }
+        }
+    }
+
+    /** Clave con la que se guarda el ajuste de un logo: su dirección. */
+    static String logoKey(URI logoUri) {
+        return logoUri == null ? null : logoUri.toString();
     }
 
     /** Factor de ancho de familia según el archivo: «…-uhd.png» → {@link #UHD_WIDTH_FACTOR}. */
@@ -117,6 +209,19 @@ final class LogoFit {
         if (trimmed != null) trimmed.setHasMipMap(true);
         float factor = familyWidthFactor(logoUri);
         if (trimmed != null && factor > 1f) WIDTH_FACTORS.put(trimmed, factor);
+        if (trimmed != null && !trimmed.isRecycled()) {
+            String key = logoKey(logoUri);
+            if (key != null) LOGO_KEYS.put(trimmed, key);
+            float coverage = 1f;
+            if (trimmed.hasAlpha()) {
+                int width = trimmed.getWidth();
+                int height = trimmed.getHeight();
+                int[] pixels = new int[width * height];
+                trimmed.getPixels(pixels, 0, width, 0, 0, width, height);
+                coverage = inkCoverage(pixels, width, height);
+            }
+            if (coverage >= 0f) COVERAGE.put(trimmed, coverage);
+        }
         return trimmed;
     }
 

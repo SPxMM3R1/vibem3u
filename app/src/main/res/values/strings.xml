@@ -306,4 +306,9 @@
     <string name="update_scene_title">VibeM3U %1$s</string>
     <string name="update_scene_message">Hay una versión nueva lista para instalar. La descarga pesa %1$s y el canal sigue mientras tanto.</string>
     <string name="update_scene_message_unknown">Hay una versión nueva lista para instalar. El canal sigue mientras la descarga.</string>
+    <string name="logo_size_hint"><b>Tamaño del logo</b> · solo este canal\nOK guarda · Atrás cancela · ▼ automático</string>
+    <string name="logo_size_value">◀  %1$d %%  ▶</string>
+    <string name="logo_size_title">Tamaño del logo</string>
+    <string name="logo_size_description">%1$s · se ajusta en vivo sobre el video</string>
+    <string name="logo_size_action">%1$d %% ›</string>
 </resources>

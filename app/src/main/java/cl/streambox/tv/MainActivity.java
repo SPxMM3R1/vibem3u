@@ -179,6 +179,17 @@ public final class MainActivity extends Activity {
     private Button sourceSelectorCloseButton;
     private ImageView channelLogo;
     private TextView channelLogoFallback;
+    /** Tamaño del logo en vivo (0.5.60). */
+    private View channelLogoFrame;
+    private View logoSizeAdjust;
+    private TextView logoSizeValue;
+    private boolean logoSizeAdjusting;
+    private boolean adjustLogoSizeAfterSettings;
+    private String logoSizeKey;
+    private float logoSizeOriginal = 1f;
+    private float logoSizeScale = 1f;
+    private android.graphics.Bitmap displayedLogoBitmap;
+    private String displayedLogoKey;
     private TextView channelNumber;
     private TextView channelName;
     private ContinuousMarqueeTextView contentTitle;
@@ -408,6 +419,7 @@ public final class MainActivity extends Activity {
         repository = new PlaylistRepository(this);
         epgRepository = new EpgRepository(this);
         channelLogoCache = new ChannelLogoCache(this);
+        LogoScales.load(this);
         playbackPreferences = new PlaybackPreferences(this);
         resolverCatalogRepository = new ResolverCatalogRepository(this);
         resolverPreferences = new ResolverPreferences(this);
@@ -517,6 +529,16 @@ public final class MainActivity extends Activity {
         sourceSelectorCloseButton.setOnClickListener(view -> closePlaybackSourceSelector());
         channelLogo = findViewById(R.id.channel_logo);
         channelLogoFallback = findViewById(R.id.channel_logo_fallback);
+        channelLogoFrame = findViewById(R.id.channel_logo_frame);
+        logoSizeAdjust = findViewById(R.id.logo_size_adjust);
+        logoSizeValue = findViewById(R.id.logo_size_value);
+        if (channelLogoFrame != null && logoSizeAdjust != null) {
+            View.OnLayoutChangeListener reposition = (view, l, t, r, b, ol, ot, or, ob) -> {
+                if (logoSizeAdjusting) positionLogoSizeAdjust();
+            };
+            channelLogoFrame.addOnLayoutChangeListener(reposition);
+            logoSizeAdjust.addOnLayoutChangeListener(reposition);
+        }
         channelNumber = findViewById(R.id.channel_number);
         channelName = findViewById(R.id.channel_name);
         contentTitle = findViewById(R.id.content_title);
@@ -2711,8 +2733,10 @@ public final class MainActivity extends Activity {
 
         String description = programme.getDescription();
         if (osdDescription != null) {
+            // Moderno (0.5.60): la descripción solo va en el detalle, que se abre con OK.
             osdDescription.setText(description);
-            osdDescription.setVisibility(AppStrings.isBlank(description) ? View.GONE : View.VISIBLE);
+            osdDescription.setVisibility(!classicUi || AppStrings.isBlank(description)
+                    ? View.GONE : View.VISIBLE);
         }
 
         long duration = programme.getStopMillis() - programme.getStartMillis();
@@ -2812,7 +2836,8 @@ public final class MainActivity extends Activity {
 
         EpgProgramme next = upcoming.size() > 1 ? upcoming.get(1) : null;
         EpgProgramme after = upcoming.size() > 2 ? upcoming.get(2) : null;
-        detailSide.setVisibility(next == null ? View.GONE : View.VISIBLE);
+        // Moderno (0.5.60): el detalle no muestra los próximos programas.
+        detailSide.setVisibility(!classicUi || next == null ? View.GONE : View.VISIBLE);
         if (next != null) {
             detailNextLabel.setText(getString(R.string.light_epg_next_at,
                     timeFormat.format(new Date(next.getStartMillis()))));
@@ -2852,6 +2877,9 @@ public final class MainActivity extends Activity {
         String expectedIdentity = PlaybackPreferences.channelIdentity(channel);
         long requestGeneration = ++logoRequestGeneration;
         if (!expectedIdentity.equals(displayedLogoIdentity)) {
+            finishLogoSizeAdjust(false);
+            displayedLogoBitmap = null;
+            displayedLogoKey = null;
             channelLogo.setImageDrawable(null);
             channelLogo.setVisibility(View.GONE);
             channelLogoFallback.setText(fallback);
@@ -2926,8 +2954,23 @@ public final class MainActivity extends Activity {
             displayedLogoIdentity = expectedIdentity;
             return;
         }
-        // Tamaño óptico: la misma superficie visual para todos los logos (los UHD, igual de
-        // altos que su versión normal).
+        sizeModernLogo(bitmap);
+        channelLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        channelLogo.setImageBitmap(bitmap);
+        channelLogo.setVisibility(View.VISIBLE);
+        channelLogoFallback.setVisibility(View.GONE);
+        displayedLogoIdentity = expectedIdentity;
+        displayedLogoBitmap = bitmap;
+        Channel channel = expectedIndex >= 0 && expectedIndex < channels.size()
+                ? channels.get(expectedIndex) : null;
+        displayedLogoKey = channel == null ? null : LogoFit.logoKey(channel.getLogoUri());
+    }
+
+    /**
+     * Tamaño óptico: la misma superficie visual para todos los logos (los UHD, igual de altos
+     * que su versión normal), con la corrección por tinta y el ajuste a mano de ese logo.
+     */
+    private void sizeModernLogo(android.graphics.Bitmap bitmap) {
         float[] size = LogoFit.opticalSize(bitmap,
                 dpToPx(LogoFit.OSD_LOGO_AREA_WIDTH_DP) * (float) dpToPx(LogoFit.OSD_LOGO_AREA_HEIGHT_DP),
                 dpToPx(LogoFit.OSD_LOGO_MAX_WIDTH_DP), dpToPx(LogoFit.OSD_LOGO_MAX_HEIGHT_DP));
@@ -2935,11 +2978,101 @@ public final class MainActivity extends Activity {
         logoParams.width = Math.max(1, Math.round(size[0]));
         logoParams.height = Math.max(1, Math.round(size[1]));
         channelLogo.setLayoutParams(logoParams);
-        channelLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        channelLogo.setImageBitmap(bitmap);
-        channelLogo.setVisibility(View.VISIBLE);
-        channelLogoFallback.setVisibility(View.GONE);
-        displayedLogoIdentity = expectedIdentity;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Tamaño del logo en vivo (0.5.60): Opciones › En reproducción › Tamaño del logo
+    // ---------------------------------------------------------------------------------
+
+    private static final float LOGO_SIZE_STEP = 0.05f;
+
+    private void startLogoSizeAdjust() {
+        if (classicUi || logoSizeAdjust == null || channelLogoFrame == null
+                || displayedLogoBitmap == null || displayedLogoKey == null || logoSizeAdjusting) return;
+        logoSizeAdjusting = true;
+        logoSizeKey = displayedLogoKey;
+        logoSizeOriginal = LogoFit.userScale(logoSizeKey);
+        logoSizeScale = logoSizeOriginal;
+        showOverlay(true);
+        int padding = dpToPx(8);
+        channelLogoFrame.setBackgroundResource(R.drawable.logo_size_frame);
+        channelLogoFrame.setPadding(padding, padding, padding, padding);
+        logoSizeAdjust.setVisibility(View.VISIBLE);
+        applyLogoSize();
+    }
+
+    private void applyLogoSize() {
+        LogoFit.setUserScale(logoSizeKey, logoSizeScale);
+        if (displayedLogoBitmap != null) sizeModernLogo(displayedLogoBitmap);
+        logoSizeValue.setText(getString(R.string.logo_size_value, Math.round(logoSizeScale * 100f)));
+        positionLogoSizeAdjust();
+    }
+
+    /** El control va a la derecha del logo, centrado en su alto. */
+    private void positionLogoSizeAdjust() {
+        if (logoSizeAdjust == null || channelLogoFrame == null
+                || !(logoSizeAdjust.getParent() instanceof View)) return;
+        int[] frame = new int[2];
+        int[] parent = new int[2];
+        channelLogoFrame.getLocationInWindow(frame);
+        ((View) logoSizeAdjust.getParent()).getLocationInWindow(parent);
+        float x = frame[0] - parent[0] + channelLogoFrame.getWidth() + dpToPx(20);
+        float y = frame[1] - parent[1]
+                + (channelLogoFrame.getHeight() - logoSizeAdjust.getHeight()) / 2f;
+        if (logoSizeAdjust.getX() != x) logoSizeAdjust.setX(x);
+        if (logoSizeAdjust.getY() != y) logoSizeAdjust.setY(y);
+    }
+
+    /** ◀ ▶ cambian de 5 en 5 %, ▼ vuelve al automático, OK guarda. Otra tecla cancela. */
+    private boolean handleLogoSizeKey(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        boolean ours = keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER;
+        if (!ours) {
+            // Atrás, cambio de canal u otra tecla: se deshace el ajuste y la tecla sigue su curso.
+            if (event.getAction() == KeyEvent.ACTION_DOWN) finishLogoSizeAdjust(false);
+            return false;
+        }
+        if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                stepLogoSize(-LOGO_SIZE_STEP);
+                return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                stepLogoSize(LOGO_SIZE_STEP);
+                return true;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                logoSizeScale = 1f;
+                applyLogoSize();
+                return true;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+                if (event.getRepeatCount() == 0) finishLogoSizeAdjust(true);
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    private void stepLogoSize(float delta) {
+        float next = Math.round((logoSizeScale + delta) * 20f) / 20f;
+        logoSizeScale = Math.max(LogoFit.USER_SCALE_MIN, Math.min(LogoFit.USER_SCALE_MAX, next));
+        applyLogoSize();
+    }
+
+    private void finishLogoSizeAdjust(boolean save) {
+        if (!logoSizeAdjusting) return;
+        logoSizeAdjusting = false;
+        if (save) LogoScales.save(this, logoSizeKey, logoSizeScale);
+        else LogoFit.setUserScale(logoSizeKey, logoSizeOriginal);
+        logoSizeAdjust.setVisibility(View.GONE);
+        channelLogoFrame.setBackground(null);
+        channelLogoFrame.setPadding(0, 0, 0, 0);
+        if (displayedLogoBitmap != null) sizeModernLogo(displayedLogoBitmap);
+        if (guideView != null) guideView.invalidate();
+        mainHandler.removeCallbacks(hideOverlay);
+        mainHandler.postDelayed(hideOverlay, OVERLAY_TIMEOUT_MS);
     }
 
     private boolean isCurrentLogo(int expectedIndex, String expectedIdentity) {
@@ -4275,6 +4408,7 @@ public final class MainActivity extends Activity {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
+        if (logoSizeAdjusting && handleLogoSizeKey(event)) return true;
         if (isGuideVisible() && handleGuideKey(event)) return true;
         if (isQualityUpgradeVisible() && handleQualityUpgradeKey(event)) return true;
         if (isSourceSelectorVisible()) {
@@ -4635,6 +4769,9 @@ public final class MainActivity extends Activity {
         intent.putExtra(SettingsActivity.EXTRA_CHANNEL_INDEX, channelIndex)
                 .putExtra(SettingsActivity.EXTRA_CHANNEL_TVG_ID, channel.getTvgId())
                 .putExtra(SettingsActivity.EXTRA_CHANNEL_NAME, channel.getName());
+        if (!classicUi && displayedLogoBitmap != null && displayedLogoKey != null) {
+            intent.putExtra(SettingsActivity.EXTRA_CHANNEL_LOGO_KEY, displayedLogoKey);
+        }
 
         List<VideoTrackOption> options = player == null
                 ? Collections.emptyList()
@@ -4789,6 +4926,8 @@ public final class MainActivity extends Activity {
                         || normalizationChanged || channels.isEmpty();
                 openSourceSelectorAfterSettings = data != null && data.getBooleanExtra(
                         SettingsActivity.EXTRA_OPEN_SOURCE_SELECTOR, false);
+                adjustLogoSizeAfterSettings = data != null && data.getBooleanExtra(
+                        SettingsActivity.EXTRA_ADJUST_LOGO_SIZE, false);
             } else if (sources.isEmpty() && !hasPublishedProviderChannels()) {
                 openSettings();
             }
@@ -5046,6 +5185,10 @@ public final class MainActivity extends Activity {
         if (hasFocus && openSourceSelectorAfterSettings && !settingsOpen) {
             openSourceSelectorAfterSettings = false;
             mainHandler.post(this::openPlaybackSourceSelector);
+        }
+        if (hasFocus && adjustLogoSizeAfterSettings && !settingsOpen) {
+            adjustLogoSizeAfterSettings = false;
+            mainHandler.post(this::startLogoSizeAdjust);
         }
         updateDiagnosticsVisibility();
         if (hasFocus && !resourcesReleased) {

@@ -82,4 +82,42 @@ public class LogoFitTest {
         assertTrue(bounds != null);
         assertArrayEquals(new int[] {0, 0, 3, 3}, bounds);
     }
+    @Test
+    public void autoScaleMovesHalfwayTowardsTheMedianInk() {
+        assertEquals(1f, LogoFit.autoScale(LogoFit.INK_MEDIAN_FRACTION), 0.001f);
+        // Un logo de trazos finos crece y uno sólido se achica, dentro de los topes.
+        assertEquals(LogoFit.AUTO_SCALE_MAX, LogoFit.autoScale(0.05f), 0.001f);
+        assertEquals((float) Math.pow(LogoFit.INK_MEDIAN_FRACTION, 0.25), LogoFit.autoScale(1f), 0.001f);
+        assertTrue(LogoFit.autoScale(1f) >= LogoFit.AUTO_SCALE_MIN);
+        assertTrue(LogoFit.autoScale(0.30f) > 1f);
+        assertTrue(LogoFit.autoScale(0.60f) < 1f);
+    }
+
+    @Test
+    public void inkCoverageAveragesAlpha() {
+        int[] half = {0xFF000000, 0x00000000, 0xFF000000, 0x00000000};
+        assertEquals(0.5f, LogoFit.inkCoverage(half, 2, 2), 0.001f);
+        assertEquals(-1f, LogoFit.inkCoverage(null, 2, 2), 0f);
+    }
+
+    @Test
+    public void scaledSizeKeepsAspectAndScalesLimitsTogether() {
+        float[] base = LogoFit.scaledSize(400, 100, AREA, 105f, 32f, 1f, -1f, 1f);
+        float[] bigger = LogoFit.scaledSize(400, 100, AREA, 105f, 32f, 1f, -1f, 1.2f);
+        assertEquals(base[0] * 1.2f, bigger[0], 0.01f);
+        assertEquals(base[1] * 1.2f, bigger[1], 0.01f);
+        // Con tinta en la mediana no cambia nada.
+        float[] median = LogoFit.scaledSize(400, 100, AREA, 105f, 32f, 1f,
+                LogoFit.INK_MEDIAN_FRACTION, 1f);
+        assertArrayEquals(base, median, 0.01f);
+    }
+
+    @Test
+    public void userScaleIsClampedAndOneRemovesIt() {
+        LogoFit.setUserScale("https://x/logo.png", 9f);
+        assertEquals(LogoFit.USER_SCALE_MAX, LogoFit.userScale("https://x/logo.png"), 0f);
+        LogoFit.setUserScale("https://x/logo.png", 1f);
+        assertEquals(1f, LogoFit.userScale("https://x/logo.png"), 0f);
+        assertEquals(1f, LogoFit.userScale(null), 0f);
+    }
 }

@@ -294,7 +294,7 @@ public final class EpgGuideView extends View implements GuideSurface {
 
         // Logo + número · categoría.
         float logoTop = dp(74);
-        float logoHeight = dp(29 * LogoFit.LOGO_SCALE);
+        float logoHeight = dp(LogoFit.OSD_LOGO_MAX_HEIGHT_DP);
         Bitmap logo = source.logo(row);
         float metaLeft = left;
         if (logo != null) {
@@ -518,6 +518,10 @@ public final class EpgGuideView extends View implements GuideSurface {
         float[] size = LogoFit.opticalSize(bitmap, area, maxWidth, maxHeight);
         float drawWidth = size[0];
         float drawHeight = size[1];
+        // Un logo agrandado a mano (o por tinta) no puede salirse de su franja ni de su celda.
+        float fit = Math.min(1f, Math.min(bandHeight / drawHeight, maxWidth * 1.2f / drawWidth));
+        drawWidth *= fit;
+        drawHeight *= fit;
         float drawLeft = center ? x + (maxWidth - drawWidth) / 2f : x;
         float drawTop = y + (bandHeight - drawHeight) / 2f;
         rect.set(drawLeft, drawTop, drawLeft + drawWidth, drawTop + drawHeight);

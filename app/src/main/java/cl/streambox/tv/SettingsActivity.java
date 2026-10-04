@@ -90,6 +90,9 @@ public final class SettingsActivity extends Activity {
     public static final String EXTRA_STATUS_HIGHFLY_AT = "status_highfly_at";
     /** Resultado: abrir el selector de fuente del canal al volver al reproductor. */
     public static final String EXTRA_OPEN_SOURCE_SELECTOR = "open_source_selector";
+    /** Al volver, MainActivity abre el ajuste en vivo del tamaño del logo (0.5.60). */
+    public static final String EXTRA_ADJUST_LOGO_SIZE = "adjust_logo_size";
+    public static final String EXTRA_CHANNEL_LOGO_KEY = "channel_logo_key";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService updateExecutor = Executors.newSingleThreadExecutor();
@@ -104,6 +107,7 @@ public final class SettingsActivity extends Activity {
     private Switch autoReconnect;
     private View openSourceSelectorButton;
     private boolean openSourceSelectorOnSave;
+    private boolean adjustLogoSizeOnSave;
     private Button updateButton;
     private TextView updateStatus;
     private TextView reminderStatus;
@@ -313,6 +317,7 @@ public final class SettingsActivity extends Activity {
             openSourceSelectorOnSave = true;
             save();
         });
+        bindLogoSizeRow(getIntent());
         initializeResolverOptions(getIntent());
         mediaFlowSettingsButton.setOnClickListener(view ->
                 startActivity(new Intent(this, MediaFlowSettingsActivity.class)));
@@ -426,6 +431,28 @@ public final class SettingsActivity extends Activity {
         // En el clásico el botón vive en su tarjeta; en el moderno la fila es el botón.
         (classicUi ? (View) openSourceSelectorButton.getParent() : openSourceSelectorButton)
                 .setVisibility(visibility);
+    }
+
+    /** Fila «Tamaño del logo»: solo en el estilo moderno y con un canal con logo al aire. */
+    private void bindLogoSizeRow(Intent intent) {
+        View row = findViewById(R.id.logo_size_row);
+        if (row == null) return;
+        String logoKey = intent.getStringExtra(EXTRA_CHANNEL_LOGO_KEY);
+        if (classicUi || !hasCurrentChannel || AppStrings.isBlank(logoKey)) {
+            row.setVisibility(View.GONE);
+            return;
+        }
+        TextView description = findViewById(R.id.logo_size_description);
+        TextView action = findViewById(R.id.logo_size_action);
+        description.setText(getString(R.string.logo_size_description,
+                currentChannelName.getText().toString()));
+        int percent = Math.round(LogoScales.get(this, logoKey) * 100f);
+        action.setText(getString(R.string.logo_size_action, percent));
+        row.setVisibility(View.VISIBLE);
+        row.setOnClickListener(view -> {
+            adjustLogoSizeOnSave = true;
+            save();
+        });
     }
 
     private void setSignalCell(int viewId, String[] parts, int index) {
@@ -1102,8 +1129,10 @@ public final class SettingsActivity extends Activity {
                 .putExtra(KEY_PLAYLIST_URL_2, value2)
                 .putExtra(KEY_PLAYLIST_ENABLED, enabled1)
                 .putExtra(KEY_PLAYLIST_ENABLED_2, enabled2)
-                .putExtra(EXTRA_OPEN_SOURCE_SELECTOR, openSourceSelectorOnSave);
+                .putExtra(EXTRA_OPEN_SOURCE_SELECTOR, openSourceSelectorOnSave)
+                .putExtra(EXTRA_ADJUST_LOGO_SIZE, adjustLogoSizeOnSave);
         openSourceSelectorOnSave = false;
+        adjustLogoSizeOnSave = false;
         if (hasCurrentChannel) {
             result.putExtra(EXTRA_CHANNEL_INDEX, currentChannelIndex)
                     .putExtra(EXTRA_CHANNEL_TVG_ID, currentChannelTvgId)

@@ -332,6 +332,55 @@
                             android:textColor="@color/osd_muted"
                             android:textSize="10.5sp" />
                     </LinearLayout>
+                    <!-- Tamaño del logo (0.5.60): OK vuelve al video y se ajusta en vivo. -->
+                    <LinearLayout
+                        android:id="@+id/logo_size_row"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:background="@drawable/settings_section_card"
+                        android:gravity="center_vertical"
+                        android:minHeight="40dp"
+                        android:orientation="horizontal"
+                        android:paddingStart="12dp"
+                        android:paddingTop="8dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="8dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:visibility="gone">
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:duplicateParentState="true"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:duplicateParentState="true"
+                                android:includeFontPadding="false"
+                                android:text="@string/logo_size_title"
+                                android:textColor="@color/white"
+                                android:textSize="13sp" />
+                            <TextView
+                                android:id="@+id/logo_size_description"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:duplicateParentState="true"
+                                android:textColor="@color/osd_muted"
+                                android:textSize="10sp" />
+                        </LinearLayout>
+                        <TextView
+                            android:id="@+id/logo_size_action"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:duplicateParentState="true"
+                            android:textColor="@color/osd_muted"
+                            android:textSize="10.5sp" />
+                    </LinearLayout>
                     <LinearLayout
                         android:id="@+id/signal_info_card"
                         android:layout_width="match_parent"
