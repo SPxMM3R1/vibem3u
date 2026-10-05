@@ -297,10 +297,10 @@ public final class PublishedPlaybackCatalogTest {
     }
 
     @Test
-    public void backupM3uRowsTravelInsideTheirChannelInOrderAfterThePreferredOne() throws Exception {
+    public void backupm3uRowsTravelInsideTheirChannelInOrderAfterThePreferredOne() throws Exception {
         String edited = document()
                 .replace("\"name\":\"TVN\",", "\"name\":\"TVN\",\"preferredM3u\":\"TVN.cl@Direct138\","
-                        + "\"backupM3u\":[\"TVN.cl@Direct45\",\"TVN.cl@Direct38b\",\"0104\",\"bad://x\"],")
+                        + "\"backupm3u\":[\"TVN.cl@Direct45\",\"TVN.cl@Direct38b\",\"0104\",\"bad://x\"],")
                 .replace("{\"kind\":\"provider\",\"provider\":\"highfly\"",
                         m3uRow("TVN.cl@Direct138", 9, 79) + "," + m3uRow("TVN.cl@Direct45", 10, 74) + ","
                                 + m3uRow("TVN.cl@Direct38b", 11, 73) + ","
@@ -328,9 +328,9 @@ public final class PublishedPlaybackCatalogTest {
     }
 
     @Test
-    public void backupM3uWithoutPreferredKeepsOwnStreamFirst() throws Exception {
+    public void backupm3uWithoutPreferredKeepsOwnStreamFirst() throws Exception {
         String edited = document()
-                .replace("\"name\":\"TVN\",", "\"name\":\"TVN\",\"backupM3u\":[\"TVN.cl@Direct45\"],")
+                .replace("\"name\":\"TVN\",", "\"name\":\"TVN\",\"backupm3u\":[\"TVN.cl@Direct45\"],")
                 .replace("{\"kind\":\"provider\",\"provider\":\"highfly\"",
                         m3uRow("TVN.cl@Direct45", 9, 74) + ",{\"kind\":\"provider\",\"provider\":\"highfly\"");
         PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);

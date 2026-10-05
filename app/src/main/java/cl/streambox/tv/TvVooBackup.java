@@ -45,7 +45,7 @@ final class TvVooBackup {
 
     /**
      * Direcciones directas de respaldo en el orden en que se prueban (desde la 0.5.72 puede
-     * haber varias: {@code backupM3u} del layout). Solo http/https; las inválidas se omiten.
+     * haber varias: {@code backupm3u} del layout). Solo http/https; las inválidas se omiten.
      */
     static List<URI> directBackupsOf(Channel channel) {
         if (channel == null) return Collections.emptyList();

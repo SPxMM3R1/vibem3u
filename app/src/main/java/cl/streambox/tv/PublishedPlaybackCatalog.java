@@ -188,7 +188,7 @@ final class PublishedPlaybackCatalog {
         for (Row row : rows) {
             if (!"active".equals(row.state)) continue;
             if (!row.preferredM3u.isEmpty()) preferredIds.add(row.preferredM3u);
-            preferredIds.addAll(row.backupM3u);
+            preferredIds.addAll(row.backupm3u);
         }
         Map<String, Channel> preferredChannels = new HashMap<>();
         Map<String, List<Channel>> byKey = new LinkedHashMap<>();
@@ -220,9 +220,9 @@ final class PublishedPlaybackCatalog {
                     Channel named = withDisplayName(channel, row.displayName);
                     Channel preferred = preferredChannels.get(row.preferredM3u);
                     if (preferred != null) named = TvVooBackup.withPreferredStream(named, preferred);
-                    if (!row.backupM3u.isEmpty()) {
+                    if (!row.backupm3u.isEmpty()) {
                         List<Channel> backups = new ArrayList<>();
-                        for (String id : row.backupM3u) {
+                        for (String id : row.backupm3u) {
                             Channel backup = preferredChannels.get(id);
                             if (backup != null) backups.add(backup);
                         }
@@ -357,7 +357,7 @@ final class PublishedPlaybackCatalog {
         /** Canal directo: tvg-id de otra fila M3U con la misma señal, que se abre primero. */
         final String preferredM3u;
         /** Canal directo: tvg-id de otras filas M3U de la misma señal, respaldos en orden. */
-        final List<String> backupM3u;
+        final List<String> backupm3u;
 
         private Row(
                 String kind,
@@ -380,7 +380,7 @@ final class PublishedPlaybackCatalog {
                 int number,
                 String backupTvVoo,
                 String preferredM3u,
-                List<String> backupM3u
+                List<String> backupm3u
         ) {
             this.kind = kind;
             this.provider = provider;
@@ -402,7 +402,7 @@ final class PublishedPlaybackCatalog {
             this.number = number;
             this.backupTvVoo = backupTvVoo == null ? "" : backupTvVoo;
             this.preferredM3u = preferredM3u == null ? "" : preferredM3u;
-            this.backupM3u = backupM3u == null ? Collections.emptyList() : backupM3u;
+            this.backupm3u = backupm3u == null ? Collections.emptyList() : backupm3u;
         }
 
         static Row parse(JSONObject value) throws IOException {
@@ -428,7 +428,7 @@ final class PublishedPlaybackCatalog {
             List<String> aliases = Collections.emptyList();
             String backupTvVoo = "";
             String preferredM3u = "";
-            List<String> backupM3u = Collections.emptyList();
+            List<String> backupm3u = Collections.emptyList();
             if (kind.equals("m3u")) {
                 stableId = safeText(value, "tvgId", true);
                 String backup = value.optString("backupTvVoo", "").trim();
@@ -438,7 +438,7 @@ final class PublishedPlaybackCatalog {
                 if (!preferred.isEmpty() && !preferred.contains("://") && preferred.length() <= 512
                         && !preferred.equals(stableId)) preferredM3u = preferred;
                 // Respaldos directos: un valor mal formado se omite sin afectar al canal.
-                JSONArray backups = value.optJSONArray("backupM3u");
+                JSONArray backups = value.optJSONArray("backupm3u");
                 if (backups != null) {
                     List<String> ids = new ArrayList<>();
                     for (int index = 0; index < backups.length() && ids.size() < 8; index++) {
@@ -447,7 +447,7 @@ final class PublishedPlaybackCatalog {
                                 && !id.equals(stableId) && !id.equals(preferredM3u)
                                 && !ids.contains(id)) ids.add(id);
                     }
-                    backupM3u = Collections.unmodifiableList(ids);
+                    backupm3u = Collections.unmodifiableList(ids);
                 }
                 if (stableId.contains("://") || stableId.startsWith("leaf:")) {
                     throw new IOException("tvg-id web no es una identidad pública estable.");
@@ -503,7 +503,7 @@ final class PublishedPlaybackCatalog {
             return new Row(
                     kind, provider, stableId, state, name, displayName, group, category, country,
                     countryKey, alias, resourceId, resolverSlug, identityState, aliases, logo, order,
-                    number, backupTvVoo, preferredM3u, backupM3u
+                    number, backupTvVoo, preferredM3u, backupm3u
             );
         }
 
