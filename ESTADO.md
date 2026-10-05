@@ -149,6 +149,12 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-05** (UTC): 0.5.70 (`versionCode` 179): el desplazamiento de títulos largos se veía
+  a saltos en la TV. `MarqueeSurfaceRenderer` ya no abre una capa (`saveLayer`) por cuadro: su
+  Surface solo contiene el título, así que la máscara DST_IN de los bordes va directo sobre
+  ella. El título y su separación se cachean como un `BitmapShader` repetido (una sola pasada
+  por cuadro en vez de dos bitmaps; caché hasta 4096 px) y el hilo `VibeM3U-Marquee` corre con
+  `THREAD_PRIORITY_DISPLAY`. Mismo aspecto y velocidad (40 dp/s). Pendiente: confirmar en la TV.
 - **2026-10-05** (UTC): validada reparación `0473d5d`: 324 tests debug, lint y auxiliar locales; CI de versión `71e1505` (`37352876869`) completo verde, incluidos tests/lint debug-experimental-release y pruebas instrumentadas. APK corregido: TNT 123 con imagen real 1080p durante >5 min, sin ciclos de recuperación ni BEHIND_LIVE_WINDOW; rebuffer inicial aún posible. 13C 137 y vuelta al directo TVN 1 con vídeo. Emulador API 36: SwiftShader provocó dos crashes del proceso QEMU (Windows 0xc0000005), no AndroidRuntime/app; se repitió con `-gpu host -feature -Vulkan`. No atribuir ese fallo del entorno a la TV ni esconderlo como prueba de app estable. Instalado APK optimizado de CI 0.5.69; comprobar publicación final por tag/Release. Lista M3U intacta, contraparte `6787030`.
 - **2026-10-05** (UTC): preparada 0.5.69 (`versionCode` 178) con reparación CNCVerse `0473d5d` ya en main remoto. Publicar solo tras CI completo verde y verificar Release/APK/firma/checksum; no reutilizar 0.5.68. Contraparte Lista M3U `6787030` sin modificación del catálogo.
 - **2026-10-05** (UTC): reparación CNCVerse autorizada tras diagnóstico con APK publicado 0.5.68. Cambios acotados a `PlaybackStallPolicy`, `PlaybackBufferManager` y uso en `MainActivity`; ocho regresiones nuevas (10 en política), clasificación de carga sin falsa etiqueta de decoder, búfer en tiempo CNCVerse sin aumentar bytes, separación del borde live. No tocar listas/EPG/OSD ni persistir URLs. Compilación aislada en C: (D: <1 GB libre): 324 tests debug, lint y auxiliar verdes; prueba de APK y CI completo antes del release. Contraparte Lista M3U sin cambios (catálogo compatible `6787030`).

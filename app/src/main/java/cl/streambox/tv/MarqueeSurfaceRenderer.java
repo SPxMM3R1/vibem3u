@@ -1,12 +1,15 @@
 package cl.streambox.tv;
 
 import android.graphics.Bitmap;
+import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PorterDuff;
+import android.graphics.Shader;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Process;
 import android.text.Layout;
 import android.text.StaticLayout;
 import android.text.TextDirectionHeuristics;
@@ -16,7 +19,7 @@ import android.view.Surface;
 
 /** Owns only a title-sized Surface; never reads or mutates an Android View on its worker. */
 final class MarqueeSurfaceRenderer implements Choreographer.FrameCallback, AutoCloseable {
-    private static final int MAX_CACHED_WIDTH_PX = 2048;
+    private static final int MAX_CACHED_WIDTH_PX = 4096;
     private static final int MAX_CACHED_HEIGHT_PX = 256;
 
     interface Listener {
@@ -53,9 +56,11 @@ final class MarqueeSurfaceRenderer implements Choreographer.FrameCallback, AutoC
     private final Surface surface; // Borrowed from SurfaceView: do not release it ourselves.
     private final Spec spec;
     private final Listener listener;
-    private final HandlerThread thread = new HandlerThread("VibeM3U-Marquee");
+    // Prioridad de pantalla: con el decodificador ocupado, un hilo normal pierde cuadros y el
+    // título avanza a saltos.
+    private final HandlerThread thread = new HandlerThread("VibeM3U-Marquee",
+            Process.THREAD_PRIORITY_DISPLAY);
     private final Handler handler;
-    private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     /** Máscara de los bordes: el texto aparece y desaparece difuminado, sin corte en seco. */
     private final Paint fadePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private volatile boolean closed;
@@ -64,6 +69,8 @@ final class MarqueeSurfaceRenderer implements Choreographer.FrameCallback, AutoC
     private Choreographer choreographer;
     private StaticLayout layout;
     private Bitmap cachedTitle;
+    /** Título más su separación, repetido en horizontal: una sola pasada por cuadro. */
+    private final Paint titlePaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private float textTop;
     private long startFrameTimeNs = -1L;
     private boolean firstFrameSubmitted;
@@ -95,11 +102,13 @@ final class MarqueeSurfaceRenderer implements Choreographer.FrameCallback, AutoC
             fadePaint.setXfermode(new android.graphics.PorterDuffXfermode(PorterDuff.Mode.DST_IN));
             // Most titles fit this small cache. Unusually long titles use the prepared layout
             // directly on this worker instead of allocating an oversized GPU texture.
-            if (spec.titleWidth <= MAX_CACHED_WIDTH_PX && spec.height <= MAX_CACHED_HEIGHT_PX) {
-                cachedTitle = Bitmap.createBitmap(spec.titleWidth, spec.height, Bitmap.Config.ARGB_8888);
+            if (spec.cycleWidth <= MAX_CACHED_WIDTH_PX && spec.height <= MAX_CACHED_HEIGHT_PX) {
+                cachedTitle = Bitmap.createBitmap(spec.cycleWidth, spec.height, Bitmap.Config.ARGB_8888);
                 Canvas canvas = new Canvas(cachedTitle);
                 canvas.translate(0f, textTop);
                 layout.draw(canvas);
+                titlePaint.setShader(new BitmapShader(cachedTitle, Shader.TileMode.REPEAT,
+                        Shader.TileMode.CLAMP));
             }
             if (closed) return;
             // This is the drawing thread's Choreographer, not the Activity's. At most one frame
@@ -126,11 +135,10 @@ final class MarqueeSurfaceRenderer implements Choreographer.FrameCallback, AutoC
                     // small surface, not the Activity/video, including after a surface resize.
                     canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
                     canvas.clipRect(0, 0, spec.width, spec.height);
-                    int layer = canvas.saveLayer(0f, 0f, spec.width, spec.height, null);
-                    drawCopy(canvas, -offset);
-                    drawCopy(canvas, spec.cycleWidth - offset);
+                    // Sin capa intermedia: esta Surface solo contiene el título, así que la
+                    // máscara DST_IN de los bordes se aplica directo sobre ella.
+                    drawTitle(canvas, offset);
                     canvas.drawRect(0f, 0f, spec.width, spec.height, fadePaint);
-                    canvas.restoreToCount(layer);
                 } finally {
                     surface.unlockCanvasAndPost(canvas);
                 }
@@ -148,15 +156,24 @@ final class MarqueeSurfaceRenderer implements Choreographer.FrameCallback, AutoC
         choreographer.postFrameCallback(this);
     }
 
-    private void drawCopy(Canvas canvas, float left) {
+    private void drawTitle(Canvas canvas, float offset) {
         if (cachedTitle != null) {
-            canvas.drawBitmap(cachedTitle, left, 0f, bitmapPaint);
-        } else {
             int saveCount = canvas.save();
-            canvas.translate(left, textTop);
-            layout.draw(canvas);
+            canvas.translate(-offset, 0f);
+            canvas.drawRect(offset, 0f, offset + spec.width, spec.height, titlePaint);
             canvas.restoreToCount(saveCount);
+        } else {
+            drawCopy(canvas, -offset);
+            drawCopy(canvas, spec.cycleWidth - offset);
         }
+    }
+
+    /** Títulos demasiado largos para el caché: se dibuja el layout preparado. */
+    private void drawCopy(Canvas canvas, float left) {
+        int saveCount = canvas.save();
+        canvas.translate(left, textTop);
+        layout.draw(canvas);
+        canvas.restoreToCount(saveCount);
     }
 
     private void fail() {
@@ -174,6 +191,7 @@ final class MarqueeSurfaceRenderer implements Choreographer.FrameCallback, AutoC
         }
         handler.post(() -> {
             if (choreographer != null) choreographer.removeFrameCallback(this);
+            titlePaint.setShader(null);
             cachedTitle = null;
             layout = null;
             // Let render buffers release their bitmap references naturally, not recycle()
