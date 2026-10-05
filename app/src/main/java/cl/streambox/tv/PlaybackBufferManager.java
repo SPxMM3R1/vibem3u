@@ -29,6 +29,7 @@ final class PlaybackBufferManager implements AutoCloseable {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ArrayDeque<String> history = new ArrayDeque<>();
     private final int targetBytes;
+    private final boolean cncVerse;
     private ExoPlayer player;
     private PlaybackStartupMetrics metrics;
     private final Runnable sampler = new Runnable() {
@@ -66,20 +67,24 @@ final class PlaybackBufferManager implements AutoCloseable {
     }
 
     PlaybackBufferManager(long maxHeapBytes, boolean lowRamDevice) {
+        this(maxHeapBytes, lowRamDevice, false);
+    }
+
+    PlaybackBufferManager(long maxHeapBytes, boolean lowRamDevice, boolean cncVerse) {
         targetBytes = PlaybackBufferBudget.targetBytes(maxHeapBytes, lowRamDevice);
+        this.cncVerse = cncVerse;
     }
 
     DefaultLoadControl loadControl() {
-        // Start live playback after two seconds are available. Keep three seconds for a
-        // post-rebuffer resume so an already-running channel does not oscillate on a short
-        // network fluctuation. The longer 50-second loading window remains unchanged; the
-        // byte target is a loading threshold, not a hard cap on decoder/process memory.
+        // Normal sources retain 2s startup / 3s resume. CNCVerse starts/resumes with 8s
+        // to avoid repeatedly draining its short bridged segments. The 50s loading
+        // window and byte target are unchanged; neither caps total decoder memory.
         return new DefaultLoadControl.Builder().setAllocator(allocator)
                 .setBufferDurationsMs(
                         MIN_BUFFER_MS,
                         MAX_BUFFER_MS,
-                        BUFFER_FOR_PLAYBACK_MS,
-                        BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+                        cncVerse ? PlaybackStallPolicy.CNC_START_BUFFER_MS : BUFFER_FOR_PLAYBACK_MS,
+                        cncVerse ? PlaybackStallPolicy.CNC_REBUFFER_MS : BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
                 )
                 .setTargetBufferBytes(targetBytes)
                 .setPrioritizeTimeOverSizeThresholds(false)

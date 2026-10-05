@@ -270,6 +270,7 @@ public final class MainActivity extends Activity {
     private String displayedLogoIdentity = "";
     private final Set<String> logoRevalidatedThisSession = new HashSet<>();
     private boolean playerUsesVolumeNormalization;
+    private boolean playerUsesCncBuffering;
     private long playbackGeneration;
     private boolean playbackWatchdogScheduled;
     private long playbackLoadingSinceElapsedRealtime = -1L;
@@ -574,7 +575,7 @@ public final class MainActivity extends Activity {
         if (playbackBufferManager != null) playbackBufferManager.close();
         ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
         playbackBufferManager = new PlaybackBufferManager(Runtime.getRuntime().maxMemory(),
-                activityManager != null && activityManager.isLowRamDevice());
+                activityManager != null && activityManager.isLowRamDevice(), playerUsesCncBuffering);
         playerUsesVolumeNormalization = isVolumeNormalizationEnabled();
         VibeRenderersFactory renderersFactory = new VibeRenderersFactory(
                 this,
@@ -1825,15 +1826,16 @@ public final class MainActivity extends Activity {
             // Startup buffering belongs to Media3. Once this channel has
             // rendered a frame, the same state means a post-start stall and
             // must not wait forever for Media3 to emit a fatal error.
+            PlaybackDiagnosticsWorker.Snapshot measurements = playbackBitrateMeter == null
+                    ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
             if (playbackHasStarted
-                    && PlaybackStallPolicy.isExpired(
+                    && PlaybackStallPolicy.shouldRecover(
+                    isCncVersePlayback(), true,
                     playbackLoadingSinceElapsedRealtime,
                     nowMs,
+                    lastMediaLoadAgeMs(measurements),
                     PLAYBACK_FREEZE_TIMEOUT_MS
             )) {
-                PlaybackDiagnosticsWorker.Snapshot measurements = playbackBitrateMeter == null
-                        ? PlaybackDiagnosticsWorker.Snapshot.EMPTY
-                        : playbackBitrateMeter.snapshot();
                 requestFullPlaybackRecovery(classifyPlaybackStall(measurements));
             }
             return;
@@ -1849,7 +1851,9 @@ public final class MainActivity extends Activity {
         long nowNs = System.nanoTime();
         if (measurements.hasRenderedVideoFrame
                 && lastFrameNs != androidx.media3.common.C.TIME_UNSET
-                && nowNs - lastFrameNs >= PLAYBACK_FREEZE_TIMEOUT_MS * 1_000_000L) {
+                && PlaybackStallPolicy.shouldRecover(isCncVersePlayback(), false,
+                0L, Math.max(0L, (nowNs - lastFrameNs) / 1_000_000L),
+                lastMediaLoadAgeMs(measurements), PLAYBACK_FREEZE_TIMEOUT_MS)) {
             requestFullPlaybackRecovery(classifyPlaybackStall(measurements));
         }
     }
@@ -1864,10 +1868,19 @@ public final class MainActivity extends Activity {
                 < PLAYBACK_DIAGNOSTIC_STALL_TIMEOUT_NS;
         long bufferedMs = player == null ? 0L : Math.max(0L, player.getTotalBufferedDuration());
 
-        if (mediaStopped && bufferedMs <= 500L) return "audio y vídeo detenidos";
-        if (audioUnderrun && bufferedMs <= 500L) return "audio detenido";
-        if (!mediaStopped || bufferedMs > 500L) return "decoder detenido";
-        return "vídeo detenido";
+        return PlaybackStallPolicy.classify(player != null
+                && player.getPlaybackState() == Player.STATE_BUFFERING,
+                mediaStopped, audioUnderrun, bufferedMs);
+    }
+
+    private boolean isCncVersePlayback() {
+        return currentPlaybackSource != null
+                && "cncverse".equalsIgnoreCase(currentPlaybackSource.getResolverId());
+    }
+
+    private static long lastMediaLoadAgeMs(PlaybackDiagnosticsWorker.Snapshot measurements) {
+        return measurements.lastMediaLoadRealtimeNs <= 0L ? -1L
+                : Math.max(0L, (System.nanoTime() - measurements.lastMediaLoadRealtimeNs) / 1_000_000L);
     }
 
     /**
@@ -2562,6 +2575,14 @@ public final class MainActivity extends Activity {
             // that token to Media3, even if the channel itself is unchanged.
             return;
         }
+        // Change buffer profile only when crossing CNCVerse/non-CNCVerse. Normal channel
+        // changes reuse the player; a recovery retains its profile and bounded allocator.
+        boolean cncVerse = "cncverse".equalsIgnoreCase(source.getResolverId());
+        if (playerUsesCncBuffering != cncVerse) {
+            releasePlayerForRecovery();
+            playerUsesCncBuffering = cncVerse;
+            createPlayer();
+        }
         resetPlaybackBitrateMeter();
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
         playbackAutoRecoveryInFlight = false;
@@ -2641,6 +2662,11 @@ public final class MainActivity extends Activity {
             );
         }
         MediaItem.Builder itemBuilder = mediaItemFor(channel, source.getPlaybackUri()).buildUpon();
+        if ("cncverse".equalsIgnoreCase(source.getResolverId())) {
+            // The bridge's small segments need runway, not low-latency playback.
+            itemBuilder.setLiveConfiguration(new MediaItem.LiveConfiguration.Builder()
+                    .setTargetOffsetMs(PlaybackStallPolicy.CNC_LIVE_OFFSET_MS).build());
+        }
         if (source.hasMimeType()) itemBuilder.setMimeType(source.getMimeType());
         return new DefaultMediaSourceFactory(playbackDataSourceFactory)
                 .setLoadErrorHandlingPolicy(new PlaybackLoadErrorPolicy(source.isDynamicallyResolved()))
