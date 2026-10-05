@@ -7,7 +7,7 @@
 > actualiza este archivo en el mismo commit**: la sección «Hoy» si cambió el estado y una
 > línea nueva en «Bitácora».
 
-Última actualización: **2026-10-03**.
+Última actualización: **2026-10-04**.
 
 ## Hoy, en una mirada
 
@@ -98,7 +98,8 @@
   Con Premium vinculado, los canales Highfly prueban primero su fuente Premium y, si no
   responde, la gratuita. Si Highfly rechaza el token, aparece la escena «Tu token venció» con
   «Vincular de nuevo» o «Ver señal gratuita». Región elegible (Automática por defecto). Solo en
-  el estilo moderno; sin prueba en TV ni con un token real todavía.
+  el estilo moderno. Probado con un token real en una TV (2026-10-04). El token
+  queda guardado solo en la TV que se vinculó: cada TV se vincula por separado.
 - **Recordatorios**: en la Guía se mantiene OK sobre un programa. El aviso llega con la app
   cerrada si tiene el permiso «Mostrar sobre otras apps». Se gestionan en Opciones › Recordatorios.
 
@@ -145,6 +146,10 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-04**: Highfly Premium funcionó con un token real en una TV del usuario. Sky Sports
+  F1 UHD y Main Event UHD (Highfly 4K) solo dan imagen con Premium: la API gratuita entrega
+  «🔒 Upgrade to Premium». Sin Premium, F1 UHD usa la FHD gratuita publicada por el runner y
+  Main Event UHD no tiene señal. El token es por TV: cada equipo se vincula aparte.
 - **2026-10-03**: «Fuentes y calidades» aprobado en mockup: sin botón Cerrar en el moderno
   (Atrás cierra), anclado abajo al margen de las escenas (52 dp), lista que mide lo que ocupan
   sus filas (alto fijo 42 dp, hasta 5 visibles) y, en TvVoo, filas dibujadas al abrir con
