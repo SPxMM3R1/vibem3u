@@ -120,7 +120,7 @@ final class DynamicSourceReference {
     }
 
     static URI create(String provider, String stableId) {
-        if (!isKnownProvider(provider) || !isSafeIdentity(stableId)) return null;
+        if (!isKnownProvider(provider) || !isSafeIdentity(provider, stableId)) return null;
         try {
             return URI.create(
                     SCHEME + "://" + HOST + "/"
@@ -138,7 +138,7 @@ final class DynamicSourceReference {
         if (segments.length != 2) return false;
         String candidateProvider = decode(segments[0]);
         String candidateStableId = decode(segments[1]);
-        return isKnownProvider(candidateProvider) && isSafeIdentity(candidateStableId);
+        return isKnownProvider(candidateProvider) && isSafeIdentity(candidateProvider, candidateStableId);
     }
 
     private static String[] rawSegments(String rawPath) {
@@ -176,7 +176,13 @@ final class DynamicSourceReference {
                 || "cncverse".equalsIgnoreCase(value);
     }
 
-    private static boolean isSafeIdentity(String value) {
+    private static boolean isSafeIdentity(String provider, String value) {
+        // The literal [Not 24/7] annotation belongs to an exact Chile metadata name,
+        // not a path separator. The outer URI still encodes the complete reference.
+        if ("cncverse".equalsIgnoreCase(provider) && value != null && value.startsWith("chiletv|")) {
+            try { CncVerseStreamResolver.referenceParts(value); return true; }
+            catch (java.io.IOException invalid) { return false; }
+        }
         if (AppStrings.isBlank(value) || value.length() > 256) return false;
         for (int index = 0; index < value.length(); index++) {
             char character = value.charAt(index);

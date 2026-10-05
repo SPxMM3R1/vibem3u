@@ -250,4 +250,16 @@ public final class CncVerseStreamResolverTest {
             assertThrows(IOException.class, () -> CncVerseStreamResolver.referenceParts(ref));
         }
     }
+    @Test public void not247ChannelSurvivesRealPlaylistParserAndDiskCache() throws Exception {
+        String ref = "chiletv|Holvoet TV (720p) [Not 24/7]|auto";
+        URI uri = DynamicSourceReference.create("cncverse", ref);
+        assertNotNull(uri); assertTrue(DynamicSourceReference.isAppOnly(uri));
+        String list = "#EXTM3U\n#EXTINF:-1 tvg-id=\"Holvoet@CNCVerse\" x-resolver=\"cncverse\""
+                + " x-resolver-id=\"" + ref + "\",Holvoet\n" + uri + "\n";
+        List<Channel> parsed = M3uParser.parse(M3uCacheSanitizer.forDisk(list), URI.create("https://example.org/list.m3u"));
+        assertEquals(1, parsed.size());
+        assertEquals(ref, DynamicSourceReference.stableId(parsed.get(0).getStreamUri()));
+        assertNull(DynamicSourceReference.create("tvn", ref));
+        assertNull(DynamicSourceReference.create("cncverse", "chiletv|a/b|auto"));
+    }
 }
