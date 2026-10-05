@@ -41,6 +41,7 @@ agente debe poder retomar el trabajo solo con lo que está en el repositorio.
 
 ## Cómo trabajar
 
+- Entrega 0.5.69 (`versionCode` 178): reparación CNCVerse `0473d5d`, sin cambios de listas, EPG, Highfly/TvVoo ni interfaz. Compuertas: 324 tests debug locales, lint y auxiliar, CI completo + prueba de reproducción real + tag `v0.5.69` y APK/firma/checksum. Verificar publicación antes de afirmar entrega; 0.5.68 es la versión diagnosticada, no la reparación.
 - Chile TV y nombres `[Not 24/7]`: `DynamicSourceReference` permite esa anotación literal solo para referencias CNCVerse Chile válidas; la URI exterior sigue percent-encoded. No habilitar `/` genérico en identidades ni en otros proveedores. Prueba de integración con `M3uParser` y `M3uCacheSanitizer` (23 tests CNCVerse en app/auxiliar).
 - Versión preparada 0.5.68 (`versionCode` 177): publicar y verificar APK antes de las nuevas filas `chiletv` de Lista M3U. No reutilizar el tag 0.5.67 ni confundir el soporte deportivo previo con Chile TV.
 - Entrega 0.5.68: amplía CNCVerse a CHILE TV también en el auxiliar. Referencia `chiletv|<nombre exacto de metadata>|auto` (no grupo multicanal): solo variantes HLS de esa entrada única, DNS/IP pública antes de validar, sin DASH ni DRM crudo. SPORTS WORLD mantiene grupo/etiqueta exactos y proxy fijo HTTPS. No hay descubrimiento ni altas de canales en la app: Lista M3U publica las filas de prueba. `:local-catalog:test` también ejecuta los 22 tests CNCVerse de la app; `M3uCacheSanitizer` se compila solo como apoyo de test. CI Android y APK siguen obligatorios.
