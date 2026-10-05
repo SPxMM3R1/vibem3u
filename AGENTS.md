@@ -41,6 +41,7 @@ agente debe poder retomar el trabajo solo con lo que está en el repositorio.
 
 ## Cómo trabajar
 
+- Entrega 0.5.67 (`versionCode` 176): añade CNCVerse a la app y al auxiliar local, sin canales automáticos ni cambios de diseño. Cambio funcional `cf106e8`; requiere Android CI verde y Release `v0.5.67` con APK/checksum verificados. Contrato relacionado en Lista M3U: motor CNCVerse, referencias sin claves y catálogo 2026.10.05.1; publicar solo después de que el auxiliar local pueda aceptar el motor.
 - Entrega 0.5.53 (`versionCode` 162): corrige solo la espera del selector Highfly. La publicación requiere CI verde y APK verificado del tag `v0.5.53`; no confundir el commit/push con la entrega del APK. Sin cambio relacionado en Lista M3U.
 - No hay SDK Android local en el equipo: los cambios se validan con CI ("Android CI"). No prometer builds locales.
 - Release:

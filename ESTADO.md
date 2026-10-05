@@ -12,7 +12,7 @@
 ## Hoy, en una mirada
 
 - **CNCVerse**: nuevo motor HTTP independiente en app y `local-catalog`, preparado para 0.5.67. Referencias exactas sin claves; ID opaco y enlaces proxy solo RAM, TTL 120 s, máximo 20 s. Preserva master/audio y MIME HLS; anuncios HTTP del Bridge se convierten a HTTPS. Prueba real Java TNT Sports 3: resolución 3,79 s y fotograma decodificado con logo TNT SPORTS 3/snooker. Falta prueba de reproducción en TV física. No hay alta automática de canales ni cambios de interfaz. El usuario confirma Highfly Premium vinculado: no atribuir F1 UHD→FHD a falta de token; la ruta real de esa TV sigue sin comprobarse y este cambio no repara Premium.
-- **Versión publicada**: 0.5.66 (`versionCode` 175): en un canal con señal preferida (p. ej.
+- **Versión de esta entrega**: 0.5.67 (`versionCode` 176), motor CNCVerse. El APK se entrega solo tras CI y Release verificados; TV física pendiente. La 0.5.66: en un canal con señal preferida (p. ej.
   Canal 13), «Fuentes y calidades» muestra «Directo» (la preferida) y «Respaldo» (la propia) y,
   debajo, las calidades; elegir el respaldo lo deja fijo en las reconexiones. La 0.5.65: señal preferida entre dos directos: con
   `preferredM3u` en el layout, el canal abre primero esa otra fila M3U (que la app ya no muestra
@@ -147,6 +147,7 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-05** (UTC): preparada entrega 0.5.67 (`versionCode` 176), cambio funcional `cf106e8` (CNCVerse). Publicar main, exigir Android CI verde y después tag `v0.5.67`/workflow «Publicar APK»; verificar asset y SHA-256. No se agregan canales ni se cambia Premium.
 - **2026-10-05** (UTC): `CncVerseStreamResolver`, registro, catálogo, referencia interna, redacción ClearKey y previsualización local. Contrato coordinado con Lista M3U; sin copiar código propietario Bridge/Cloudstream ni nuevas dependencias. Runner/editor primero; 37 tests JVM de lógica y 7 del auxiliar, más Gradle `--offline :local-catalog:test :local-catalog:installDist` en verde (distribución local recompilada). Video TNT Sports 3 obtenido con el cliente Java real. APK completa/lint/registros Android se validan en CI; reproducción TV y alta de canales pendientes.
 - **2026-10-04**: Highfly Premium funcionó con un token real en una TV del usuario. Sky Sports
   F1 UHD y Main Event UHD (Highfly 4K) solo dan imagen con Premium: la API gratuita entrega
