@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Contador de escenas abiertas que ocultan el menú de Opciones (SceneDialog). -->
+    <item name="scene_host_hidden_count" type="id" />
+</resources>

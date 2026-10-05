@@ -149,6 +149,12 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-05** (UTC): 0.5.71 (`versionCode` 180), mockup aprobado por el usuario: las escenas
+  Premium abiertas desde Opciones (vincular con QR y gestionar cuenta) se ven solas. Opciones es
+  translúcido sobre el video y el velo de la escena (38 %) dejaba ver el menú detrás del QR.
+  `SceneDialog.hideHostWhileShown` oculta `settings_root` mientras la escena está abierta (contador
+  en el tag `scene_host_hidden_count` para escenas encadenadas) y lo devuelve al cerrarse. Texto,
+  QR y botones sin cambios. Pendiente: confirmar en la TV.
 - **2026-10-05** (UTC): 0.5.70 (`versionCode` 179): el desplazamiento de títulos largos se veía
   a saltos en la TV. `MarqueeSurfaceRenderer` ya no abre una capa (`saveLayer`) por cuadro: su
   Surface solo contiene el título, así que la máscara DST_IN de los bordes va directo sobre

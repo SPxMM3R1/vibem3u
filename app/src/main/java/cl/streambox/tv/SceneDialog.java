@@ -2,6 +2,7 @@ package cl.streambox.tv;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.view.View;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -25,6 +26,33 @@ final class SceneDialog {
             window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         }
         return dialog;
+    }
+
+    /**
+     * Oculta {@code host} (p. ej. el menú de Opciones, que es translúcido sobre el video)
+     * mientras la escena está abierta, para que detrás solo quede el video. Llamar después de
+     * {@code show()}. Varias escenas encadenadas comparten un contador: el menú vuelve al
+     * cerrarse la última.
+     */
+    static void hideHostWhileShown(Dialog dialog, View host) {
+        Window window = dialog.getWindow();
+        if (host == null || window == null || !dialog.isShowing()) return;
+        View decor = window.getDecorView();
+        Object tag = host.getTag(R.id.scene_host_hidden_count);
+        int count = tag instanceof Integer ? (Integer) tag : 0;
+        host.setTag(R.id.scene_host_hidden_count, count + 1);
+        host.setVisibility(View.INVISIBLE);
+        decor.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(View view) {}
+
+            @Override public void onViewDetachedFromWindow(View view) {
+                decor.removeOnAttachStateChangeListener(this);
+                Object current = host.getTag(R.id.scene_host_hidden_count);
+                int left = (current instanceof Integer ? (Integer) current : 1) - 1;
+                host.setTag(R.id.scene_host_hidden_count, Math.max(0, left));
+                if (left <= 0) host.setVisibility(View.VISIBLE);
+            }
+        });
     }
 
     /** Oculta las barras del sistema también en la ventana del diálogo. */

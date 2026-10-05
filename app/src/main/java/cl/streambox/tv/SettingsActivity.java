@@ -1229,18 +1229,24 @@ public final class SettingsActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
     }
 
+    private void showPremiumPairing() {
+        SceneDialog.hideHostWhileShown(
+                PremiumScenes.showPairing(this, this::refreshPremiumSection), settingsRoot);
+    }
+
     /** Sección «Highfly Premium» (solo en el estilo moderno). */
     private void bindPremiumSection() {
         View row = findViewById(R.id.premium_account_row);
         if (row == null) return;
         HighflyPremiumCredentialStore store = HighflyPremiumCredentialStore.getInstance(this);
+        // Las escenas Premium se ven solas: el menú translúcido se oculta mientras están abiertas.
         row.setOnClickListener(view -> {
             if (store.hasCredential() && store.isUsable()) {
-                PremiumScenes.showManage(this,
-                        () -> PremiumScenes.showPairing(this, this::refreshPremiumSection),
-                        this::refreshPremiumSection);
+                SceneDialog.hideHostWhileShown(PremiumScenes.showManage(this,
+                        this::showPremiumPairing,
+                        this::refreshPremiumSection), settingsRoot);
             } else {
-                PremiumScenes.showPairing(this, this::refreshPremiumSection);
+                showPremiumPairing();
             }
         });
         LinearLayout options = findViewById(R.id.premium_region_options);
