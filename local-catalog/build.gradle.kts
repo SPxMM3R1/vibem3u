@@ -7,6 +7,7 @@ val resolverFiles = listOf(
     "AppStrings.java",
     "Channel.java",
     "ChannelRequestHeaders.java",
+    "CncVerseStreamResolver.java",
     "DynamicSourceReference.java",
     "HlsCandidateRace.java",
     "HlsStreamValidator.java",

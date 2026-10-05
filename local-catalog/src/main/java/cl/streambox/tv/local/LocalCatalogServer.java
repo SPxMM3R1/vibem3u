@@ -13,6 +13,7 @@ import cl.streambox.tv.TvnStreamResolver;
 import cl.streambox.tv.TvVooCatalogChannel;
 import cl.streambox.tv.TvVooStreamResolver;
 import cl.streambox.tv.HighflyStreamResolver;
+import cl.streambox.tv.CncVerseStreamResolver;
 import cl.streambox.tv.MeganoticiasStreamResolver;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -302,6 +303,7 @@ public final class LocalCatalogServer {
         ResolverDefinition definition = resolverCatalog.find(channel);
         if (definition == null) return null;
         return switch (definition.getEngine()) {
+            case "cncverse" -> new CncVerseStreamResolver(definition);
             case "tvn" -> new TvnStreamResolver(definition);
             case "meganoticias" -> new MeganoticiasStreamResolver(definition);
             case "highfly" -> new HighflyStreamResolver(definition);

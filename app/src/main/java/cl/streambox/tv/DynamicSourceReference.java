@@ -172,7 +172,8 @@ final class DynamicSourceReference {
         return "tvn".equalsIgnoreCase(value)
                 || "meganoticias".equalsIgnoreCase(value)
                 || "tvvoo".equalsIgnoreCase(value)
-                || "highfly".equalsIgnoreCase(value);
+                || "highfly".equalsIgnoreCase(value)
+                || "cncverse".equalsIgnoreCase(value);
     }
 
     private static boolean isSafeIdentity(String value) {

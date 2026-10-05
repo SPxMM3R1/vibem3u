@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026.09.17.1",
+  "catalogVersion": "2026.10.05.1",
   "providers": [
     {
       "id": "tvn",
@@ -480,6 +480,18 @@
         "maxStreams": 16,
         "maxPayloadBytes": 262144,
         "resolutionBudgetMs": 12000
+      }
+    },
+    {
+      "id": "cncverse",
+      "name": "CNCVerse",
+      "engine": "cncverse",
+      "enabledByDefault": true,
+      "cacheTtlSeconds": 120,
+      "match": {"tvgIdSuffixes": ["@CNCVerse"]},
+      "config": {
+        "manifestUrl": "https://cncverse.dpdns.org/u/p_0md89st1e5th/manifest.json",
+        "resolutionBudgetMs": 20000
       }
     }
   ]

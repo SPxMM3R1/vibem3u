@@ -26,7 +26,7 @@ final class SafePlaybackText {
     private static final Pattern SENSITIVE_ASSIGNMENT_PATTERN = Pattern.compile(
             "(?i)(\\b(?:access[_-]?token|server[_-]?key|token|key|signature|sig|"
                     + "auth(?:orization)?|hdnea|hdnts|session(?:id)?|jwt|ua|"
-                    + "api[_-]?password|password|d)\\s*[=:]\\s*)"
+                    + "api[_-]?password|password|clearkey|license[_-]?key|d)\\s*[=:]\\s*)"
                     + "([^&\\s,;]+)"
     );
     private static final Set<String> SENSITIVE_QUERY_KEYS = sensitiveQueryKeys();
@@ -201,6 +201,8 @@ final class SafePlaybackText {
                 "serverkey",
                 "server_key",
                 "key",
+                "clearkey",
+                "license_key",
                 "signature",
                 "sig",
                 "auth",
