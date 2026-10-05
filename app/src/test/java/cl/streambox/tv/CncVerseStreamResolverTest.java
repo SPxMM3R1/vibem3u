@@ -20,11 +20,15 @@ public final class CncVerseStreamResolverTest {
         return new Channel("Nombre personalizado", DynamicSourceReference.create("cncverse", REF),
                 null, "Deportes", attrs);
     }
-    private static JSONObject object(String value) { return new JSONObject(value); }
+    private static JSONObject object(String value) {
+        try { return new JSONObject(value); }
+        catch (org.json.JSONException invalid) { throw new AssertionError("Invalid test fixture", invalid); }
+    }
     private static String payload(String label, String uri) {
-        return new JSONObject().put("streams", new org.json.JSONArray().put(new JSONObject()
+        try { return new JSONObject().put("streams", new org.json.JSONArray().put(new JSONObject()
                 .put("title", "🍿 TNT Sports UK\n🏷️ " + label + "\n🎞️ Auto • DASH")
-                .put("url", uri))).toString();
+                .put("url", uri))).toString(); }
+        catch (org.json.JSONException invalid) { throw new AssertionError("Invalid test fixture", invalid); }
     }
     private static class FakeClient extends TokenHttpClient {
         int lookups;

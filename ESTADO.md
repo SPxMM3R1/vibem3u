@@ -147,6 +147,7 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-05** (UTC): primer CI de 0.5.67 detectó `JSONException` checked en los helpers del test CNCVerse, invisible con org.json JVM puro. Helpers corregidos para compilar también contra las firmas Android; mantener la compuerta de CI antes del tag/APK. Sin cambios al resolutor de producción.
 - **2026-10-05** (UTC): preparada entrega 0.5.67 (`versionCode` 176), cambio funcional `cf106e8` (CNCVerse). Publicar main, exigir Android CI verde y después tag `v0.5.67`/workflow «Publicar APK»; verificar asset y SHA-256. No se agregan canales ni se cambia Premium.
 - **2026-10-05** (UTC): `CncVerseStreamResolver`, registro, catálogo, referencia interna, redacción ClearKey y previsualización local. Contrato coordinado con Lista M3U; sin copiar código propietario Bridge/Cloudstream ni nuevas dependencias. Runner/editor primero; 37 tests JVM de lógica y 7 del auxiliar, más Gradle `--offline :local-catalog:test :local-catalog:installDist` en verde (distribución local recompilada). Video TNT Sports 3 obtenido con el cliente Java real. APK completa/lint/registros Android se validan en CI; reproducción TV y alta de canales pendientes.
 - **2026-10-04**: Highfly Premium funcionó con un token real en una TV del usuario. Sky Sports
