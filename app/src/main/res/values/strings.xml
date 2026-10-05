@@ -315,5 +315,6 @@
     <string name="source_selector_direct_label">Directo</string>
     <string name="source_selector_direct_detail">Señal principal del canal</string>
     <string name="source_selector_backup_label">Respaldo</string>
-    <string name="source_selector_backup_detail">Señal propia del canal</string>
+    <string name="source_selector_backup_detail">Otra señal del mismo canal</string>
+    <string name="source_selector_backup_numbered_label">Respaldo %1$d</string>
 </resources>

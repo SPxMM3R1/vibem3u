@@ -296,6 +296,64 @@ public final class PublishedPlaybackCatalogTest {
         assertEquals(tvn.getStreamUri(), TvVooBackup.resolutionChannel(played).getStreamUri());
     }
 
+    @Test
+    public void backupM3uRowsTravelInsideTheirChannelInOrderAfterThePreferredOne() throws Exception {
+        String edited = document()
+                .replace("\"name\":\"TVN\",", "\"name\":\"TVN\",\"preferredM3u\":\"TVN.cl@Direct138\","
+                        + "\"backupM3u\":[\"TVN.cl@Direct45\",\"TVN.cl@Direct38b\",\"0104\",\"bad://x\"],")
+                .replace("{\"kind\":\"provider\",\"provider\":\"highfly\"",
+                        m3uRow("TVN.cl@Direct138", 9, 79) + "," + m3uRow("TVN.cl@Direct45", 10, 74) + ","
+                                + m3uRow("TVN.cl@Direct38b", 11, 73) + ","
+                                + "{\"kind\":\"provider\",\"provider\":\"highfly\"");
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);
+        Channel tvn = direct("TVN", "https://example.org/tvn.m3u8", "0104");
+        Channel better = direct("TVN 138", "http://example.org/hd.m3u8", "TVN.cl@Direct138");
+        Channel ip45 = direct("TVN 45", "http://example.org/45.m3u8", "TVN.cl@Direct45");
+        Channel ip38 = direct("TVN 38", "http://example.org/38.m3u8", "TVN.cl@Direct38b");
+
+        List<Channel> playback = catalog.applyToPlayback(Arrays.asList(tvn, better, ip45, ip38));
+
+        assertEquals(1, playback.size());
+        Channel played = playback.get(0);
+        assertEquals("0104", played.getTvgId());
+        assertEquals(better.getStreamUri(), played.getStreamUri());
+        assertEquals(Arrays.asList(tvn.getStreamUri(), ip45.getStreamUri(), ip38.getStreamUri()),
+                TvVooBackup.directBackupsOf(played));
+        assertEquals(ip38.getStreamUri(),
+                TvVooBackup.directResolutionChannel(played, 2).getStreamUri());
+        assertEquals(null, TvVooBackup.directResolutionChannel(played, 3));
+        assertEquals(tvn.getStreamUri(), TvVooBackup.resolutionChannel(played).getStreamUri());
+        assertTrue(TvVooBackup.directResolutionChannel(played, 1).getAttributes()
+                .get(TvVooBackup.DIRECT_ATTRIBUTE) == null);
+    }
+
+    @Test
+    public void backupM3uWithoutPreferredKeepsOwnStreamFirst() throws Exception {
+        String edited = document()
+                .replace("\"name\":\"TVN\",", "\"name\":\"TVN\",\"backupM3u\":[\"TVN.cl@Direct45\"],")
+                .replace("{\"kind\":\"provider\",\"provider\":\"highfly\"",
+                        m3uRow("TVN.cl@Direct45", 9, 74) + ",{\"kind\":\"provider\",\"provider\":\"highfly\"");
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);
+        Channel tvn = direct("TVN", "https://example.org/tvn.m3u8", "0104");
+        Channel ip45 = direct("TVN 45", "http://example.org/45.m3u8", "TVN.cl@Direct45");
+
+        Channel played = catalog.applyToPlayback(Arrays.asList(tvn, ip45)).get(0);
+
+        assertEquals(tvn.getStreamUri(), played.getStreamUri());
+        assertEquals(Collections.singletonList(ip45.getStreamUri()), TvVooBackup.directBackupsOf(played));
+    }
+
+    private static String m3uRow(String tvgId, int order, int number) {
+        return "{\"kind\":\"m3u\",\"tvgId\":\"" + tvgId + "\",\"name\":\"" + tvgId + "\","
+                + "\"group\":\"Nacionales\",\"sourceList\":\"1.m3u\","
+                + "\"order\":" + order + ",\"number\":" + number + ",\"state\":\"active\"}";
+    }
+
+    private static Channel direct(String name, String url, String tvgId) {
+        return new Channel(name, java.net.URI.create(url), null, "Nacionales",
+                Collections.singletonMap("tvg-id", tvgId));
+    }
+
     private static String document() {
         return "{\"schemaVersion\":1,\"channels\":["
                 + "{\"kind\":\"m3u\",\"tvgId\":\"0104\",\"name\":\"TVN\","

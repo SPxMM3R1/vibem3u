@@ -195,6 +195,9 @@ public final class MainActivity extends Activity {
      */
     private boolean tvvooBackupActive;
     private String pendingTvVooBackupIdentity;
+    /** Respaldo directo en uso (0 = el primero) mientras tvvooBackupActive; 0.5.72. */
+    private int directBackupIndex;
+    private int pendingDirectBackupIndex;
     private boolean adjustLogoSizeAfterSettings;
     private String logoSizeKey;
     private float logoSizeOriginal = 1f;
@@ -1673,6 +1676,7 @@ public final class MainActivity extends Activity {
         Channel channel = channels.get(channelIndex);
         tvvooBackupActive = PlaybackPreferences.channelIdentity(channel)
                 .equals(pendingTvVooBackupIdentity) && TvVooBackup.has(channel);
+        directBackupIndex = tvvooBackupActive ? pendingDirectBackupIndex : 0;
         pendingTvVooBackupIdentity = null;
         playbackGeneration++;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
@@ -2033,19 +2037,32 @@ public final class MainActivity extends Activity {
     /** Canal con el que se resuelve la reproducción: el de respaldo si está activo. */
     private Channel resolutionChannelFor(Channel channel) {
         if (!tvvooBackupActive || channel == null) return channel;
-        Channel backup = TvVooBackup.resolutionChannel(channel);
+        Channel backup = TvVooBackup.hasTvVoo(channel)
+                ? TvVooBackup.resolutionChannel(channel)
+                : TvVooBackup.directResolutionChannel(channel, directBackupIndex);
         return backup == null ? channel : backup;
     }
 
     /**
-     * Un canal directo con respaldo TvVoo que falla pasa al respaldo antes de gastar
-     * reintentos en el directo. Devuelve true si tomó el control de la recuperación.
+     * Un canal directo con respaldo que falla pasa al respaldo antes de gastar reintentos en
+     * el directo; con varios respaldos directos, cada falla pasa al siguiente. Devuelve true
+     * si tomó el control de la recuperación.
      */
     private boolean switchToTvVooBackup(String reason) {
         Channel channel = playbackChannel;
-        if (tvvooBackupActive || channel == null || !TvVooBackup.has(channel)) return false;
-        Log.i(PLAYBACK_HEALTH_TAG, "backup tvvoo reason=" + reason);
+        if (channel == null || !TvVooBackup.has(channel)) return false;
+        if (tvvooBackupActive) {
+            if (TvVooBackup.hasTvVoo(channel)
+                    || directBackupIndex + 1 >= TvVooBackup.directBackupsOf(channel).size()) {
+                return false;
+            }
+            directBackupIndex++;
+        } else {
+            directBackupIndex = 0;
+        }
+        Log.i(PLAYBACK_HEALTH_TAG, "backup reason=" + reason + " index=" + directBackupIndex);
         pendingTvVooBackupIdentity = PlaybackPreferences.channelIdentity(channel);
+        pendingDirectBackupIndex = directBackupIndex;
         tvvooBackupActive = true;
         playbackAutoRecoveryInFlight = true;
         playbackRecoveryFailed = false;
@@ -2105,7 +2122,10 @@ public final class MainActivity extends Activity {
             // again: it may have expired, so ask the resolver for a new one.
             resolverCoordinator.invalidate(resolutionChannel, resolver);
         }
-        if (tvvooBackupActive) pendingTvVooBackupIdentity = identity;
+        if (tvvooBackupActive) {
+            pendingTvVooBackupIdentity = identity;
+            pendingDirectBackupIndex = directBackupIndex;
+        }
         // A first watchdog/decoder recovery recreates ExoPlayer but keeps the
         // validated TvVoo/MediaFlow source in the process-only coordinator
         // cache so the new player can attach to it immediately.
@@ -4216,22 +4236,25 @@ public final class MainActivity extends Activity {
     private void renderDirectQualitySelector(Channel channel) {
         sourceCandidates.clear();
         playbackOptions.clear();
-        // Canal con señal preferida (0.5.66): las dos señales arriba y, debajo, sus calidades.
-        URI directBackup = TvVooBackup.directBackupOf(channel);
-        if (directBackup != null) {
+        // Canal con señal preferida o respaldos directos (0.5.66, varios desde la 0.5.72):
+        // todas sus señales arriba y, debajo, sus calidades.
+        int backupCount = TvVooBackup.directBackupsOf(channel).size();
+        if (backupCount > 0) {
             ResolvedPlaybackSource principal = ResolvedPlaybackSource.direct(channel, PLAYER_USER_AGENT);
-            Channel backupChannel = TvVooBackup.resolutionChannel(channel);
-            ResolvedPlaybackSource backup = backupChannel == null ? null
-                    : ResolvedPlaybackSource.direct(backupChannel, PLAYER_USER_AGENT);
             sourceCandidates.add(ResolvedPlaybackCandidate.version(
                     getString(R.string.source_selector_direct_label),
                     getString(R.string.source_selector_direct_detail),
                     principal, "direct-principal", "", true, true, 0));
-            if (backup != null) {
+            for (int index = 0; index < backupCount; index++) {
+                Channel backupChannel = TvVooBackup.directResolutionChannel(channel, index);
+                if (backupChannel == null) continue;
+                String label = backupCount == 1 ? getString(R.string.source_selector_backup_label)
+                        : getString(R.string.source_selector_backup_numbered_label, index + 1);
                 sourceCandidates.add(ResolvedPlaybackCandidate.version(
-                        getString(R.string.source_selector_backup_label),
+                        label,
                         getString(R.string.source_selector_backup_detail),
-                        backup, "direct-backup", "", true, false, 0));
+                        ResolvedPlaybackSource.direct(backupChannel, PLAYER_USER_AGENT),
+                        "direct-backup-" + index, "", true, false, 0));
             }
             for (ResolvedPlaybackCandidate candidate : sourceCandidates) {
                 playbackOptions.add(PlaybackOption.source(
@@ -4517,8 +4540,10 @@ public final class MainActivity extends Activity {
         if (TvVooBackup.hasTvVoo(channel)) {
             tvvooBackupActive = source.hasResolver();
         } else if (TvVooBackup.directBackupOf(channel) != null) {
-            // Elegir la señal de respaldo la deja fija también para las reconexiones.
-            tvvooBackupActive = TvVooBackup.directBackupOf(channel).equals(source.getPlaybackUri());
+            // Elegir una señal de respaldo la deja fija también para las reconexiones.
+            int index = TvVooBackup.directBackupsOf(channel).indexOf(source.getPlaybackUri());
+            tvvooBackupActive = index >= 0;
+            directBackupIndex = Math.max(0, index);
         }
 
         playbackHasStarted = false;

@@ -149,6 +149,14 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-05** (UTC): 0.5.72 (`versionCode` 181): varios respaldos directos por canal. El layout
+  admite `backupM3u` (lista ordenada de tvg-id de otras filas M3U de la misma señal, hasta 8).
+  `PublishedPlaybackCatalog` oculta esas filas y las agrega al canal dueño; `TvVooBackup` guarda
+  los respaldos como lista (`x-backup-stream`, uno por línea, solo en memoria) con
+  `directBackupsOf`/`directResolutionChannel`. Orden: señal preferida → propia → `backupM3u`.
+  `MainActivity` avanza al siguiente respaldo en cada falla (`directBackupIndex`) y el selector
+  muestra Directo y «Respaldo 1…n». Primer uso: TVN (01) con 73 y 74; Canal 13 (004) con 85.
+  Pendiente: confirmar en la TV.
 - **2026-10-05** (UTC): 0.5.71 (`versionCode` 180), mockup aprobado por el usuario: las escenas
   Premium abiertas desde Opciones (vincular con QR y gestionar cuenta) se ven solas. Opciones es
   translúcido sobre el video y el velo de la escena (38 %) dejaba ver el menú detrás del QR.

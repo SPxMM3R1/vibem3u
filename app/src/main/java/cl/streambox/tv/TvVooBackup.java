@@ -1,8 +1,10 @@
 package cl.streambox.tv;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -35,13 +37,32 @@ final class TvVooBackup {
         return TvVooCatalogChannel.isStableId(stableIdOf(channel));
     }
 
-    /** Dirección directa de respaldo, o null. */
+    /** Primera dirección directa de respaldo, o null. */
     static URI directBackupOf(Channel channel) {
-        if (channel == null) return null;
+        List<URI> backups = directBackupsOf(channel);
+        return backups.isEmpty() ? null : backups.get(0);
+    }
+
+    /**
+     * Direcciones directas de respaldo en el orden en que se prueban (desde la 0.5.72 puede
+     * haber varias: {@code backupM3u} del layout). Solo http/https; las inválidas se omiten.
+     */
+    static List<URI> directBackupsOf(Channel channel) {
+        if (channel == null) return Collections.emptyList();
         String value = channel.getAttributes().get(DIRECT_ATTRIBUTE);
-        if (value == null || value.trim().isEmpty()) return null;
+        if (value == null || value.trim().isEmpty()) return Collections.emptyList();
+        List<URI> result = new ArrayList<>();
+        for (String line : value.split("\n")) {
+            URI uri = httpUri(line.trim());
+            if (uri != null && !result.contains(uri)) result.add(uri);
+        }
+        return Collections.unmodifiableList(result);
+    }
+
+    private static URI httpUri(String value) {
+        if (value.isEmpty()) return null;
         try {
-            URI uri = URI.create(value.trim());
+            URI uri = URI.create(value);
             String scheme = uri.getScheme();
             return "http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme) ? uri : null;
         } catch (IllegalArgumentException error) {
@@ -62,6 +83,35 @@ final class TvVooBackup {
                 primary.getGroup(), attributes);
     }
 
+    /** Agrega señales de otras filas M3U al final de los respaldos directos del canal. */
+    static Channel withDirectBackups(Channel channel, List<Channel> backups) {
+        if (channel == null || backups == null || backups.isEmpty()) return channel;
+        List<String> lines = new ArrayList<>();
+        for (URI uri : directBackupsOf(channel)) lines.add(uri.toString());
+        for (Channel backup : backups) {
+            URI uri = backup == null || backup.getStreamUri() == null ? null
+                    : httpUri(backup.getStreamUri().toString());
+            if (uri == null || uri.equals(channel.getStreamUri())
+                    || lines.contains(uri.toString())) continue;
+            lines.add(uri.toString());
+        }
+        if (lines.isEmpty()) return channel;
+        Map<String, String> attributes = new LinkedHashMap<>(channel.getAttributes());
+        attributes.put(DIRECT_ATTRIBUTE, String.join("\n", lines));
+        return new Channel(channel.getName(), channel.getStreamUri(), channel.getLogoUri(),
+                channel.getGroup(), attributes);
+    }
+
+    /** Canal que reproduce el respaldo directo número {@code index} (0 = el primero), o null. */
+    static Channel directResolutionChannel(Channel channel, int index) {
+        List<URI> backups = directBackupsOf(channel);
+        if (index < 0 || index >= backups.size()) return null;
+        Map<String, String> attributes = new LinkedHashMap<>(channel.getAttributes());
+        attributes.remove(DIRECT_ATTRIBUTE);
+        return new Channel(channel.getName(), backups.get(index), channel.getLogoUri(),
+                channel.getGroup(), attributes);
+    }
+
     /** Copia del canal con su respaldo TvVoo declarado (sin tocar la identidad). */
     static Channel withBackup(Channel channel, String stableId) {
         if (channel == null || !TvVooCatalogChannel.isStableId(stableId)) return channel;
@@ -77,14 +127,7 @@ final class TvVooBackup {
      */
     static Channel resolutionChannel(Channel channel) {
         String stableId = stableIdOf(channel);
-        if (!TvVooCatalogChannel.isStableId(stableId)) {
-            URI direct = directBackupOf(channel);
-            if (direct == null) return null;
-            Map<String, String> attributes = new LinkedHashMap<>(channel.getAttributes());
-            attributes.remove(DIRECT_ATTRIBUTE);
-            return new Channel(channel.getName(), direct, channel.getLogoUri(),
-                    channel.getGroup(), attributes);
-        }
+        if (!TvVooCatalogChannel.isStableId(stableId)) return directResolutionChannel(channel, 0);
         int separator = stableId.indexOf('|');
         String countryKey = stableId.substring(0, separator);
         String alias = stableId.substring(separator + 1);
