@@ -23,7 +23,8 @@ public final class CncVerseStreamResolver implements StreamResolver {
     public static final String DEFAULT_MANIFEST_URL =
             "https://cncverse.dpdns.org/u/p_0md89st1e5th/manifest.json";
     private static final Set<String> API_HOSTS = Collections.singleton("cncverse.dpdns.org");
-    private static final String CATALOG = "/catalog/tv/cnc_SPORTSWORLD_tv.json";
+    private static final String SPORTS_CATALOG = "/catalog/tv/cnc_SPORTSWORLD_tv.json";
+    private static final String CHILE_CATALOG = "/catalog/tv/cnc_CHILETV_tv.json";
     private static final int MAX_JSON_BYTES = 1024 * 1024;
     private static final long TTL_MS = 120_000L;
 
@@ -76,6 +77,7 @@ public final class CncVerseStreamResolver implements StreamResolver {
         String reference = channel.getAttributes().get("x-resolver-id");
         if (reference == null) reference = DynamicSourceReference.stableId(channel.getStreamUri());
         String[] parts = referenceParts(reference);
+        boolean chile = "chiletv".equals(parts[0]);
         String base = addonBase(definition == null ? DEFAULT_MANIFEST_URL
                 : definition.getConfig("manifestUrl", DEFAULT_MANIFEST_URL));
         ResolutionProgressListener progress = listener == null ? ResolutionProgressListener.NONE : listener;
@@ -86,8 +88,8 @@ public final class CncVerseStreamResolver implements StreamResolver {
         try (ResolutionContext.Scope ignored = context.activate()) {
             context.check();
             progress.onProgress(ResolutionProgress.of(ResolutionStage.PAGE_REQUEST,
-                    "CNCVerse · consultando catálogo SPORTS WORLD"));
-            JSONObject catalog = json(base + CATALOG);
+                    "CNCVerse · consultando catálogo " + (chile ? "CHILE TV" : "SPORTS WORLD")));
+            JSONObject catalog = json(base + (chile ? CHILE_CATALOG : SPORTS_CATALOG));
             String resourceId = uniqueResource(catalog, parts[1]);
             // resourceId can contain session material: it exists only within this attempt.
             JSONObject payload = json(base + "/stream/tv/" + encode(resourceId) + ".json");
@@ -97,19 +99,26 @@ public final class CncVerseStreamResolver implements StreamResolver {
                 if (!result.isEmpty() && context.remainingMillis() <= 0L) break;
                 context.check();
                 JSONObject stream = streams.optJSONObject(i);
-                if (stream == null || !parts[2].equals(sourceLabel(stream))) continue;
-                URI uri = playbackUri(stream.optString("url", ""));
+                if (stream == null || (!chile && !parts[2].equals(sourceLabel(stream)))) continue;
+                // CHILE TV metadata denotes one exact channel, not a multi-channel sports group.
+                // Only its own public HLS renditions are candidates; raw DRM is never interpreted.
+                if (chile && hasRawDrm(stream)) continue;
+                URI uri = chile ? chilePlaybackUri(stream.optString("url", ""))
+                        : playbackUri(stream.optString("url", ""));
                 if (uri == null) continue;
                 Map<String, String> headers = headers(stream);
                 try {
+                    if (chile) PublicStreamPolicy.requirePublicHttp(uri);
                     // Keep the master intact: separate audio renditions must not be lost.
                     validation.validate(uri, headers, context, progress);
                     ResolvedPlaybackSource source = ResolvedPlaybackSource.dynamic(
                             ID, stableSourceId(channel), uri, headers,
                             headers.getOrDefault("User-Agent", TokenHttpClient.BROWSER_USER_AGENT),
-                            System.currentTimeMillis() + TTL_MS, parts[2],
+                            System.currentTimeMillis() + TTL_MS, chile ? parts[1] : parts[2],
                             "application/x-mpegURL", null);
-                    result.add(new ResolvedPlaybackCandidate(parts[2], "CNCVerse · HLS del puente", source));
+                    String label = sourceLabel(stream);
+                    result.add(new ResolvedPlaybackCandidate(chile ? (label.isEmpty() ? parts[1] : label) : parts[2],
+                            chile ? "CNCVerse Chile · HLS validado" : "CNCVerse · HLS del puente", source));
                     if (!all || result.size() >= 8) break;
                 } catch (IOException failed) {
                     // Never propagate an exception embedding a signed URL or JSON resource id.
@@ -133,12 +142,17 @@ public final class CncVerseStreamResolver implements StreamResolver {
     }
 
     static String[] referenceParts(String reference) throws IOException {
-        if (reference == null || reference.length() > 256
-                || reference.matches("(?s).*[\\x00-\\x1f\\x7f/\\\\?#=\"].*")) {
+        if (reference == null || reference.length() > 256) {
             throw new IOException("Referencia CNCVerse inválida.");
         }
         String[] parts = reference.split("\\|", -1);
-        if (parts.length != 3 || !"sportsworld".equals(parts[0])) {
+        if (parts.length != 3 || !("sportsworld".equals(parts[0]) || "chiletv".equals(parts[0]))) {
+            throw new IOException("Referencia CNCVerse inválida.");
+        }
+        boolean chile = "chiletv".equals(parts[0]);
+        String checked = chile ? reference.replace("[Not 24/7]", "[Not 24-7]") : reference;
+        if ((chile && !"auto".equals(parts[2]))
+                || checked.matches("(?s).*[\\x00-\\x1f\\x7f/\\\\?#=\"].*")) {
             throw new IOException("Referencia CNCVerse inválida.");
         }
         for (String part : parts) if (part.isEmpty() || !part.equals(part.trim())) {
@@ -204,6 +218,33 @@ public final class CncVerseStreamResolver implements StreamResolver {
                     || !uri.getPath().endsWith(".m3u8")) return null;
             return uri;
         } catch (IllegalArgumentException error) { return null; }
+    }
+
+    /** Scoped to CHILE TV. Public-IP enforcement happens before any HLS request. */
+    static URI chilePlaybackUri(String value) {
+        URI bridge = playbackUri(value);
+        if (bridge != null) return bridge;
+        try {
+            URI uri = okhttp3.HttpUrl.get(value).uri();
+            if (uri.getUserInfo() != null || uri.getFragment() != null
+                    || !uri.getPath().toLowerCase(Locale.ROOT).endsWith(".m3u8")) return null;
+            // No key-bearing Bridge query or signed URL is sent over cleartext.
+            if (API_HOSTS.contains(uri.getHost())
+                    || ("http".equals(uri.getScheme()) && uri.getRawQuery() != null)) return null;
+            return uri;
+        } catch (IllegalArgumentException error) { return null; }
+    }
+
+    private static boolean hasRawDrm(JSONObject stream) {
+        for (JSONObject object : new JSONObject[]{stream, stream.optJSONObject("behaviorHints")}) {
+            if (object == null) continue;
+            for (Iterator<String> keys = object.keys(); keys.hasNext();) {
+                String key = keys.next().toLowerCase(Locale.ROOT);
+                if (key.contains("drm") || key.contains("clearkey") || key.contains("widevine")
+                        || key.contains("playready") || key.contains("license")) return true;
+            }
+        }
+        return false;
     }
 
     private static Map<String, String> headers(JSONObject stream) {

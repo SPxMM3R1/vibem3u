@@ -41,9 +41,10 @@ agente debe poder retomar el trabajo solo con lo que está en el repositorio.
 
 ## Cómo trabajar
 
+- Entrega 0.5.68: amplía CNCVerse a CHILE TV también en el auxiliar. Referencia `chiletv|<nombre exacto de metadata>|auto` (no grupo multicanal): solo variantes HLS de esa entrada única, DNS/IP pública antes de validar, sin DASH ni DRM crudo. SPORTS WORLD mantiene grupo/etiqueta exactos y proxy fijo HTTPS. No hay descubrimiento ni altas de canales en la app: Lista M3U publica las filas de prueba. `:local-catalog:test` también ejecuta los 22 tests CNCVerse de la app; `M3uCacheSanitizer` se compila solo como apoyo de test. CI Android y APK siguen obligatorios.
 - Entrega 0.5.67 (`versionCode` 176): añade CNCVerse a la app y al auxiliar local, sin canales automáticos ni cambios de diseño. Cambio funcional `cf106e8`; requiere Android CI verde y Release `v0.5.67` con APK/checksum verificados. Contrato relacionado en Lista M3U: motor CNCVerse, referencias sin claves y catálogo 2026.10.05.1; publicar solo después de que el auxiliar local pueda aceptar el motor.
 - Entrega 0.5.53 (`versionCode` 162): corrige solo la espera del selector Highfly. La publicación requiere CI verde y APK verificado del tag `v0.5.53`; no confundir el commit/push con la entrega del APK. Sin cambio relacionado en Lista M3U.
-- No hay SDK Android local en el equipo: los cambios se validan con CI ("Android CI"). No prometer builds locales.
+- SDK local confirmado el 2026-10-05 con `android info sdk` (plataformas 35/36); la publicación exige de todos modos CI ("Android CI"). No afirmar una compilación Android local sin ejecutarla. El disco D tiene menos de 1 GB libre; no instalar ni borrar herramientas/archivos del usuario para compilar.
 - Release:
   1. Actualizar `versionCode` (+1) y `versionName` en `app/build.gradle.kts`.
      - Numeración: cada release sube solo el último número (0.5.33 → 0.5.34). Subir el número del medio o el primero (0.6.0, 1.0.0) lo decide el usuario: preguntar antes. Las 0.6.0/0.6.1 del 27-09 fueron un error: 0.6.2 (versionCode 141) es un puente que acepta 0.5.33+ como actualización, 0.5.33 (versionCode 142) retira el puente y después se borran los releases 0.6.x.

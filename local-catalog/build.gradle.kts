@@ -68,6 +68,11 @@ sourceSets {
     test {
         java {
             srcDir("src/test/java")
+            srcDir("../app/src/test/java")
+            srcDir(appSources)
+            include("cl/streambox/tv/local/**")
+            include("cl/streambox/tv/CncVerseStreamResolverTest.java")
+            include("cl/streambox/tv/M3uCacheSanitizer.java")
         }
     }
 }

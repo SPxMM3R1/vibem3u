@@ -171,4 +171,83 @@ public final class CncVerseStreamResolverTest {
         assertFalse(disk.contains("test-value")); assertFalse(disk.contains("/proxy/"));
         assertTrue(disk.contains("vibem3u://resolver/cncverse/"));
     }
+
+    private Channel chileChannel() {
+        String ref = "chiletv|13C (1080p)|auto";
+        Map<String, String> attrs = new LinkedHashMap<>();
+        attrs.put("tvg-id", "Chile13C@CNCVerse"); attrs.put("x-resolver", "cncverse");
+        attrs.put("x-resolver-id", ref);
+        return new Channel("Personalizado", DynamicSourceReference.create("cncverse", ref), null, "Chile", attrs);
+    }
+    private FakeClient chileClient() {
+        FakeClient client = new FakeClient();
+        client.catalog = "{\"metas\":[{\"name\":\"13C (1080p)\",\"id\":\"fresh-chile\"}]}";
+        client.streams = payload("13C (1080p)", "https://1.1.1.1/master.m3u8");
+        return client;
+    }
+    @Test public void chileUsesExactMetadataOwnCatalogAndPublicMaster() throws Exception {
+        FakeClient client = chileClient();
+        List<URI> checked = new ArrayList<>();
+        ResolvedPlaybackSource source = new CncVerseStreamResolver(null, client,
+                (uri, headers, context, progress) -> checked.add(uri)).resolve(chileChannel());
+        assertTrue(client.requests.get(0).endsWith("/catalog/tv/cnc_CHILETV_tv.json"));
+        assertEquals(Collections.singletonList(URI.create("https://1.1.1.1/master.m3u8")), checked);
+        assertEquals("Chile13C@CNCVerse", source.getStableSourceId());
+        assertEquals("13C (1080p)", source.getVariantId());
+        assertEquals("application/x-mpegURL", source.getMimeType());
+    }
+    @Test public void chilePrivateTargetsAreRejectedBeforeValidation() {
+        for (String uri : Arrays.asList("http://127.0.0.1/a.m3u8", "http://10.0.0.1/a.m3u8",
+                "http://169.254.169.254/a.m3u8", "http://localhost/a.m3u8", "http://[::1]/a.m3u8")) {
+            FakeClient client = chileClient(); client.streams = payload("13C", uri);
+            int[] attempts = {0};
+            assertThrows(IOException.class, () -> new CncVerseStreamResolver(null, client,
+                    (url, headers, context, progress) -> attempts[0]++).resolve(chileChannel()));
+            assertEquals(0, attempts[0]);
+        }
+    }
+    @Test public void chileModeNeverFallsBackToNeighbouringMetadata() {
+        FakeClient client = chileClient();
+        client.catalog = "{\"metas\":[{\"name\":\"13C\",\"id\":\"other\"}]}";
+        assertThrows(IOException.class, () -> resolver(client).resolve(chileChannel()));
+        assertEquals(1, client.requests.size());
+        FakeClient ambiguous = chileClient();
+        ambiguous.catalog = "{\"metas\":[{\"name\":\"13C (1080p)\",\"id\":\"a\"},"
+                + "{\"name\":\"13C (1080p)\",\"id\":\"b\"}]}";
+        assertThrows(IOException.class, () -> resolver(ambiguous).resolve(chileChannel()));
+    }
+    @Test public void chileFallsBackOnlyAmongItsOwnValidatedHlsSources() throws Exception {
+        FakeClient client = chileClient();
+        org.json.JSONArray streams = new org.json.JSONArray();
+        streams.put(new JSONObject().put("url", "https://1.1.1.1/dead.m3u8"));
+        streams.put(new JSONObject().put("url", "https://1.1.1.1/good.m3u8"));
+        client.streams = new JSONObject().put("streams", streams).toString();
+        List<URI> attempts = new ArrayList<>();
+        ResolvedPlaybackSource source = new CncVerseStreamResolver(null, client, (uri, headers, context, progress) -> {
+            attempts.add(uri); if (uri.getPath().contains("dead")) throw new IOException("private-detail");
+        }).resolve(chileChannel());
+        assertEquals(2, attempts.size()); assertEquals("/good.m3u8", source.getPlaybackUri().getPath());
+    }
+    @Test public void chileRejectsRawDrmAndNonHls() throws Exception {
+        FakeClient client = chileClient();
+        JSONObject stream = new JSONObject().put("url", "https://1.1.1.1/a.m3u8")
+                .put("behaviorHints", new JSONObject().put("drmConfiguration", "dummy"));
+        client.streams = new JSONObject().put("streams", new org.json.JSONArray().put(stream)).toString();
+        int[] attempts = {0};
+        assertThrows(IOException.class, () -> new CncVerseStreamResolver(null, client,
+                (url, headers, context, progress) -> attempts[0]++).resolve(chileChannel()));
+        assertEquals(0, attempts[0]);
+        for (String uri : Arrays.asList("file:///a.m3u8", "https://1.1.1.1/a.mpd", "https://1.1.1.1/a.m3u8#x",
+                "https://user:password@1.1.1.1/a.m3u8", "http://1.1.1.1/a.m3u8?token=fake")) {
+            assertNull(CncVerseStreamResolver.chilePlaybackUri(uri));
+        }
+        assertEquals("http", CncVerseStreamResolver.chilePlaybackUri("http://1.1.1.1/a.m3u8").getScheme());
+    }
+    @Test public void chileReferenceModeIsClosedAndNot247AnnotationIsLiteral() throws Exception {
+        assertEquals("chiletv", CncVerseStreamResolver.referenceParts("chiletv|TV [Not 24/7]|auto")[0]);
+        for (String ref : Arrays.asList("chiletv|TV|custom", "chiletv|http://local|auto",
+                "unknown|TV|auto", "sportsworld|TV [Not 24/7]|auto", "chiletv|TV?secret=x|auto")) {
+            assertThrows(IOException.class, () -> CncVerseStreamResolver.referenceParts(ref));
+        }
+    }
 }
