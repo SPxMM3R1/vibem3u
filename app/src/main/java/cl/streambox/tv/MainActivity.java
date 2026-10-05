@@ -4541,9 +4541,9 @@ public final class MainActivity extends Activity {
             tvvooBackupActive = source.hasResolver();
         } else if (TvVooBackup.directBackupOf(channel) != null) {
             // Elegir una señal de respaldo la deja fija también para las reconexiones.
-            int index = TvVooBackup.directBackupsOf(channel).indexOf(source.getPlaybackUri());
-            tvvooBackupActive = index >= 0;
-            directBackupIndex = Math.max(0, index);
+            int backupIndex = TvVooBackup.directBackupsOf(channel).indexOf(source.getPlaybackUri());
+            tvvooBackupActive = backupIndex >= 0;
+            directBackupIndex = Math.max(0, backupIndex);
         }
 
         playbackHasStarted = false;
