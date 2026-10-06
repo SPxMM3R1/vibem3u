@@ -34,7 +34,7 @@ public final class MeganoticiasStreamResolver implements StreamResolver {
         this(null, httpClient);
     }
 
-    private MeganoticiasStreamResolver(
+    MeganoticiasStreamResolver(
             ResolverDefinition definition,
             TokenHttpClient httpClient
     ) {
@@ -98,6 +98,34 @@ public final class MeganoticiasStreamResolver implements StreamResolver {
     }
 
     private ResolvedPlaybackSource resolveInContext(
+            Channel channel,
+            ResolutionProgressListener listener
+    ) throws IOException {
+        // A valid master does not prove that its token authorizes the video.
+        // Renew once on a rejected session, within the SAME total deadline.
+        for (int attempt = 0; ; attempt++) {
+            ResolutionContext.current().check();
+            try {
+                return resolveAttempt(channel, listener);
+            } catch (IOException error) {
+                if (attempt != 0 || !isAuthorizationFailure(error)) throw error;
+                ResolutionContext.current().check();
+            }
+        }
+    }
+
+    private static boolean isAuthorizationFailure(IOException error) {
+        Throwable cause = error;
+        for (int depth = 0; cause != null && depth < 32; depth++, cause = cause.getCause()) {
+            if (cause instanceof TokenHttpClient.HttpStatusException) {
+                int status = ((TokenHttpClient.HttpStatusException) cause).getStatusCode();
+                return status == 401 || status == 403;
+            }
+        }
+        return false;
+    }
+
+    private ResolvedPlaybackSource resolveAttempt(
             Channel channel,
             ResolutionProgressListener listener
     ) throws IOException {
@@ -170,7 +198,9 @@ public final class MeganoticiasStreamResolver implements StreamResolver {
                 livePage,
                 playbackOrigin
         );
-        validator.validateForPlayback(playbackUri, playbackHeaders, progress);
+        // Capture the accepted master + variant for Media3 only AFTER a recent
+        // media segment was authorized. Never cache a master-only false positive.
+        validator.validate(playbackUri, playbackHeaders, progress);
         progress.onProgress(ResolutionProgress.of(
                 ResolutionStage.SOURCE_FOUND,
                 "Playlist HLS válida · id=" + providerConfig.getStreamId()
