@@ -15,6 +15,11 @@ final class PlaybackPreferences {
     private static final String QUALITY_PREFIX = "quality_";
     private static final String AUTOMATIC_QUALITY_VALUE = "auto";
     private static final String SUBTITLES_PREFIX = "subtitles_";
+    /** Señal elegida a mano en «Fuentes y calidades» (0.5.75). */
+    private static final String SOURCE_PREFIX = "source_";
+    static final String SOURCE_PRINCIPAL = "principal";
+    static final String SOURCE_TVVOO_BACKUP = "tvvoo";
+    static final String SOURCE_DIRECT_BACKUP_PREFIX = "backup:";
 
     static final class QualityPreference {
         final int bitrate;
@@ -85,6 +90,25 @@ final class PlaybackPreferences {
                 .apply();
     }
 
+    /** Última señal elegida para el canal, o "" si nunca se eligió una. */
+    String getSourceChoice(Channel channel) {
+        String value = preferences.getString(sourceKey(channel), "");
+        return value == null ? "" : value;
+    }
+
+    void rememberSourceChoice(Channel channel, String value) {
+        if (value == null || AppStrings.isBlank(value)) {
+            preferences.edit().remove(sourceKey(channel)).apply();
+        } else {
+            preferences.edit().putString(sourceKey(channel), value).apply();
+        }
+    }
+
+    /** Respaldo directo identificado por la huella de su dirección (no se guarda la URL). */
+    static String directBackupChoice(java.net.URI uri) {
+        return SOURCE_DIRECT_BACKUP_PREFIX + sha256(String.valueOf(uri));
+    }
+
     boolean getSubtitles(Channel channel) {
         return preferences.getBoolean(subtitlesKey(channel), true);
     }
@@ -112,6 +136,10 @@ final class PlaybackPreferences {
 
     private static String qualityKey(Channel channel) {
         return QUALITY_PREFIX + sha256(channelIdentity(channel));
+    }
+
+    private static String sourceKey(Channel channel) {
+        return SOURCE_PREFIX + sha256(channelIdentity(channel));
     }
 
     private static String subtitlesKey(Channel channel) {

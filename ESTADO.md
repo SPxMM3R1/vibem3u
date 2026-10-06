@@ -153,6 +153,20 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-06** (UTC): 0.5.75 (`versionCode` 184), pedidos del usuario.
+  - Logo del OSD: al cambiar de canal ya no aparece el nombre unos cuadros antes del logo. Con
+    logo, el recuadro queda vacío (INVISIBLE) hasta que llega; el nombre solo se ve si el canal
+    no tiene logo o si falla la descarga sin caché (`showChannelLogoFallback`).
+  - Memoria del selector de señales: `PlaybackPreferences.rememberSourceChoice` guarda por canal
+    la señal elegida (principal, respaldo directo por huella SHA-256 de su URL —no la URL— o
+    respaldo TvVoo) y `applyRememberedSourceChoice` abre ahí. Si falla, sigue con los demás
+    respaldos y una vez vuelve a la principal (`rememberedBackupStart`/`backupReturnedToPrincipal`,
+    índice pendiente -1 = principal). Versión TvVoo elegida: `TvVooSourceHistory.pinAlias` la
+    prueba primero (carrera y resolución directa). Elegir otra señal reemplaza la memoria. La
+    calidad ya se recordaba por canal.
+  - Versiones TvVoo de otro país que la del editor se muestran con el país («EUROSPORT 1 · PT»):
+    Lista M3U publica respaldos de otros países para Eurosport 1 y 2 (`backupCountries`).
+  Pruebas nuevas: `SourceMemoryTest`. Pendiente: confirmar en la TV.
 - **2026-10-06 UTC**: cierre de publicación 0.5.74/183: Android CI `37542313890` y Release `37542728936` correctos, tag `a3687ac`, APK descargada de GitHub con SHA256/firma compatible comprobadas. Instalación de esa APK (no debug): canal 007 con vídeo real entre 22:50–22:52 UTC, dos fotogramas distintos y OSD 1080p30 H.264/AAC. Sin 401/recuperación observados en ese intervalo. Documentación solamente; no mover el tag ni generar otro binario. Prueba física e intermitencia upstream siguen sin resolverse de manera concluyente.
 - **2026-10-06 UTC**: preparada 0.5.74/183 tras publicar `a22cca4`. Solo incremento de versión y documentación. Exigir Android CI completo del SHA de versión antes de tag y Release; no presentar push como APK publicada. La reparación acota autorización/intermitencia, no garantiza funcionamiento ante caída general del proveedor.
 - **2026-10-06 UTC**: reparación de falsos positivos de autorización de Meganoticias en app y auxiliar: master → variante → segmento, handoff solo del flujo aceptado y un reintento 401/403 acotado al plazo original. Nueve tests cubren renovación, rechazo persistente, no renovar 404/contenido inválido, cancelación, presupuesto, headers/handoff y expiración RAM. Runner/editor primero (312 Python, una copia omitida por ruta, 41 JS); 340 Android debug, lint/APK debug y 39 auxiliar verdes. Prueba Java y fotograma muestran vídeo real; la prueba previa también se recuperó sin cambios, así que el origen de la intermitencia 401 no está confirmado. Sin cambios editoriales ni visuales. Publicar corrección y preparar 0.5.74/183; CI/Release/TV física no se sustituyen por la validación JVM.

@@ -202,6 +202,11 @@ public final class TvVooStreamResolver implements StreamResolver {
                 channel == null ? null : channel.getAttributes().get("x-resolver-stable-id")));
         // El selector muestra la versión del editor primero, sin reordenar por historial.
         String preferred = aliases.isEmpty() ? "" : aliases.iterator().next();
+        // Una versión elegida a mano en el selector se prueba antes que las demás.
+        List<String> pinnedFirst = TvVooSourceHistory.withPinnedFirst(
+                stableSourceId(channel), new ArrayList<>(aliases));
+        aliases.clear();
+        aliases.addAll(pinnedFirst);
         int maxAliases = definition.getIntConfig(
                 "maxAliases",
                 DEFAULT_MAX_ALIASES,
@@ -264,7 +269,7 @@ public final class TvVooStreamResolver implements StreamResolver {
             boolean isPreferred = version.alias.equals(preferred);
             if (version.best == null) {
                 rows.add(ResolvedPlaybackCandidate.version(
-                        versionName(version.alias), version.failure, null,
+                        versionLabel(version.alias, preferred), version.failure, null,
                         version.alias, "—", false, isPreferred, 0));
                 continue;
             }
@@ -274,7 +279,7 @@ public final class TvVooStreamResolver implements StreamResolver {
                     Math.max(0L, version.respondedMillis) / 1000.0);
             String quality = best.info == null ? "Calidad sin datos" : best.info.label();
             rows.add(ResolvedPlaybackCandidate.version(
-                    versionName(version.alias),
+                    versionLabel(version.alias, preferred),
                     detail,
                     ResolvedPlaybackSource.dynamic(
                             getId(),
@@ -652,7 +657,7 @@ public final class TvVooStreamResolver implements StreamResolver {
         String quality = chosen.info == null ? "calidad sin datos" : chosen.info.label();
         progress.onProgress(ResolutionProgress.of(
                 ResolutionStage.SOURCE_FOUND,
-                "TvVoo · " + versionName(chosen.link.alias) + " · " + quality
+                "TvVoo · " + versionLabel(chosen.link.alias, stableId) + " · " + quality
         ));
         return ResolvedPlaybackSource.dynamic(
                 getId(),
@@ -704,9 +709,35 @@ public final class TvVooStreamResolver implements StreamResolver {
         String preferred = aliases.isEmpty() ? "" : aliases.iterator().next();
         for (String alias : aliases) {
             if (result.size() >= maxAliases) break;
-            result.add(new PlannedVersion(alias, versionName(alias), alias.equals(preferred)));
+            result.add(new PlannedVersion(alias, versionLabel(alias, preferred), alias.equals(preferred)));
         }
         return result;
+    }
+
+    /**
+     * Nombre para el selector: el de la versión y, si es de otro país que la versión del editor
+     * (respaldos de otros idiomas, p. ej. Eurosport), el país: «EUROSPORT 1 · PT».
+     */
+    static String versionLabel(String alias, String preferredAlias) {
+        String name = versionName(alias);
+        String country = groupCode(alias);
+        if (country.isEmpty() || country.equals(groupCode(preferredAlias))) return name;
+        return name + " · " + country.toUpperCase(Locale.ROOT);
+    }
+
+    /** Código de país del alias («…%7Cgroup%3Apt» → «pt»), o "" si no lo trae. */
+    static String groupCode(String alias) {
+        if (alias == null) return "";
+        String lower = alias.toLowerCase(Locale.ROOT);
+        int index = lower.lastIndexOf("%7cgroup%3a");
+        int skip = "%7cgroup%3a".length();
+        if (index < 0) {
+            index = lower.lastIndexOf("|group:");
+            skip = "|group:".length();
+        }
+        if (index < 0) return "";
+        String code = lower.substring(index + skip).trim();
+        return code.matches("[a-z]{2}") ? code : "";
     }
 
     /** Nombre legible de una versión: «vavoo_TNT%20SPORTS%203%7Cgroup%3Auk» → «TNT SPORTS 3». */

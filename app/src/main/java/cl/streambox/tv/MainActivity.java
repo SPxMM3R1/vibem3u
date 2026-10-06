@@ -197,7 +197,12 @@ public final class MainActivity extends Activity {
     private String pendingTvVooBackupIdentity;
     /** Respaldo directo en uso (0 = el primero) mientras tvvooBackupActive; 0.5.72. */
     private int directBackupIndex;
+    /** -1 = la recuperación vuelve a la señal principal (tras fallar la recordada). */
     private int pendingDirectBackupIndex;
+    /** El canal abrió en la señal recordada del selector, no en la principal (0.5.75). */
+    private boolean rememberedBackupStart;
+    /** La señal recordada falló y ya se volvió una vez a la principal. */
+    private boolean backupReturnedToPrincipal;
     private boolean adjustLogoSizeAfterSettings;
     private String logoSizeKey;
     private float logoSizeOriginal = 1f;
@@ -1674,9 +1679,17 @@ public final class MainActivity extends Activity {
         tvvooNoSignalToken++;
         channelIndex = (requestedIndex % channels.size() + channels.size()) % channels.size();
         Channel channel = channels.get(channelIndex);
-        tvvooBackupActive = PlaybackPreferences.channelIdentity(channel)
-                .equals(pendingTvVooBackupIdentity) && TvVooBackup.has(channel);
-        directBackupIndex = tvvooBackupActive ? pendingDirectBackupIndex : 0;
+        boolean resumingRecovery = PlaybackPreferences.channelIdentity(channel)
+                .equals(pendingTvVooBackupIdentity);
+        if (resumingRecovery) {
+            tvvooBackupActive = pendingDirectBackupIndex >= 0 && TvVooBackup.has(channel);
+            directBackupIndex = Math.max(0, pendingDirectBackupIndex);
+        } else {
+            tvvooBackupActive = false;
+            directBackupIndex = 0;
+            backupReturnedToPrincipal = false;
+            rememberedBackupStart = applyRememberedSourceChoice(channel);
+        }
         pendingTvVooBackupIdentity = null;
         playbackGeneration++;
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
@@ -2034,6 +2047,37 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void rememberSourceChoice(Channel channel, String value) {
+        if (playbackPreferences != null) playbackPreferences.rememberSourceChoice(channel, value);
+        rememberedBackupStart = !PlaybackPreferences.SOURCE_PRINCIPAL.equals(value);
+        backupReturnedToPrincipal = false;
+    }
+
+    /**
+     * Abre el canal en la señal elegida la última vez en el selector (0.5.75). Devuelve true si
+     * empieza en un respaldo y no en la señal principal.
+     */
+    private boolean applyRememberedSourceChoice(Channel channel) {
+        if (playbackPreferences == null || channel == null || !TvVooBackup.has(channel)) return false;
+        String choice = playbackPreferences.getSourceChoice(channel);
+        if (PlaybackPreferences.SOURCE_TVVOO_BACKUP.equals(choice) && TvVooBackup.hasTvVoo(channel)) {
+            tvvooBackupActive = true;
+            return true;
+        }
+        if (choice.startsWith(PlaybackPreferences.SOURCE_DIRECT_BACKUP_PREFIX)
+                && !TvVooBackup.hasTvVoo(channel)) {
+            List<URI> backups = TvVooBackup.directBackupsOf(channel);
+            for (int index = 0; index < backups.size(); index++) {
+                if (choice.equals(PlaybackPreferences.directBackupChoice(backups.get(index)))) {
+                    tvvooBackupActive = true;
+                    directBackupIndex = index;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /** Canal con el que se resuelve la reproducción: el de respaldo si está activo. */
     private Channel resolutionChannelFor(Channel channel) {
         if (!tvvooBackupActive || channel == null) return channel;
@@ -2052,18 +2096,31 @@ public final class MainActivity extends Activity {
         Channel channel = playbackChannel;
         if (channel == null || !TvVooBackup.has(channel)) return false;
         if (tvvooBackupActive) {
-            if (TvVooBackup.hasTvVoo(channel)
-                    || directBackupIndex + 1 >= TvVooBackup.directBackupsOf(channel).size()) {
+            boolean moreDirect = !TvVooBackup.hasTvVoo(channel)
+                    && directBackupIndex + 1 < TvVooBackup.directBackupsOf(channel).size();
+            if (moreDirect) {
+                directBackupIndex++;
+            } else if (rememberedBackupStart && !backupReturnedToPrincipal) {
+                // La señal recordada del selector y las siguientes fallaron: una vez, la principal.
+                backupReturnedToPrincipal = true;
+                return switchPlaybackSource(channel, reason, -1);
+            } else {
                 return false;
             }
-            directBackupIndex++;
         } else {
+            if (backupReturnedToPrincipal) return false;
             directBackupIndex = 0;
         }
-        Log.i(PLAYBACK_HEALTH_TAG, "backup reason=" + reason + " index=" + directBackupIndex);
+        return switchPlaybackSource(channel, reason, directBackupIndex);
+    }
+
+    /** Pasa a otra señal del canal (índice de respaldo directo, o -1 = principal). */
+    private boolean switchPlaybackSource(Channel channel, String reason, int backupIndex) {
+        Log.i(PLAYBACK_HEALTH_TAG, "backup reason=" + reason + " index=" + backupIndex);
         pendingTvVooBackupIdentity = PlaybackPreferences.channelIdentity(channel);
-        pendingDirectBackupIndex = directBackupIndex;
-        tvvooBackupActive = true;
+        pendingDirectBackupIndex = backupIndex;
+        tvvooBackupActive = backupIndex >= 0;
+        directBackupIndex = Math.max(0, backupIndex);
         playbackAutoRecoveryInFlight = true;
         playbackRecoveryFailed = false;
         setStatus("RESPALDO", R.color.amber);
@@ -2122,9 +2179,10 @@ public final class MainActivity extends Activity {
             // again: it may have expired, so ask the resolver for a new one.
             resolverCoordinator.invalidate(resolutionChannel, resolver);
         }
-        if (tvvooBackupActive) {
+        if (tvvooBackupActive || backupReturnedToPrincipal || rememberedBackupStart) {
+            // La reconexión sigue en la misma señal (también si es la principal tras volver).
             pendingTvVooBackupIdentity = identity;
-            pendingDirectBackupIndex = directBackupIndex;
+            pendingDirectBackupIndex = tvvooBackupActive ? directBackupIndex : -1;
         }
         // A first watchdog/decoder recovery recreates ExoPlayer but keeps the
         // validated TvVoo/MediaFlow source in the process-only coordinator
@@ -2988,19 +3046,26 @@ public final class MainActivity extends Activity {
         String fallback = classicUi ? initials(channel.getName()) : channel.getName();
         String expectedIdentity = PlaybackPreferences.channelIdentity(channel);
         long requestGeneration = ++logoRequestGeneration;
+        boolean hasLogo = logoUri != null && ("http".equalsIgnoreCase(logoUri.getScheme())
+                || "https".equalsIgnoreCase(logoUri.getScheme()));
+        channelLogoFallback.setText(fallback);
         if (!expectedIdentity.equals(displayedLogoIdentity)) {
             finishLogoSizeAdjust(false);
             displayedLogoBitmap = null;
             displayedLogoKey = null;
             channelLogo.setImageDrawable(null);
-            channelLogo.setVisibility(View.GONE);
-            channelLogoFallback.setText(fallback);
-            channelLogoFallback.setVisibility(View.VISIBLE);
             displayedLogoIdentity = "";
+            if (hasLogo) {
+                // Con logo, el recuadro queda vacío hasta que llega (caché: unos cuadros).
+                // Mostrar el nombre mientras tanto lo hacía parpadear al cambiar de canal.
+                channelLogo.setVisibility(View.INVISIBLE);
+                channelLogoFallback.setVisibility(View.GONE);
+            } else {
+                channelLogo.setVisibility(View.GONE);
+                channelLogoFallback.setVisibility(View.VISIBLE);
+            }
         }
-        if (logoUri == null || !("http".equalsIgnoreCase(logoUri.getScheme()) || "https".equalsIgnoreCase(logoUri.getScheme()))) {
-            return;
-        }
+        if (!hasLogo) return;
 
         int expectedIndex = channelIndex;
         // Se carga con margen de sobra: el tamaño final lo fija el tamaño óptico.
@@ -3043,9 +3108,24 @@ public final class MainActivity extends Activity {
                         requestGeneration
                 ));
             } catch (Exception ignored) {
-                // El logo en caché ya mostrado permanece si falla la actualización.
+                // El logo en caché ya mostrado permanece si falla la actualización. Sin caché
+                // y sin red, el nombre ocupa el lugar del logo.
+                if (cached == null) {
+                    mainHandler.post(() -> showChannelLogoFallback(
+                            expectedIndex, expectedIdentity, requestGeneration));
+                }
             }
         });
+    }
+
+    private void showChannelLogoFallback(int expectedIndex, String expectedIdentity,
+            long requestGeneration) {
+        if (requestGeneration != logoRequestGeneration
+                || !isCurrentLogo(expectedIndex, expectedIdentity)
+                || isFinishing()
+                || expectedIdentity.equals(displayedLogoIdentity)) return;
+        channelLogo.setVisibility(View.GONE);
+        channelLogoFallback.setVisibility(View.VISIBLE);
     }
 
     private void showChannelLogo(
@@ -4549,11 +4629,21 @@ public final class MainActivity extends Activity {
         if (!isCurrentPlayback(channel, playbackGeneration)) return;
         if (TvVooBackup.hasTvVoo(channel)) {
             tvvooBackupActive = source.hasResolver();
+            rememberSourceChoice(channel, tvvooBackupActive
+                    ? PlaybackPreferences.SOURCE_TVVOO_BACKUP : PlaybackPreferences.SOURCE_PRINCIPAL);
         } else if (TvVooBackup.directBackupOf(channel) != null) {
             // Elegir una señal de respaldo la deja fija también para las reconexiones.
             int backupIndex = TvVooBackup.directBackupsOf(channel).indexOf(source.getPlaybackUri());
             tvvooBackupActive = backupIndex >= 0;
             directBackupIndex = Math.max(0, backupIndex);
+            rememberSourceChoice(channel, backupIndex >= 0
+                    ? PlaybackPreferences.directBackupChoice(source.getPlaybackUri())
+                    : PlaybackPreferences.SOURCE_PRINCIPAL);
+        }
+        // Versión TvVoo elegida (canal TvVoo o respaldo TvVoo): se prueba primero las próximas veces.
+        if (source.hasResolver() && "tvvoo".equalsIgnoreCase(source.getResolverId())
+                && !AppStrings.isBlank(source.getVariantId())) {
+            TvVooSourceHistory.pinAlias(source.getStableSourceId(), source.getVariantId());
         }
 
         playbackHasStarted = false;

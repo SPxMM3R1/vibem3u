@@ -25,6 +25,8 @@ import java.util.Map;
 final class TvVooSourceHistory {
     private static final String PREFS = "tvvoo_source_history";
     private static final String ENTRY_PREFIX = "entry_";
+    /** Versión elegida a mano en «Fuentes y calidades»: se prueba primero (0.5.75). */
+    private static final String PIN_PREFIX = "pin_";
     private static final int MAX_CHANNELS = 64;
     private static final int MAX_ALIASES_PER_CHANNEL = 8;
     private static final int MAX_SCORE = 12;
@@ -58,7 +60,41 @@ final class TvVooSourceHistory {
         if (aliases == null || aliases.isEmpty()) return Collections.emptyList();
         TvVooSourceHistory store = active;
         if (store == null) return new ArrayList<>(aliases);
-        return store.order(channelIdentity, aliases);
+        return withPinnedFirst(channelIdentity, store.order(channelIdentity, aliases));
+    }
+
+    /** Ancla la versión elegida por el usuario para este canal; null o vacío la quita. */
+    static void pinAlias(String channelIdentity, String alias) {
+        TvVooSourceHistory store = active;
+        if (store == null || channelIdentity == null) return;
+        String key = PIN_PREFIX + key(channelIdentity);
+        if (alias == null || !isSafeAlias(alias)) {
+            store.preferences.edit().remove(key).apply();
+        } else {
+            store.preferences.edit().putString(key, alias.trim()).apply();
+        }
+    }
+
+    static String pinnedAlias(String channelIdentity) {
+        TvVooSourceHistory store = active;
+        if (store == null || channelIdentity == null) return "";
+        String value = store.preferences.getString(PIN_PREFIX + key(channelIdentity), "");
+        return isSafeAlias(value) ? value : "";
+    }
+
+    /** La versión anclada va primero si está entre las del canal; el resto conserva su orden. */
+    static List<String> withPinnedFirst(String channelIdentity, List<String> aliases) {
+        if (aliases == null || aliases.isEmpty()) return aliases;
+        String pinned = canonicalAlias(pinnedAlias(channelIdentity));
+        if (pinned.isEmpty()) return aliases;
+        for (int index = 0; index < aliases.size(); index++) {
+            if (pinned.equals(canonicalAlias(aliases.get(index)))) {
+                List<String> result = new ArrayList<>(aliases);
+                result.add(0, result.remove(index));
+                return result;
+            }
+        }
+        return aliases;
     }
 
     static void recordSuccess(String channelIdentity, String alias) {
