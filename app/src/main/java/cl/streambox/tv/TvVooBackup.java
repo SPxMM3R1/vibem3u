@@ -18,6 +18,8 @@ final class TvVooBackup {
     static final String ATTRIBUTE = "x-backup-tvvoo";
     /** Dirección directa de respaldo; solo existe en memoria, nunca se publica. */
     static final String DIRECT_ATTRIBUTE = "x-backup-stream";
+    /** Stable public ID of an internal CNCVerse backup, kept only in the projected channel. */
+    private static final String SOURCE_ID_PREFIX = "x-backup-source-id-";
 
     private TvVooBackup() {}
 
@@ -45,7 +47,8 @@ final class TvVooBackup {
 
     /**
      * Direcciones directas de respaldo en el orden en que se prueban (desde la 0.5.72 puede
-     * haber varias: {@code backupm3u} del layout). Solo http/https; las inválidas se omiten.
+     * haber varias: {@code backupm3u} del layout). HTTP(S) o referencia CNCVerse validada;
+     * esta última debe pasar por el resolutor, nunca directamente por Media3.
      */
     static List<URI> directBackupsOf(Channel channel) {
         if (channel == null) return Collections.emptyList();
@@ -53,16 +56,25 @@ final class TvVooBackup {
         if (value == null || value.trim().isEmpty()) return Collections.emptyList();
         List<URI> result = new ArrayList<>();
         for (String line : value.split("\n")) {
-            URI uri = httpUri(line.trim());
+            URI uri = playbackReference(line.trim());
             if (uri != null && !result.contains(uri)) result.add(uri);
         }
         return Collections.unmodifiableList(result);
     }
 
-    private static URI httpUri(String value) {
+    private static URI playbackReference(String value) {
         if (value.isEmpty()) return null;
         try {
             URI uri = URI.create(value);
+            if (DynamicSourceReference.isAppOnly(uri)
+                    && CncVerseStreamResolver.ID.equals(DynamicSourceReference.provider(uri))) {
+                try {
+                    CncVerseStreamResolver.referenceParts(DynamicSourceReference.stableId(uri));
+                    return uri;
+                } catch (java.io.IOException invalid) {
+                    return null;
+                }
+            }
             String scheme = uri.getScheme();
             return "http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme) ? uri : null;
         } catch (IllegalArgumentException error) {
@@ -88,15 +100,20 @@ final class TvVooBackup {
         if (channel == null || backups == null || backups.isEmpty()) return channel;
         List<String> lines = new ArrayList<>();
         for (URI uri : directBackupsOf(channel)) lines.add(uri.toString());
+        Map<String, String> attributes = new LinkedHashMap<>(channel.getAttributes());
         for (Channel backup : backups) {
             URI uri = backup == null || backup.getStreamUri() == null ? null
-                    : httpUri(backup.getStreamUri().toString());
+                    : playbackReference(backup.getStreamUri().toString());
             if (uri == null || uri.equals(channel.getStreamUri())
                     || lines.contains(uri.toString())) continue;
+            if (DynamicSourceReference.isAppOnly(uri)) {
+                String id = backup.getTvgId();
+                if (AppStrings.isBlank(id)) continue;
+                attributes.put(SOURCE_ID_PREFIX + lines.size(), id);
+            }
             lines.add(uri.toString());
         }
         if (lines.isEmpty()) return channel;
-        Map<String, String> attributes = new LinkedHashMap<>(channel.getAttributes());
         attributes.put(DIRECT_ATTRIBUTE, String.join("\n", lines));
         return new Channel(channel.getName(), channel.getStreamUri(), channel.getLogoUri(),
                 channel.getGroup(), attributes);
@@ -107,8 +124,20 @@ final class TvVooBackup {
         List<URI> backups = directBackupsOf(channel);
         if (index < 0 || index >= backups.size()) return null;
         Map<String, String> attributes = new LinkedHashMap<>(channel.getAttributes());
+        URI uri = backups.get(index);
+        String backupId = attributes.get(SOURCE_ID_PREFIX + index);
         attributes.remove(DIRECT_ATTRIBUTE);
-        return new Channel(channel.getName(), backups.get(index), channel.getLogoUri(),
+        attributes.keySet().removeIf(key -> key.startsWith(SOURCE_ID_PREFIX));
+        if (DynamicSourceReference.isAppOnly(uri)) {
+            if (AppStrings.isBlank(backupId)) return null;
+            // Resolve the backup's identity/reference, not the principal's provider metadata.
+            attributes.put("tvg-id", backupId);
+            attributes.put("x-resolver", DynamicSourceReference.provider(uri));
+            attributes.put("x-resolver-id", DynamicSourceReference.stableId(uri));
+            attributes.remove("x-resolver-ids");
+            attributes.remove("x-resolver-stable-id");
+        }
+        return new Channel(channel.getName(), uri, channel.getLogoUri(),
                 channel.getGroup(), attributes);
     }
 

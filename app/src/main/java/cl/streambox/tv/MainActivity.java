@@ -2201,6 +2201,11 @@ public final class MainActivity extends Activity {
         Channel resolutionChannel = resolutionChannelFor(channel);
         StreamResolver resolver = streamResolverRegistry.find(resolutionChannel);
         if (resolver == null) {
+            if (DynamicSourceReference.isAppOnly(resolutionChannel.getStreamUri())) {
+                // An unavailable/disabled resolver cannot turn its locator into a media URL.
+                showPlaybackFailure();
+                return;
+            }
             startupMetrics.dequeued(startupMetrics.currentId());
             startupMetrics.resolved(startupMetrics.currentId());
             showLoadingState(getString(R.string.loading_direct_source));
@@ -2489,6 +2494,11 @@ public final class MainActivity extends Activity {
         long requestId = ++playbackResolutionRequestId;
         setStatus("CARGANDO", R.color.amber);
         showLoadingState(getString(R.string.source_selector_switching));
+        if (DynamicSourceReference.isAppOnly(source.getPlaybackUri())) {
+            // The selector row carries a tokenless locator, not a playable URL.
+            resolveAndPlay(channel, playbackGeneration, true);
+            return;
+        }
         startResolvedPlayback(channel, source, playbackGeneration, requestId);
     }
 
