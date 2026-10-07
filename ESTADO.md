@@ -153,6 +153,11 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-06** (UTC): 0.5.76 (`versionCode` 185): la memoria del selector también cubre Highfly,
+  CNCVerse y cualquier resolutor sin versiones propias. Se guarda el nombre de la fuente elegida
+  (`resolver_source_*` por canal y resolutor, sin URL); al abrir el canal (no en reconexiones) se
+  piden las fuentes y se abre esa si sigue disponible (`rememberedSource`); si no, la resolución
+  normal. TvVoo sigue con su versión anclada. Pendiente: confirmar en la TV.
 - **2026-10-06** (UTC): 0.5.75 (`versionCode` 184), pedidos del usuario.
   - Logo del OSD: al cambiar de canal ya no aparece el nombre unos cuadros antes del logo. Con
     logo, el recuadro queda vacío (INVISIBLE) hasta que llega; el nombre solo se ve si el canal

@@ -2286,6 +2286,11 @@ public final class MainActivity extends Activity {
         long measurementId = startupMetrics.currentId();
         ResolutionContext resolutionContext = new ResolutionContext(20_000L);
         playbackResolutionContext = resolutionContext;
+        // Fuente recordada del selector (Highfly, CNCVerse…; 0.5.76). Solo al abrir el canal:
+        // las reconexiones usan la resolución normal para no insistir en una fuente caída.
+        String rememberedLabel = !forceRefresh && playbackRecoveryBudget.used() == 0
+                && playbackPreferences != null && !"tvvoo".equalsIgnoreCase(resolver.getId())
+                ? playbackPreferences.getResolverSourceChoice(channel, resolver.getId()) : "";
         showLoadingState(getString(R.string.loading_resolver_initializing));
         ResolutionProgressListener progressListener = progress -> mainHandler.post(() -> {
             if (isCurrentPlayback(channel, expectedGeneration)
@@ -2304,12 +2309,16 @@ public final class MainActivity extends Activity {
                         showLoadingState(getString(R.string.loading_resolver_resolving));
                     }
                 });
-                ResolvedPlaybackSource source = resolverCoordinator.resolve(
-                        resolutionChannel,
-                        resolver,
-                        forceRefresh,
-                        progressListener
-                );
+                ResolvedPlaybackSource source = rememberedSource(
+                        resolutionChannel, resolver, rememberedLabel, progressListener);
+                if (source == null) {
+                    source = resolverCoordinator.resolve(
+                            resolutionChannel,
+                            resolver,
+                            forceRefresh,
+                            progressListener
+                    );
+                }
                 resolutionContext.check();
                 if (source == null || source.isExpired(System.currentTimeMillis())) {
                     throw new java.io.IOException("La fuente venció antes de iniciar la reproducción.");
@@ -2336,6 +2345,29 @@ public final class MainActivity extends Activity {
                 });
             }
         });
+    }
+
+    /** La fuente elegida la última vez en el selector, si el resolutor todavía la ofrece. */
+    private static ResolvedPlaybackSource rememberedSource(
+            Channel resolutionChannel,
+            StreamResolver resolver,
+            String label,
+            ResolutionProgressListener progress
+    ) {
+        if (AppStrings.isBlank(label)) return null;
+        try {
+            for (ResolvedPlaybackCandidate candidate
+                    : resolver.resolvePlaybackCandidates(resolutionChannel, progress)) {
+                ResolvedPlaybackSource source = candidate.getSource();
+                if (label.equals(candidate.getLabel()) && candidate.isAvailable() && source != null
+                        && !source.isExpired(System.currentTimeMillis())) {
+                    return source;
+                }
+            }
+        } catch (Exception ignored) {
+            // Sin la fuente recordada se usa la resolución normal.
+        }
+        return null;
     }
 
     private void handleResolutionFailure(
@@ -4644,6 +4676,10 @@ public final class MainActivity extends Activity {
         if (source.hasResolver() && "tvvoo".equalsIgnoreCase(source.getResolverId())
                 && !AppStrings.isBlank(source.getVariantId())) {
             TvVooSourceHistory.pinAlias(source.getStableSourceId(), source.getVariantId());
+        } else if (source.hasResolver() && playbackPreferences != null) {
+            // Highfly, CNCVerse y otros: se recuerda la fuente por su nombre en el selector.
+            playbackPreferences.rememberResolverSourceChoice(
+                    channel, source.getResolverId(), candidate.getLabel());
         }
 
         playbackHasStarted = false;

@@ -20,6 +20,8 @@ final class PlaybackPreferences {
     static final String SOURCE_PRINCIPAL = "principal";
     static final String SOURCE_TVVOO_BACKUP = "tvvoo";
     static final String SOURCE_DIRECT_BACKUP_PREFIX = "backup:";
+    /** Fuente elegida de un resolutor sin versiones propias (Highfly, CNCVerse…), por nombre. */
+    private static final String RESOLVER_SOURCE_PREFIX = "resolver_source_";
 
     static final class QualityPreference {
         final int bitrate;
@@ -102,6 +104,25 @@ final class PlaybackPreferences {
         } else {
             preferences.edit().putString(sourceKey(channel), value).apply();
         }
+    }
+
+    /** Nombre de la fuente elegida en el selector para ese resolutor, o "". */
+    String getResolverSourceChoice(Channel channel, String resolverId) {
+        String value = preferences.getString(resolverSourceKey(channel, resolverId), "");
+        return value == null ? "" : value;
+    }
+
+    void rememberResolverSourceChoice(Channel channel, String resolverId, String label) {
+        String key = resolverSourceKey(channel, resolverId);
+        if (label == null || AppStrings.isBlank(label) || label.length() > 200) {
+            preferences.edit().remove(key).apply();
+        } else {
+            preferences.edit().putString(key, label).apply();
+        }
+    }
+
+    private static String resolverSourceKey(Channel channel, String resolverId) {
+        return RESOLVER_SOURCE_PREFIX + sha256(channelIdentity(channel) + "|" + resolverId);
     }
 
     /** Respaldo directo identificado por la huella de su dirección (no se guarda la URL). */
