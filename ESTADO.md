@@ -153,6 +153,14 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-07** (UTC): 0.5.77 (`versionCode` 186). El usuario reportó que en TVN el respaldo
+  elegido volvía al principal. Causa: `directResolutionChannel` copiaba al respaldo HTTP el
+  `tvg-id` 0104 y `x-resolver` del canal dueño, y el resolutor TVN (match por tvg-id) lo resolvía
+  a la señal oficial. Ahora el respaldo HTTP lleva su propio tvg-id (`x-backup-source-id-N`, ya
+  guardado para todos los respaldos) y ningún `x-resolver*`. Además: «Directo» en el selector de
+  un canal con resolutor vuelve a resolver la señal oficial (su URL publicada es solo respaldo y
+  la de TVN da 403 en Chile), y el selector consulta fuentes también en CNCVerse (antes solo
+  TvVoo/Highfly), para que su memoria tenga qué recordar. Prueba nueva en `SourceMemoryTest`.
 - **2026-10-06** (UTC): 0.5.76 (`versionCode` 185): la memoria del selector también cubre Highfly,
   CNCVerse y cualquier resolutor sin versiones propias. Se guarda el nombre de la fuente elegida
   (`resolver_source_*` por canal y resolutor, sin URL); al abrir el canal (no en reconexiones) se

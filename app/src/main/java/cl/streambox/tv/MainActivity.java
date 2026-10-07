@@ -4097,7 +4097,8 @@ public final class MainActivity extends Activity {
     private static boolean supportsSourceSelector(StreamResolver resolver) {
         if (resolver == null || AppStrings.isBlank(resolver.getId())) return false;
         String id = resolver.getId();
-        return "tvvoo".equalsIgnoreCase(id) || "highfly".equalsIgnoreCase(id);
+        return "tvvoo".equalsIgnoreCase(id) || "highfly".equalsIgnoreCase(id)
+                || "cncverse".equalsIgnoreCase(id);
     }
 
     private void startSourceSelectorQuery(Channel channel, StreamResolver resolver) {
@@ -4671,6 +4672,21 @@ public final class MainActivity extends Activity {
             rememberSourceChoice(channel, backupIndex >= 0
                     ? PlaybackPreferences.directBackupChoice(source.getPlaybackUri())
                     : PlaybackPreferences.SOURCE_PRINCIPAL);
+            if (backupIndex < 0 && streamResolverRegistry != null
+                    && streamResolverRegistry.find(channel) != null) {
+                // «Directo» de un canal con resolutor (TVN): se pide de nuevo la señal oficial;
+                // su dirección publicada es solo un respaldo y puede no responder.
+                closePlaybackSourceSelector();
+                playbackHasStarted = false;
+                playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
+                playbackAutoRecoveryInFlight = false;
+                playbackRecoveryFailed = false;
+                resetPlaybackBitrateMeter();
+                setStatus("CARGANDO", R.color.amber);
+                showLoadingState(getString(R.string.source_selector_switching));
+                resolveAndPlay(channel, playbackGeneration, true);
+                return;
+            }
         }
         // Versión TvVoo elegida (canal TvVoo o respaldo TvVoo): se prueba primero las próximas veces.
         if (source.hasResolver() && "tvvoo".equalsIgnoreCase(source.getResolverId())

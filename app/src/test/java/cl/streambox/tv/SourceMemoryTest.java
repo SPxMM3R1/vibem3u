@@ -43,6 +43,26 @@ public final class SourceMemoryTest {
     }
 
     @Test
+    public void httpBackupDoesNotKeepTheOwnersResolverIdentity() {
+        java.util.Map<String, String> tvnAttributes = new java.util.LinkedHashMap<>();
+        tvnAttributes.put("tvg-id", "0104");
+        tvnAttributes.put("x-resolver", "tvn");
+        tvnAttributes.put("x-resolver-refresh", "on_play");
+        Channel tvn = new Channel("TVN", URI.create("http://15.204.246.24:8080/TVNHD/index.m3u8"),
+                null, "Nacionales", tvnAttributes);
+        Channel ip38 = new Channel("TVN [IP 38]", URI.create("http://38.44.109.41:8003/play/a0gs/index.m3u8"),
+                null, "Nacionales", java.util.Collections.singletonMap("tvg-id", "TVN.cl@Direct38b"));
+
+        Channel withBackup = TvVooBackup.withDirectBackups(tvn, Arrays.asList(ip38));
+        Channel backup = TvVooBackup.directResolutionChannel(withBackup, 0);
+
+        assertEquals(ip38.getStreamUri(), backup.getStreamUri());
+        assertEquals("TVN.cl@Direct38b", backup.getTvgId());
+        assertTrue(backup.getAttributes().keySet().stream().noneMatch(key -> key.startsWith("x-resolver")));
+        assertEquals("tvn", withBackup.getAttributes().get("x-resolver"));
+    }
+
+    @Test
     public void withoutAStoreTheAliasOrderIsUnchanged() {
         List<String> aliases = Arrays.asList("vavoo_A%7Cgroup%3Aes", "vavoo_B%7Cgroup%3Apt");
         assertEquals(aliases, TvVooSourceHistory.withPinnedFirst("spain|vavoo_A", aliases));

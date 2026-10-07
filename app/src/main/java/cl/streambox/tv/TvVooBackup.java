@@ -106,11 +106,10 @@ final class TvVooBackup {
                     : playbackReference(backup.getStreamUri().toString());
             if (uri == null || uri.equals(channel.getStreamUri())
                     || lines.contains(uri.toString())) continue;
-            if (DynamicSourceReference.isAppOnly(uri)) {
-                String id = backup.getTvgId();
-                if (AppStrings.isBlank(id)) continue;
-                attributes.put(SOURCE_ID_PREFIX + lines.size(), id);
-            }
+            String id = backup.getTvgId();
+            if (DynamicSourceReference.isAppOnly(uri) && AppStrings.isBlank(id)) continue;
+            // Identidad propia del respaldo: así no lo reclama el resolutor del canal dueño.
+            if (!AppStrings.isBlank(id)) attributes.put(SOURCE_ID_PREFIX + lines.size(), id);
             lines.add(uri.toString());
         }
         if (lines.isEmpty()) return channel;
@@ -136,6 +135,15 @@ final class TvVooBackup {
             attributes.put("x-resolver-id", DynamicSourceReference.stableId(uri));
             attributes.remove("x-resolver-ids");
             attributes.remove("x-resolver-stable-id");
+        } else {
+            // Respaldo HTTP: se reproduce tal cual. Sin el tvg-id ni los datos de resolutor del
+            // canal dueño (TVN 0104 → su resolutor abría la señal principal en vez del respaldo).
+            attributes.keySet().removeIf(key -> key.startsWith("x-resolver"));
+            if (AppStrings.isBlank(backupId)) {
+                attributes.remove("tvg-id");
+            } else {
+                attributes.put("tvg-id", backupId);
+            }
         }
         return new Channel(channel.getName(), uri, channel.getLogoUri(),
                 channel.getGroup(), attributes);
