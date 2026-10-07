@@ -17,13 +17,8 @@ import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.Future;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.RejectedExecutionException;
+import java.util.LinkedHashSet;
+import java.util.function.LongSupplier;
 
 /** Independent Stremio HTTP client; no Bridge/Cloudstream implementation is bundled. */
 public final class CncVerseStreamResolver implements StreamResolver {
@@ -35,18 +30,25 @@ public final class CncVerseStreamResolver implements StreamResolver {
     private static final String CHILE_CATALOG = "/catalog/tv/cnc_CHILETV_tv.json";
     private static final int MAX_JSON_BYTES = 1024 * 1024;
     private static final long TTL_MS = 120_000L;
-    // Bounded even if a platform DNS call ignores interruption. No IP is persisted.
-    private static final ThreadPoolExecutor DNS_WORKERS = new ThreadPoolExecutor(
-            0, 2, 30L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(2), task -> {
-                Thread thread = new Thread(task, "CNCVerse-DNS");
-                thread.setDaemon(true);
-                return thread;
-            });
+    private static final long CATALOG_TTL_MS = 60_000L;
+    private static final long GROUP_TTL_MS = 15_000L;
+    private static final int MAX_CACHE_BYTES = 512 * 1024;
 
     private final ResolverDefinition definition;
     private final TokenHttpClient client;
     private final HlsCheck validation;
     private final okhttp3.Dns dns;
+    private final LongSupplier clock;
+    private final Map<String, CachedJson> jsonCache = new LinkedHashMap<>(8, 0.75f, true);
+    private long cacheGeneration;
+    private static final class CachedJson {
+        final JSONObject data;
+        final long expires;
+        final int bytes;
+        CachedJson(JSONObject data, long expires, int bytes) {
+            this.data = data; this.expires = expires; this.bytes = bytes;
+        }
+    }
     interface HlsCheck {
         void validate(URI uri, Map<String, String> headers, ResolutionContext context,
                 ResolutionProgressListener progress) throws IOException;
@@ -64,10 +66,15 @@ public final class CncVerseStreamResolver implements StreamResolver {
     }
     CncVerseStreamResolver(ResolverDefinition definition, TokenHttpClient client,
             HlsCheck validation, okhttp3.Dns dns) {
+        this(definition, client, validation, dns, () -> System.nanoTime() / 1_000_000L);
+    }
+    CncVerseStreamResolver(ResolverDefinition definition, TokenHttpClient client,
+            HlsCheck validation, okhttp3.Dns dns, LongSupplier clock) {
         this.definition = definition;
         this.client = client;
         this.validation = validation;
         this.dns = dns;
+        this.clock = clock;
     }
 
     @Override public String getId() { return ID; }
@@ -80,6 +87,9 @@ public final class CncVerseStreamResolver implements StreamResolver {
         return channel == null ? "" : channel.getTvgId();
     }
     @Override public long cacheTtlMillis() { return TTL_MS; }
+    @Override public void clearSensitiveState() {
+        synchronized (jsonCache) { jsonCache.clear(); cacheGeneration++; }
+    }
     @Override public ResolvedPlaybackSource resolve(Channel channel) throws IOException {
         return resolve(channel, ResolutionProgressListener.NONE);
     }
@@ -110,13 +120,43 @@ public final class CncVerseStreamResolver implements StreamResolver {
             context.check();
             progress.onProgress(ResolutionProgress.of(ResolutionStage.PAGE_REQUEST,
                     "CNCVerse · consultando catálogo " + (chile ? "CHILE TV" : "SPORTS WORLD")));
-            JSONObject catalog = json(base + (chile ? CHILE_CATALOG : SPORTS_CATALOG));
-            String resourceId = uniqueResource(catalog, parts[1]);
-            // resourceId can contain session material: it exists only within this attempt.
-            JSONObject payload = json(base + "/stream/tv/" + encode(resourceId) + ".json");
-            JSONArray streams = payload.optJSONArray("streams");
+            String catalogUrl = base + (chile ? CHILE_CATALOG : SPORTS_CATALOG);
+            for (int attempt = 0; attempt < 2; attempt++) {
+                boolean[] reused = {false};
+                try {
+                    JSONObject catalog = json(catalogUrl, CATALOG_TTL_MS, attempt > 0, reused);
+                    String resourceId = uniqueResource(catalog, parts[1]);
+                    // Opaque ids and group responses are briefly reused in RAM, never persisted.
+                    JSONObject payload = json(base + "/stream/tv/" + encode(resourceId) + ".json",
+                            GROUP_TTL_MS, attempt > 0, reused);
+                    return validateStreams(payload.optJSONArray("streams"), channel, parts, all, context, progress);
+                } catch (IOException | JSONException stale) {
+                    context.check();
+                    // Refresh cached ids/links once; never reset the total deadline.
+                    if (attempt != 0 || !reused[0]) throw stale;
+                    clearSensitiveState();
+                }
+            }
+            throw new IOException("CNCVerse no entregó la señal.");
+        } catch (JSONException | IllegalArgumentException error) {
+            throw new IOException("La respuesta de CNCVerse no es compatible.");
+        } catch (IOException error) {
+            throw new IOException("No se pudo resolver la señal CNCVerse. Reintenta o revisa el proveedor.");
+        }
+    }
+
+    private List<ResolvedPlaybackCandidate> validateStreams(JSONArray streams, Channel channel,
+            String[] parts, boolean all, ResolutionContext context, ResolutionProgressListener progress) throws IOException {
+            boolean chile = "chiletv".equals(parts[0]);
+            int matching = 0;
+            if (streams != null) for (int i = 0; i < Math.min(64, streams.length()); i++) {
+                JSONObject stream = streams.optJSONObject(i);
+                if (stream != null && (chile ? !hasRawDrm(stream) : parts[2].equals(sourceLabel(stream)))) matching++;
+            }
             List<ResolvedPlaybackCandidate> result = new ArrayList<>();
             List<InetAddress> bridgeAddresses = null;
+            Set<String> checked = new LinkedHashSet<>();
+            int tried = 0;
             if (streams != null) for (int i = 0; i < Math.min(streams.length(), 64); i++) {
                 if (!result.isEmpty() && context.remainingMillis() <= 0L) break;
                 context.check();
@@ -141,10 +181,14 @@ public final class CncVerseStreamResolver implements StreamResolver {
                 URI uri = normalized != null ? normalized : chile ? chilePlaybackUri(advertised) : null;
                 if (uri == null) continue;
                 Map<String, String> headers = headers(stream);
-                try {
+                if (!checked.add(uri.toString() + "\n" + headers) || tried++ >= 8) continue;
+                ResolutionContext candidate = context.child(matching > 1
+                        ? Math.min(6000L, context.remainingMillis()) : context.remainingMillis());
+                try (ResolutionContext.Scope candidateScope = candidate.activate()) {
                     if (chile) PublicStreamPolicy.requirePublicHttp(uri);
                     // Keep the master intact: separate audio renditions must not be lost.
-                    validation.validate(uri, headers, context, progress);
+                    validation.validate(uri, headers, candidate, progress);
+                    candidate.check();
                     ResolvedPlaybackSource source = ResolvedPlaybackSource.dynamic(
                             ID, stableSourceId(channel), uri, headers,
                             headers.getOrDefault("User-Agent", TokenHttpClient.BROWSER_USER_AGENT),
@@ -157,22 +201,40 @@ public final class CncVerseStreamResolver implements StreamResolver {
                 } catch (IOException failed) {
                     // Never propagate an exception embedding a signed URL or JSON resource id.
                     if (context.isCancelled() || Thread.currentThread().isInterrupted()) break;
-                }
+                } finally { candidate.cancel(); }
             }
+            if (context.isCancelled() || Thread.currentThread().isInterrupted()) context.check();
             if (result.isEmpty()) throw new IOException("CNCVerse no entregó HLS válido para la señal elegida.");
             return Collections.unmodifiableList(result);
-        } catch (JSONException | IllegalArgumentException error) {
-            throw new IOException("La respuesta de CNCVerse no es compatible.");
-        } catch (IOException error) {
-            throw new IOException("No se pudo resolver la señal CNCVerse. Reintenta o revisa el proveedor.");
-        }
     }
 
-    private JSONObject json(String url) throws IOException, JSONException {
+    private JSONObject json(String url, long ttl, boolean force, boolean[] reused) throws IOException, JSONException {
+        ResolutionContext context = ResolutionContext.current();
+        if (context != null) context.check();
+        long generation;
+        synchronized (jsonCache) {
+            long now = clock.getAsLong();
+            jsonCache.values().removeIf(value -> value.expires <= now);
+            CachedJson cached = force ? null : jsonCache.get(url);
+            if (cached != null) { reused[0] = true; return cached.data; }
+            generation = cacheGeneration;
+        }
         TokenHttpClient.Response response = client.getPublicOnHosts(url,
                 Collections.singletonMap("Accept", "application/json"), MAX_JSON_BYTES, null, API_HOSTS);
+        if (context != null) context.check();
         if (response.getStatusCode() != 200) throw new IOException("CNCVerse no respondió correctamente.");
-        return new JSONObject(new String(response.getBody(), StandardCharsets.UTF_8));
+        JSONObject data = new JSONObject(new String(response.getBody(), StandardCharsets.UTF_8));
+        synchronized (jsonCache) {
+            if (generation == cacheGeneration && response.getBody().length <= MAX_CACHE_BYTES) {
+                jsonCache.put(url, new CachedJson(data, clock.getAsLong() + ttl, response.getBody().length));
+                int bytes = jsonCache.values().stream().mapToInt(value -> value.bytes).sum();
+                Iterator<CachedJson> oldest = jsonCache.values().iterator();
+                while ((bytes > MAX_CACHE_BYTES || jsonCache.size() > 6) && oldest.hasNext()) {
+                    bytes -= oldest.next().bytes; oldest.remove();
+                }
+            }
+        }
+        return data;
     }
 
     static String[] referenceParts(String reference) throws IOException {
@@ -279,26 +341,7 @@ public final class CncVerseStreamResolver implements StreamResolver {
     }
 
     private List<InetAddress> bridgeAddresses(ResolutionContext context) throws IOException {
-        context.check();
-        Future<List<InetAddress>> lookup;
-        try { lookup = DNS_WORKERS.submit(() -> dns.lookup("cncverse.dpdns.org")); }
-        catch (RejectedExecutionException saturated) { throw new IOException("DNS CNCVerse ocupado."); }
-        long until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(
-                Math.min(2000L, context.remainingMillis()));
-        try {
-            while (true) {
-                context.check();
-                long remaining = until - System.nanoTime();
-                if (remaining <= 0) throw new IOException("DNS CNCVerse agotó su plazo.");
-                try { return lookup.get(Math.min(remaining, TimeUnit.MILLISECONDS.toNanos(50)), TimeUnit.NANOSECONDS); }
-                catch (TimeoutException pending) { /* Check cancellation/deadline again. */ }
-            }
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Solicitud cancelada.");
-        } catch (ExecutionException failed) {
-            throw new IOException("El dominio CNCVerse no resolvió.");
-        } finally { lookup.cancel(true); }
+        return context.lookupDns("cncverse.dpdns.org", dns);
     }
 
     /** Scoped to CHILE TV. Public-IP enforcement happens before any HLS request. */

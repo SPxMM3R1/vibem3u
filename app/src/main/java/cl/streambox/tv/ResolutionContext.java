@@ -1,6 +1,16 @@
 package cl.streambox.tv;
 
 import java.io.IOException;
+import java.net.InetAddress;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeoutException;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -21,6 +31,13 @@ import okhttp3.Call;
 public final class ResolutionContext {
     private static final ThreadLocal<ResolutionContext> CURRENT = new ThreadLocal<>();
     private static final long NANOS_PER_MILLISECOND = 1_000_000L;
+    private static final ThreadPoolExecutor DNS_WORKERS = new ThreadPoolExecutor(
+            2, 2, 30L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(8), task -> {
+                Thread thread = new Thread(task, "Resolver-DNS");
+                thread.setDaemon(true);
+                return thread;
+            });
+    static { DNS_WORKERS.allowCoreThreadTimeOut(true); }
 
     private final ResolutionContext parent;
     private final long deadlineNanos;
@@ -31,6 +48,8 @@ public final class ResolutionContext {
             new CopyOnWriteArrayList<>();
     private final ManifestHandoffCache manifestCache;
     private final boolean ownsManifestCache;
+    // Only this resolution and its children share DNS, including the actual connection.
+    private final Map<String, List<InetAddress>> dnsAddresses;
 
     /** Creates a context whose total budget is {@code timeoutMs} milliseconds. */
     public ResolutionContext(long timeoutMs) {
@@ -43,6 +62,7 @@ public final class ResolutionContext {
             ManifestHandoffCache inheritedManifestCache
     ) {
         this.parent = parent;
+        this.dnsAddresses = parent == null ? new LinkedHashMap<>() : parent.dnsAddresses;
         long localDeadline = deadlineFromNow(timeoutMs);
         this.deadlineNanos = parent == null
                 ? localDeadline
@@ -118,6 +138,48 @@ public final class ResolutionContext {
     /** Returns the per-resolution handoff cache shared by this context's children. */
     public ManifestHandoffCache manifests() {
         return manifestCache;
+    }
+
+    /** Bounded DNS reused within an attempt, never a process-wide stale address cache. */
+    List<InetAddress> lookupDns(String host, okhttp3.Dns dns) throws IOException {
+        check();
+        synchronized (dnsAddresses) {
+            List<InetAddress> cached = dnsAddresses.get(host);
+            if (cached != null) return cached;
+        }
+        Future<List<InetAddress>> lookup;
+        try { lookup = DNS_WORKERS.submit(() -> dns.lookup(host)); }
+        catch (java.util.concurrent.RejectedExecutionException busy) {
+            throw new IOException("DNS del resolutor ocupado.");
+        }
+        long until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.min(2000L, remainingMillis()));
+        try {
+            while (true) {
+                check();
+                long left = until - System.nanoTime();
+                if (left <= 0) throw new IOException("DNS del resolutor agotó su plazo.");
+                try {
+                    List<InetAddress> found = lookup.get(Math.min(left, TimeUnit.MILLISECONDS.toNanos(50)), TimeUnit.NANOSECONDS);
+                    check();
+                    if (found == null || found.isEmpty() || found.size() > 32 || found.contains(null)) {
+                        throw new IOException("El dominio no entregó direcciones válidas.");
+                    }
+                    List<InetAddress> safe = Collections.unmodifiableList(new java.util.ArrayList<>(found));
+                    synchronized (dnsAddresses) {
+                        if (dnsAddresses.size() < 32) dnsAddresses.put(host, safe);
+                    }
+                    return safe;
+                } catch (TimeoutException pending) { /* Recheck cancellation every 50 ms. */ }
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Solicitud cancelada.");
+        } catch (ExecutionException failed) {
+            throw new IOException("El dominio no resolvió.");
+        } finally {
+            lookup.cancel(true);
+            DNS_WORKERS.remove((Runnable) lookup);
+        }
     }
 
     /**

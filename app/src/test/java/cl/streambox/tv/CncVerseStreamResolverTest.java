@@ -182,7 +182,7 @@ public final class CncVerseStreamResolverTest {
         String streams = payload("TNT Sports 1", PLAYBACK);
         String catalog;
         @Override public Response getPublicOnHosts(String url, Map<String, String> headers,
-                int maxBytes, String range, Set<String> hosts) {
+                int maxBytes, String range, Set<String> hosts) throws IOException {
             requests.add(url);
             assertEquals(Collections.singleton("cncverse.dpdns.org"), hosts);
             assertEquals(1024 * 1024, maxBytes);
@@ -210,14 +210,125 @@ public final class CncVerseStreamResolverTest {
         assertTrue(source.getExpiresAtMillis() > System.currentTimeMillis());
         assertTrue(client.requests.get(1).contains("fresh-1.json"));
     }
-    @Test public void discoversFreshOpaqueResourceOnEveryResolution() throws Exception {
+    @Test public void warmOpeningReusesCatalogAndGroupButStillValidatesHls() throws Exception {
         FakeClient client = new FakeClient();
         CncVerseStreamResolver resolver = resolver(client);
         resolver.resolve(channel()); resolver.resolve(channel());
         assertTrue(client.requests.get(1).endsWith("fresh-1.json"));
-        assertTrue(client.requests.get(3).endsWith("fresh-2.json"));
+        assertEquals(2, client.requests.size());
         assertEquals(120000L, resolver.cacheTtlMillis());
         assertFalse(resolver.keepSessionSourceOnPlaybackPause());
+    }
+    private CncVerseStreamResolver timed(FakeClient client, long[] clock, CncVerseStreamResolver.HlsCheck check) {
+        return new CncVerseStreamResolver(null, client, check,
+                host -> Collections.singletonList(InetAddress.getByName("1.1.1.1")), () -> clock[0]);
+    }
+    @Test public void cacheHasSeparateCatalogAndGroupTtlsAndClearDropsOpaqueState() throws Exception {
+        FakeClient client = new FakeClient(); long[] clock = {0}; int[] validated = {0};
+        CncVerseStreamResolver resolver = timed(client, clock, (u,h,c,p) -> validated[0]++);
+        resolver.resolve(channel());
+        clock[0] = 15_001; resolver.resolve(channel());
+        assertEquals(3, client.requests.size()); assertEquals(1, client.lookups);
+        clock[0] = 60_001; resolver.resolve(channel());
+        assertEquals(5, client.requests.size()); assertEquals(2, client.lookups);
+        resolver.clearSensitiveState(); resolver.resolve(channel());
+        assertEquals(7, client.requests.size()); assertEquals(3, client.lookups);
+        assertEquals(4, validated[0]);
+    }
+    @Test public void cachedBrokenHlsRenewsCatalogAndGroupExactlyOnce() throws Exception {
+        FakeClient client = new FakeClient(); int[] checked = {0};
+        CncVerseStreamResolver resolver = timed(client, new long[]{0}, (u,h,c,p) -> {
+            checked[0]++; if (checked[0] == 2) throw new IOException("expired-secret");
+        });
+        resolver.resolve(channel()); resolver.resolve(channel());
+        assertEquals(3, checked[0]); assertEquals(2, client.lookups);
+        assertEquals(4, client.requests.size());
+        assertTrue(client.requests.get(3).endsWith("fresh-2.json"));
+    }
+    @Test public void cachedOpaqueId404RefreshesBeforeRetryingSameSignal() throws Exception {
+        FakeClient client = new FakeClient() {
+            @Override public Response getPublicOnHosts(String u, Map<String,String>h,int m,String r,Set<String>a) throws IOException {
+                if (u.endsWith("fresh-1.json") && lookups == 1 && requests.size() > 1) {
+                    requests.add(u); throw new IOException("HTTP 404");
+                }
+                return super.getPublicOnHosts(u,h,m,r,a);
+            }
+        };
+        long[] clock = {0}; CncVerseStreamResolver resolver = timed(client, clock, (u,h,c,p) -> {});
+        resolver.resolve(channel()); clock[0] = 16_000;
+        assertEquals("TNT Sports 1", resolver.resolve(channel()).getVariantId());
+        assertEquals(2, client.lookups); assertEquals(5, client.requests.size());
+    }
+    @Test public void badColdResponseDoesNotRetryAndBadWarmResponseCannotLoop() throws Exception {
+        FakeClient cold = new FakeClient(); cold.streams = "malformed-private-response";
+        assertThrows(IOException.class, () -> timed(cold,new long[]{0},(u,h,c,p)->{}).resolve(channel()));
+        assertEquals(2, cold.requests.size());
+        FakeClient warm = new FakeClient(); int[] checked = {0};
+        CncVerseStreamResolver resolver = timed(warm,new long[]{0},(u,h,c,p)-> {
+            if (++checked[0] > 1) throw new IOException("401-secret");
+        });
+        resolver.resolve(channel());
+        IOException error = assertThrows(IOException.class, () -> resolver.resolve(channel()));
+        assertEquals(4, warm.requests.size()); assertEquals(3, checked[0]);
+        assertFalse(error.toString().contains("401-secret")); assertNull(error.getCause());
+    }
+    @Test public void cancelledCachedResolutionDoesNotRefreshOrValidate() throws Exception {
+        FakeClient client = new FakeClient(); CncVerseStreamResolver resolver = timed(client,new long[]{0},(u,h,c,p)->{});
+        resolver.resolve(channel()); ResolutionContext parent = new ResolutionContext(1000); parent.cancel();
+        try (ResolutionContext.Scope ignored = parent.activate()) {
+            assertThrows(IOException.class, () -> resolver.resolve(channel()));
+        }
+        assertEquals(2, client.requests.size());
+    }
+    @Test public void duplicateStreamsDoNotRepeatProbeOrConsumeAlternativeLimit() throws Exception {
+        FakeClient client = new FakeClient(); org.json.JSONArray rows = new org.json.JSONArray();
+        JSONObject dead = object(payload("TNT Sports 1", PLAYBACK.replace("manifest", "dead"))).getJSONArray("streams").getJSONObject(0);
+        for (int i=0;i<12;i++) rows.put(dead);
+        rows.put(object(payload("TNT Sports 1",PLAYBACK)).getJSONArray("streams").getJSONObject(0));
+        client.streams = new JSONObject().put("streams",rows).toString(); int[] checked={0};
+        CncVerseStreamResolver resolver = timed(client,new long[]{0},(u,h,c,p)-> {
+            checked[0]++; assertTrue(c.remainingMillis() <= 6000);
+            if(u.getPath().contains("dead")) throw new IOException("unavailable");
+        });
+        assertEquals(PLAYBACK, resolver.resolve(channel()).getPlaybackUri().toString()); assertEquals(2, checked[0]);
+    }
+    @Test public void neighbourLabelsDoNotReduceSingleSignalsValidationBudget() throws Exception {
+        FakeClient client = new FakeClient(); org.json.JSONArray rows = object(client.streams).getJSONArray("streams");
+        rows.put(object(payload("TNT Sports 2",PLAYBACK)).getJSONArray("streams").getJSONObject(0));
+        client.streams = new JSONObject().put("streams",rows).toString();
+        timed(client,new long[]{0},(u,h,c,p)->assertTrue(c.remainingMillis()>6000)).resolve(channel());
+    }
+    @Test public void largeResponsesAreValidatedButNotRetainedInJsonCache() throws Exception {
+        FakeClient client = new FakeClient();
+        client.streams = new JSONObject(client.streams).put("padding", "x".repeat(600_000)).toString();
+        CncVerseStreamResolver resolver=timed(client,new long[]{0},(u,h,c,p)->{});
+        resolver.resolve(channel()); resolver.resolve(channel());
+        assertEquals(1,client.lookups);assertEquals(3,client.requests.size());
+    }
+    @Test public void clearingDuringFetchCannotRepopulateOldCatalog() throws Exception {
+        CncVerseStreamResolver[] holder={null};
+        FakeClient client=new FakeClient(){
+            @Override public Response getPublicOnHosts(String u,Map<String,String>h,int m,String r,Set<String>a)throws IOException {
+                Response response=super.getPublicOnHosts(u,h,m,r,a);
+                if(u.contains("/catalog/")&&lookups==1)holder[0].clearSensitiveState();
+                return response;
+            }
+        };
+        holder[0]=timed(client,new long[]{0},(u,h,c,p)->{});
+        holder[0].resolve(channel());holder[0].resolve(channel());
+        assertEquals(2,client.lookups);assertEquals(4,client.requests.size());
+    }
+    @Test public void cancelledSelectorCannotReturnPartialAcceptedSources() throws Exception {
+        FakeClient client=new FakeClient();
+        org.json.JSONArray rows=new JSONObject(client.streams).getJSONArray("streams");
+        rows.put(object(payload("TNT Sports 1",PLAYBACK.replace("manifest","other"))).getJSONArray("streams").getJSONObject(0));
+        client.streams=new JSONObject().put("streams",rows).toString();
+        ResolutionContext parent=new ResolutionContext(1000);int[] validated={0};
+        CncVerseStreamResolver resolver=timed(client,new long[]{0},(u,h,c,p)->{if(++validated[0]==2)parent.cancel();});
+        try(ResolutionContext.Scope ignored=parent.activate()){
+            assertThrows(IOException.class,()->resolver.resolvePlaybackCandidates(channel(),null));
+        }
+        assertEquals(2,client.requests.size());
     }
     @Test public void neverSelectsNeighbouringChannel() {
         FakeClient client = new FakeClient(); client.streams = payload("TNT Sports 2", PLAYBACK);

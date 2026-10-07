@@ -6,7 +6,22 @@ import okhttp3.OkHttpClient;
 
 /** Process-wide OkHttp configuration shared with Media3 and resolver requests. */
 public final class SharedHttpClient {
+    /** Same DNS strategy identity preserves OkHttp pooling across resolution contexts. */
+    private static final class ScopedDns implements okhttp3.Dns {
+        private final ResolutionContext context;
+        ScopedDns(ResolutionContext context) { this.context = context; }
+        @Override public java.util.List<java.net.InetAddress> lookup(String host) throws java.net.UnknownHostException {
+            if (context == null) return okhttp3.Dns.SYSTEM.lookup(host);
+            try { return context.lookupDns(host, okhttp3.Dns.SYSTEM); }
+            catch (java.io.IOException failed) {
+                throw new java.net.UnknownHostException("DNS del resolutor no disponible.");
+            }
+        }
+        @Override public boolean equals(Object other) { return other instanceof ScopedDns; }
+        @Override public int hashCode() { return ScopedDns.class.hashCode(); }
+    }
     private static final OkHttpClient INSTANCE = new OkHttpClient.Builder()
+            .dns(new ScopedDns(null))
             // Media3 follows redirects itself through the supplied client. The
             // resolver path derives a client with both flags disabled so it can
             // validate every hop before opening it.
@@ -60,6 +75,8 @@ public final class SharedHttpClient {
                 .writeTimeout(Math.max(1L, writeTimeoutMs), TimeUnit.MILLISECONDS);
         if (context != null) {
             builder.callTimeout(Math.max(1L, context.remainingMillis()), TimeUnit.MILLISECONDS);
+            // Connect to the same per-attempt addresses checked by PublicStreamPolicy.
+            builder.dns(new ScopedDns(context));
         }
         return builder.build();
     }

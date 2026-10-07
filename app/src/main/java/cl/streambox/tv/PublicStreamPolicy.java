@@ -24,7 +24,9 @@ final class PublicStreamPolicy {
         }
         InetAddress[] addresses;
         try {
-            addresses = InetAddress.getAllByName(host);
+            ResolutionContext context = ResolutionContext.current();
+            addresses = context == null ? InetAddress.getAllByName(host)
+                    : context.lookupDns(host, SharedHttpClient.get().dns()).toArray(new InetAddress[0]);
         } catch (UnknownHostException error) {
             throw new IOException("El host del stream no resolvió.", error);
         }

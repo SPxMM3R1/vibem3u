@@ -72,6 +72,7 @@ sourceSets {
             srcDir(appSources)
             include("cl/streambox/tv/local/**")
             include("cl/streambox/tv/CncVerseStreamResolverTest.java")
+            include("cl/streambox/tv/ResolutionDnsTest.java")
             include("cl/streambox/tv/MeganoticiasStreamResolverTest.java")
             include("cl/streambox/tv/M3uCacheSanitizer.java")
         }
