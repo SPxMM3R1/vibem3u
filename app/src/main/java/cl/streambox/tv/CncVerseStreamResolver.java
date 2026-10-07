@@ -6,6 +6,7 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.InetAddress;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -16,6 +17,13 @@ import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.RejectedExecutionException;
 
 /** Independent Stremio HTTP client; no Bridge/Cloudstream implementation is bundled. */
 public final class CncVerseStreamResolver implements StreamResolver {
@@ -27,10 +35,18 @@ public final class CncVerseStreamResolver implements StreamResolver {
     private static final String CHILE_CATALOG = "/catalog/tv/cnc_CHILETV_tv.json";
     private static final int MAX_JSON_BYTES = 1024 * 1024;
     private static final long TTL_MS = 120_000L;
+    // Bounded even if a platform DNS call ignores interruption. No IP is persisted.
+    private static final ThreadPoolExecutor DNS_WORKERS = new ThreadPoolExecutor(
+            0, 2, 30L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(2), task -> {
+                Thread thread = new Thread(task, "CNCVerse-DNS");
+                thread.setDaemon(true);
+                return thread;
+            });
 
     private final ResolverDefinition definition;
     private final TokenHttpClient client;
     private final HlsCheck validation;
+    private final okhttp3.Dns dns;
     interface HlsCheck {
         void validate(URI uri, Map<String, String> headers, ResolutionContext context,
                 ResolutionProgressListener progress) throws IOException;
@@ -41,12 +57,17 @@ public final class CncVerseStreamResolver implements StreamResolver {
         this(definition, new TokenHttpClient(6000, 8000));
     }
     CncVerseStreamResolver(ResolverDefinition definition, TokenHttpClient client) {
-        this(definition, client, new HlsStreamValidator(client)::validateForPlayback);
+        this(definition, client, new HlsStreamValidator(client)::validate);
     }
     CncVerseStreamResolver(ResolverDefinition definition, TokenHttpClient client, HlsCheck validation) {
+        this(definition, client, validation, SharedHttpClient.get().dns());
+    }
+    CncVerseStreamResolver(ResolverDefinition definition, TokenHttpClient client,
+            HlsCheck validation, okhttp3.Dns dns) {
         this.definition = definition;
         this.client = client;
         this.validation = validation;
+        this.dns = dns;
     }
 
     @Override public String getId() { return ID; }
@@ -95,6 +116,7 @@ public final class CncVerseStreamResolver implements StreamResolver {
             JSONObject payload = json(base + "/stream/tv/" + encode(resourceId) + ".json");
             JSONArray streams = payload.optJSONArray("streams");
             List<ResolvedPlaybackCandidate> result = new ArrayList<>();
+            List<InetAddress> bridgeAddresses = null;
             if (streams != null) for (int i = 0; i < Math.min(streams.length(), 64); i++) {
                 if (!result.isEmpty() && context.remainingMillis() <= 0L) break;
                 context.check();
@@ -103,8 +125,20 @@ public final class CncVerseStreamResolver implements StreamResolver {
                 // CHILE TV metadata denotes one exact channel, not a multi-channel sports group.
                 // Only its own public HLS renditions are candidates; raw DRM is never interpreted.
                 if (chile && hasRawDrm(stream)) continue;
-                URI uri = chile ? chilePlaybackUri(stream.optString("url", ""))
-                        : playbackUri(stream.optString("url", ""));
+                String advertised = stream.optString("url", "");
+                okhttp3.HttpUrl bridge = bridgeShape(advertised);
+                if (bridge != null && !API_HOSTS.contains(bridge.host())
+                        && isIpLiteral(bridge.host()) && bridgeAddresses == null) {
+                    try { bridgeAddresses = bridgeAddresses(context); }
+                    catch (IOException unavailable) {
+                        context.check();
+                        bridgeAddresses = Collections.emptyList();
+                    }
+                }
+                URI normalized = playbackUri(advertised, bridgeAddresses);
+                context.check();
+                if (normalized == null && bridge != null && isIpLiteral(bridge.host())) continue;
+                URI uri = normalized != null ? normalized : chile ? chilePlaybackUri(advertised) : null;
                 if (uri == null) continue;
                 Map<String, String> headers = headers(stream);
                 try {
@@ -205,19 +239,66 @@ public final class CncVerseStreamResolver implements StreamResolver {
     }
 
     static URI playbackUri(String value) {
+        return playbackUri(value, Collections.emptyList());
+    }
+
+    /** Only addresses currently published by the trusted domain can act as its aliases. */
+    static URI playbackUri(String value, List<InetAddress> addresses) {
         try {
-            // Bridge query parameters may contain literal JSON braces/quotes. HttpUrl
-            // escapes those characters without changing query semantics; only RAM holds it.
+            okhttp3.HttpUrl parsed = bridgeShape(value);
+            if (parsed == null) return null;
+            if (!API_HOSTS.contains(parsed.host())) {
+                if (!isIpLiteral(parsed.host()) || addresses == null || addresses.isEmpty()) return null;
+                InetAddress candidate = InetAddress.getByName(parsed.host()); // Literal only, no DNS.
+                if (!PublicStreamPolicy.isPublic(candidate)) return null;
+                boolean matches = false;
+                for (InetAddress address : addresses) {
+                    if (!PublicStreamPolicy.isPublic(address)) return null;
+                    matches |= candidate.equals(address);
+                }
+                if (!matches) return null;
+            }
+            // Preserve escaped query/path and use valid TLS/SNI for the canonical domain.
+            return parsed.newBuilder().scheme("https").host("cncverse.dpdns.org").port(443).build().uri();
+        } catch (IllegalArgumentException | java.net.UnknownHostException error) { return null; }
+    }
+
+    private static boolean isIpLiteral(String host) {
+        return host != null && (host.indexOf(':') >= 0 || host.matches("[0-9]+(?:\\.[0-9]+){3}"));
+    }
+
+    private static okhttp3.HttpUrl bridgeShape(String value) {
+        try {
             okhttp3.HttpUrl parsed = okhttp3.HttpUrl.get(value);
-            // Some Bridge deployments advertise HTTP even when HTTPS is available.
-            // Never transmit its key-bearing query over cleartext, even on this fixed host.
-            URI uri = parsed.newBuilder().scheme("https").build().uri();
-            if (!"https".equals(uri.getScheme()) || !API_HOSTS.contains(uri.getHost())
-                    || uri.getUserInfo() != null || uri.getPort() != -1 || uri.getFragment() != null
-                    || !uri.getPath().startsWith("/proxy/")
-                    || !uri.getPath().endsWith(".m3u8")) return null;
-            return uri;
+            if (!parsed.username().isEmpty() || !parsed.password().isEmpty() || parsed.fragment() != null
+                    || parsed.port() != ("https".equals(parsed.scheme()) ? 443 : 80)
+                    || !parsed.encodedPath().startsWith("/proxy/")
+                    || !parsed.encodedPath().endsWith(".m3u8")) return null;
+            return parsed;
         } catch (IllegalArgumentException error) { return null; }
+    }
+
+    private List<InetAddress> bridgeAddresses(ResolutionContext context) throws IOException {
+        context.check();
+        Future<List<InetAddress>> lookup;
+        try { lookup = DNS_WORKERS.submit(() -> dns.lookup("cncverse.dpdns.org")); }
+        catch (RejectedExecutionException saturated) { throw new IOException("DNS CNCVerse ocupado."); }
+        long until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(
+                Math.min(2000L, context.remainingMillis()));
+        try {
+            while (true) {
+                context.check();
+                long remaining = until - System.nanoTime();
+                if (remaining <= 0) throw new IOException("DNS CNCVerse agotó su plazo.");
+                try { return lookup.get(Math.min(remaining, TimeUnit.MILLISECONDS.toNanos(50)), TimeUnit.NANOSECONDS); }
+                catch (TimeoutException pending) { /* Check cancellation/deadline again. */ }
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Solicitud cancelada.");
+        } catch (ExecutionException failed) {
+            throw new IOException("El dominio CNCVerse no resolvió.");
+        } finally { lookup.cancel(true); }
     }
 
     /** Scoped to CHILE TV. Public-IP enforcement happens before any HLS request. */

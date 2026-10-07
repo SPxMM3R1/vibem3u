@@ -4,6 +4,7 @@ import org.json.JSONObject;
 import org.junit.Test;
 import java.io.IOException;
 import java.net.URI;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import static org.junit.Assert.*;
@@ -11,6 +12,151 @@ import static org.junit.Assert.*;
 public final class CncVerseStreamResolverTest {
     private static final String REF = "sportsworld|TNT Sports UK|TNT Sports 1";
     private static final String PLAYBACK = "https://cncverse.dpdns.org/proxy/mpd/manifest.m3u8?d=example&clearkey=test-value";
+
+    private static List<InetAddress> addresses(String... values) throws Exception {
+        List<InetAddress> result = new ArrayList<>();
+        for (String value : values) result.add(InetAddress.getByName(value));
+        return result;
+    }
+
+    @Test public void bridgeIpAliasesFollowCurrentDnsWithoutPinningAnAddress() throws Exception {
+        for (String ip : Arrays.asList("1.1.1.1", "8.8.8.8")) {
+            String raw = PLAYBACK.replace("https://cncverse.dpdns.org", "http://" + ip);
+            assertEquals(URI.create(PLAYBACK), CncVerseStreamResolver.playbackUri(raw, addresses(ip)));
+            assertNull(CncVerseStreamResolver.playbackUri(raw, addresses("9.9.9.9")));
+        }
+    }
+    @Test public void bridgeIpv6AndMultipleDnsAddressesNormalizeToTlsDomain() throws Exception {
+        assertEquals(URI.create(PLAYBACK), CncVerseStreamResolver.playbackUri(
+                PLAYBACK.replace("cncverse.dpdns.org", "[2606:4700:4700::1111]"),
+                addresses("8.8.8.8", "2606:4700:4700::1111")));
+    }
+    @Test public void aliasesRejectPrivateMixedDnsAndUnrelatedDomains() throws Exception {
+        for (String ip : Arrays.asList("127.0.0.1", "10.0.0.1", "169.254.169.254", "::1")) {
+            String host = ip.contains(":") ? "[" + ip + "]" : ip;
+            assertNull(CncVerseStreamResolver.playbackUri(PLAYBACK.replace("cncverse.dpdns.org", host), addresses(ip)));
+        }
+        assertNull(CncVerseStreamResolver.playbackUri(PLAYBACK.replace("cncverse.dpdns.org", "1.1.1.1"),
+                addresses("1.1.1.1", "127.0.0.1")));
+        assertNull(CncVerseStreamResolver.playbackUri(PLAYBACK.replace("cncverse.dpdns.org", "evil.invalid"),
+                addresses("1.1.1.1")));
+    }
+    @Test public void aliasesRequireProxyHlsNoCredentialsFragmentOrUnexpectedPort() throws Exception {
+        List<InetAddress> current = addresses("1.1.1.1");
+        for (String url : Arrays.asList("http://1.1.1.1:8000/proxy/a.m3u8", "https://1.1.1.1:8443/proxy/a.m3u8",
+                "http://user:pass@1.1.1.1/proxy/a.m3u8", "http://1.1.1.1/proxy/a.m3u8#fragment",
+                "http://1.1.1.1/a.m3u8", "http://1.1.1.1/proxy/a.mpd", "file:///proxy/a.m3u8")) {
+            assertNull(CncVerseStreamResolver.playbackUri(url, current));
+        }
+    }
+    @Test public void defaultPortsAndEscapedQueryArePreservedWithoutCleartext() throws Exception {
+        URI result = CncVerseStreamResolver.playbackUri(
+                "http://1.1.1.1:80/proxy/hls/manifest.m3u8?d=a%2Fb&clearkey={\"fake\":\"dummy\"}", addresses("1.1.1.1"));
+        assertNotNull(result);
+        assertEquals("https", result.getScheme());
+        assertEquals("cncverse.dpdns.org", result.getHost());
+        assertEquals(-1, result.getPort());
+        assertTrue(result.getRawQuery().startsWith("d=a%2Fb&clearkey="));
+        assertTrue(result.getQuery().contains("{\"fake\":\"dummy\"}"));
+        assertEquals(URI.create(PLAYBACK), CncVerseStreamResolver.playbackUri(
+                PLAYBACK.replace("cncverse.dpdns.org", "cncverse.dpdns.org:443")));
+    }
+    @Test public void aliasResolutionUsesFreshDnsOncePerAttemptAndKeepsExactIdentity() throws Exception {
+        FakeClient client = new FakeClient();
+        List<String> dnsCalls = new ArrayList<>();
+        List<URI> validated = new ArrayList<>();
+        CncVerseStreamResolver resolver = new CncVerseStreamResolver(null, client,
+                (uri, h, ctx, p) -> validated.add(uri), host -> {
+                    dnsCalls.add(host);
+                    return Collections.singletonList(InetAddress.getByName(dnsCalls.size() == 1 ? "1.1.1.1" : "8.8.8.8"));
+                });
+        for (String ip : Arrays.asList("1.1.1.1", "8.8.8.8")) {
+            client.streams = payload("TNT Sports 1", PLAYBACK.replace("cncverse.dpdns.org", ip));
+            ResolvedPlaybackSource source = resolver.resolve(channel());
+            assertEquals(PLAYBACK, source.getPlaybackUri().toString());
+            assertEquals("TNTSports1.uk@CNCVerse", source.getStableSourceId());
+        }
+        assertEquals(Arrays.asList("cncverse.dpdns.org", "cncverse.dpdns.org"), dnsCalls);
+        assertEquals(2, validated.size());
+    }
+    @Test public void canonicalDomainNeedsNoAliasLookup() throws Exception {
+        FakeClient client = new FakeClient();
+        new CncVerseStreamResolver(null, client, (u, h, c, p) -> {}, host -> {
+            throw new AssertionError("Alias DNS must not run for canonical URLs");
+        }).resolve(channel());
+    }
+    @Test public void foreignAliasNeverReachesValidation() throws Exception {
+        FakeClient client = new FakeClient();
+        client.streams = payload("TNT Sports 1", PLAYBACK.replace("cncverse.dpdns.org", "8.8.8.8"));
+        int[] validations = {0};
+        assertThrows(IOException.class, () -> new CncVerseStreamResolver(null, client,
+                (u, h, c, p) -> validations[0]++, host -> Collections.singletonList(InetAddress.getByName("1.1.1.1")))
+                .resolve(channel()));
+        assertEquals(0, validations[0]);
+    }
+    @Test public void dnsFailureCanStillUseSameSignalCanonicalAlternative() throws Exception {
+        FakeClient client = new FakeClient();
+        org.json.JSONArray rows = new JSONObject(payload("TNT Sports 1", PLAYBACK.replace("cncverse.dpdns.org", "1.1.1.1")))
+                .getJSONArray("streams");
+        rows.put(new JSONObject(payload("TNT Sports 1", PLAYBACK)).getJSONArray("streams").getJSONObject(0));
+        client.streams = new JSONObject().put("streams", rows).toString();
+        ResolvedPlaybackSource source = new CncVerseStreamResolver(null, client, (u, h, c, p) -> {},
+                host -> { throw new java.net.UnknownHostException("private-DNS-detail"); }).resolve(channel());
+        assertEquals(PLAYBACK, source.getPlaybackUri().toString());
+    }
+    @Test public void cancellationDuringDnsStopsWithoutValidationOrLeakingDetails() throws Exception {
+        FakeClient client = new FakeClient();
+        client.streams = payload("TNT Sports 1", PLAYBACK.replace("cncverse.dpdns.org", "1.1.1.1"));
+        ResolutionContext parent = new ResolutionContext(1000);
+        int[] validations = {0};
+        try (ResolutionContext.Scope ignored = parent.activate()) {
+            IOException error = assertThrows(IOException.class, () -> new CncVerseStreamResolver(null, client,
+                    (u, h, c, p) -> validations[0]++, host -> {
+                        parent.cancel();
+                        return Collections.singletonList(InetAddress.getByName("1.1.1.1"));
+                    }).resolve(channel()));
+            assertFalse(error.toString().contains("clearkey"));
+        }
+        assertEquals(0, validations[0]);
+    }
+    @Test public void stalledDnsCannotResetParentDeadline() throws Exception {
+        FakeClient client = new FakeClient();
+        client.streams = payload("TNT Sports 1", PLAYBACK.replace("cncverse.dpdns.org", "1.1.1.1"));
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        ResolutionContext parent = new ResolutionContext(150);
+        long started = System.nanoTime();
+        try (ResolutionContext.Scope ignored = parent.activate()) {
+            assertThrows(IOException.class, () -> new CncVerseStreamResolver(null, client, (u, h, c, p) -> {
+                throw new AssertionError("Expired DNS cannot validate");
+            }, host -> {
+                try { release.await(); } catch (InterruptedException stopped) { Thread.currentThread().interrupt(); }
+                return Collections.singletonList(InetAddress.getByName("1.1.1.1"));
+            }).resolve(channel()));
+        } finally { release.countDown(); }
+        assertTrue("DNS must stay inside the parent budget", (System.nanoTime() - started) / 1_000_000L < 1000);
+    }
+    @Test public void normalizationDoesNotSkipFailedHlsValidation() throws Exception {
+        FakeClient client = new FakeClient();
+        client.streams = payload("TNT Sports 1", PLAYBACK.replace("cncverse.dpdns.org", "1.1.1.1"));
+        IOException error = assertThrows(IOException.class, () -> new CncVerseStreamResolver(null, client,
+                (u, h, c, p) -> { throw new IOException("secret-source-url"); },
+                host -> Collections.singletonList(InetAddress.getByName("1.1.1.1"))).resolve(channel()));
+        assertFalse(error.toString().contains("secret-source-url"));
+        assertNull(error.getCause());
+    }
+    @Test public void chileProxyUsesSameVerifiedAliasPolicyAsSports() throws Exception {
+        for (boolean trusted : Arrays.asList(true, false)) {
+            FakeClient client = chileClient();
+            client.streams = payload("13C (1080p)", PLAYBACK.replace("cncverse.dpdns.org", "1.1.1.1"));
+            int[] checked = {0};
+            CncVerseStreamResolver resolver = new CncVerseStreamResolver(null, client, (u, h, c, p) -> {
+                checked[0]++; assertEquals("cncverse.dpdns.org", u.getHost());
+            }, host -> Collections.singletonList(InetAddress.getByName(trusted ? "1.1.1.1" : "8.8.8.8")));
+            if (trusted) assertEquals(PLAYBACK, resolver.resolve(chileChannel()).getPlaybackUri().toString());
+            else assertThrows(IOException.class, () -> resolver.resolve(chileChannel()));
+            assertEquals(trusted ? 1 : 0, checked[0]);
+        }
+    }
 
     private Channel channel() {
         Map<String, String> attrs = new LinkedHashMap<>();
