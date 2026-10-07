@@ -2309,16 +2309,16 @@ public final class MainActivity extends Activity {
                         showLoadingState(getString(R.string.loading_resolver_resolving));
                     }
                 });
-                ResolvedPlaybackSource source = rememberedSource(
+                ResolvedPlaybackSource remembered = rememberedSource(
                         resolutionChannel, resolver, rememberedLabel, progressListener);
-                if (source == null) {
-                    source = resolverCoordinator.resolve(
-                            resolutionChannel,
-                            resolver,
-                            forceRefresh,
-                            progressListener
-                    );
-                }
+                final ResolvedPlaybackSource source = remembered != null
+                        ? remembered
+                        : resolverCoordinator.resolve(
+                                resolutionChannel,
+                                resolver,
+                                forceRefresh,
+                                progressListener
+                        );
                 resolutionContext.check();
                 if (source == null || source.isExpired(System.currentTimeMillis())) {
                     throw new java.io.IOException("La fuente venció antes de iniciar la reproducción.");
