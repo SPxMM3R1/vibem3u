@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -341,6 +342,33 @@ public final class PublishedPlaybackCatalogTest {
 
         assertEquals(tvn.getStreamUri(), played.getStreamUri());
         assertEquals(Collections.singletonList(ip45.getStreamUri()), TvVooBackup.directBackupsOf(played));
+    }
+
+    @Test
+    public void nautaBackupRowIsHiddenAndAttachedToTheHdChannel() throws Exception {
+        String edited = "{\"schemaVersion\":1,\"channels\":["
+                + "{\"kind\":\"m3u\",\"tvgId\":\"nauta.hd@Nauta\",\"name\":\"Canal X HD\","
+                + "\"group\":\"Nauta\",\"sourceList\":\"1.m3u\",\"order\":1,\"number\":2,"
+                + "\"state\":\"active\",\"backupm3u\":[\"nauta.sd@Nauta\"]},"
+                + "{\"kind\":\"m3u\",\"tvgId\":\"nauta.sd@Nauta\",\"name\":\"Canal X\","
+                + "\"group\":\"Nauta\",\"sourceList\":\"1.m3u\",\"order\":2,\"number\":1,"
+                + "\"state\":\"active\"}]}";
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);
+        URI hdReference = DynamicSourceReference.create("nauta", "cat_4|Canal X HD");
+        URI sdReference = DynamicSourceReference.create("nauta", "cat_4|Canal X");
+        Channel hd = new Channel("Canal X HD", hdReference, null, "Nauta",
+                Collections.singletonMap("tvg-id", "nauta.hd@Nauta"));
+        Channel sd = new Channel("Canal X", sdReference, null, "Nauta",
+                Collections.singletonMap("tvg-id", "nauta.sd@Nauta"));
+
+        List<Channel> playback = catalog.applyToPlayback(Arrays.asList(hd, sd));
+
+        assertEquals(1, playback.size());
+        assertEquals(hdReference, playback.get(0).getStreamUri());
+        assertEquals(Collections.singletonList(sdReference), TvVooBackup.directBackupsOf(playback.get(0)));
+        Channel fallback = TvVooBackup.directResolutionChannel(playback.get(0), 0);
+        assertEquals(sdReference, fallback.getStreamUri());
+        assertTrue(new NautaStreamResolver().supports(fallback));
     }
 
     private static String m3uRow(String tvgId, int order, int number) {

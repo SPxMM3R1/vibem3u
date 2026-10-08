@@ -52,8 +52,24 @@ public final class TvVooBackupTest {
         assertNull(TvVooBackup.directResolutionChannel(projected, 2));
     }
 
+    @Test public void validatedNautaReferenceCanBeResolvedAsDirectBackup() {
+        URI reference = DynamicSourceReference.create("nauta", "cat_4|Canal X");
+        assertNotNull(reference);
+        Channel backup = new Channel("Canal X", reference, null, "Nauta",
+                Collections.singletonMap("tvg-id", "Nauta.base@Nauta"));
+
+        Channel projected = TvVooBackup.withDirectBackups(direct(), Collections.singletonList(backup));
+        Channel resolving = TvVooBackup.directResolutionChannel(projected, 0);
+
+        assertEquals(Collections.singletonList(reference), TvVooBackup.directBackupsOf(projected));
+        assertEquals(reference, resolving.getStreamUri());
+        assertEquals("Nauta.base@Nauta", resolving.getTvgId());
+        assertTrue(new NautaStreamResolver().supports(resolving));
+    }
+
     @Test public void unsafeBackupsAreRejected() {
-        for (String invalid : Arrays.asList("file:///etc/passwd", "vibem3u://resolver/unknown/example")) {
+        for (String invalid : Arrays.asList("file:///etc/passwd", "vibem3u://resolver/unknown/example",
+                "vibem3u://resolver/nauta/not-valid")) {
             Channel backup = new Channel("Invalid", URI.create(invalid), null, "Noticias",
                     Collections.singletonMap("tvg-id", "T13.bad"));
             assertFalse(TvVooBackup.has(TvVooBackup.withDirectBackups(direct(), Collections.singletonList(backup))));

@@ -47,7 +47,8 @@ final class TvVooBackup {
 
     /**
      * Direcciones directas de respaldo en el orden en que se prueban (desde la 0.5.72 puede
-     * haber varias: {@code backupm3u} del layout). Solo HTTP(S).
+     * haber varias: {@code backupm3u} del layout). Admite HTTP(S) y referencias internas Nauta
+     * validadas, que la app resuelve de nuevo en memoria al cambiar de señal.
      */
     static List<URI> directBackupsOf(Channel channel) {
         if (channel == null) return Collections.emptyList();
@@ -66,7 +67,10 @@ final class TvVooBackup {
         try {
             URI uri = URI.create(value);
             String scheme = uri.getScheme();
-            return "http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme) ? uri : null;
+            if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) return uri;
+            if ("nauta".equalsIgnoreCase(DynamicSourceReference.provider(uri))
+                    && !AppStrings.isBlank(DynamicSourceReference.stableId(uri))) return uri;
+            return null;
         } catch (IllegalArgumentException error) {
             return null;
         }
