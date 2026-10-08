@@ -7,7 +7,6 @@ val resolverFiles = listOf(
     "AppStrings.java",
     "Channel.java",
     "ChannelRequestHeaders.java",
-    "CncVerseStreamResolver.java",
     "DynamicSourceReference.java",
     "HlsCandidateRace.java",
     "HlsStreamValidator.java",
@@ -71,7 +70,6 @@ sourceSets {
             srcDir("../app/src/test/java")
             srcDir(appSources)
             include("cl/streambox/tv/local/**")
-            include("cl/streambox/tv/CncVerseStreamResolverTest.java")
             include("cl/streambox/tv/ResolutionDnsTest.java")
             include("cl/streambox/tv/MeganoticiasStreamResolverTest.java")
             include("cl/streambox/tv/M3uCacheSanitizer.java")

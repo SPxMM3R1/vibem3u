@@ -278,7 +278,6 @@ public final class MainActivity extends Activity {
     private String displayedLogoIdentity = "";
     private final Set<String> logoRevalidatedThisSession = new HashSet<>();
     private boolean playerUsesVolumeNormalization;
-    private boolean playerUsesCncBuffering;
     private long playbackGeneration;
     private boolean playbackWatchdogScheduled;
     private long playbackLoadingSinceElapsedRealtime = -1L;
@@ -583,7 +582,7 @@ public final class MainActivity extends Activity {
         if (playbackBufferManager != null) playbackBufferManager.close();
         ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
         playbackBufferManager = new PlaybackBufferManager(Runtime.getRuntime().maxMemory(),
-                activityManager != null && activityManager.isLowRamDevice(), playerUsesCncBuffering);
+                activityManager != null && activityManager.isLowRamDevice());
         playerUsesVolumeNormalization = isVolumeNormalizationEnabled();
         VibeRenderersFactory renderersFactory = new VibeRenderersFactory(
                 this,
@@ -1846,11 +1845,9 @@ public final class MainActivity extends Activity {
             PlaybackDiagnosticsWorker.Snapshot measurements = playbackBitrateMeter == null
                     ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
             if (playbackHasStarted
-                    && PlaybackStallPolicy.shouldRecover(
-                    isCncVersePlayback(), true,
+                    && PlaybackStallPolicy.isExpired(
                     playbackLoadingSinceElapsedRealtime,
                     nowMs,
-                    lastMediaLoadAgeMs(measurements),
                     PLAYBACK_FREEZE_TIMEOUT_MS
             )) {
                 requestFullPlaybackRecovery(classifyPlaybackStall(measurements));
@@ -1868,9 +1865,8 @@ public final class MainActivity extends Activity {
         long nowNs = System.nanoTime();
         if (measurements.hasRenderedVideoFrame
                 && lastFrameNs != androidx.media3.common.C.TIME_UNSET
-                && PlaybackStallPolicy.shouldRecover(isCncVersePlayback(), false,
-                0L, Math.max(0L, (nowNs - lastFrameNs) / 1_000_000L),
-                lastMediaLoadAgeMs(measurements), PLAYBACK_FREEZE_TIMEOUT_MS)) {
+                && PlaybackStallPolicy.isExpired(0L, Math.max(0L, (nowNs - lastFrameNs) / 1_000_000L),
+                PLAYBACK_FREEZE_TIMEOUT_MS)) {
             requestFullPlaybackRecovery(classifyPlaybackStall(measurements));
         }
     }
@@ -1888,16 +1884,6 @@ public final class MainActivity extends Activity {
         return PlaybackStallPolicy.classify(player != null
                 && player.getPlaybackState() == Player.STATE_BUFFERING,
                 mediaStopped, audioUnderrun, bufferedMs);
-    }
-
-    private boolean isCncVersePlayback() {
-        return currentPlaybackSource != null
-                && "cncverse".equalsIgnoreCase(currentPlaybackSource.getResolverId());
-    }
-
-    private static long lastMediaLoadAgeMs(PlaybackDiagnosticsWorker.Snapshot measurements) {
-        return measurements.lastMediaLoadRealtimeNs <= 0L ? -1L
-                : Math.max(0L, (System.nanoTime() - measurements.lastMediaLoadRealtimeNs) / 1_000_000L);
     }
 
     /**
@@ -2286,7 +2272,7 @@ public final class MainActivity extends Activity {
         long measurementId = startupMetrics.currentId();
         ResolutionContext resolutionContext = new ResolutionContext(20_000L);
         playbackResolutionContext = resolutionContext;
-        // Fuente recordada del selector (Highfly, CNCVerse…; 0.5.76). Solo al abrir el canal:
+        // Fuente recordada del selector (Highfly…; 0.5.76). Solo al abrir el canal:
         // las reconexiones usan la resolución normal para no insistir en una fuente caída.
         String rememberedLabel = !forceRefresh && playbackRecoveryBudget.used() == 0
                 && playbackPreferences != null && !"tvvoo".equalsIgnoreCase(resolver.getId())
@@ -2695,14 +2681,6 @@ public final class MainActivity extends Activity {
             // that token to Media3, even if the channel itself is unchanged.
             return;
         }
-        // Change buffer profile only when crossing CNCVerse/non-CNCVerse. Normal channel
-        // changes reuse the player; a recovery retains its profile and bounded allocator.
-        boolean cncVerse = "cncverse".equalsIgnoreCase(source.getResolverId());
-        if (playerUsesCncBuffering != cncVerse) {
-            releasePlayerForRecovery();
-            playerUsesCncBuffering = cncVerse;
-            createPlayer();
-        }
         resetPlaybackBitrateMeter();
         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
         playbackAutoRecoveryInFlight = false;
@@ -2782,11 +2760,6 @@ public final class MainActivity extends Activity {
             );
         }
         MediaItem.Builder itemBuilder = mediaItemFor(channel, source.getPlaybackUri()).buildUpon();
-        if ("cncverse".equalsIgnoreCase(source.getResolverId())) {
-            // The bridge's small segments need runway, not low-latency playback.
-            itemBuilder.setLiveConfiguration(new MediaItem.LiveConfiguration.Builder()
-                    .setTargetOffsetMs(PlaybackStallPolicy.CNC_LIVE_OFFSET_MS).build());
-        }
         if (source.hasMimeType()) itemBuilder.setMimeType(source.getMimeType());
         return new DefaultMediaSourceFactory(playbackDataSourceFactory)
                 .setLoadErrorHandlingPolicy(new PlaybackLoadErrorPolicy(source.isDynamicallyResolved()))
@@ -4097,8 +4070,7 @@ public final class MainActivity extends Activity {
     private static boolean supportsSourceSelector(StreamResolver resolver) {
         if (resolver == null || AppStrings.isBlank(resolver.getId())) return false;
         String id = resolver.getId();
-        return "tvvoo".equalsIgnoreCase(id) || "highfly".equalsIgnoreCase(id)
-                || "cncverse".equalsIgnoreCase(id);
+        return "tvvoo".equalsIgnoreCase(id) || "highfly".equalsIgnoreCase(id);
     }
 
     private void startSourceSelectorQuery(Channel channel, StreamResolver resolver) {
@@ -4693,7 +4665,7 @@ public final class MainActivity extends Activity {
                 && !AppStrings.isBlank(source.getVariantId())) {
             TvVooSourceHistory.pinAlias(source.getStableSourceId(), source.getVariantId());
         } else if (source.hasResolver() && playbackPreferences != null) {
-            // Highfly, CNCVerse y otros: se recuerda la fuente por su nombre en el selector.
+            // Highfly y otros: se recuerda la fuente por su nombre en el selector.
             playbackPreferences.rememberResolverSourceChoice(
                     channel, source.getResolverId(), candidate.getLabel());
         }

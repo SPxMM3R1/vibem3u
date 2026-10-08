@@ -20,7 +20,7 @@ final class PlaybackPreferences {
     static final String SOURCE_PRINCIPAL = "principal";
     static final String SOURCE_TVVOO_BACKUP = "tvvoo";
     static final String SOURCE_DIRECT_BACKUP_PREFIX = "backup:";
-    /** Fuente elegida de un resolutor sin versiones propias (Highfly, CNCVerse…), por nombre. */
+    /** Fuente elegida de un resolutor sin versiones propias (Highfly…), por nombre. */
     private static final String RESOLVER_SOURCE_PREFIX = "resolver_source_";
 
     static final class QualityPreference {

@@ -27,7 +27,7 @@ public final class ResolverCatalogTest {
         for (ResolverDefinition definition : ResolverCatalog.parse(json).getProviders()) {
             ids.add(definition.getId());
         }
-        assertTrue(ids.containsAll(java.util.Arrays.asList("tvn", "meganoticias", "tvvoo", "highfly", "cncverse")));
+        assertTrue(ids.containsAll(java.util.Arrays.asList("tvn", "meganoticias", "tvvoo", "highfly")));
     }
 
     @Test

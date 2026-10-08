@@ -33,7 +33,7 @@ public final class ResolverCatalog {
     private static final int MAX_ALIAS_LENGTH = 240;
     private static final Pattern SAFE_ID = Pattern.compile("[a-z0-9][a-z0-9_-]{0,31}");
     private static final Set<String> ENGINES = setOf(
-            "tvn", "meganoticias", "24horas", "tvvoo", "highfly", "cncverse"
+            "tvn", "meganoticias", "24horas", "tvvoo", "highfly"
     );
     /** Retired provider entries are ignored if an old persisted catalogue is encountered. */
     private static final Set<String> RETIRED_ENGINES = setOf("24horas");
@@ -267,11 +267,6 @@ public final class ResolverCatalog {
             throw new IOException("La receta declarativa no define su validación.");
         }
         if ("highfly".equals(engine)) validateHighflyConfig(config);
-        if ("cncverse".equals(engine)) {
-            CncVerseStreamResolver.addonBase(config.getOrDefault("manifestUrl",
-                    CncVerseStreamResolver.DEFAULT_MANIFEST_URL));
-            boundedConfigInt(config, "resolutionBudgetMs", 1000, 20000);
-        }
         Set<String> allowedHosts = ALLOWED_CONFIG_HOSTS.get(engine);
         if (allowedHosts == null) allowedHosts = Collections.emptySet();
         for (Map.Entry<String, String> entry : config.entrySet()) {
@@ -376,7 +371,6 @@ public final class ResolverCatalog {
 
     private static Map<String, Set<String>> allowedHosts() {
         Map<String, Set<String>> result = new HashMap<>();
-        result.put("cncverse", setOf("cncverse.dpdns.org"));
         // TVN movió su reproductor en vivo a Cloud Run (2026-09); live.tvn.cl queda de respaldo.
         result.put("tvn", setOf(
                 "live.tvn.cl", "www.tvn.cl", "mdstrm.com",

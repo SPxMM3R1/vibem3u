@@ -19,7 +19,6 @@ public final class StreamResolverRegistry {
         configured.add(new MeganoticiasStreamResolver());
         configured.add(new TvVooStreamResolver(ResolverDefinition.fallbackTvVoo()));
         configured.add(new HighflyStreamResolver(ResolverDefinition.fallbackHighfly()));
-        configured.add(new CncVerseStreamResolver());
         resolvers = Collections.unmodifiableList(configured);
         catalog = null;
         preferences = null;
@@ -101,7 +100,6 @@ public final class StreamResolverRegistry {
             ResolverPreferences preferences
     ) {
         return switch (definition.getEngine()) {
-            case "cncverse" -> new CncVerseStreamResolver(definition);
             case "tvn" -> new TvnStreamResolver(definition);
             case "meganoticias" -> new MeganoticiasStreamResolver(definition);
             case "tvvoo" -> preferences != null && preferences.isMediaFlowEnabled()

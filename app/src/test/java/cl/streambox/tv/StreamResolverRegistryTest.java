@@ -11,16 +11,6 @@ import static org.junit.Assert.assertNull;
 public final class StreamResolverRegistryTest {
     private final StreamResolverRegistry registry = new StreamResolverRegistry();
 
-    @Test public void findsCncVerseByTokenlessReference() {
-        java.util.Map<String, String> attrs = new java.util.LinkedHashMap<>();
-        attrs.put("tvg-id", "TNTSports1.uk@CNCVerse");
-        attrs.put("x-resolver", "cncverse");
-        String ref = "sportsworld|TNT Sports UK|TNT Sports 1";
-        Channel channel = new Channel("TNT Sports 1", DynamicSourceReference.create("cncverse", ref),
-                null, "Deportes", attrs);
-        assertEquals("cncverse", registry.find(channel).getId());
-    }
-
     @Test
     public void resolvesBothCurrentAndLegacyMeganoticiasIds() {
         assertEquals(

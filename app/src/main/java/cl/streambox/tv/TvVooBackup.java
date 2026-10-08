@@ -18,7 +18,7 @@ final class TvVooBackup {
     static final String ATTRIBUTE = "x-backup-tvvoo";
     /** Dirección directa de respaldo; solo existe en memoria, nunca se publica. */
     static final String DIRECT_ATTRIBUTE = "x-backup-stream";
-    /** Stable public ID of an internal CNCVerse backup, kept only in the projected channel. */
+    /** tvg-id propio de cada respaldo, indexado por posición; solo vive en el canal proyectado. */
     private static final String SOURCE_ID_PREFIX = "x-backup-source-id-";
 
     private TvVooBackup() {}
@@ -47,8 +47,7 @@ final class TvVooBackup {
 
     /**
      * Direcciones directas de respaldo en el orden en que se prueban (desde la 0.5.72 puede
-     * haber varias: {@code backupm3u} del layout). HTTP(S) o referencia CNCVerse validada;
-     * esta última debe pasar por el resolutor, nunca directamente por Media3.
+     * haber varias: {@code backupm3u} del layout). Solo HTTP(S).
      */
     static List<URI> directBackupsOf(Channel channel) {
         if (channel == null) return Collections.emptyList();
@@ -66,15 +65,6 @@ final class TvVooBackup {
         if (value.isEmpty()) return null;
         try {
             URI uri = URI.create(value);
-            if (DynamicSourceReference.isAppOnly(uri)
-                    && CncVerseStreamResolver.ID.equals(DynamicSourceReference.provider(uri))) {
-                try {
-                    CncVerseStreamResolver.referenceParts(DynamicSourceReference.stableId(uri));
-                    return uri;
-                } catch (java.io.IOException invalid) {
-                    return null;
-                }
-            }
             String scheme = uri.getScheme();
             return "http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme) ? uri : null;
         } catch (IllegalArgumentException error) {
@@ -106,9 +96,8 @@ final class TvVooBackup {
                     : playbackReference(backup.getStreamUri().toString());
             if (uri == null || uri.equals(channel.getStreamUri())
                     || lines.contains(uri.toString())) continue;
-            String id = backup.getTvgId();
-            if (DynamicSourceReference.isAppOnly(uri) && AppStrings.isBlank(id)) continue;
             // Identidad propia del respaldo: así no lo reclama el resolutor del canal dueño.
+            String id = backup.getTvgId();
             if (!AppStrings.isBlank(id)) attributes.put(SOURCE_ID_PREFIX + lines.size(), id);
             lines.add(uri.toString());
         }
@@ -127,23 +116,13 @@ final class TvVooBackup {
         String backupId = attributes.get(SOURCE_ID_PREFIX + index);
         attributes.remove(DIRECT_ATTRIBUTE);
         attributes.keySet().removeIf(key -> key.startsWith(SOURCE_ID_PREFIX));
-        if (DynamicSourceReference.isAppOnly(uri)) {
-            if (AppStrings.isBlank(backupId)) return null;
-            // Resolve the backup's identity/reference, not the principal's provider metadata.
-            attributes.put("tvg-id", backupId);
-            attributes.put("x-resolver", DynamicSourceReference.provider(uri));
-            attributes.put("x-resolver-id", DynamicSourceReference.stableId(uri));
-            attributes.remove("x-resolver-ids");
-            attributes.remove("x-resolver-stable-id");
+        // Respaldo HTTP: se reproduce tal cual, con su propia identidad y sin los datos de
+        // resolutor del canal dueño (TVN 0104 → su resolutor abría la señal principal).
+        attributes.keySet().removeIf(key -> key.startsWith("x-resolver"));
+        if (AppStrings.isBlank(backupId)) {
+            attributes.remove("tvg-id");
         } else {
-            // Respaldo HTTP: se reproduce tal cual. Sin el tvg-id ni los datos de resolutor del
-            // canal dueño (TVN 0104 → su resolutor abría la señal principal en vez del respaldo).
-            attributes.keySet().removeIf(key -> key.startsWith("x-resolver"));
-            if (AppStrings.isBlank(backupId)) {
-                attributes.remove("tvg-id");
-            } else {
-                attributes.put("tvg-id", backupId);
-            }
+            attributes.put("tvg-id", backupId);
         }
         return new Channel(channel.getName(), uri, channel.getLogoUri(),
                 channel.getGroup(), attributes);
