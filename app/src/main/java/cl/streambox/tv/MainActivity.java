@@ -4065,6 +4065,22 @@ public final class MainActivity extends Activity {
         ViewGroup.LayoutParams params = scroll.getLayoutParams();
         params.height = dp(visible * SOURCE_ROW_HEIGHT_DP + (visible - 1) * SOURCE_ROW_GAP_DP);
         scroll.setLayoutParams(params);
+        scroll.setOnScrollChangeListener((view, x, y, oldX, oldY) -> refreshSourceSelectorMoreHint());
+        scroll.post(this::refreshSourceSelectorMoreHint);
+    }
+
+    /**
+     * Degradado y pista «hay más opciones» mientras la lista pueda bajar. Al llegar al final se
+     * ocultan: el degradado taparía la última fila. En clásico no se muestran (0.5.82).
+     */
+    private void refreshSourceSelectorMoreHint() {
+        View scroll = findViewById(R.id.source_selector_scroll);
+        View fade = findViewById(R.id.source_selector_more_fade);
+        TextView hint = findViewById(R.id.source_selector_more_hint);
+        if (scroll == null || fade == null || hint == null) return;
+        int visibility = !classicUi && scroll.canScrollVertically(1) ? View.VISIBLE : View.GONE;
+        fade.setVisibility(visibility);
+        hint.setVisibility(visibility);
     }
 
     private static boolean supportsSourceSelector(StreamResolver resolver) {

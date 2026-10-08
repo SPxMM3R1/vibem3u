@@ -136,6 +136,7 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-08** (UTC): 0.5.82 (`versionCode` 191), mockup aprobado por el usuario: el selector «Fuentes y calidades» ya no muestra barra lateral. Si la lista tiene más de 5 filas, un degradado sobre la última fila y la pista «Mueve el control para ver más opciones» avisan que hay más; ambos se ocultan al llegar al final (`refreshSourceSelectorMoreHint`). El estilo clásico no cambia. Pendiente: confirmar en la TV.
 - **2026-10-07, cierre Nauta**: APK GitHub 0.5.81/190 descargada, firma/versionado/checksum correctos; CI completo e instrumentado/Release correctos. Solo entonces se publicó Lista M3U `b33cebf` (533 filas en prueba/sin EPG). Proyección real de clases compiladas confirma 533 Nauta / 594 visibles, números únicos 87–619 y 0 descartes. Los orígenes de la placa siguen excluidos temporalmente, sin garantías de todas las señales ni TV física. Cierre documental sin cambios de funcionalidad/binario/tag.
 
 - **2026-10-07, versión Nauta**: 0.5.80/189 → 0.5.81/190; funcional previo `e3d2ee2` subido y SHA remoto comprobado. Contraparte Lista M3U: snapshot público `contracts/nauta-trial-channels-20261007.json` (533 filas, números 87–619, en prueba/sin EPG), todavía local hasta verificar APK. Las pruebas/compilación completas locales pasan; el CI instrumentado y Release firmado siguen siendo compuertas de publicación.

@@ -129,6 +129,7 @@
     <string name="source_selector_no_options">No se detectaron fuentes ni calidades disponibles.</string>
     <string name="source_selector_switching">Cambiando a la fuente seleccionada…</string>
     <string name="source_selector_close">Cerrar</string>
+    <string name="source_selector_more_hint">Mueve el control para ver más opciones</string>
     <string name="mediaflow_settings_title">MediaFlow Proxy</string>
     <string name="mediaflow_open_settings">Servidor MediaFlow</string>
     <string name="mediaflow_settings_description">Envía la resolución Vavoo por tu servidor MediaFlow. La contraseña se guarda cifrada en Android Keystore.</string>

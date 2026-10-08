@@ -72,21 +72,46 @@
             android:textColor="#B7C4CA"
             android:textSize="12.5sp" />
 
-        <ScrollView
-            android:id="@+id/source_selector_scroll"
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:fadingEdge="none"
-            android:fillViewport="false"
-            android:overScrollMode="never">
+            android:layout_marginTop="14dp">
 
-            <LinearLayout
-                android:id="@+id/source_selector_options"
+            <ScrollView
+                android:id="@+id/source_selector_scroll"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical" />
-        </ScrollView>
+                android:fadingEdge="none"
+                android:fillViewport="false"
+                android:overScrollMode="never"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/source_selector_options"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </ScrollView>
+
+            <View
+                android:id="@+id/source_selector_more_fade"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:layout_gravity="bottom"
+                android:background="@drawable/source_selector_more_fade"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/source_selector_more_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:includeFontPadding="false"
+            android:text="@string/source_selector_more_hint"
+            android:textColor="@color/osd_muted"
+            android:textSize="9.5sp"
+            android:visibility="gone" />
 
         <Button
             android:id="@+id/source_selector_close"
