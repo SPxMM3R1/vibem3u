@@ -33,7 +33,7 @@ public final class ResolverCatalog {
     private static final int MAX_ALIAS_LENGTH = 240;
     private static final Pattern SAFE_ID = Pattern.compile("[a-z0-9][a-z0-9_-]{0,31}");
     private static final Set<String> ENGINES = setOf(
-            "tvn", "meganoticias", "24horas", "tvvoo", "highfly"
+            "tvn", "meganoticias", "24horas", "tvvoo", "highfly", "nauta"
     );
     /** Retired provider entries are ignored if an old persisted catalogue is encountered. */
     private static final Set<String> RETIRED_ENGINES = setOf("24horas");
@@ -386,6 +386,7 @@ public final class ResolverCatalog {
         result.put("highfly", setOf(
                 "sports.highfly.to", "papacito.cfd", "raw.githubusercontent.com"
         ));
+        result.put("nauta", setOf("stremio-addon-wheat.vercel.app"));
         return Collections.unmodifiableMap(result);
     }
 

@@ -14,6 +14,7 @@ import cl.streambox.tv.TvVooCatalogChannel;
 import cl.streambox.tv.TvVooStreamResolver;
 import cl.streambox.tv.HighflyStreamResolver;
 import cl.streambox.tv.MeganoticiasStreamResolver;
+import cl.streambox.tv.NautaStreamResolver;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.json.JSONArray;
@@ -303,6 +304,7 @@ public final class LocalCatalogServer {
         if (definition == null) return null;
         return switch (definition.getEngine()) {
             case "tvn" -> new TvnStreamResolver(definition);
+            case "nauta" -> new NautaStreamResolver();
             case "meganoticias" -> new MeganoticiasStreamResolver(definition);
             case "highfly" -> new HighflyStreamResolver(definition);
             case "tvvoo" -> new TvVooStreamResolver(definition);

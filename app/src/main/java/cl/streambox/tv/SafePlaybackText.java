@@ -77,6 +77,14 @@ final class SafePlaybackText {
         }
         if (uri.getPort() > 0) result.append(':').append(uri.getPort());
         String path = uri.getRawPath();
+        // Nauta origin paths can carry short account/password components, and
+        // the addon stream route carries an opaque provider ID. Never show them.
+        String normalizedHost = host.toLowerCase(Locale.ROOT);
+        if (normalizedHost.equals("m3u.tvcluboficial.com") || normalizedHost.equals("tv.m3uts.xyz")
+                || (normalizedHost.equals("stremio-addon-wheat.vercel.app")
+                    && path != null && path.startsWith("/stream/"))) {
+            return result.append('/').append(REDACTED).toString();
+        }
         if (path != null && !AppStrings.isBlank(path)) result.append(redactPath(path));
         String query = uri.getRawQuery();
         if (query != null && !AppStrings.isBlank(query)) result.append('?').append(redactQuery(query));

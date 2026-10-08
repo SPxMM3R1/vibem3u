@@ -24,6 +24,8 @@ public final class MeganoticiasStreamResolverTest {
     }
     @Test public void requiresVideoBeforeAcceptingAndHandsOffExactPlaylists() throws Exception {
         FakeClient client = new FakeClient();
+        // This test checks HLS authorization/handoff, not cold JVM TLS initialization.
+        SharedHttpClient.get();
         ResolutionContext context = new ResolutionContext(1000);
         List<ResolutionStage> stages = new ArrayList<>();
         try (ResolutionContext.Scope ignored = context.activate()) {

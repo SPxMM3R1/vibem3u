@@ -20,6 +20,7 @@ val resolverFiles = listOf(
     "HighflyPremiumTokenRules.java",
     "HighflyStreamResolver.java",
     "M3uParser.java",
+    "NautaStreamResolver.java",
     "ManifestHandoffCache.java",
     "ManifestHandoffData.java",
     "MeganoticiasHlsDecoder.java",
@@ -72,6 +73,7 @@ sourceSets {
             include("cl/streambox/tv/local/**")
             include("cl/streambox/tv/ResolutionDnsTest.java")
             include("cl/streambox/tv/MeganoticiasStreamResolverTest.java")
+            include("cl/streambox/tv/NautaStreamResolverTest.java")
             include("cl/streambox/tv/M3uCacheSanitizer.java")
         }
     }
