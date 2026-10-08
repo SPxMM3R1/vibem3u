@@ -11,6 +11,8 @@
 
 ## Hoy, en una mirada
 
+- **Publicación Nauta en curso**: funcional `e3d2ee2` publicado en `main`; preparada 0.5.81/190 sin cambio visual ni CNCVerse. CI completo, tag y APK Release se verifican antes de publicar las 533 referencias del repositorio hermano. No afirmar disponibilidad completa de Nauta ni prueba física.
+
 - **Nauta preparado (2026-10-07)**: motor nuevo app + auxiliar local, sin UI/EPG ni altas autónomas. URI pública categoría/nombre exacto; metadatos/IDs opacos/URLs/headers solo RAM. HLS y segmento exigidos, plazo 20 s y renovación única. Lista M3U prepara 533 filas en prueba al final (snapshot de 536 recursos/18 categorías), sin renumerar existentes. Doce regresiones Nauta + catálogo integrado; APK 0.5.81 antes de publicar esas referencias. CI/Release/prueba física pendientes en esta entrada.
 
 - **Versión publicada y verificada 0.5.74 (`versionCode` 183)**: reparación Meganoticias `a22cca4`; versión/tag `a3687ac`. Android CI completo `37542313890` y Release `37542728936` verdes. Release no draft: `VibeM3U-v0.5.74.apk`, 2.717.755 bytes, SHA256 `8c940150a223180f5f9e830d42b50321fd1b11bb3eae0b0ae2398e30d31f78f3`, descarga/firma compatible verificadas. APK exacta instalada y 007 con vídeo real 1080p30 en Android TV API36; TV física pendiente. Catálogo/EPG/diseño intactos; no se necesita commit hermano en Lista M3U. El cierre documental posterior no modifica el tag ni el binario.
@@ -131,6 +133,8 @@
   captura.
 
 ## Bitácora (más reciente arriba)
+
+- **2026-10-07, versión Nauta**: 0.5.80/189 → 0.5.81/190; funcional previo `e3d2ee2` subido y SHA remoto comprobado. Contraparte Lista M3U: snapshot público `contracts/nauta-trial-channels-20261007.json` (533 filas, números 87–619, en prueba/sin EPG), todavía local hasta verificar APK. Las pruebas/compilación completas locales pasan; el CI instrumentado y Release firmado siguen siendo compuertas de publicación.
 
 - **2026-10-07, validación local Nauta**: 331 tests por variante debug/experimental/release, 34 del auxiliar (12 Nauta), lint de las tres variantes y los tres APK correctos. Parser real de la app + catálogo integrado reconoce las 533 referencias publicables, 0 incompatibles. Repetición Java del resolver confirma imagen ESPN/DSports y rechazo de los dos canales de la placa. La publicación requiere Android CI instrumentado y Release firmado del tag; la prueba física sigue pendiente.
 
