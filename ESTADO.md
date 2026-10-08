@@ -11,6 +11,8 @@
 
 ## Hoy, en una mirada
 
+- **0.5.81/190 publicada y verificada, Nauta**: funcional `e3d2ee2`, versión/tag `0ef0331` / `v0.5.81`. Android CI `37717793042` y Release `37718148346` success; APK no draft/prerelease, 2.720.775 bytes, SHA256 `dfb24e1a397aa4b029d41ba082414787beee0076ded5869e7c2c00258c1f2ca5`, descarga/firma compatible verificadas. Lista M3U contraparte `b33cebf` publica 533 filas en prueba/sin EPG al final (87–619), después del APK. Proyección real acepta todas, 594 visibles totales. No se tocó UI ni se reintrodujo CNCVerse. Prueba de contenido Java en ESPN/DSports, no APK en TV; ADB sin dispositivo y emulator ausente en SDK C:.
+
 - **Publicación Nauta en curso**: funcional `e3d2ee2` publicado en `main`; preparada 0.5.81/190 sin cambio visual ni CNCVerse. CI completo, tag y APK Release se verifican antes de publicar las 533 referencias del repositorio hermano. No afirmar disponibilidad completa de Nauta ni prueba física.
 
 - **Nauta preparado (2026-10-07)**: motor nuevo app + auxiliar local, sin UI/EPG ni altas autónomas. URI pública categoría/nombre exacto; metadatos/IDs opacos/URLs/headers solo RAM. HLS y segmento exigidos, plazo 20 s y renovación única. Lista M3U prepara 533 filas en prueba al final (snapshot de 536 recursos/18 categorías), sin renumerar existentes. Doce regresiones Nauta + catálogo integrado; APK 0.5.81 antes de publicar esas referencias. CI/Release/prueba física pendientes en esta entrada.
@@ -133,6 +135,8 @@
   captura.
 
 ## Bitácora (más reciente arriba)
+
+- **2026-10-07, cierre Nauta**: APK GitHub 0.5.81/190 descargada, firma/versionado/checksum correctos; CI completo e instrumentado/Release correctos. Solo entonces se publicó Lista M3U `b33cebf` (533 filas en prueba/sin EPG). Proyección real de clases compiladas confirma 533 Nauta / 594 visibles, números únicos 87–619 y 0 descartes. Los orígenes de la placa siguen excluidos temporalmente, sin garantías de todas las señales ni TV física. Cierre documental sin cambios de funcionalidad/binario/tag.
 
 - **2026-10-07, versión Nauta**: 0.5.80/189 → 0.5.81/190; funcional previo `e3d2ee2` subido y SHA remoto comprobado. Contraparte Lista M3U: snapshot público `contracts/nauta-trial-channels-20261007.json` (533 filas, números 87–619, en prueba/sin EPG), todavía local hasta verificar APK. Las pruebas/compilación completas locales pasan; el CI instrumentado y Release firmado siguen siendo compuertas de publicación.
 
