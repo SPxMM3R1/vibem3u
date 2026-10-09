@@ -149,8 +149,9 @@
   proveedor cortó el video dos veces durante la búsqueda con 19 conexiones). Tras aceptar se busca de nuevo
   sobre la calidad nueva; si el cambio falla y vuelve, esa versión no se reofrece en la visita, no se repite si el usuario lo rechaza o lo deja pasar, y registra cada paso
   en logcat `VibeM3U-Quality`. Al aceptar, la versión queda en la caché del coordinador
-  (`ResolverCoordinator.remember`) y fijada en `TvVooSourceHistory`. TvVoo abre con la primera versión NoFreeze
-  aceptada (ya no espera la ventana de 700 ms por mejor calidad; eso lo ofrece el aviso). Arranque: el último
+  (`ResolverCoordinator.remember`) y fijada en `TvVooSourceHistory`. TvVoo abre con la primera versión de la lista
+  (elegida en el selector o la del editor) apenas da NoFreeze; si tarda, espera 700 ms y abre la primera
+  aceptada (ya no espera por mejor calidad; eso lo ofrece el aviso). Arranque: el último
   canal (`PlaybackPreferences.lastChannelSnapshot`, sin respaldos) se resuelve desde `onCreate` en paralelo con
   la lista; los vecinos directos abren conexión (DNS+TCP+TLS en el pool de `SharedHttpClient`) y se renuevan
   cada 4 min; recordatorios 10 s después del arranque; búfer inicial 1 s (`BUFFER_FOR_PLAYBACK_MS`). Precarga de

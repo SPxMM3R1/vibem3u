@@ -29,9 +29,11 @@ import java.util.concurrent.TimeUnit;
  *   <li>a cada enlace se le pide solo su lista HLS («¿estás ahí?»), todos en paralelo;</li>
  *   <li>los que contestan pasan, en orden de llegada, a la prueba completa (segmento real),
  *       que además lee la resolución del video;</li>
- *   <li>al abrir ({@link Mode#PLAY}, 0.5.87) gana el primero aceptado si es NoFreeze (no
- *       vence); si es Clean se espera una ventana corta por uno NoFreeze. La mejor calidad ya no
- *       retrasa la apertura: la ofrece después el aviso de calidad superior.</li>
+ *   <li>al abrir ({@link Mode#PLAY}, 0.5.87) gana la primera versión de la lista (la elegida a
+ *       mano en el selector o, si no hay, la del editor) apenas entrega un enlace NoFreeze (no
+ *       vence); si tarda, se espera {@link #QUALITY_WINDOW_MILLIS} y abre la primera aceptada,
+ *       NoFreeze antes que Clean. La mejor calidad ya no retrasa la apertura: la ofrece después
+ *       el aviso de calidad superior.</li>
  * </ol>
  * <p>{@link Mode#SCAN} recorre todo y devuelve un informe por versión para el selector. Con
  * {@code stopAboveHeight} (aviso de calidad superior, 0.5.87) no espera a las versiones que no
@@ -303,7 +305,7 @@ final class TvVooFastRace {
                         && aliasQueue.isEmpty() && lightQueue.isEmpty() && fullQueue.isEmpty();
                 if (mode == Mode.PLAY && !accepted.isEmpty()) {
                     long waited = millisSince(started) - firstAcceptedAt;
-                    if (idle || hasNoFreeze(accepted) || waited >= QUALITY_WINDOW_MILLIS) break;
+                    if (idle || hasPreferredNoFreeze(accepted) || waited >= QUALITY_WINDOW_MILLIS) break;
                 }
                 if (upgrade) {
                     if (hasAbove(accepted, Math.max(stopAboveHeight, TOP_HEIGHT - 1))) break;
@@ -400,12 +402,29 @@ final class TvVooFastRace {
         return new Result(chosen, new ArrayList<>(reports.values()), lastError);
     }
 
-    /** Al abrir: el primer NoFreeze aceptado o, si no hay, el primero aceptado. */
+    /**
+     * Al abrir: la primera versión de la lista (NoFreeze antes que Clean); si no respondió,
+     * el primer NoFreeze aceptado o, si no hay, el primero aceptado.
+     */
     static Accepted firstToPlay(List<Accepted> accepted) {
+        Accepted preferred = null;
+        for (Accepted candidate : accepted) {
+            if (candidate.link.aliasIndex != 0) continue;
+            if (candidate.link.noFreeze) return candidate;
+            if (preferred == null) preferred = candidate;
+        }
+        if (preferred != null) return preferred;
         for (Accepted candidate : accepted) {
             if (candidate.link.noFreeze) return candidate;
         }
         return accepted.isEmpty() ? null : accepted.get(0);
+    }
+
+    private static boolean hasPreferredNoFreeze(List<Accepted> accepted) {
+        for (Accepted candidate : accepted) {
+            if (candidate.link.aliasIndex == 0 && candidate.link.noFreeze) return true;
+        }
+        return false;
     }
 
     private static boolean hasAbove(List<Accepted> accepted, int height) {
@@ -415,12 +434,6 @@ final class TvVooFastRace {
         return false;
     }
 
-    private static boolean hasNoFreeze(List<Accepted> accepted) {
-        for (Accepted candidate : accepted) {
-            if (candidate.link.noFreeze) return true;
-        }
-        return false;
-    }
 
     private static String failureText(IOException error) {
         String message = String.valueOf(error.getMessage());

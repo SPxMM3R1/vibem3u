@@ -193,6 +193,23 @@ public final class TvVooQualityTest {
     }
 
     @Test
+    public void playWaitsBrieflyForThePinnedVersionInsteadOfTheFastestSibling() throws IOException {
+        Map<String, List<URI>> links = new HashMap<>();
+        links.put("elegida", Collections.singletonList(
+                URI.create("https://tvvoo.hayd.uk/live/manifest.m3u8?url=pin")));
+        links.put("rapida", Collections.singletonList(
+                URI.create("https://tvvoo.hayd.uk/live/manifest.m3u8?url=fast")));
+        // La elegida contesta 300 ms después que la hermana: igual gana (memoria del selector).
+        Map<String, Long> delays = Collections.singletonMap(
+                "https://tvvoo.hayd.uk/live/manifest.m3u8?url=pin", 300L);
+
+        TvVooFastRace.Result result = runDelayed(TvVooFastRace.Mode.PLAY,
+                Arrays.asList("elegida", "rapida"), links, delays, Collections.emptyMap(), -1);
+
+        assertEquals("elegida", result.chosen.link.alias);
+    }
+
+    @Test
     public void deadVersionsGoLastForTenMinutes() {
         long now = 1_000_000L;
         TvVooDeadVersions.markDead("canal", "a", now);
