@@ -172,6 +172,27 @@ public final class TvVooQualityTest {
     }
 
     @Test
+    public void upgradeSearchWaitsBrieflyForA1080pThatAnswersAfterA720p() throws IOException {
+        Map<String, List<URI>> links = new HashMap<>();
+        links.put("actual", Collections.singletonList(URI.create("http://1.1.1.1/a.m3u8")));
+        links.put("hd", Collections.singletonList(URI.create("http://1.1.1.2/hd.m3u8")));
+        links.put("fhd", Collections.singletonList(URI.create("http://1.1.1.3/fhd.m3u8")));
+        Map<String, VideoSampleInfo> quality = new HashMap<>();
+        quality.put("http://1.1.1.1/a.m3u8", new VideoSampleInfo(854, 480, 25, "h264"));
+        quality.put("http://1.1.1.2/hd.m3u8", new VideoSampleInfo(1280, 720, 25, "h264"));
+        quality.put("http://1.1.1.3/fhd.m3u8", new VideoSampleInfo(1920, 1080, 25, "h264"));
+        // La 1080p contesta 1 s después que la 720p: igual entra en la búsqueda.
+        Map<String, Long> delays = Collections.singletonMap("http://1.1.1.3/fhd.m3u8", 1_000L);
+
+        TvVooFastRace.Result result = runDelayed(TvVooFastRace.Mode.SCAN,
+                Arrays.asList("actual", "hd", "fhd"), links, delays, quality, 480);
+
+        TvVooFastRace.VersionReport fhd = result.versions.get(2);
+        assertNotNull("La 1080p tardía debe quedar en el informe", fhd.best);
+        assertEquals(1080, fhd.best.info.height);
+    }
+
+    @Test
     public void deadVersionsGoLastForTenMinutes() {
         long now = 1_000_000L;
         TvVooDeadVersions.markDead("canal", "a", now);
@@ -226,6 +247,41 @@ public final class TvVooQualityTest {
                                 throw new IOException("cancelada");
                             }
                             throw new IOException("Read timed out");
+                        }
+                        return published;
+                    },
+                    source -> quality.get(source.toString()),
+                    new ResolutionDeadline(8_000L),
+                    TvVooFastRace.Listener.NONE,
+                    stopAboveHeight
+            );
+        }
+    }
+
+    /** Como {@link #run}, pero los enlaces lentos contestan bien después de la demora. */
+    private static TvVooFastRace.Result runDelayed(
+            TvVooFastRace.Mode mode,
+            List<String> aliases,
+            Map<String, List<URI>> links,
+            Map<String, Long> delays,
+            Map<String, VideoSampleInfo> quality,
+            int stopAboveHeight
+    ) throws IOException {
+        ResolutionContext context = new ResolutionContext(10_000L);
+        try (ResolutionContext.Scope ignored = context.activate()) {
+            return TvVooFastRace.run(
+                    mode,
+                    aliases,
+                    alias -> links.getOrDefault(alias, Collections.emptyList()),
+                    published -> {
+                        Long delay = delays.get(published.toString());
+                        if (delay != null) {
+                            try {
+                                Thread.sleep(delay);
+                            } catch (InterruptedException interrupted) {
+                                Thread.currentThread().interrupt();
+                                throw new IOException("cancelada");
+                            }
                         }
                         return published;
                     },

@@ -143,8 +143,11 @@
 - **2026-10-09** (UTC): 0.5.87 (`versionCode` 196). Aviso de calidad superior reparado y robusto: antes solo se
   programaba si el primer cuadro llegaba junto con READY (casi nunca) y se abandonaba si a los 15 s el video
   cargaba. Ahora nace en `markPlaybackStarted`, busca a los 3 s, 2 min y 10 min, reintenta cada 5 s si el
-  momento no sirve (hasta 12 veces); la búsqueda (`TvVooStreamResolver.findBetterThan`) termina con la
-  primera versión de más resolución en vez de esperar a todas (medido: 18 s esperando a todas), no se repite si el usuario lo rechaza o lo deja pasar, y registra cada paso
+  momento no sirve (hasta 12 veces); la búsqueda (`TvVooStreamResolver.findBetterThan`) no espera a las versiones que no contestan:
+  corta al tiro con 1080p o más, o espera 2,5 s por una superior a la primera mejor (antes 18 s; ahora
+  aviso ~10 s después del primer cuadro). Usa pocas conexiones y exige 8 s de búfer (en el emulador el
+  proveedor cortó el video dos veces durante la búsqueda con 19 conexiones). Tras aceptar se busca de nuevo
+  sobre la calidad nueva; si el cambio falla y vuelve, esa versión no se reofrece en la visita, no se repite si el usuario lo rechaza o lo deja pasar, y registra cada paso
   en logcat `VibeM3U-Quality`. Al aceptar, la versión queda en la caché del coordinador
   (`ResolverCoordinator.remember`) y fijada en `TvVooSourceHistory`. TvVoo abre con la primera versión NoFreeze
   aceptada (ya no espera la ventana de 700 ms por mejor calidad; eso lo ofrece el aviso). Arranque: el último

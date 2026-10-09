@@ -2589,13 +2589,21 @@ public final class MainActivity extends Activity {
 
     private final Runnable qualityUpgradeCheck = this::startQualityUpgradeCheck;
     private final Runnable hideQualityUpgradeRunnable = this::hideQualityUpgrade;
+    private static final long QUALITY_CHECK_MIN_BUFFER_MS = 8_000L;
     private int qualityCheckAttempt;
     private int qualityCheckDeferrals;
     private boolean qualityUpgradeDeclined;
+    /** Tras aceptar (o volver de) un cambio, se busca de nuevo sobre la calidad nueva. */
+    private boolean qualityCheckRestartPending;
+    /** Versiones que fallaron al cambiar en esta visita al canal: no se vuelven a ofrecer. */
+    private final java.util.Set<String> qualityFailedVariants = new java.util.HashSet<>();
 
-    /** Empieza las búsquedas del canal recién abierto. */
+    /** Empieza las búsquedas del canal recién abierto (o de la versión recién aceptada). */
     private void maybeScheduleQualityUpgradeCheck() {
-        if (qualityUpgradeCheckedGeneration == playbackGeneration) return;
+        boolean sameVisit = qualityUpgradeCheckedGeneration == playbackGeneration;
+        if (sameVisit && !qualityCheckRestartPending) return;
+        if (!sameVisit) qualityFailedVariants.clear();
+        qualityCheckRestartPending = false;
         qualityUpgradeCheckedGeneration = playbackGeneration;
         qualityCheckAttempt = 0;
         qualityCheckDeferrals = 0;
@@ -2643,12 +2651,18 @@ public final class MainActivity extends Activity {
             deferQualityCheck("altura del video aún desconocida");
             return;
         }
+        // La búsqueda comparte red y proveedor con el video: solo con colchón suficiente.
+        if (player.getTotalBufferedDuration() < QUALITY_CHECK_MIN_BUFFER_MS) {
+            deferQualityCheck("búfer bajo (" + player.getTotalBufferedDuration() + " ms)");
+            return;
+        }
         if (isSourceSelectorVisible() || isGuideVisible() || settingsOpen || isQualityUpgradeVisible()) {
             deferQualityCheck("hay un menú abierto");
             return;
         }
         int attempt = ++qualityCheckAttempt;
         long generation = playbackGeneration;
+        java.util.Set<String> skip = new java.util.HashSet<>(qualityFailedVariants);
         Log.i(QUALITY_TAG, "búsqueda " + attempt + " · actual " + currentHeight + "p · "
                 + TvVooStreamResolver.versionName(current.getVariantId()));
         ResolutionContext context = new ResolutionContext(30_000L);
@@ -2666,6 +2680,7 @@ public final class MainActivity extends Activity {
                     if (!row.isAvailable() || row.getSource() == null) continue;
                     if (row.getQualityHeight() <= currentHeight) continue;
                     if (row.getVariantId().equals(current.getVariantId())) continue;
+                    if (skip.contains(row.getVariantId())) continue;
                     if (best == null || row.getQualityHeight() > best.getQualityHeight()) best = row;
                 }
                 outcome = "sin versión de mayor calidad (" + scanMs + " ms)";
@@ -2808,6 +2823,8 @@ public final class MainActivity extends Activity {
         }
         qualityRevertSource = currentPlaybackSource;
         qualityRevertUntilElapsedRealtime = SystemClock.elapsedRealtime() + QUALITY_REVERT_WINDOW_MS;
+        // Si hay una aún mejor (p. ej. 480p → 720p y existe 1080p), se ofrece después.
+        qualityCheckRestartPending = true;
         switchToSource(channel, offer);
     }
 
@@ -2818,6 +2835,20 @@ public final class MainActivity extends Activity {
         if (previous == null || channel == null || player == null
                 || SystemClock.elapsedRealtime() > qualityRevertUntilElapsedRealtime
                 || previous.isExpired(System.currentTimeMillis())) return false;
+        ResolvedPlaybackSource failed = currentPlaybackSource;
+        if (failed != null && !AppStrings.isBlank(failed.getVariantId())) {
+            qualityFailedVariants.add(failed.getVariantId());
+        }
+        Log.i(QUALITY_TAG, "la versión nueva falló: se vuelve a la anterior");
+        // La próxima apertura vuelve a usar la versión que sí funcionaba.
+        Channel resolutionChannel = resolutionChannelFor(channel);
+        StreamResolver resolver = streamResolverRegistry == null ? null
+                : streamResolverRegistry.find(resolutionChannel);
+        if (resolver != null) resolverCoordinator.remember(resolutionChannel, resolver, previous);
+        if (!AppStrings.isBlank(previous.getVariantId())) {
+            TvVooSourceHistory.pinAlias(previous.getStableSourceId(), previous.getVariantId());
+        }
+        qualityCheckRestartPending = true;
         switchToSource(channel, previous);
         return true;
     }

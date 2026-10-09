@@ -34,16 +34,23 @@ import java.util.concurrent.TimeUnit;
  *       retrasa la apertura: la ofrece después el aviso de calidad superior.</li>
  * </ol>
  * <p>{@link Mode#SCAN} recorre todo y devuelve un informe por versión para el selector. Con
- * {@code stopAboveHeight} (aviso de calidad superior, 0.5.87) termina apenas una versión entrega
- * video de más resolución que esa, sin esperar a las demás ni a las que no contestan.</p>
+ * {@code stopAboveHeight} (aviso de calidad superior, 0.5.87) no espera a las versiones que no
+ * contestan: termina al tiro si una entrega 1080p o más; si la primera mejor es menor, espera
+ * {@link #UPGRADE_WINDOW_MILLIS} por una superior. Usa menos conexiones a la vez para no
+ * quitarle red (ni cupo del proveedor) al video que se está viendo.</p>
  */
 final class TvVooFastRace {
     enum Mode { PLAY, SCAN }
 
     static final long QUALITY_WINDOW_MILLIS = 700L;
+    static final long UPGRADE_WINDOW_MILLIS = 2_500L;
+    static final int TOP_HEIGHT = 1080;
     private static final int PARALLEL_ALIASES = 4;
     private static final int PARALLEL_LIGHT = 12;
     private static final int PARALLEL_FULL = 3;
+    private static final int GENTLE_ALIASES = 2;
+    private static final int GENTLE_LIGHT = 4;
+    private static final int GENTLE_FULL = 1;
 
     /** Un enlace publicado por una versión del canal. */
     static final class Link {
@@ -196,11 +203,15 @@ final class TvVooFastRace {
             int stopAboveHeight
     ) throws IOException {
         Listener progress = listener == null ? Listener.NONE : listener;
+        boolean upgrade = stopAboveHeight >= 0;
+        int maxAliases = upgrade ? GENTLE_ALIASES : PARALLEL_ALIASES;
+        int maxLight = upgrade ? GENTLE_LIGHT : PARALLEL_LIGHT;
+        int maxFull = upgrade ? GENTLE_FULL : PARALLEL_FULL;
         ResolutionContext parent = ResolutionContext.current();
         if (parent == null) parent = new ResolutionContext(deadline.remainingMillis());
         BlockingQueue<Event> events = new LinkedBlockingQueue<>();
         ExecutorService pool = Executors.newFixedThreadPool(
-                PARALLEL_ALIASES + PARALLEL_LIGHT + PARALLEL_FULL,
+                maxAliases + maxLight + maxFull,
                 runnable -> {
                     Thread thread = new Thread(runnable, "vibem3u-tvvoo-race");
                     thread.setDaemon(true);
@@ -226,12 +237,13 @@ final class TvVooFastRace {
         int totalLinks = 0;
         int testedLinks = 0;
         long firstAcceptedAt = -1L;
+        long firstBetterAt = -1L;
         long started = System.nanoTime();
         IOException lastError = null;
         try {
             while (true) {
                 // Lanza todo lo que cabe en cada etapa.
-                while (aliasInFlight < PARALLEL_ALIASES && !aliasQueue.isEmpty()) {
+                while (aliasInFlight < maxAliases && !aliasQueue.isEmpty()) {
                     int index = aliasQueue.poll();
                     String alias = aliases.get(index);
                     ResolutionContext child = parent.child(deadline.remainingMillis());
@@ -250,7 +262,7 @@ final class TvVooFastRace {
                     }));
                     aliasInFlight++;
                 }
-                while (lightInFlight < PARALLEL_LIGHT && !lightQueue.isEmpty()) {
+                while (lightInFlight < maxLight && !lightQueue.isEmpty()) {
                     Link link = lightQueue.poll();
                     ResolutionContext child = parent.child(deadline.remainingMillis());
                     contexts.add(child);
@@ -268,7 +280,7 @@ final class TvVooFastRace {
                     }));
                     lightInFlight++;
                 }
-                while (fullInFlight < PARALLEL_FULL && !fullQueue.isEmpty()) {
+                while (fullInFlight < maxFull && !fullQueue.isEmpty()) {
                     Link link = fullQueue.poll();
                     URI source = acceptedLight.get(link);
                     ResolutionContext child = parent.child(deadline.remainingMillis());
@@ -293,7 +305,14 @@ final class TvVooFastRace {
                     long waited = millisSince(started) - firstAcceptedAt;
                     if (idle || hasNoFreeze(accepted) || waited >= QUALITY_WINDOW_MILLIS) break;
                 }
-                if (stopAboveHeight >= 0 && hasAbove(accepted, stopAboveHeight)) break;
+                if (upgrade) {
+                    if (hasAbove(accepted, Math.max(stopAboveHeight, TOP_HEIGHT - 1))) break;
+                    if (firstBetterAt < 0L && hasAbove(accepted, stopAboveHeight)) {
+                        firstBetterAt = millisSince(started);
+                    }
+                    if (firstBetterAt >= 0L
+                            && millisSince(started) - firstBetterAt >= UPGRADE_WINDOW_MILLIS) break;
+                }
                 if (idle) break;
                 if (deadline.remainingMillis() <= 0L) {
                     if (!accepted.isEmpty()) break;
