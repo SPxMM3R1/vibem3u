@@ -33,6 +33,9 @@ public final class SharedHttpClient {
             .writeTimeout(20_000L, TimeUnit.MILLISECONDS)
             .build();
 
+    /** User-Agent de la app (reproductor, logos y guía); antes decía «0.4.42» fijo. */
+    static final String USER_AGENT = "VibeM3U/" + BuildConfig.VERSION_NAME + " (Android TV)";
+
     private SharedHttpClient() {}
 
     /** Returns the singleton client intended for {@code OkHttpDataSource.Factory}. */

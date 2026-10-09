@@ -140,6 +140,11 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-09** (UTC): 0.5.88 (`versionCode` 197), menores de la auditoría ciega. El User-Agent de reproductor,
+  logos, guía y listas (`SharedHttpClient.USER_AGENT`) lleva la versión real; decía «VibeM3U/0.4.42» fijo. Al volver de
+  la configuración se reprograma la precarga de vecinos (con la configuración abierta se detenía hasta el siguiente
+  cambio de canal). Revisado sin cambios: actualizador (firma y versión del APK), vinculación Premium (código y bloqueo),
+  limpieza de búsquedas de calidad y precarga al pasar a segundo plano.
 - **2026-10-09** (UTC): 0.5.87 (`versionCode` 196). Aviso de calidad superior reparado y robusto: antes solo se
   programaba si el primer cuadro llegaba junto con READY (casi nunca) y se abandonaba si a los 15 s el video
   cargaba. Ahora nace en `markPlaybackStarted`, busca a los 3 s, 2 min y 10 min, reintenta cada 5 s si el
