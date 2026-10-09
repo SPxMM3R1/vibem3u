@@ -135,9 +135,9 @@ public final class MainActivity extends Activity {
     private long lastZapKeyAtMs;
     private boolean zapPreviewPending;
     private final Runnable commitZap = () -> {
-        if (!zapPreviewPending) return;
-        zapPreviewPending = false;
-        playChannel(channelIndex);
+        if (!this.zapPreviewPending) return;
+        this.zapPreviewPending = false;
+        playChannel(this.channelIndex);
     };
     /** Documento del catálogo ya aplicado; "" mientras no se aplica ninguno. */
     private String appliedCatalogDocument = "";
