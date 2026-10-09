@@ -141,7 +141,7 @@
 ## Bitácora (más reciente arriba)
 
 - **2026-10-09** (UTC): 0.5.88 (`versionCode` 197), menores de la auditoría ciega. El User-Agent de reproductor,
-  logos, guía y listas (`SharedHttpClient.USER_AGENT`) lleva la versión real; decía «VibeM3U/0.4.42» fijo. Al volver de
+  logos, guía y listas (`AppUserAgent.VALUE`) lleva la versión real; decía «VibeM3U/0.4.42» fijo. Al volver de
   la configuración se reprograma la precarga de vecinos (con la configuración abierta se detenía hasta el siguiente
   cambio de canal). Revisado sin cambios: actualizador (firma y versión del APK), vinculación Premium (código y bloqueo),
   limpieza de búsquedas de calidad y precarga al pasar a segundo plano.

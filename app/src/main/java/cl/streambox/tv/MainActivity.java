@@ -98,7 +98,7 @@ public final class MainActivity extends Activity {
     private static final String RESOURCE_HEALTH_TAG = "VibeM3U-Resource";
     private static final long UPDATE_CHECK_DELAY_MS = 4_000;
     private static final long NO_RESOLUTION_REQUEST = -1L;
-    private static final String PLAYER_USER_AGENT = SharedHttpClient.USER_AGENT;
+    private static final String PLAYER_USER_AGENT = AppUserAgent.VALUE;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
