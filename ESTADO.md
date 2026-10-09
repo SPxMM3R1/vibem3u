@@ -140,6 +140,12 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-09** (UTC): 0.5.86 (`versionCode` 195). Primera verificación en emulador propio (AVD `VibeTV`, Android TV 16,
+  1080p, SDK en `%LOCALAPPDATA%\Android\Sdk`). La precarga de vecinos de la 0.5.85 nunca se disparaba: el primer
+  cuadro suele llegar después de READY y `playbackHasStarted` lo marcaba el watchdog, donde no se programaba.
+  Ahora ambos caminos pasan por `markPlaybackStarted`. Medido en el emulador con 0.5.85: arranque en frío TVN 4,7 s
+  hasta el primer cuadro (2,7 s de resolución, token nuevo); directos 1,4–2,9 s; ráfaga de 5 y de 8 CH = 1 sola
+  apertura; sin cierres.
 - **2026-10-09** (UTC): 0.5.85 (`versionCode` 194), velocidad y fallas pedidas por el usuario tras el análisis completo.
   - Arranque instantáneo: `PublishedPlaybackCatalogRepository` guarda en `files/published_catalog/` el último
     layout, enlaces Highfly y variantes TvVoo válidos; la app abre con ellos y los renueva en segundo plano.

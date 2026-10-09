@@ -675,8 +675,7 @@ public final class MainActivity extends Activity {
                 updateDiagnostics();
                 if (playbackState == Player.STATE_READY && !loadFailed) {
                     if (hasRenderedVideoFrame()) {
-                        if (!playbackHasStarted) scheduleNeighborPrefetch();
-                        playbackHasStarted = true;
+                        markPlaybackStarted();
                         playbackLoadingSinceElapsedRealtime = -1L;
                         maybeSchedulePlaybackSourceStability();
                         maybeScheduleQualityUpgradeCheck();
@@ -1735,6 +1734,15 @@ public final class MainActivity extends Activity {
         mainHandler.postDelayed(commitZap, ZAP_SETTLE_MS);
     }
 
+    /**
+     * Primer cuadro del canal. Puede llegar con el estado READY o después, desde el watchdog;
+     * en ambos casos se programa la precarga de los vecinos una sola vez (0.5.86).
+     */
+    private void markPlaybackStarted() {
+        if (!playbackHasStarted) scheduleNeighborPrefetch();
+        playbackHasStarted = true;
+    }
+
     private void scheduleNeighborPrefetch() {
         mainHandler.removeCallbacks(prefetchNeighbors);
         mainHandler.postDelayed(prefetchNeighbors, NEIGHBOR_PREFETCH_DELAY_MS);
@@ -1940,7 +1948,7 @@ public final class MainActivity extends Activity {
         int state = player.getPlaybackState();
         boolean renderedFrame = hasRenderedVideoFrame();
         if (renderedFrame) {
-            playbackHasStarted = true;
+            markPlaybackStarted();
             maybeSchedulePlaybackSourceStability();
         }
         boolean waitingWithoutFrames = state == Player.STATE_IDLE
