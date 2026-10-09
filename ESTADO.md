@@ -156,6 +156,11 @@
   después de cargar del disco las versiones TvVoo y enlaces Highfly (si se adelanta, ignora la versión elegida); los vecinos directos abren conexión (DNS+TCP+TLS en el pool de `SharedHttpClient`) y se renuevan
   cada 4 min; recordatorios 10 s después del arranque; búfer inicial 1 s (`BUFFER_FOR_PLAYBACK_MS`). Precarga de
   video de vecinos (`DefaultPreloadManager`) evaluada y descartada: ver AGENTS.md.
+  Publicada: tag `v0.5.87` sobre `37dd107`, `VibeM3U-v0.5.87.apk` 2.731.891 bytes, SHA-256
+  `4a50a39fa8ee5a72f92aba02e12df7f1a9d454cbaf91d872863fa8f823a09598`, instalada encima en el emulador (versionCode 196).
+  Medido en emulador: aviso 1080p en Eurosport 2 a 10–14 s del primer cuadro (antes ~21 s y casi nunca), aceptar →
+  1080p en 4 s y nueva búsqueda sobre 1080p; la versión aceptada abre primero al reiniciar (3,8–4,7 s); directos
+  1,3–2,0 s; TVN vecino con caché. Eurosport 2 720p (principal) tiene errores de segmento propios desde el 1.er segundo.
 - **2026-10-09** (UTC): 0.5.86 (`versionCode` 195). Primera verificación en emulador propio (AVD `VibeTV`, Android TV 16,
   1080p, SDK en `%LOCALAPPDATA%/Android/Sdk`). La precarga de vecinos de la 0.5.85 nunca se disparaba: el primer
   cuadro suele llegar después de READY y `playbackHasStarted` lo marcaba el watchdog, donde no se programaba.
