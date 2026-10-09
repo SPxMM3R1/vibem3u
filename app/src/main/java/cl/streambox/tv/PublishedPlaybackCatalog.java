@@ -443,7 +443,10 @@ final class PublishedPlaybackCatalog {
                     List<String> ids = new ArrayList<>();
                     for (int index = 0; index < backups.length() && ids.size() < 8; index++) {
                         String id = backups.optString(index, "").trim();
-                        if (!id.isEmpty() && !id.contains("://") && id.length() <= 512
+                        // Nauta resolver references are not direct M3U backups. Ignore any stale
+                        // Nauta IDs before they hide those rows as independent channels.
+                        if (!id.regionMatches(true, 0, "Nauta.", 0, 6)
+                                && !id.isEmpty() && !id.contains("://") && id.length() <= 512
                                 && !id.equals(stableId) && !id.equals(preferredM3u)
                                 && !ids.contains(id)) ids.add(id);
                     }
