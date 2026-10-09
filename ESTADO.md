@@ -145,6 +145,8 @@
   la configuración se reprograma la precarga de vecinos (con la configuración abierta se detenía hasta el siguiente
   cambio de canal). Revisado sin cambios: actualizador (firma y versión del APK), vinculación Premium (código y bloqueo),
   limpieza de búsquedas de calidad y precarga al pasar a segundo plano.
+  Publicada: tag `v0.5.88` sobre `d6562ab`, `VibeM3U-v0.5.88.apk` 2.731.919 bytes, SHA-256
+  `c33e1121fce3c155003115f515edf31adf289334391417de93622a3469ebf7f6`; probada en emulador (7 canales, configuración ida y vuelta).
 - **2026-10-09** (UTC): 0.5.87 (`versionCode` 196). Aviso de calidad superior reparado y robusto: antes solo se
   programaba si el primer cuadro llegaba junto con READY (casi nunca) y se abandonaba si a los 15 s el video
   cargaba. Ahora nace en `markPlaybackStarted`, busca a los 3 s, 2 min y 10 min, reintenta cada 5 s si el
