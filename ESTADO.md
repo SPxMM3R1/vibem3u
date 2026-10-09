@@ -140,6 +140,22 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-09** (UTC): 0.5.85 (`versionCode` 194), velocidad y fallas pedidas por el usuario tras el análisis completo.
+  - Arranque instantáneo: `PublishedPlaybackCatalogRepository` guarda en `files/published_catalog/` el último
+    layout, enlaces Highfly y variantes TvVoo válidos; la app abre con ellos y los renueva en segundo plano.
+    Las tres descargas van en paralelo (`catalogExecutor`, antes en serie en un hilo). Sin red se conserva el
+    último catálogo conocido (antes quedaba vacío toda la sesión). Un documento idéntico no rearma la lista.
+  - Refresco: catálogo, enlaces y variantes cada 30 min (`catalogRefreshTicker`) y en `onStart` si tienen más
+    de 15 min (antes solo en `onCreate`; con la app abierta días los enlaces Highfly vencían a las 24 h).
+  - Zapeo: al mantener CH+/− o pulsar seguido solo se muestra el canal (`previewChannel`); abre 300 ms después
+    de la última pulsación (`zapBy`). Una pulsación aislada abre al instante.
+  - Precarga: con el canal estable 5 s, se resuelven en segundo plano el anterior y el siguiente (caché del
+    coordinador); los directos solo adelantan el DNS. Guía (caché, descarga y mezcla) en hilo de baja prioridad.
+  - TVN recuerda 6 h la página del reproductor descubierta (no baja tvn.cl/en-vivo en cada token nuevo).
+    Nota: TVN y Meganoticias ya reutilizaban el token vigente (`cacheTtlSeconds` 0 = vigencia del token).
+  - Fallas: `playChannel` usaba `player` antes de comprobar nulo; un enlace Highfly fallido se marcaba por URL
+    y apagaba también a F1 UHD (mismo enlace): ahora por canal (`markFailed(catalogKey)`, prueba nueva).
+  Sin cambios visuales. Pendiente: confirmar en la TV.
 - **2026-10-08 / cierre de integración Nauta**: la Lista M3U hermana publicó `08cf7e1`; sus workflows de canales/editor/dirigido/Highfly finalizaron en éxito y la EPG `37870440382` también. La guía queda limitada a Lista 1, sin identidades Nauta en XML ni pendientes. Se conservaron base y HD Nauta como canales independientes; el resolutor de reproducción sigue intacto. Sin prueba física de TV.
 
 - **2026-10-08 / 2026-10-09 UTC**: retirada la relación Nauta base→HD y publicada la fuente Nauta local. `backupm3u` acepta solo HTTP(S); IDs Nauta residuales no ocultan filas; el resolutor Nauta normal permanece intacto. `local-catalog` entrega categorías/nombres, sin IDs opacos/URLs/headers. Matriz local completa, Android CI `37869646187` y Release `37869965389` success; APK/tag/checksum/certificado verificados arriba. Falta publicar y verificar Lista M3U.

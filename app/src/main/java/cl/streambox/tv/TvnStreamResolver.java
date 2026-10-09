@@ -19,6 +19,13 @@ public final class TvnStreamResolver implements StreamResolver {
     private static final long PAGE_ATTEMPT_BUDGET_MILLIS = 4_000L;
     private static final String PLAYLIST_BASE = "https://mdstrm.com/live-stream-playlist/";
     private static final long SESSION_TOKEN_CACHE_TTL_MILLIS = Long.MAX_VALUE;
+    /**
+     * Página del reproductor ya descubierta en tvn.cl (0.5.85). Se recuerda 6 h para no bajar
+     * tvn.cl/en-vivo en cada token nuevo; si deja de publicar el token, se vuelve a descubrir.
+     */
+    private static final long LIVE_PAGE_MEMORY_MILLIS = 6L * 60L * 60L * 1000L;
+    private static volatile String rememberedLivePage;
+    private static volatile long rememberedLivePageAtMillis;
     private static final long DEFAULT_RESOLUTION_BUDGET_MILLIS = 12_000L;
 
     private final ResolverDefinition definition;
@@ -108,7 +115,8 @@ public final class TvnStreamResolver implements StreamResolver {
         // primero se lee la dirección vigente desde tvn.cl y luego se prueban
         // las conocidas, cada una con su propio plazo.
         LinkedHashSet<String> candidates = new LinkedHashSet<>();
-        String discovered = discoverLivePage(pageReferer, progress);
+        String remembered = rememberedLivePage();
+        String discovered = remembered != null ? remembered : discoverLivePage(pageReferer, progress);
         if (discovered != null) candidates.add(discovered);
         candidates.add(config("pageUrl", LIVE_PAGE));
         for (String fallback : config("fallbackPageUrls", LEGACY_LIVE_PAGE).split(",")) {
@@ -127,6 +135,8 @@ public final class TvnStreamResolver implements StreamResolver {
                 page = getWithinAttemptBudget(candidate, pageHeaders(pageReferer));
                 if (page.contains("access_token")) {
                     livePage = candidate;
+                    rememberedLivePage = candidate;
+                    rememberedLivePageAtMillis = System.currentTimeMillis();
                     break;
                 }
                 lastError = new IOException("TVN no publicó el reproductor en esa dirección.");
@@ -136,6 +146,7 @@ public final class TvnStreamResolver implements StreamResolver {
             ResolutionContext.current().check();
         }
         if (livePage == null) {
+            rememberedLivePage = null;
             throw lastError != null ? lastError
                     : new IOException("TVN no publicó el reproductor en vivo.");
         }
@@ -191,6 +202,13 @@ public final class TvnStreamResolver implements StreamResolver {
                 TokenHttpClient.BROWSER_USER_AGENT,
                 expiresAt(explicitExpiryAtMillis)
         );
+    }
+
+    private static String rememberedLivePage() {
+        String page = rememberedLivePage;
+        if (page == null) return null;
+        long age = System.currentTimeMillis() - rememberedLivePageAtMillis;
+        return age >= 0L && age < LIVE_PAGE_MEMORY_MILLIS ? page : null;
     }
 
     /** Lee en tvn.cl la dirección vigente del reproductor; null si no se pudo. */

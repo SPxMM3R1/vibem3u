@@ -108,6 +108,49 @@ public final class MainActivity extends Activity {
     private final ExecutorService playbackExecutor = Executors.newFixedThreadPool(2);
     private final ExecutorService logoCacheExecutor = Executors.newFixedThreadPool(2);
     private final ExecutorService resourceCacheExecutor = Executors.newSingleThreadExecutor();
+    /**
+     * Guía (leer caché, descargar y mezclar ~3 MB de XML) y precarga de vecinos a baja prioridad:
+     * no compiten con el arranque del video ni ocupan el hilo de red de la lista (0.5.85).
+     */
+    private final ExecutorService epgExecutor = backgroundExecutor("vibem3u-epg");
+    private final ExecutorService prefetchExecutor = backgroundExecutor("vibem3u-prefetch");
+    private static final long NEIGHBOR_PREFETCH_DELAY_MS = 5_000L;
+    private final Runnable prefetchNeighbors = this::prefetchNeighborChannels;
+
+    private static ExecutorService backgroundExecutor(String name) {
+        return Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(() -> {
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
+                runnable.run();
+            }, name);
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+    /** Catálogo, enlaces Highfly y variantes TvVoo: tres descargas en paralelo (0.5.85). */
+    private final ExecutorService catalogExecutor = Executors.newFixedThreadPool(3);
+    private boolean catalogRefreshRunning;
+    /** Pausa del zapeo continuo antes de abrir el canal elegido (0.5.85). */
+    private static final long ZAP_SETTLE_MS = 300L;
+    private long lastZapKeyAtMs;
+    private boolean zapPreviewPending;
+    private final Runnable commitZap = () -> {
+        if (!zapPreviewPending) return;
+        zapPreviewPending = false;
+        playChannel(channelIndex);
+    };
+    /** Documento del catálogo ya aplicado; "" mientras no se aplica ninguno. */
+    private String appliedCatalogDocument = "";
+    private static final long CATALOG_REFRESH_INTERVAL_MS = 30L * 60L * 1000L;
+    private static final long CATALOG_REFRESH_ON_START_MS = 15L * 60L * 1000L;
+    /** La app queda abierta días: el catálogo y los enlaces se renuevan cada 30 min. */
+    private final Runnable catalogRefreshTicker = new Runnable() {
+        @Override public void run() {
+            if (isFinishing() || isDestroyed()) return;
+            if (!settingsOpen) refreshPublishedPlaybackCatalog();
+            mainHandler.postDelayed(this, CATALOG_REFRESH_INTERVAL_MS);
+        }
+    };
     private PlaylistRepository repository;
     private EpgRepository epgRepository;
     private final PlaybackRecoveryEpisode playbackRecoveryEpisode = new PlaybackRecoveryEpisode();
@@ -460,6 +503,7 @@ public final class MainActivity extends Activity {
         enterImmersiveMode();
         createPlayer();
         refreshPublishedPlaybackCatalog();
+        mainHandler.postDelayed(catalogRefreshTicker, CATALOG_REFRESH_INTERVAL_MS);
         if (BuildConfig.ENABLE_APP_UPDATES) {
             appUpdater = new AppUpdater(this, networkExecutor, mainHandler);
             mainHandler.postDelayed(appUpdater::checkForUpdates, UPDATE_CHECK_DELAY_MS);
@@ -631,6 +675,7 @@ public final class MainActivity extends Activity {
                 updateDiagnostics();
                 if (playbackState == Player.STATE_READY && !loadFailed) {
                     if (hasRenderedVideoFrame()) {
+                        if (!playbackHasStarted) scheduleNeighborPrefetch();
                         playbackHasStarted = true;
                         playbackLoadingSinceElapsedRealtime = -1L;
                         maybeSchedulePlaybackSourceStability();
@@ -981,7 +1026,7 @@ public final class MainActivity extends Activity {
             for (URI epgUri : playlist.getEpgUris()) {
                 String url = epgUri.toString();
                 if (!epgRequests.add(url)) continue;
-                resourceCacheExecutor.submit(() -> {
+                epgExecutor.submit(() -> {
                     EpgData local = null;
                     try {
                         local = epgRepository.loadCached(epgUri);
@@ -995,7 +1040,7 @@ public final class MainActivity extends Activity {
                     if (!isNetworkAvailable()) return;
 
                     EpgData baseline = local;
-                    networkExecutor.submit(() -> {
+                    epgExecutor.submit(() -> {
                         try {
                             EpgRepository.LoadResult result = epgRepository.downloadIfChanged(epgUri);
                             if (result.isChanged() || baseline == null) {
@@ -1048,7 +1093,7 @@ public final class MainActivity extends Activity {
         List<EpgData> snapshot = Collections.unmodifiableList(
                 new ArrayList<>(epgDataByUrl.values())
         );
-        networkExecutor.submit(() -> {
+        epgExecutor.submit(() -> {
             EpgData merged = EpgData.merge(snapshot);
             mainHandler.post(() -> {
                 if (generation != playlistGeneration
@@ -1670,8 +1715,87 @@ public final class MainActivity extends Activity {
         playChannel(requestedIndex, false);
     }
 
+    /**
+     * Zapeo (0.5.85). Una pulsación aislada abre el canal al instante. Al mantener CH+/− o pulsar
+     * seguido, solo se muestran número, nombre, logo y guía de cada canal; el video abre
+     * {@link #ZAP_SETTLE_MS} después de la última pulsación. Antes, cada canal intermedio
+     * detenía el reproductor y lanzaba una resolución de red.
+     */
+    private void zapBy(int delta, boolean repeat) {
+        if (channels.isEmpty()) return;
+        long now = SystemClock.uptimeMillis();
+        boolean rapid = repeat || zapPreviewPending || now - lastZapKeyAtMs < ZAP_SETTLE_MS;
+        lastZapKeyAtMs = now;
+        if (!rapid) {
+            playChannel(channelIndex + delta);
+            return;
+        }
+        previewChannel(channelIndex + delta);
+        mainHandler.removeCallbacks(commitZap);
+        mainHandler.postDelayed(commitZap, ZAP_SETTLE_MS);
+    }
+
+    private void scheduleNeighborPrefetch() {
+        mainHandler.removeCallbacks(prefetchNeighbors);
+        mainHandler.postDelayed(prefetchNeighbors, NEIGHBOR_PREFETCH_DELAY_MS);
+    }
+
+    /**
+     * Precarga (0.5.85): con el canal estable, resuelve en segundo plano el anterior y el
+     * siguiente. Su fuente queda en la caché del coordinador, así CH+/− abre sin esperar al
+     * resolutor. Los canales directos solo adelantan la consulta DNS de su servidor.
+     */
+    private void prefetchNeighborChannels() {
+        if (channels.size() < 2 || player == null || !playbackHasStarted || settingsOpen
+                || exiting || resourcesReleased || streamResolverRegistry == null) return;
+        for (int delta : new int[] {1, -1}) {
+            int index = ((channelIndex + delta) % channels.size() + channels.size()) % channels.size();
+            Channel neighbor = channels.get(index);
+            if (neighbor == null || neighbor == playbackChannel) continue;
+            StreamResolver resolver = streamResolverRegistry.find(neighbor);
+            if (resolver != null) {
+                if (!resolver.cacheResolvedSource() || resolver.cacheTtlMillis() <= 0L) continue;
+                prefetchExecutor.submit(() -> {
+                    ResolutionContext context = new ResolutionContext(12_000L);
+                    try (ResolutionContext.Scope ignored = context.activate()) {
+                        resolverCoordinator.resolve(neighbor, resolver, false,
+                                ResolutionProgressListener.NONE);
+                    } catch (Exception ignored) {
+                        // Una precarga fallida no afecta: al abrir el canal se resuelve normal.
+                    }
+                });
+            } else {
+                URI uri = neighbor.getStreamUri();
+                String host = uri == null ? null : uri.getHost();
+                if (host == null || !("http".equalsIgnoreCase(uri.getScheme())
+                        || "https".equalsIgnoreCase(uri.getScheme()))) continue;
+                prefetchExecutor.submit(() -> {
+                    try {
+                        java.net.InetAddress.getAllByName(host);
+                    } catch (Exception ignored) {
+                        // Solo adelanta la consulta DNS.
+                    }
+                });
+            }
+        }
+    }
+
+    /** Muestra el canal en el OSD sin abrirlo; el que se está viendo sigue sonando. */
+    private void previewChannel(int requestedIndex) {
+        zapPreviewPending = true;
+        channelIndex = (requestedIndex % channels.size() + channels.size()) % channels.size();
+        Channel channel = channels.get(channelIndex);
+        bindOsdChannel(publishedPlaybackCatalog.numberFor(channel, channelIndex + 1), channel);
+        updateProgrammeInfo();
+        loadChannelLogo(channel, false);
+        showOverlayForChannelStart();
+    }
+
     private void playChannel(int requestedIndex, boolean revalidateLogo) {
         if (channels.isEmpty()) return;
+        mainHandler.removeCallbacks(commitZap);
+        mainHandler.removeCallbacks(prefetchNeighbors);
+        zapPreviewPending = false;
         closePlaybackSourceSelector();
         cancelQualityUpgrade();
         qualityRevertSource = null;
@@ -1712,11 +1836,11 @@ public final class MainActivity extends Activity {
         subtitlePreferenceAppliedFor = null;
         subtitleTextObservedFor = null;
 
-        player.setTrackSelectionParameters(player.getTrackSelectionParameters()
-                .buildUpon()
-                .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
-                .build());
         if (player != null) {
+            player.setTrackSelectionParameters(player.getTrackSelectionParameters()
+                    .buildUpon()
+                    .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                    .build());
             player.stop();
             player.clearMediaItems();
         }
@@ -3919,7 +4043,7 @@ public final class MainActivity extends Activity {
     private void markPublishedHighflyLinkFailed() {
         if (currentPlaybackSource != null
                 && "highfly".equalsIgnoreCase(currentPlaybackSource.getResolverId())) {
-            PublishedHighflyLinks.markFailed(currentPlaybackSource.getPlaybackUri());
+            PublishedHighflyLinks.markFailed(currentPlaybackSource.getStableSourceId());
         }
     }
 
@@ -4510,68 +4634,112 @@ public final class MainActivity extends Activity {
     }
 
     private void refreshPublishedPlaybackCatalog() {
-        if (publishedPlaybackCatalogRepository == null) return;
-        publishedCatalogRefreshPending = true;
-        networkExecutor.execute(() -> {
-            PublishedPlaybackCatalog refreshed;
+        if (publishedPlaybackCatalogRepository == null || catalogRefreshRunning) return;
+        catalogRefreshRunning = true;
+        boolean firstLoad = appliedCatalogDocument.isEmpty();
+        if (publishedPlaybackCatalog.isEmpty()) publishedCatalogRefreshPending = true;
+        PublishedPlaybackCatalogRepository repository = publishedPlaybackCatalogRepository;
+        catalogExecutor.execute(() -> {
+            PublishedPlaybackCatalog refreshed = null;
+            String document = null;
             try {
-                // Enlaces directos Highfly primero: así el primer canal ya abre rápido.
-                PublishedHighflyLinks.update(
-                        publishedPlaybackCatalogRepository.fetchHighflyLinks(),
-                        System.currentTimeMillis()
-                );
-            } catch (Exception ignored) {
-                // Sin enlaces publicados, Highfly se resuelve como siempre.
-            }
-            try {
-                // Hermanas de cada canal TvVoo (HD, FHD, BACKUP): respaldo si la elegida cae.
-                PublishedTvVooVariants.update(
-                        publishedPlaybackCatalogRepository.fetchTvVooVariants(),
-                        System.currentTimeMillis()
-                );
-            } catch (Exception ignored) {
-                // Sin variantes, cada canal TvVoo usa solo su versión elegida.
-            }
-            try {
-                refreshed = publishedPlaybackCatalogRepository.refresh();
-            } catch (Exception ignored) {
-                // Local selection/cache data was retired; offline startup must
-                // not reintroduce channels that are absent from the web config.
+                if (firstLoad) {
+                    // Arranque instantáneo (0.5.85): lo último conocido mientras llega la red.
+                    long now = System.currentTimeMillis();
+                    String links = repository.cached(PublishedPlaybackCatalogRepository.HIGHFLY_LINKS_FILE);
+                    if (links != null) PublishedHighflyLinks.update(links, now);
+                    String variants = repository.cached(PublishedPlaybackCatalogRepository.TVVOO_VARIANTS_FILE);
+                    if (variants != null) PublishedTvVooVariants.update(variants, now);
+                    String cachedLayout = repository.cached(PublishedPlaybackCatalogRepository.LAYOUT_FILE);
+                    if (cachedLayout != null) {
+                        try {
+                            PublishedPlaybackCatalog cached = PublishedPlaybackCatalog.parse(cachedLayout);
+                            if (!cached.isEmpty()) {
+                                mainHandler.post(() -> applyPublishedCatalog(cached, cachedLayout, false));
+                            }
+                        } catch (Exception ignored) {
+                            // Un archivo dañado se ignora: se espera la red como antes.
+                        }
+                    }
+                }
+                // Las tres descargas en paralelo: ninguna espera a la otra.
+                catalogExecutor.execute(() -> {
+                    try {
+                        // Enlaces directos Highfly: el canal Highfly abre sin consultar la API.
+                        PublishedHighflyLinks.update(repository.fetchHighflyLinks(),
+                                System.currentTimeMillis());
+                    } catch (Exception ignored) {
+                        // Sin enlaces publicados, Highfly se resuelve como siempre.
+                    }
+                });
+                catalogExecutor.execute(() -> {
+                    try {
+                        // Hermanas de cada canal TvVoo (HD, FHD, BACKUP): respaldo si la elegida cae.
+                        PublishedTvVooVariants.update(repository.fetchTvVooVariants(),
+                                System.currentTimeMillis());
+                    } catch (Exception ignored) {
+                        // Sin variantes, cada canal TvVoo usa solo su versión elegida.
+                    }
+                });
+                try {
+                    document = repository.fetchLayoutDocument();
+                    refreshed = PublishedPlaybackCatalog.parse(document);
+                } catch (Exception ignored) {
+                    refreshed = null;
+                }
+            } finally {
+                PublishedPlaybackCatalog result = refreshed;
+                String resultDocument = document;
                 mainHandler.post(() -> {
+                    catalogRefreshRunning = false;
                     if (isFinishing() || isDestroyed()) return;
-                    publishedPlaybackCatalog = PublishedPlaybackCatalog.empty();
-                    publishedCatalogRefreshPending = false;
-                    if (getPlaylistSources().isEmpty() && !settingsOpen) {
-                        openSettings();
+                    if (result == null) {
+                        // Sin red se conserva el último catálogo conocido (de disco o de antes).
+                        if (!publishedPlaybackCatalog.isEmpty()) return;
+                        publishedPlaybackCatalog = PublishedPlaybackCatalog.empty();
+                        publishedCatalogRefreshPending = false;
+                        if (getPlaylistSources().isEmpty() && !settingsOpen) {
+                            openSettings();
+                            return;
+                        }
+                        applyPlaylistsAfterCatalogWait();
                         return;
                     }
-                    applyPlaylistsAfterCatalogWait();
+                    catalogUpdatedAtMillis = System.currentTimeMillis();
+                    applyPublishedCatalog(result, resultDocument, true);
                 });
-                return;
             }
-            PublishedPlaybackCatalog result = refreshed;
-            mainHandler.post(() -> {
-                if (isFinishing() || isDestroyed()) return;
-                publishedPlaybackCatalog = result;
-                publishedCatalogRefreshPending = false;
-                mainHandler.removeCallbacks(publishedCatalogWaitTimeout);
-                catalogUpdatedAtMillis = System.currentTimeMillis();
-                List<PlaylistSource> sources = getPlaylistSources();
-                if (sources.isEmpty() && !hasPublishedProviderChannels()) {
-                    if (!settingsOpen) openSettings();
-                    return;
-                }
-                if (playlistsBySource.isEmpty() && !hasPublishedProviderChannels()) return;
-                boolean firstList = channels.isEmpty();
-                applyPlaylists(
-                        new LinkedHashMap<>(playlistsBySource),
-                        loadedPlaylistSignature,
-                        playlistGeneration,
-                        false
-                );
-                if (firstList && !channels.isEmpty()) hidePlaylistLoadingIfPlaybackPending();
-            });
         });
+    }
+
+    /**
+     * Aplica un catálogo publicado. Uno guardado en disco solo se usa mientras no haya llegado el
+     * de la red; uno idéntico al ya aplicado no vuelve a armar la lista.
+     */
+    private void applyPublishedCatalog(PublishedPlaybackCatalog result, String document,
+            boolean fromNetwork) {
+        if (isFinishing() || isDestroyed() || result == null) return;
+        if (!fromNetwork && !appliedCatalogDocument.isEmpty()) return;
+        String key = document == null ? "" : document;
+        publishedCatalogRefreshPending = false;
+        mainHandler.removeCallbacks(publishedCatalogWaitTimeout);
+        if (!key.isEmpty() && key.equals(appliedCatalogDocument)) return;
+        appliedCatalogDocument = key;
+        publishedPlaybackCatalog = result;
+        List<PlaylistSource> sources = getPlaylistSources();
+        if (sources.isEmpty() && !hasPublishedProviderChannels()) {
+            if (!settingsOpen) openSettings();
+            return;
+        }
+        if (playlistsBySource.isEmpty() && !hasPublishedProviderChannels()) return;
+        boolean firstList = channels.isEmpty();
+        applyPlaylists(
+                new LinkedHashMap<>(playlistsBySource),
+                loadedPlaylistSignature,
+                playlistGeneration,
+                false
+        );
+        if (firstList && !channels.isEmpty()) hidePlaylistLoadingIfPlaybackPending();
     }
 
     private void moveSourceSelectorFocus(int delta) {
@@ -4766,10 +4934,10 @@ public final class MainActivity extends Activity {
         if (isChannelNavigationKey(keyCode)) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 // Android TV remotes emit repeated ACTION_DOWN events while
-                // a channel key is held. Handle every repeat so holding
-                // Channel +/− (and the existing D-pad aliases) scrolls
-                // through channels continuously.
-                playChannel(channelIndex + channelNavigationDelta(keyCode));
+                // a channel key is held. Holding Channel +/− (and the D-pad
+                // aliases) scrolls through channels continuously; only the
+                // channel where the user stops is opened (0.5.85).
+                zapBy(channelNavigationDelta(keyCode), event.getRepeatCount() > 0);
             }
             // Consume ACTION_UP as well so the focused player/view cannot
             // reinterpret the release as another navigation action.
@@ -4975,6 +5143,9 @@ public final class MainActivity extends Activity {
         playbackExecutor.shutdownNow();
         logoCacheExecutor.shutdownNow();
         resourceCacheExecutor.shutdownNow();
+        catalogExecutor.shutdownNow();
+        epgExecutor.shutdownNow();
+        prefetchExecutor.shutdownNow();
 
         if (playbackBitrateMeter != null) {
             playbackBitrateMeter.close();
@@ -5456,6 +5627,11 @@ public final class MainActivity extends Activity {
     @Override
     protected void onStart() {
         super.onStart();
+        // Al volver a la app (TV encendida de nuevo), catálogo y enlaces se renuevan si son viejos.
+        if (!settingsOpen && catalogUpdatedAtMillis > 0L
+                && System.currentTimeMillis() - catalogUpdatedAtMillis > CATALOG_REFRESH_ON_START_MS) {
+            refreshPublishedPlaybackCatalog();
+        }
         if (restartPlaybackAfterFocusLoss) {
             restartPlaybackAfterFocusLoss = false;
             if (channels.isEmpty()) {

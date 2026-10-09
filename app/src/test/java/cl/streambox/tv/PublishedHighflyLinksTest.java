@@ -43,6 +43,18 @@ public final class PublishedHighflyLinksTest {
     }
 
     @Test
+    public void aFailureInOneChannelKeepsAnotherChannelWithTheSameLink() {
+        String url = "https://papacito.cfd/m3u/now-545445/live.m3u8";
+        PublishedHighflyLinks.update("{\"schema\":1,\"generatedAt\":\"2026-09-29T01:30:00Z\",\"channels\":["
+                + "{\"catalogKey\":\"SkySportsF1.uk\",\"slug\":\"now-545445\",\"url\":\"" + url + "\"},"
+                + "{\"catalogKey\":\"SkySportsF1UHD.uk\",\"slug\":\"now-545445\",\"url\":\"" + url + "\"}]}", NOW);
+        PublishedHighflyLinks.markFailed("SkySportsF1.uk");
+
+        assertNull(PublishedHighflyLinks.usable("SkySportsF1.uk"));
+        assertEquals(URI.create(url), PublishedHighflyLinks.usable("SkySportsF1UHD.uk"));
+    }
+
+    @Test
     public void rejectsLinksThatAreNotTheExactTokenFreeForm() {
         assertTrue(PublishedHighflyLinks.parse(document("2026-09-29T01:30:00Z", "now-545445",
                 "https://papacito.cfd/m3u/now-545445/live.m3u8?token=x"), NOW).isEmpty());

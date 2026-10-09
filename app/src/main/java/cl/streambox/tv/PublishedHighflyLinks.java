@@ -90,14 +90,26 @@ final class PublishedHighflyLinks {
     /** Enlace directo del canal si existe y no falló en esta sesión; si no, null. */
     static URI usable(String catalogKey) {
         if (catalogKey == null) return null;
-        URI link = links.get(catalogKey.trim());
-        if (link == null || failed.contains(link.toString())) return null;
+        String key = catalogKey.trim();
+        URI link = links.get(key);
+        if (link == null || failed.contains(key)) return null;
         return link;
     }
 
-    /** El enlace no reprodujo: la próxima vez se usa el resolutor completo. */
+    /**
+     * El enlace no reprodujo en este canal: la próxima vez se usa su resolutor completo. Se marca
+     * por canal y no por URL: F1 y F1 UHD pueden publicar el mismo enlace (0.5.85).
+     */
+    static void markFailed(String catalogKey) {
+        if (catalogKey != null && !catalogKey.trim().isEmpty()) failed.add(catalogKey.trim());
+    }
+
+    /** Compatibilidad: marca los canales cuyo enlace publicado es exactamente {@code link}. */
     static void markFailed(URI link) {
-        if (link != null) failed.add(link.toString());
+        if (link == null) return;
+        for (Map.Entry<String, URI> entry : links.entrySet()) {
+            if (link.equals(entry.getValue())) failed.add(entry.getKey());
+        }
     }
 
     static void resetForTests() {
