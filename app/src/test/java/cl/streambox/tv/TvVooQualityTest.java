@@ -61,7 +61,29 @@ public final class TvVooQualityTest {
     }
 
     @Test
-    public void playPicksTheBestQualityThatAnswersInTheWindow() throws IOException {
+    public void playOpensWithTheFirstStableAnswerWithoutWaitingForQuality() throws IOException {
+        String stable = "https://tvvoo.hayd.uk/live/manifest.m3u8?url=a";
+        Map<String, List<URI>> links = new HashMap<>();
+        links.put("elegida", Collections.singletonList(URI.create(stable)));
+        links.put("hermana", Collections.singletonList(URI.create("http://1.1.1.2/b.m3u8")));
+        Map<String, VideoSampleInfo> quality = new HashMap<>();
+        quality.put(stable, new VideoSampleInfo(1024, 576, 25, "h264"));
+        quality.put("http://1.1.1.2/b.m3u8", new VideoSampleInfo(1920, 1080, 50, "h264"));
+        // La de mejor calidad tarda: antes se la esperaba 700 ms; desde 0.5.87 se abre ya.
+        Map<String, Long> slow = Collections.singletonMap("http://1.1.1.2/b.m3u8", 3_000L);
+        long started = System.nanoTime();
+
+        TvVooFastRace.Result result = run(TvVooFastRace.Mode.PLAY, Arrays.asList("elegida", "hermana"),
+                links, slow, quality);
+
+        long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
+        assertEquals("elegida", result.chosen.link.alias);
+        assertTrue("No espera la ventana de calidad: " + elapsedMs + " ms",
+                elapsedMs < TvVooFastRace.QUALITY_WINDOW_MILLIS);
+    }
+
+    @Test
+    public void scanStillRanksTheBestQualityForTheUpgradeOffer() throws IOException {
         Map<String, List<URI>> links = new HashMap<>();
         links.put("elegida", Collections.singletonList(URI.create("http://1.1.1.1/a.m3u8")));
         links.put("hermana", Collections.singletonList(URI.create("http://1.1.1.2/b.m3u8")));
@@ -69,7 +91,7 @@ public final class TvVooQualityTest {
         quality.put("http://1.1.1.1/a.m3u8", new VideoSampleInfo(1024, 576, 25, "h264"));
         quality.put("http://1.1.1.2/b.m3u8", new VideoSampleInfo(1920, 1080, 50, "h264"));
 
-        TvVooFastRace.Result result = run(TvVooFastRace.Mode.PLAY, Arrays.asList("elegida", "hermana"),
+        TvVooFastRace.Result result = run(TvVooFastRace.Mode.SCAN, Arrays.asList("elegida", "hermana"),
                 links, Collections.emptyMap(), quality);
 
         assertEquals("hermana", result.chosen.link.alias);

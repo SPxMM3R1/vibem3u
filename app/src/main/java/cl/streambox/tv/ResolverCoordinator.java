@@ -99,6 +99,19 @@ public final class ResolverCoordinator {
         }
     }
 
+    /**
+     * Guarda una fuente elegida fuera de la resolución normal (aviso de calidad superior,
+     * 0.5.87): la próxima apertura del canal reutiliza esa fuente mientras siga vigente.
+     */
+    public void remember(Channel channel, StreamResolver resolver, ResolvedPlaybackSource source) {
+        if (channel == null || source == null || !shouldCache(resolver)
+                || source.isExpired(System.currentTimeMillis())) return;
+        synchronized (lock) {
+            memoryCache.put(key(channel, resolver), new CachedSource(
+                    source, resolver.keepSessionSourceOnPlaybackPause()));
+        }
+    }
+
     public void invalidate(Channel channel, StreamResolver resolver) {
         if (channel == null || resolver == null) return;
         synchronized (lock) {

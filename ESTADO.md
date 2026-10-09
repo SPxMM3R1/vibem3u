@@ -7,7 +7,7 @@
 > actualiza este archivo en el mismo commit**: la sección «Hoy» si cambió el estado y una
 > línea nueva en «Bitácora».
 
-Última actualización: **2026-10-08** (America/Santiago).
+Última actualización: **2026-10-09** (America/Santiago).
 
 ## Hoy, en una mirada
 
@@ -140,6 +140,17 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-09** (UTC): 0.5.87 (`versionCode` 196). Aviso de calidad superior reparado y robusto: antes solo se
+  programaba si el primer cuadro llegaba junto con READY (casi nunca) y se abandonaba si a los 15 s el video
+  cargaba. Ahora nace en `markPlaybackStarted`, busca a los 12 s, 2 min y 10 min, reintenta cada 15 s si el
+  momento no sirve (hasta 8 veces), no se repite si el usuario lo rechaza o lo deja pasar, y registra cada paso
+  en logcat `VibeM3U-Quality`. Al aceptar, la versión queda en la caché del coordinador
+  (`ResolverCoordinator.remember`) y fijada en `TvVooSourceHistory`. TvVoo abre con la primera versión NoFreeze
+  aceptada (ya no espera la ventana de 700 ms por mejor calidad; eso lo ofrece el aviso). Arranque: el último
+  canal (`PlaybackPreferences.lastChannelSnapshot`, sin respaldos) se resuelve desde `onCreate` en paralelo con
+  la lista; los vecinos directos abren conexión (DNS+TCP+TLS en el pool de `SharedHttpClient`) y se renuevan
+  cada 4 min; recordatorios 10 s después del arranque; búfer inicial 1 s (`BUFFER_FOR_PLAYBACK_MS`). Precarga de
+  video de vecinos (`DefaultPreloadManager`) evaluada y descartada: ver AGENTS.md.
 - **2026-10-09** (UTC): 0.5.86 (`versionCode` 195). Primera verificación en emulador propio (AVD `VibeTV`, Android TV 16,
   1080p, SDK en `%LOCALAPPDATA%/Android/Sdk`). La precarga de vecinos de la 0.5.85 nunca se disparaba: el primer
   cuadro suele llegar después de READY y `playbackHasStarted` lo marcaba el watchdog, donde no se programaba.

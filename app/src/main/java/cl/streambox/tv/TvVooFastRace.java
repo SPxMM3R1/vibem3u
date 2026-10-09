@@ -29,9 +29,9 @@ import java.util.concurrent.TimeUnit;
  *   <li>a cada enlace se le pide solo su lista HLS («¿estás ahí?»), todos en paralelo;</li>
  *   <li>los que contestan pasan, en orden de llegada, a la prueba completa (segmento real),
  *       que además lee la resolución del video;</li>
- *   <li>al abrir ({@link Mode#PLAY}) gana el de mejor calidad entre los aceptados dentro de una
- *       ventana corta tras el primero; a igual calidad, la versión elegida en el editor y,
- *       dentro de una versión, NoFreeze (no vence) antes que Clean.</li>
+ *   <li>al abrir ({@link Mode#PLAY}, 0.5.87) gana el primero aceptado si es NoFreeze (no
+ *       vence); si es Clean se espera una ventana corta por uno NoFreeze. La mejor calidad ya no
+ *       retrasa la apertura: la ofrece después el aviso de calidad superior.</li>
  * </ol>
  * <p>{@link Mode#SCAN} recorre todo y devuelve un informe por versión para el selector.</p>
  */
@@ -276,7 +276,7 @@ final class TvVooFastRace {
                         && aliasQueue.isEmpty() && lightQueue.isEmpty() && fullQueue.isEmpty();
                 if (mode == Mode.PLAY && !accepted.isEmpty()) {
                     long waited = millisSince(started) - firstAcceptedAt;
-                    if (idle || waited >= QUALITY_WINDOW_MILLIS) break;
+                    if (idle || hasNoFreeze(accepted) || waited >= QUALITY_WINDOW_MILLIS) break;
                 }
                 if (idle) break;
                 if (deadline.remainingMillis() <= 0L) {
@@ -361,8 +361,23 @@ final class TvVooFastRace {
         for (VersionReport report : reports.values()) {
             if (report.best == null && report.failure.isEmpty()) report.failure = "No respondió";
         }
-        Accepted chosen = best(accepted);
+        Accepted chosen = mode == Mode.PLAY ? firstToPlay(accepted) : best(accepted);
         return new Result(chosen, new ArrayList<>(reports.values()), lastError);
+    }
+
+    /** Al abrir: el primer NoFreeze aceptado o, si no hay, el primero aceptado. */
+    static Accepted firstToPlay(List<Accepted> accepted) {
+        for (Accepted candidate : accepted) {
+            if (candidate.link.noFreeze) return candidate;
+        }
+        return accepted.isEmpty() ? null : accepted.get(0);
+    }
+
+    private static boolean hasNoFreeze(List<Accepted> accepted) {
+        for (Accepted candidate : accepted) {
+            if (candidate.link.noFreeze) return true;
+        }
+        return false;
     }
 
     private static String failureText(IOException error) {

@@ -115,6 +115,7 @@ public final class MainActivity extends Activity {
     private final ExecutorService epgExecutor = backgroundExecutor("vibem3u-epg");
     private final ExecutorService prefetchExecutor = backgroundExecutor("vibem3u-prefetch");
     private static final long NEIGHBOR_PREFETCH_DELAY_MS = 5_000L;
+    private static final long NEIGHBOR_REWARM_MS = 4L * 60L * 1000L;
     private final Runnable prefetchNeighbors = this::prefetchNeighborChannels;
 
     private static ExecutorService backgroundExecutor(String name) {
@@ -476,7 +477,10 @@ public final class MainActivity extends Activity {
         classicUi = UiStyle.beginStart(this);
         consumeReminderIntent(getIntent());
         // Android borra las alarmas si la app fue detenida: se reponen al abrirla.
-        ReminderAlerts.rescheduleAll(this);
+        // Recordatorios: no hacen falta para el primer cuadro; se reponen 10 s después (0.5.87).
+        mainHandler.postDelayed(() -> {
+            if (!isFinishing() && !isDestroyed()) ReminderAlerts.rescheduleAll(this);
+        }, 10_000L);
         setContentView(R.layout.activity_main);
         SettingsActivity.ensureDefaultPlaylistConfigured(this);
         repository = new PlaylistRepository(this);
@@ -496,6 +500,7 @@ public final class MainActivity extends Activity {
         // Deja disponible el token Premium cifrado para el resolutor de Highfly.
         HighflyPremiumCredentialStore.getInstance(this);
         reloadResolverRegistry();
+        warmLastChannel();
         bindViews();
         // Si en 5 s la pantalla sigue viva, el estilo elegido arrancó bien (ver UiStyle).
         mainHandler.postDelayed(() -> UiStyle.startCompleted(this), 5_000L);
@@ -678,7 +683,6 @@ public final class MainActivity extends Activity {
                         markPlaybackStarted();
                         playbackLoadingSinceElapsedRealtime = -1L;
                         maybeSchedulePlaybackSourceStability();
-                        maybeScheduleQualityUpgradeCheck();
                     } else if (playbackLoadingSinceElapsedRealtime < 0L) {
                         playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
                     }
@@ -1739,8 +1743,59 @@ public final class MainActivity extends Activity {
      * en ambos casos se programa la precarga de los vecinos una sola vez (0.5.86).
      */
     private void markPlaybackStarted() {
-        if (!playbackHasStarted) scheduleNeighborPrefetch();
+        if (!playbackHasStarted) {
+            scheduleNeighborPrefetch();
+            maybeScheduleQualityUpgradeCheck();
+        }
         playbackHasStarted = true;
+    }
+
+    /**
+     * Arranque (0.5.87): resuelve el último canal visto mientras se arman la lista y el
+     * catálogo. Cuando el canal abre, el coordinador entrega esa misma resolución (en curso o
+     * en caché) en vez de empezar de cero. Un canal directo solo abre su conexión.
+     */
+    private void warmLastChannel() {
+        Channel last = playbackPreferences == null ? null : playbackPreferences.lastChannelSnapshot();
+        if (last == null || streamResolverRegistry == null) return;
+        StreamResolver resolver = streamResolverRegistry.find(last);
+        if (resolver == null) {
+            prefetchExecutor.submit(() -> warmConnection(last));
+            return;
+        }
+        if (!resolver.cacheResolvedSource() || resolver.cacheTtlMillis() <= 0L) return;
+        playbackExecutor.submit(() -> {
+            ResolutionContext context = new ResolutionContext(15_000L);
+            try (ResolutionContext.Scope ignored = context.activate()) {
+                resolverCoordinator.resolve(last, resolver, false, ResolutionProgressListener.NONE);
+            } catch (Exception ignored) {
+                // Si falla, el canal se resuelve como siempre al abrirse.
+            }
+        });
+    }
+
+    /**
+     * Abre la conexión al servidor de un canal directo (DNS, TCP y TLS) con el mismo cliente
+     * HTTP del reproductor: queda en su pool y la apertura del canal se salta ese saludo.
+     */
+    private static void warmConnection(Channel channel) {
+        URI uri = channel == null ? null : channel.getStreamUri();
+        if (uri == null || !("http".equalsIgnoreCase(uri.getScheme())
+                || "https".equalsIgnoreCase(uri.getScheme()))) return;
+        okhttp3.OkHttpClient client = SharedHttpClient.get().newBuilder()
+                .callTimeout(6_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .build();
+        okhttp3.Request request = new okhttp3.Request.Builder()
+                .url(uri.toString())
+                .header("User-Agent", PLAYER_USER_AGENT)
+                .header("Range", "bytes=0-1023")
+                .build();
+        try (okhttp3.Response response = client.newCall(request).execute()) {
+            okhttp3.ResponseBody body = response.body();
+            if (body != null) body.source().request(1024L);
+        } catch (Exception ignored) {
+            // Solo precalienta: un fallo no afecta la apertura normal.
+        }
     }
 
     private void scheduleNeighborPrefetch() {
@@ -1773,19 +1828,11 @@ public final class MainActivity extends Activity {
                     }
                 });
             } else {
-                URI uri = neighbor.getStreamUri();
-                String host = uri == null ? null : uri.getHost();
-                if (host == null || !("http".equalsIgnoreCase(uri.getScheme())
-                        || "https".equalsIgnoreCase(uri.getScheme()))) continue;
-                prefetchExecutor.submit(() -> {
-                    try {
-                        java.net.InetAddress.getAllByName(host);
-                    } catch (Exception ignored) {
-                        // Solo adelanta la consulta DNS.
-                    }
-                });
+                prefetchExecutor.submit(() -> warmConnection(neighbor));
             }
         }
+        // El pool cierra conexiones inactivas a los 5 min: se renuevan mientras se mira el canal.
+        mainHandler.postDelayed(prefetchNeighbors, NEIGHBOR_REWARM_MS);
     }
 
     /** Muestra el canal en el OSD sin abrirlo; el que se está viendo sigue sonando. */
@@ -2525,41 +2572,92 @@ public final class MainActivity extends Activity {
     // Mejor calidad disponible (TvVoo, 2026-10-03)
     // ---------------------------------------------------------------------------------
 
-    private static final long QUALITY_UPGRADE_DELAY_MS = 15_000L;
+    /**
+     * Aviso de calidad superior (robusto desde 0.5.87). Antes se programaba una sola vez y solo
+     * si el primer cuadro llegaba junto con READY; si a los 15 s el video cargaba o aún no tenía
+     * altura, se abandonaba. Ahora: búsquedas a los 12 s, 2 min y 10 min de reproducción; si el
+     * momento no sirve (cargando, menú abierto, altura desconocida) se reintenta a los 15 s; se
+     * deja de ofrecer en ese canal si el usuario lo rechaza o deja pasar el aviso.
+     */
+    private static final long[] QUALITY_CHECK_DELAYS_MS = {12_000L, 120_000L, 600_000L};
+    private static final long QUALITY_CHECK_RETRY_MS = 15_000L;
+    private static final int QUALITY_CHECK_MAX_DEFERRALS = 8;
     private static final long QUALITY_UPGRADE_VISIBLE_MS = 12_000L;
     private static final long QUALITY_REVERT_WINDOW_MS = 20_000L;
     private static final double QUALITY_UPGRADE_MIN_SPEED = 1.5d;
+    private static final String QUALITY_TAG = "VibeM3U-Quality";
 
     private final Runnable qualityUpgradeCheck = this::startQualityUpgradeCheck;
     private final Runnable hideQualityUpgradeRunnable = this::hideQualityUpgrade;
+    private int qualityCheckAttempt;
+    private int qualityCheckDeferrals;
+    private boolean qualityUpgradeDeclined;
 
-    /** Una sola búsqueda por canal abierto, 15 s después de que el video arranca. */
+    /** Empieza las búsquedas del canal recién abierto. */
     private void maybeScheduleQualityUpgradeCheck() {
-        if (qualityUpgradeCheckedGeneration == playbackGeneration
-                || currentPlaybackSource == null
-                || !"tvvoo".equalsIgnoreCase(currentPlaybackSource.getResolverId())) return;
+        if (qualityUpgradeCheckedGeneration == playbackGeneration) return;
         qualityUpgradeCheckedGeneration = playbackGeneration;
+        qualityCheckAttempt = 0;
+        qualityCheckDeferrals = 0;
+        qualityUpgradeDeclined = false;
+        scheduleNextQualityCheck(playbackGeneration);
+    }
+
+    private void scheduleNextQualityCheck(long generation) {
         mainHandler.removeCallbacks(qualityUpgradeCheck);
-        mainHandler.postDelayed(qualityUpgradeCheck, QUALITY_UPGRADE_DELAY_MS);
+        if (generation != playbackGeneration || qualityUpgradeDeclined
+                || qualityCheckAttempt >= QUALITY_CHECK_DELAYS_MS.length) return;
+        mainHandler.postDelayed(qualityUpgradeCheck, QUALITY_CHECK_DELAYS_MS[qualityCheckAttempt]);
+    }
+
+    private void deferQualityCheck(String reason) {
+        if (++qualityCheckDeferrals > QUALITY_CHECK_MAX_DEFERRALS) {
+            Log.i(QUALITY_TAG, "sin búsqueda: " + reason + " (se agotaron los reintentos)");
+            return;
+        }
+        Log.i(QUALITY_TAG, "búsqueda aplazada: " + reason);
+        mainHandler.removeCallbacks(qualityUpgradeCheck);
+        mainHandler.postDelayed(qualityUpgradeCheck, QUALITY_CHECK_RETRY_MS);
     }
 
     private void startQualityUpgradeCheck() {
         Channel channel = playbackChannel;
-        if (channel == null || player == null || !player.isPlaying() || exiting
-                || streamResolverRegistry == null || qualityUpgradeTask != null) return;
-        Format video = player.getVideoFormat();
-        int currentHeight = video == null ? 0 : Math.max(0, video.height);
+        if (channel == null || exiting || streamResolverRegistry == null
+                || qualityUpgradeDeclined || qualityUpgradeCheckedGeneration != playbackGeneration) return;
+        if (qualityUpgradeTask != null) {
+            deferQualityCheck("otra búsqueda en curso");
+            return;
+        }
         ResolvedPlaybackSource current = currentPlaybackSource;
-        StreamResolver resolver = streamResolverRegistry.find(channel);
-        if (currentHeight <= 0 || current == null || resolver == null
-                || !"tvvoo".equalsIgnoreCase(resolver.getId())) return;
+        Channel resolutionChannel = resolutionChannelFor(channel);
+        StreamResolver resolver = streamResolverRegistry.find(resolutionChannel);
+        if (current == null || resolver == null || !"tvvoo".equalsIgnoreCase(resolver.getId())
+                || !"tvvoo".equalsIgnoreCase(current.getResolverId())) return;
+        Format video = player == null ? null : player.getVideoFormat();
+        int currentHeight = video == null ? 0 : Math.max(0, video.height);
+        if (player == null || !player.isPlaying()) {
+            deferQualityCheck("el video no está reproduciendo");
+            return;
+        }
+        if (currentHeight <= 0) {
+            deferQualityCheck("altura del video aún desconocida");
+            return;
+        }
+        if (isSourceSelectorVisible() || isGuideVisible() || settingsOpen || isQualityUpgradeVisible()) {
+            deferQualityCheck("hay un menú abierto");
+            return;
+        }
+        int attempt = ++qualityCheckAttempt;
         long generation = playbackGeneration;
+        Log.i(QUALITY_TAG, "búsqueda " + attempt + " · actual " + currentHeight + "p · "
+                + TvVooStreamResolver.versionName(current.getVariantId()));
         ResolutionContext context = new ResolutionContext(30_000L);
         qualityUpgradeContext = context;
-        qualityUpgradeTask = playbackExecutor.submit(() -> {
+        qualityUpgradeTask = prefetchExecutor.submit(() -> {
+            String outcome = "sin versión de mayor calidad";
             try (ResolutionContext.Scope ignored = context.activate()) {
                 List<ResolvedPlaybackCandidate> rows = resolver.resolvePlaybackCandidates(
-                        channel, ResolutionProgressListener.NONE);
+                        resolutionChannel, ResolutionProgressListener.NONE);
                 ResolvedPlaybackCandidate best = null;
                 for (ResolvedPlaybackCandidate row : rows) {
                     if (!row.isAvailable() || row.getSource() == null) continue;
@@ -2567,31 +2665,46 @@ public final class MainActivity extends Activity {
                     if (row.getVariantId().equals(current.getVariantId())) continue;
                     if (best == null || row.getQualityHeight() > best.getQualityHeight()) best = row;
                 }
-                if (best == null) return;
-                // Prueba exigente: dos segmentos completos, bien por sobre tiempo real.
-                HlsStreamValidator.Sustained sustained = new HlsStreamValidator(
-                        new TokenHttpClient(4_000, 10_000)).measureSustained(
-                        best.getSource().getPlaybackUri(),
-                        best.getSource().getRequestHeaders(),
-                        context);
-                if (sustained.speed < QUALITY_UPGRADE_MIN_SPEED) return;
-                if (sustained.info != null && sustained.info.height <= currentHeight) return;
-                ResolvedPlaybackCandidate offer = best;
-                mainHandler.post(() -> showQualityUpgrade(channel, generation, offer, currentHeight));
-            } catch (Exception ignored) {
-                // Sin oferta: se sigue viendo la fuente actual sin avisar nada.
+                if (best != null) {
+                    // Prueba exigente: dos segmentos completos, bien por sobre tiempo real.
+                    HlsStreamValidator.Sustained sustained = new HlsStreamValidator(
+                            new TokenHttpClient(4_000, 10_000)).measureSustained(
+                            best.getSource().getPlaybackUri(),
+                            best.getSource().getRequestHeaders(),
+                            context);
+                    if (sustained.speed < QUALITY_UPGRADE_MIN_SPEED) {
+                        outcome = best.getQualityHeight() + "p no aguanta tiempo real ("
+                                + String.format(Locale.ROOT, "%.1f", sustained.speed) + "x)";
+                    } else if (sustained.info != null && sustained.info.height <= currentHeight) {
+                        outcome = "el video real no supera " + currentHeight + "p";
+                    } else {
+                        ResolvedPlaybackCandidate offer = best;
+                        outcome = "oferta " + offer.getQualityHeight() + "p";
+                        mainHandler.post(() -> {
+                            if (!showQualityUpgrade(channel, generation, offer, currentHeight)) {
+                                Log.i(QUALITY_TAG, "oferta no mostrada: canal cambiado o menú abierto");
+                                scheduleNextQualityCheck(generation);
+                            }
+                        });
+                    }
+                }
+            } catch (Exception error) {
+                outcome = "falló la búsqueda: " + error.getClass().getSimpleName();
             } finally {
+                String result = outcome;
                 mainHandler.post(() -> {
                     if (qualityUpgradeContext == context) {
                         qualityUpgradeContext = null;
                         qualityUpgradeTask = null;
                     }
+                    Log.i(QUALITY_TAG, "búsqueda " + attempt + ": " + result);
+                    if (!result.startsWith("oferta")) scheduleNextQualityCheck(generation);
                 });
             }
         });
     }
 
-    private void showQualityUpgrade(
+    private boolean showQualityUpgrade(
             Channel channel,
             long generation,
             ResolvedPlaybackCandidate offer,
@@ -2600,7 +2713,7 @@ public final class MainActivity extends Activity {
         if (channel != playbackChannel || generation != playbackGeneration || exiting
                 || isSourceSelectorVisible() || isGuideVisible() || settingsOpen
                 || (exitDialog != null && exitDialog.isShowing())
-                || (premiumSceneDialog != null && premiumSceneDialog.isShowing())) return;
+                || (premiumSceneDialog != null && premiumSceneDialog.isShowing())) return false;
         qualityUpgradeOffer = offer.getSource();
         String quality = offer.getQuality();
         String shortQuality = quality.contains(" · ") ? quality.substring(0, quality.indexOf(" · ")) : quality;
@@ -2619,6 +2732,8 @@ public final class MainActivity extends Activity {
         qualityUpgradeTimerAnimation.start();
         mainHandler.removeCallbacks(hideQualityUpgradeRunnable);
         mainHandler.postDelayed(hideQualityUpgradeRunnable, QUALITY_UPGRADE_VISIBLE_MS);
+        Log.i(QUALITY_TAG, "aviso mostrado: " + offer.getLabel() + " · " + offer.getQuality());
+        return true;
     }
 
     private boolean isQualityUpgradeVisible() {
@@ -2651,6 +2766,8 @@ public final class MainActivity extends Activity {
     }
 
     private void hideQualityUpgrade() {
+        // Rechazado o dejado pasar: no se vuelve a ofrecer en esta visita al canal.
+        if (isQualityUpgradeVisible()) qualityUpgradeDeclined = true;
         mainHandler.removeCallbacks(hideQualityUpgradeRunnable);
         if (qualityUpgradeTimerAnimation != null) qualityUpgradeTimerAnimation.cancel();
         qualityUpgradeOffer = null;
@@ -2673,6 +2790,15 @@ public final class MainActivity extends Activity {
         hideQualityUpgrade();
         if (offer == null || channel == null || player == null
                 || offer.isExpired(System.currentTimeMillis())) return;
+        Log.i(QUALITY_TAG, "aviso aceptado");
+        // La próxima apertura del canal usa esta versión: queda en la caché y se prueba primero.
+        Channel resolutionChannel = resolutionChannelFor(channel);
+        StreamResolver resolver = streamResolverRegistry == null ? null
+                : streamResolverRegistry.find(resolutionChannel);
+        if (resolver != null) resolverCoordinator.remember(resolutionChannel, resolver, offer);
+        if (!AppStrings.isBlank(offer.getVariantId())) {
+            TvVooSourceHistory.pinAlias(offer.getStableSourceId(), offer.getVariantId());
+        }
         qualityRevertSource = currentPlaybackSource;
         qualityRevertUntilElapsedRealtime = SystemClock.elapsedRealtime() + QUALITY_REVERT_WINDOW_MS;
         switchToSource(channel, offer);

@@ -12,6 +12,11 @@ final class PlaybackPreferences {
     private static final String PREFS = "playback_state";
     private static final String KEY_LAST_CHANNEL = "last_channel";
     private static final String KEY_LAST_INDEX = "last_index";
+    /**
+     * Copia del último canal (0.5.87): al encender, la app empieza a resolverlo antes de tener
+     * la lista armada. Sin respaldos ni tokens: los mismos datos que publica la lista.
+     */
+    private static final String KEY_LAST_SNAPSHOT = "last_channel_snapshot";
     private static final String QUALITY_PREFIX = "quality_";
     private static final String AUTOMATIC_QUALITY_VALUE = "auto";
     private static final String SUBTITLES_PREFIX = "subtitles_";
@@ -53,7 +58,59 @@ final class PlaybackPreferences {
         preferences.edit()
                 .putString(KEY_LAST_CHANNEL, channelIdentity(channel))
                 .putInt(KEY_LAST_INDEX, index)
+                .putString(KEY_LAST_SNAPSHOT, snapshotJson(channel))
                 .apply();
+    }
+
+    /** El último canal visto, reconstruido de su copia; null si no hay o está dañada. */
+    Channel lastChannelSnapshot() {
+        return parseSnapshot(preferences.getString(KEY_LAST_SNAPSHOT, ""));
+    }
+
+    static String snapshotJson(Channel channel) {
+        if (channel == null || channel.getStreamUri() == null) return "";
+        try {
+            org.json.JSONObject attributes = new org.json.JSONObject();
+            for (java.util.Map.Entry<String, String> entry : channel.getAttributes().entrySet()) {
+                String key = entry.getKey();
+                if (key == null || entry.getValue() == null || key.startsWith("x-backup")) continue;
+                attributes.put(key, entry.getValue());
+            }
+            return new org.json.JSONObject()
+                    .put("name", channel.getName())
+                    .put("uri", channel.getStreamUri().toString())
+                    .put("logo", channel.getLogoUri() == null ? "" : channel.getLogoUri().toString())
+                    .put("group", channel.getGroup() == null ? "" : channel.getGroup())
+                    .put("attributes", attributes)
+                    .toString();
+        } catch (org.json.JSONException | RuntimeException error) {
+            return "";
+        }
+    }
+
+    static Channel parseSnapshot(String json) {
+        if (json == null || json.isEmpty() || json.length() > 16 * 1024) return null;
+        try {
+            org.json.JSONObject root = new org.json.JSONObject(json);
+            java.util.Map<String, String> attributes = new java.util.LinkedHashMap<>();
+            org.json.JSONObject values = root.optJSONObject("attributes");
+            if (values != null) {
+                java.util.Iterator<String> keys = values.keys();
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    attributes.put(key, values.optString(key, ""));
+                }
+            }
+            String logo = root.optString("logo", "");
+            return new Channel(
+                    root.getString("name"),
+                    java.net.URI.create(root.getString("uri")),
+                    logo.isEmpty() ? null : java.net.URI.create(logo),
+                    root.optString("group", ""),
+                    attributes);
+        } catch (org.json.JSONException | RuntimeException error) {
+            return null;
+        }
     }
 
     QualityPreference getQuality(Channel channel) {

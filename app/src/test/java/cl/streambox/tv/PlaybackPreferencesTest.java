@@ -32,6 +32,24 @@ public final class PlaybackPreferencesTest {
         ));
     }
 
+    @Test
+    public void lastChannelSnapshotKeepsTheResolverIdentityButNotBackups() {
+        java.util.Map<String, String> attributes = new java.util.LinkedHashMap<>();
+        attributes.put("tvg-id", "0104");
+        attributes.put("x-resolver", "tvn");
+        attributes.put("x-backup-stream", "http://example.com/backup.m3u8");
+        Channel original = new Channel("TVN", URI.create("http://example.com/tvn.m3u8"),
+                URI.create("https://example.com/tvn.png"), "Nacionales", attributes);
+
+        Channel restored = PlaybackPreferences.parseSnapshot(PlaybackPreferences.snapshotJson(original));
+
+        assertEquals(PlaybackPreferences.channelIdentity(original), PlaybackPreferences.channelIdentity(restored));
+        assertEquals(original.getStreamUri(), restored.getStreamUri());
+        assertEquals("tvn", restored.getAttributes().get("x-resolver"));
+        assertEquals(null, restored.getAttributes().get("x-backup-stream"));
+        assertEquals(null, PlaybackPreferences.parseSnapshot("{dañado"));
+    }
+
     private static Channel channel(String name, String tvgId, String stream) {
         return new Channel(
                 name,

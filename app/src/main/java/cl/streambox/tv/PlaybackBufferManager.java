@@ -23,7 +23,7 @@ final class PlaybackBufferManager implements AutoCloseable {
     private static final String TAG = "VibeM3U-Buffer";
     private static final int MIN_BUFFER_MS = 50_000;
     private static final int MAX_BUFFER_MS = 50_000;
-    private static final int BUFFER_FOR_PLAYBACK_MS = 2_000;
+    private static final int BUFFER_FOR_PLAYBACK_MS = 1_000;
     private static final int BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 3_000;
     private final DefaultAllocator allocator = new DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE);
     private final Handler handler = new Handler(Looper.getMainLooper());
