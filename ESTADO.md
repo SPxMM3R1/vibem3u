@@ -152,8 +152,8 @@
   (`ResolverCoordinator.remember`) y fijada en `TvVooSourceHistory`. TvVoo abre con la primera versión de la lista
   (elegida en el selector o la del editor) apenas da NoFreeze; si tarda, espera 700 ms y abre la primera
   aceptada (ya no espera por mejor calidad; eso lo ofrece el aviso). Arranque: el último
-  canal (`PlaybackPreferences.lastChannelSnapshot`, sin respaldos) se resuelve desde `onCreate` en paralelo con
-  la lista; los vecinos directos abren conexión (DNS+TCP+TLS en el pool de `SharedHttpClient`) y se renuevan
+  canal (`PlaybackPreferences.lastChannelSnapshot`, sin respaldos) se resuelve en paralelo con la lista, justo
+  después de cargar del disco las versiones TvVoo y enlaces Highfly (si se adelanta, ignora la versión elegida); los vecinos directos abren conexión (DNS+TCP+TLS en el pool de `SharedHttpClient`) y se renuevan
   cada 4 min; recordatorios 10 s después del arranque; búfer inicial 1 s (`BUFFER_FOR_PLAYBACK_MS`). Precarga de
   video de vecinos (`DefaultPreloadManager`) evaluada y descartada: ver AGENTS.md.
 - **2026-10-09** (UTC): 0.5.86 (`versionCode` 195). Primera verificación en emulador propio (AVD `VibeTV`, Android TV 16,

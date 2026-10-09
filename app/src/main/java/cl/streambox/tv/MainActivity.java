@@ -500,7 +500,6 @@ public final class MainActivity extends Activity {
         // Deja disponible el token Premium cifrado para el resolutor de Highfly.
         HighflyPremiumCredentialStore.getInstance(this);
         reloadResolverRegistry();
-        warmLastChannel();
         bindViews();
         // Si en 5 s la pantalla sigue viva, el estilo elegido arrancó bien (ver UiStyle).
         mainHandler.postDelayed(() -> UiStyle.startCompleted(this), 5_000L);
@@ -1751,8 +1750,9 @@ public final class MainActivity extends Activity {
     }
 
     /**
-     * Arranque (0.5.87): resuelve el último canal visto mientras se arman la lista y el
-     * catálogo. Cuando el canal abre, el coordinador entrega esa misma resolución (en curso o
+     * Arranque (0.5.87): resuelve el último canal visto mientras se arma la lista, justo después
+     * de cargar del disco las versiones TvVoo y los enlaces Highfly (antes de eso solo veía la
+     * versión principal e ignoraba la elegida en el selector). Cuando el canal abre, el coordinador entrega esa misma resolución (en curso o
      * en caché) en vez de empezar de cero. Un canal directo solo abre su conexión.
      */
     private void warmLastChannel() {
@@ -4822,6 +4822,9 @@ public final class MainActivity extends Activity {
                     if (links != null) PublishedHighflyLinks.update(links, now);
                     String variants = repository.cached(PublishedPlaybackCatalogRepository.TVVOO_VARIANTS_FILE);
                     if (variants != null) PublishedTvVooVariants.update(variants, now);
+                    // Recién ahora: con las hermanas TvVoo y los enlaces Highfly cargados, la
+                    // resolución temprana ve las mismas versiones (y la elegida) que la apertura.
+                    mainHandler.post(this::warmLastChannel);
                     String cachedLayout = repository.cached(PublishedPlaybackCatalogRepository.LAYOUT_FILE);
                     if (cachedLayout != null) {
                         try {
