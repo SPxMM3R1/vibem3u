@@ -2575,13 +2575,13 @@ public final class MainActivity extends Activity {
     /**
      * Aviso de calidad superior (robusto desde 0.5.87). Antes se programaba una sola vez y solo
      * si el primer cuadro llegaba junto con READY; si a los 15 s el video cargaba o aún no tenía
-     * altura, se abandonaba. Ahora: búsquedas a los 12 s, 2 min y 10 min de reproducción; si el
-     * momento no sirve (cargando, menú abierto, altura desconocida) se reintenta a los 15 s; se
+     * altura, se abandonaba. Ahora: búsquedas a los 3 s, 2 min y 10 min de reproducción; si el
+     * momento no sirve (cargando, menú abierto, altura desconocida) se reintenta cada 5 s; se
      * deja de ofrecer en ese canal si el usuario lo rechaza o deja pasar el aviso.
      */
-    private static final long[] QUALITY_CHECK_DELAYS_MS = {12_000L, 120_000L, 600_000L};
-    private static final long QUALITY_CHECK_RETRY_MS = 15_000L;
-    private static final int QUALITY_CHECK_MAX_DEFERRALS = 8;
+    private static final long[] QUALITY_CHECK_DELAYS_MS = {3_000L, 120_000L, 600_000L};
+    private static final long QUALITY_CHECK_RETRY_MS = 5_000L;
+    private static final int QUALITY_CHECK_MAX_DEFERRALS = 12;
     private static final long QUALITY_UPGRADE_VISIBLE_MS = 12_000L;
     private static final long QUALITY_REVERT_WINDOW_MS = 20_000L;
     private static final double QUALITY_UPGRADE_MIN_SPEED = 1.5d;
