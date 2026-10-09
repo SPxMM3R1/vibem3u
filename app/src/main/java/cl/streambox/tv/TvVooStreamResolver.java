@@ -146,6 +146,24 @@ public final class TvVooStreamResolver implements StreamResolver {
             Channel channel,
             ResolutionProgressListener listener
     ) throws IOException {
+        return scanVersions(channel, listener, -1);
+    }
+
+    /**
+     * Aviso de calidad superior: igual que el selector, pero termina con la primera versión
+     * que entrega video de más de {@code currentHeight} líneas (segundos en vez de esperar a
+     * todas las versiones, incluidas las que no contestan).
+     */
+    List<ResolvedPlaybackCandidate> findBetterThan(Channel channel, int currentHeight)
+            throws IOException {
+        return scanVersions(channel, ResolutionProgressListener.NONE, Math.max(0, currentHeight));
+    }
+
+    private List<ResolvedPlaybackCandidate> scanVersions(
+            Channel channel,
+            ResolutionProgressListener listener,
+            int stopAboveHeight
+    ) throws IOException {
         ResolutionProgressListener progress = listener == null
                 ? ResolutionProgressListener.NONE
                 : listener;
@@ -154,29 +172,21 @@ public final class TvVooStreamResolver implements StreamResolver {
         if (ambient == null) {
             ResolutionContext root = new ResolutionContext(deadline.remainingMillis());
             try (ResolutionContext.Scope ignored = root.activate()) {
-                return resolvePlaybackCandidatesWithDeadline(channel, progress, deadline);
+                return resolveExternalCandidates(channel, progress, deadline, stopAboveHeight);
             }
         }
-        return resolvePlaybackCandidatesWithDeadline(channel, progress, deadline);
+        return resolveExternalCandidates(channel, progress, deadline, stopAboveHeight);
     }
 
     /**
-     * Resolves alternatives only when the user explicitly opens the source
-     * selector. The normal channel-open path keeps using the first-valid race
-     * above so it does not wait for every candidate.
+     * Alternatives for the source selector and the quality-upgrade offer. The normal
+     * channel-open path keeps using the first-valid race so it does not wait for every candidate.
      */
-    private List<ResolvedPlaybackCandidate> resolvePlaybackCandidatesWithDeadline(
-            Channel channel,
-            ResolutionProgressListener progress,
-            ResolutionDeadline deadline
-    ) throws IOException {
-        return resolveExternalCandidates(channel, progress, deadline);
-    }
-
     private List<ResolvedPlaybackCandidate> resolveExternalCandidates(
             Channel channel,
             ResolutionProgressListener progress,
-            ResolutionDeadline deadline
+            ResolutionDeadline deadline,
+            int stopAboveHeight
     ) throws IOException {
         String endpointBase = channel.getAttributes().get("x-resolver-endpoint");
         if (endpointBase == null || AppStrings.isBlank(endpointBase)) {
@@ -240,9 +250,11 @@ public final class TvVooStreamResolver implements StreamResolver {
                         Math.max(1, tested),
                         Math.max(1, total),
                         "TvVoo · probando versiones"
-                ))
+                )),
+                stopAboveHeight
         );
-        recordRaceOutcome(stableId, race);
+        // Una búsqueda cortada no vio todas las versiones: no cuenta como resultado completo.
+        if (stopAboveHeight < 0) recordRaceOutcome(stableId, race);
         return versionRows(race.versions, preferred, stableId, playbackHeaders);
     }
 

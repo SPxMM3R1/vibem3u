@@ -152,6 +152,26 @@ public final class TvVooQualityTest {
     }
 
     @Test
+    public void upgradeSearchStopsAtTheFirstBetterVersionWithoutWaitingForSilentOnes() throws IOException {
+        Map<String, List<URI>> links = new HashMap<>();
+        links.put("actual", Collections.singletonList(URI.create("http://1.1.1.1/a.m3u8")));
+        links.put("colgada", Collections.singletonList(URI.create("http://1.1.1.9/dead.m3u8")));
+        links.put("fhd", Collections.singletonList(URI.create("http://1.1.1.2/b.m3u8")));
+        Map<String, VideoSampleInfo> quality = new HashMap<>();
+        quality.put("http://1.1.1.1/a.m3u8", new VideoSampleInfo(1280, 720, 25, "h264"));
+        quality.put("http://1.1.1.2/b.m3u8", new VideoSampleInfo(1920, 1080, 25, "h264"));
+        Map<String, Long> slow = Collections.singletonMap("http://1.1.1.9/dead.m3u8", 6_000L);
+        long started = System.nanoTime();
+
+        TvVooFastRace.Result result = run(TvVooFastRace.Mode.SCAN,
+                Arrays.asList("actual", "colgada", "fhd"), links, slow, quality, 720);
+
+        long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
+        assertEquals("fhd", result.chosen.link.alias);
+        assertTrue("No espera a la versión colgada: " + elapsedMs + " ms", elapsedMs < 3_000L);
+    }
+
+    @Test
     public void deadVersionsGoLastForTenMinutes() {
         long now = 1_000_000L;
         TvVooDeadVersions.markDead("canal", "a", now);
@@ -174,6 +194,17 @@ public final class TvVooQualityTest {
             Map<String, List<URI>> links,
             Map<String, Long> lightDelayMillis,
             Map<String, VideoSampleInfo> quality
+    ) throws IOException {
+        return run(mode, aliases, links, lightDelayMillis, quality, -1);
+    }
+
+    private static TvVooFastRace.Result run(
+            TvVooFastRace.Mode mode,
+            List<String> aliases,
+            Map<String, List<URI>> links,
+            Map<String, Long> lightDelayMillis,
+            Map<String, VideoSampleInfo> quality,
+            int stopAboveHeight
     ) throws IOException {
         AtomicInteger calls = new AtomicInteger();
         ResolutionContext context = new ResolutionContext(10_000L);
@@ -200,7 +231,8 @@ public final class TvVooQualityTest {
                     },
                     source -> quality.get(source.toString()),
                     new ResolutionDeadline(8_000L),
-                    TvVooFastRace.Listener.NONE
+                    TvVooFastRace.Listener.NONE,
+                    stopAboveHeight
             );
         }
     }

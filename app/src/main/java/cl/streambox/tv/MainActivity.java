@@ -2656,8 +2656,11 @@ public final class MainActivity extends Activity {
         qualityUpgradeTask = prefetchExecutor.submit(() -> {
             String outcome = "sin versión de mayor calidad";
             try (ResolutionContext.Scope ignored = context.activate()) {
-                List<ResolvedPlaybackCandidate> rows = resolver.resolvePlaybackCandidates(
-                        resolutionChannel, ResolutionProgressListener.NONE);
+                long scanStarted = SystemClock.elapsedRealtime();
+                List<ResolvedPlaybackCandidate> rows = resolver instanceof TvVooStreamResolver
+                        ? ((TvVooStreamResolver) resolver).findBetterThan(resolutionChannel, currentHeight)
+                        : resolver.resolvePlaybackCandidates(resolutionChannel, ResolutionProgressListener.NONE);
+                long scanMs = SystemClock.elapsedRealtime() - scanStarted;
                 ResolvedPlaybackCandidate best = null;
                 for (ResolvedPlaybackCandidate row : rows) {
                     if (!row.isAvailable() || row.getSource() == null) continue;
@@ -2665,21 +2668,25 @@ public final class MainActivity extends Activity {
                     if (row.getVariantId().equals(current.getVariantId())) continue;
                     if (best == null || row.getQualityHeight() > best.getQualityHeight()) best = row;
                 }
+                outcome = "sin versión de mayor calidad (" + scanMs + " ms)";
                 if (best != null) {
+                    long measureStarted = SystemClock.elapsedRealtime();
                     // Prueba exigente: dos segmentos completos, bien por sobre tiempo real.
                     HlsStreamValidator.Sustained sustained = new HlsStreamValidator(
                             new TokenHttpClient(4_000, 10_000)).measureSustained(
                             best.getSource().getPlaybackUri(),
                             best.getSource().getRequestHeaders(),
                             context);
+                    String timing = " · búsqueda " + scanMs + " ms, prueba "
+                            + (SystemClock.elapsedRealtime() - measureStarted) + " ms";
                     if (sustained.speed < QUALITY_UPGRADE_MIN_SPEED) {
                         outcome = best.getQualityHeight() + "p no aguanta tiempo real ("
-                                + String.format(Locale.ROOT, "%.1f", sustained.speed) + "x)";
+                                + String.format(Locale.ROOT, "%.1f", sustained.speed) + "x)" + timing;
                     } else if (sustained.info != null && sustained.info.height <= currentHeight) {
-                        outcome = "el video real no supera " + currentHeight + "p";
+                        outcome = "el video real no supera " + currentHeight + "p" + timing;
                     } else {
                         ResolvedPlaybackCandidate offer = best;
-                        outcome = "oferta " + offer.getQualityHeight() + "p";
+                        outcome = "oferta " + offer.getQualityHeight() + "p" + timing;
                         mainHandler.post(() -> {
                             if (!showQualityUpgrade(channel, generation, offer, currentHeight)) {
                                 Log.i(QUALITY_TAG, "oferta no mostrada: canal cambiado o menú abierto");

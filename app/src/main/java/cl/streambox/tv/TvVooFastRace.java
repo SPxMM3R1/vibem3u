@@ -33,7 +33,9 @@ import java.util.concurrent.TimeUnit;
  *       vence); si es Clean se espera una ventana corta por uno NoFreeze. La mejor calidad ya no
  *       retrasa la apertura: la ofrece después el aviso de calidad superior.</li>
  * </ol>
- * <p>{@link Mode#SCAN} recorre todo y devuelve un informe por versión para el selector.</p>
+ * <p>{@link Mode#SCAN} recorre todo y devuelve un informe por versión para el selector. Con
+ * {@code stopAboveHeight} (aviso de calidad superior, 0.5.87) termina apenas una versión entrega
+ * video de más resolución que esa, sin esperar a las demás ni a las que no contestan.</p>
  */
 final class TvVooFastRace {
     enum Mode { PLAY, SCAN }
@@ -180,6 +182,19 @@ final class TvVooFastRace {
             ResolutionDeadline deadline,
             Listener listener
     ) throws IOException {
+        return run(mode, aliases, aliasQuery, lightProbe, fullProbe, deadline, listener, -1);
+    }
+
+    static Result run(
+            Mode mode,
+            List<String> aliases,
+            AliasQuery aliasQuery,
+            LightProbe lightProbe,
+            FullProbe fullProbe,
+            ResolutionDeadline deadline,
+            Listener listener,
+            int stopAboveHeight
+    ) throws IOException {
         Listener progress = listener == null ? Listener.NONE : listener;
         ResolutionContext parent = ResolutionContext.current();
         if (parent == null) parent = new ResolutionContext(deadline.remainingMillis());
@@ -278,6 +293,7 @@ final class TvVooFastRace {
                     long waited = millisSince(started) - firstAcceptedAt;
                     if (idle || hasNoFreeze(accepted) || waited >= QUALITY_WINDOW_MILLIS) break;
                 }
+                if (stopAboveHeight >= 0 && hasAbove(accepted, stopAboveHeight)) break;
                 if (idle) break;
                 if (deadline.remainingMillis() <= 0L) {
                     if (!accepted.isEmpty()) break;
@@ -371,6 +387,13 @@ final class TvVooFastRace {
             if (candidate.link.noFreeze) return candidate;
         }
         return accepted.isEmpty() ? null : accepted.get(0);
+    }
+
+    private static boolean hasAbove(List<Accepted> accepted, int height) {
+        for (Accepted candidate : accepted) {
+            if (candidate.info != null && candidate.info.height > height) return true;
+        }
+        return false;
     }
 
     private static boolean hasNoFreeze(List<Accepted> accepted) {
