@@ -88,6 +88,13 @@ public final class MainActivity extends Activity {
     private static final long OVERLAY_TIMEOUT_MS = 4_500;
     private static final long PROGRAMME_DETAIL_TIMEOUT_MS = 12_000;
     private static final long PLAYBACK_FREEZE_TIMEOUT_MS = 5_000L;
+    /** Con bytes de video llegando, un corte se espera hasta 30 s antes de reiniciar (0.5.89). */
+    private static final long PLAYBACK_RECEIVING_WINDOW_MS = 4_000L;
+    private static final long PLAYBACK_MAX_WAIT_WHILE_RECEIVING_MS = 30_000L;
+    /** Nauta: servidor lento y a saltos; 30 s detrás del vivo y 8 s de búfer para arrancar. */
+    private static final long SLOW_RELAY_LIVE_OFFSET_MS = 30_000L;
+    private static final long SLOW_RELAY_START_BUFFER_MS = 8_000L;
+    private final MediaTransferProgress mediaTransferProgress = new MediaTransferProgress();
     private static final long PLAYBACK_DIAGNOSTIC_STALL_TIMEOUT_NS =
             PLAYBACK_FREEZE_TIMEOUT_MS * 1_000_000L;
     private static final long PLAYBACK_WATCHDOG_INTERVAL_MS = 1_000L;
@@ -637,7 +644,8 @@ public final class MainActivity extends Activity {
                 playerUsesVolumeNormalization
         );
         OkHttpDataSource.Factory httpDataSourceFactory =
-                new OkHttpDataSource.Factory(SharedHttpClient.get()).setUserAgent(PLAYER_USER_AGENT);
+                new OkHttpDataSource.Factory(SharedHttpClient.get()).setUserAgent(PLAYER_USER_AGENT)
+                        .setTransferListener(mediaTransferProgress);
         player = new ExoPlayer.Builder(
                 this,
                 renderersFactory
@@ -2029,6 +2037,15 @@ public final class MainActivity extends Activity {
                     nowMs,
                     PLAYBACK_FREEZE_TIMEOUT_MS
             )) {
+                if (PlaybackStallPolicy.keepWaitingWhileReceiving(
+                        playbackLoadingSinceElapsedRealtime,
+                        nowMs,
+                        mediaTransferProgress.lastMediaBytesElapsedMs(),
+                        PLAYBACK_RECEIVING_WINDOW_MS,
+                        PLAYBACK_MAX_WAIT_WHILE_RECEIVING_MS)) {
+                    // El servidor sigue entregando el segmento: reiniciar lo dejaría sin búfer.
+                    return;
+                }
                 requestFullPlaybackRecovery(classifyPlaybackStall(measurements));
             }
             return;
@@ -3033,7 +3050,8 @@ public final class MainActivity extends Activity {
                 : source.getUserAgent();
         OkHttpClient playbackClient = MediaFlowPlaybackClient.forSource(source);
         OkHttpDataSource.Factory dataSourceFactory =
-                new OkHttpDataSource.Factory(playbackClient).setUserAgent(userAgent);
+                new OkHttpDataSource.Factory(playbackClient).setUserAgent(userAgent)
+                        .setTransferListener(mediaTransferProgress);
         Map<String, String> headers = PlaybackRequestHeaders.withoutUserAgent(
                 source.getRequestHeaders()
         );
@@ -3057,10 +3075,30 @@ public final class MainActivity extends Activity {
         }
         MediaItem.Builder itemBuilder = mediaItemFor(channel, source.getPlaybackUri()).buildUpon();
         if (source.hasMimeType()) itemBuilder.setMimeType(source.getMimeType());
+        boolean slowRelay = isSlowRelay(source);
+        if (slowRelay) {
+            // Lista de 60 s con segmentos de 5 s que el servidor entrega a saltos: 30 s detrás
+            // del vivo hay segmentos ya publicados para adelantar, y la velocidad queda fija
+            // (sin acelerar para alcanzar el vivo).
+            itemBuilder.setLiveConfiguration(new MediaItem.LiveConfiguration.Builder()
+                    .setTargetOffsetMs(SLOW_RELAY_LIVE_OFFSET_MS)
+                    .setMinPlaybackSpeed(1f)
+                    .setMaxPlaybackSpeed(1f)
+                    .build());
+        }
+        if (playbackBufferManager != null) {
+            playbackBufferManager.setMinimumStartBufferMs(slowRelay ? SLOW_RELAY_START_BUFFER_MS : 0L);
+        }
+        mediaTransferProgress.reset();
         return new DefaultMediaSourceFactory(playbackDataSourceFactory)
                 .setLoadErrorHandlingPolicy(new PlaybackLoadErrorPolicy(source.isDynamicallyResolved()))
                 .createMediaSource(itemBuilder
                         .setTag(Long.valueOf(startupMetrics.currentId())).build());
+    }
+
+    /** Fuentes de servidor lento y a saltos (Nauta): más margen al vivo y al arrancar. */
+    private static boolean isSlowRelay(ResolvedPlaybackSource source) {
+        return source != null && NautaStreamResolver.ID.equalsIgnoreCase(source.getResolverId());
     }
 
     private void beginStartupMeasurement(Channel channel, PlaybackStartupMetrics.Reason reason) {

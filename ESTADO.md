@@ -140,6 +140,15 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-11** (UTC): 0.5.89 (`versionCode` 198). Canales Nauta «se ven 5 s y se pegan». Diagnóstico: los 74 Nauta
+  salen de un solo servidor (`m3u.tvcluboficial.com/free/`), una fuente y una calidad por canal, segmentos de 5 s que
+  el servidor entrega en 2–18 s (0,16×–2,6× tiempo real según la hora) y una lista que avanza a saltos. En el emulador
+  (091 ESPN 1 México) el vigilante reiniciaba el canal tras 5 s de carga («carga detenida») y cada reinicio volvía al
+  vivo sin búfer: 4 reinicios en 40 s. Cambios: (1) `MediaTransferProgress` registra el último byte de video (no
+  listas) y `PlaybackStallPolicy.keepWaitingWhileReceiving` espera hasta 30 s si llegaron bytes en los últimos 4 s,
+  para todas las fuentes; (2) Nauta (`isSlowRelay`) reproduce 30 s detrás del vivo a velocidad fija; (3)
+  `StartThresholdLoadControl` exige 8 s de búfer antes de mostrar imagen en Nauta (tope de espera 15 s). Si el
+  servidor va más lento que el video por un rato largo, el canal se seguirá cortando: no hay otra fuente ni calidad.
 - **2026-10-09** (UTC): 0.5.88 (`versionCode` 197), menores de la auditoría ciega. El User-Agent de reproductor,
   logos, guía y listas (`AppUserAgent.VALUE`) lleva la versión real; decía «VibeM3U/0.4.42» fijo. Al volver de
   la configuración se reprograma la precarga de vecinos (con la configuración abierta se detenía hasta el siguiente
