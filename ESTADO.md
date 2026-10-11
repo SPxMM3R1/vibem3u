@@ -149,6 +149,10 @@
   para todas las fuentes; (2) Nauta (`isSlowRelay`) reproduce 30 s detrás del vivo a velocidad fija; (3)
   `StartThresholdLoadControl` exige 8 s de búfer antes de mostrar imagen en Nauta (tope de espera 15 s). Si el
   servidor va más lento que el video por un rato largo, el canal se seguirá cortando: no hay otra fuente ni calidad.
+  Medido en emulador con el build de CI: 091 ESPN 1 México 3 min y 088 ESPN 1 Argentina ~3,5 min, una sola apertura
+  cada uno, sin reinicios; búfer de 8 s al arrancar que subió hasta 37 s. Directos y TvVoo sin cambios (2,3 s / 2,7 s).
+  Publicada: tag `v0.5.89` sobre `ce79403`, `VibeM3U-v0.5.89.apk` 2.734.251 bytes, SHA-256
+  `74e17326191d9c200e6f0030add213e673a615ecc83d63f54324636fe49c1128`.
 - **2026-10-09** (UTC): 0.5.88 (`versionCode` 197), menores de la auditoría ciega. El User-Agent de reproductor,
   logos, guía y listas (`AppUserAgent.VALUE`) lleva la versión real; decía «VibeM3U/0.4.42» fijo. Al volver de
   la configuración se reprograma la precarga de vecinos (con la configuración abierta se detenía hasta el siguiente
