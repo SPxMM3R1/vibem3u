@@ -948,8 +948,7 @@ public final class SettingsActivity extends Activity {
             String name = providerDisplayName(definition);
             String count = getResources().getQuantityString(
                     R.plurals.resolver_group_count, channelCount, channelCount);
-            android.text.SpannableString text = new android.text.SpannableString(name + "
-" + count);
+            android.text.SpannableString text = new android.text.SpannableString(name + "\n" + count);
             int start = name.length() + 1;
             text.setSpan(new android.text.style.RelativeSizeSpan(8.5f / 11.5f), start, text.length(), 0);
             text.setSpan(new android.text.style.ForegroundColorSpan(0), start, text.length(), 0);
@@ -1067,7 +1066,7 @@ public final class SettingsActivity extends Activity {
     /** Nombre corto del proveedor: el catálogo trae «Meganoticias dinamico» o «TvVoo externo». */
     static String providerDisplayName(ResolverDefinition definition) {
         String name = definition.getDisplayName() == null ? "" : definition.getDisplayName().trim();
-        return name.replaceAll("(?i)\s+(din[aá]mico|externo)$", "").trim();
+        return name.replaceAll("(?i)\\s+(din[aá]mico|externo)$", "").trim();
     }
 
     /** La línea «N canales» va en gris; sobre la tarjeta blanca del foco, en gris oscuro. */
