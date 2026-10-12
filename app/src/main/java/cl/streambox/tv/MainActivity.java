@@ -4486,7 +4486,34 @@ public final class MainActivity extends Activity {
         params.height = Math.max(dp(SOURCE_ROW_HEIGHT_DP), Math.min(max, sourceSelectorOptions.getMeasuredHeight()));
         scroll.setLayoutParams(params);
         scroll.setOnScrollChangeListener((view, x, y, oldX, oldY) -> refreshSourceSelectorMoreHint());
-        scroll.post(this::refreshSourceSelectorMoreHint);
+        // Tras el próximo layout (0.5.94): la fila enfocada al abrir quedaba bajo el difuminado
+        // y la pista «Mueve el control…» se calculaba antes de medir y no aparecía.
+        scroll.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                scroll.getViewTreeObserver().removeOnPreDrawListener(this);
+                revealFocusedSourceRow(scroll);
+                refreshSourceSelectorMoreHint();
+                return true;
+            }
+        });
+    }
+
+    /** Deja la fila enfocada entera a la vista, fuera de los bordes difuminados. */
+    private void revealFocusedSourceRow(View scroll) {
+        View focused = scroll.findFocus();
+        if (!(scroll instanceof ViewGroup) || focused == null || focused == scroll) return;
+        android.graphics.Rect rect = new android.graphics.Rect();
+        focused.getDrawingRect(rect);
+        ((ViewGroup) scroll).offsetDescendantRectToMyCoords(focused, rect);
+        int fade = scroll.getVerticalFadingEdgeLength();
+        int top = scroll.getScrollY();
+        int bottom = top + scroll.getHeight();
+        if (rect.bottom > bottom - fade) {
+            scroll.scrollTo(0, rect.bottom - scroll.getHeight() + fade);
+        } else if (top > 0 && rect.top < top + fade) {
+            scroll.scrollTo(0, Math.max(0, rect.top - fade));
+        }
     }
 
     /**
@@ -4497,10 +4524,14 @@ public final class MainActivity extends Activity {
         View scroll = findViewById(R.id.source_selector_scroll);
         View fade = findViewById(R.id.source_selector_more_fade);
         TextView hint = findViewById(R.id.source_selector_more_hint);
-        if (scroll == null || fade == null || hint == null) return;
-        int visibility = !classicUi && scroll.canScrollVertically(1) ? View.VISIBLE : View.GONE;
-        fade.setVisibility(visibility);
-        hint.setVisibility(visibility);
+        if (scroll == null || hint == null) return;
+        // El difuminado ya no es una vista con color encima (sobre video claro se veía como una
+        // banda sólida, 0.5.94): es el borde nativo del ScrollView, que vuelve transparentes las
+        // filas y solo aparece del lado hacia donde queda contenido.
+        if (fade != null) fade.setVisibility(View.GONE);
+        scroll.setVerticalFadingEdgeEnabled(!classicUi);
+        scroll.setFadingEdgeLength(dp(42));
+        hint.setVisibility(!classicUi && scroll.canScrollVertically(1) ? View.VISIBLE : View.GONE);
     }
 
     private static boolean supportsSourceSelector(StreamResolver resolver) {
@@ -4796,9 +4827,20 @@ public final class MainActivity extends Activity {
                         ResolvedPlaybackSource.direct(backupChannel, PLAYER_USER_AGENT),
                         "direct-backup-" + index, "", true, false, 0));
             }
+            // «En uso» por URL; si ninguna coincide (TVN y otros pasan por su resolutor oficial y
+            // la URL reproducida no es la del canal), por el estado de respaldo (0.5.94).
+            boolean anyMatch = false;
             for (ResolvedPlaybackCandidate candidate : sourceCandidates) {
-                playbackOptions.add(PlaybackOption.source(
-                        candidate, isCurrentSource(candidate.getSource())));
+                anyMatch |= isCurrentSource(candidate.getSource());
+            }
+            // Si lo que suena es una versión TvVoo (tiene variante), ninguna señal directa está en uso.
+            boolean onTvVooVersion = currentPlaybackSource != null
+                    && !AppStrings.isBlank(currentPlaybackSource.getVariantId());
+            int inUse = onTvVooVersion ? -1 : tvvooBackupActive ? directBackupIndex + 1 : 0;
+            for (int index = 0; index < sourceCandidates.size(); index++) {
+                ResolvedPlaybackCandidate candidate = sourceCandidates.get(index);
+                boolean selected = anyMatch ? isCurrentSource(candidate.getSource()) : index == inUse;
+                playbackOptions.add(PlaybackOption.source(candidate, selected));
             }
         }
         List<VideoTrackOption> qualities = player == null
@@ -4829,10 +4871,13 @@ public final class MainActivity extends Activity {
             sourceSelectorCloseButton.requestFocus();
             return;
         }
-        renderPlaybackOptions(getString(
-                R.string.source_selector_quality_count,
-                qualities.size()
-        ));
+        // Con señales arriba se cuentan las opciones; solo calidades, las calidades (0.5.94).
+        // Antes decía «1 calidades detectadas» aunque hubiera Directo y respaldos.
+        renderPlaybackOptions(sourceCandidates.isEmpty()
+                ? qualities.size() == 1 ? getString(R.string.source_selector_quality_one)
+                : getString(R.string.source_selector_quality_count, qualities.size())
+                : playbackOptions.size() == 1 ? getString(R.string.source_selector_ready_one)
+                : getString(R.string.source_selector_ready_count, playbackOptions.size()));
     }
 
     private VideoTrackOption selectedQualityOption(

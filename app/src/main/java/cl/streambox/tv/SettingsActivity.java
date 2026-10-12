@@ -297,6 +297,10 @@ public final class SettingsActivity extends Activity {
                     getString(R.string.normalize_volume_description)));
             autoReconnect.setText(twoLine(getString(R.string.settings_auto_reconnect),
                     getString(R.string.settings_auto_reconnect_description)));
+            // Mismo aire entre título y descripción que las demás filas de Opciones (0.5.94).
+            for (TextView twoLineRow : new TextView[] {normalizeVolume, autoReconnect, subtitlesStatus, subtitlesSwitch}) {
+                if (twoLineRow != null) twoLineRow.setLineSpacing(dp(3), 1f);
+            }
         }
         // Los interruptores se guardan al instante; las listas, con Guardar.
         normalizeVolume.setOnCheckedChangeListener((button, checked) ->
@@ -368,7 +372,10 @@ public final class SettingsActivity extends Activity {
         text.append(description);
         text.setSpan(new android.text.style.RelativeSizeSpan(0.75f), start, text.length(),
                 android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        text.setSpan(new android.text.style.ForegroundColorSpan(getColor(R.color.osd_muted)),
+        // Color con estado de foco (0.5.94): antes era osd_muted fijo y sobre la fila blanca del
+        // foco la descripción quedaba gris claro sobre blanco.
+        text.setSpan(new android.text.style.TextAppearanceSpan(null, 0, 0,
+                        getColorStateList(R.color.settings_row_detail), null),
                 start, text.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         return text;
     }
@@ -1396,8 +1403,11 @@ public final class SettingsActivity extends Activity {
     }
 
     private LinearLayout.LayoutParams linkRowParams() {
-        return new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        // Igual separación que el resto de filas (0.5.94); antes quedaban pegadas.
+        params.bottomMargin = dp(4);
+        return params;
     }
 
     private void showPremiumPairing() {
