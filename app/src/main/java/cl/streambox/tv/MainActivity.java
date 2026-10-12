@@ -4385,6 +4385,9 @@ public final class MainActivity extends Activity {
         sourceSelectorChannel.setText(playbackChannel.getName());
         sourceSelectorOverlay.setVisibility(View.VISIBLE);
         sourceSelectorFixedHint = !classicUi && resolver instanceof TvVooStreamResolver;
+        // Moderno: la lista ya nace con su alto final (0.5.90). Antes medía lo de la última
+        // vez, o solo el texto de estado, y el panel aparecía a medias antes de sus filas.
+        if (!classicUi) fitSourceSelectorList(SOURCE_ROWS_VISIBLE);
         if (resolver != null && supportsSourceSelector(resolver)) {
             startSourceSelectorQuery(playbackChannel, versionsChannel, resolver);
             if (sourceSelectorFixedHint) {
