@@ -1010,6 +1010,7 @@ public final class SettingsActivity extends Activity {
                 int index = container.indexOfChild(view);
                 renderHiddenChannels();
                 View next = container.getChildAt(Math.min(index, container.getChildCount() - 1));
+                if (next == null) next = findViewById(R.id.premium_account_row);
                 if (next != null) next.requestFocus();
             });
             container.addView(row);
