@@ -354,4 +354,10 @@
     <string name="github_link_waiting">Esperando la autorización en GitHub…</string>
     <string name="github_link_requesting">Pidiendo un código a GitHub…</string>
     <string name="github_link_unconfigured">Esta versión no tiene configurada la vinculación con GitHub.</string>
+    <!-- Vinculaciones en Sistema (0.5.91). -->
+    <string name="system_links_title">Vinculaciones</string>
+    <string name="github_link_row_title">Vincular GitHub</string>
+    <string name="github_link_row_detail">Para enviar canales a la papelera de Lista M3U. Escanea un QR y escribe un código.</string>
+    <string name="github_link_linked">Vinculado ›</string>
+    <string name="premium_link_linked">Gestionar ›</string>
 </resources>

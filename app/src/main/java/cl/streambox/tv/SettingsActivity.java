@@ -209,6 +209,7 @@ public final class SettingsActivity extends Activity {
         styleModern.setOnClickListener(view -> setUiStyle(false));
         styleClassic.setOnClickListener(view -> setUiStyle(true));
         bindPremiumSection();
+        bindSystemLinks();
         enterImmersiveMode();
 
         settingsRoot = findViewById(R.id.settings_root);
@@ -1356,6 +1357,47 @@ public final class SettingsActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (appUpdater != null && appUpdater.onActivityResult(requestCode)) return;
         super.onActivityResult(requestCode, resultCode, data);
+    }
+
+    /** Sistema › Vinculaciones (0.5.91): Premium y GitHub con el mismo QR de siempre. */
+    private void bindSystemLinks() {
+        refreshSystemLinks();
+    }
+
+    private void refreshSystemLinks() {
+        LinearLayout container = findViewById(R.id.system_links_container);
+        if (container == null || classicUi) return;
+        container.removeAllViews();
+        HighflyPremiumCredentialStore store = HighflyPremiumCredentialStore.getInstance(this);
+        boolean premiumLinked = store.hasCredential() && store.isUsable();
+        container.addView(settingsActionRow(
+                getString(R.string.premium_link_title),
+                getString(R.string.premium_link_description),
+                getString(premiumLinked ? R.string.premium_link_linked : R.string.premium_link_action)),
+                linkRowParams());
+        container.addView(settingsActionRow(
+                getString(R.string.github_link_row_title),
+                getString(R.string.github_link_row_detail),
+                getString(new GitHubCredentialStore(this).linked()
+                        ? R.string.github_link_linked : R.string.premium_link_action)),
+                linkRowParams());
+        View premiumRow = container.getChildAt(0);
+        premiumRow.setOnClickListener(view -> {
+            if (premiumLinked) {
+                SceneDialog.hideHostWhileShown(PremiumScenes.showManage(this,
+                        this::showPremiumPairing, this::refreshSystemLinks), settingsRoot);
+            } else {
+                showPremiumPairing();
+            }
+        });
+        View githubRow = container.getChildAt(1);
+        githubRow.setOnClickListener(view -> SceneDialog.hideHostWhileShown(
+                ChannelActionScenes.showGitHubLink(this, this::refreshSystemLinks), settingsRoot));
+    }
+
+    private LinearLayout.LayoutParams linkRowParams() {
+        return new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
     }
 
     private void showPremiumPairing() {
