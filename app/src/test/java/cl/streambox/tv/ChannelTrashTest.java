@@ -22,7 +22,8 @@ public final class ChannelTrashTest {
         assertEquals("provider:tvvoo:spain|vavoo_EUROSPORT%202%7Cgroup%3Aes", request.getString("rowKey"));
         assertEquals("EUROSPORT 2", request.getString("name"));
         assertEquals("1970-01-01T00:00:00Z", request.getString("requestedAt"));
-        assertEquals(5, request.length());
+        assertEquals("VibeM3U 0.5.90", request.getString("app"));
+        assertEquals(6, request.length());
     }
 
     @Test
