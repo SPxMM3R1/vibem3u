@@ -4830,7 +4830,8 @@ public final class MainActivity extends Activity {
                 anyQuality = true;
             }
         }
-        groupQualities = !classicUi && anySource && anyQuality;
+        // Siempre que haya calidades (0.5.91): también en canales de una sola señal, sin fuentes arriba.
+        groupQualities = !classicUi && anyQuality;
         LinearLayout qualityGroup = null;
         for (int index = 0; index < playbackOptions.size(); index++) {
             final int candidateIndex = index;
