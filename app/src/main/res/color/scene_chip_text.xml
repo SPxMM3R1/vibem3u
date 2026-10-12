@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Estado de una fila escena (0.5.92): gris; gris oscuro sobre la fila blanca del foco. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:color="#4A5258" />
+    <item android:color="@color/osd_muted" />
+</selector>

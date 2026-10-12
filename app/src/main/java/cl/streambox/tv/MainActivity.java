@@ -4385,13 +4385,17 @@ public final class MainActivity extends Activity {
         sourceSelectorChannel.setText(playbackChannel.getName());
         sourceSelectorOverlay.setVisibility(View.VISIBLE);
         sourceSelectorFixedHint = !classicUi && resolver instanceof TvVooStreamResolver;
-        // Moderno: la lista ya nace con su alto final (0.5.90). Antes medía lo de la última
-        // vez, o solo el texto de estado, y el panel aparecía a medias antes de sus filas.
-        if (!classicUi) fitSourceSelectorList(SOURCE_ROWS_VISIBLE);
         if (resolver != null && supportsSourceSelector(resolver)) {
             startSourceSelectorQuery(playbackChannel, versionsChannel, resolver);
-            if (sourceSelectorFixedHint) {
-                renderSourcePlaceholders(((TvVooStreamResolver) resolver).plannedVersions(versionsChannel));
+            // Moderno (0.5.92): mientras consulta ya están las filas que tendrá al final
+            // (versiones conocidas o una fila «Consultando…») y las acciones de «Este canal».
+            // Antes reservaba 5 filas vacías y el panel se encogía al cargar.
+            List<TvVooStreamResolver.PlannedVersion> planned = sourceSelectorFixedHint
+                    ? ((TvVooStreamResolver) resolver).plannedVersions(versionsChannel) : null;
+            if (planned != null && !planned.isEmpty()) {
+                renderSourcePlaceholders(planned);
+            } else if (!classicUi) {
+                renderLoadingPlaceholder(providerLabel(resolver));
             }
         } else {
             renderDirectQualitySelector(playbackChannel);
@@ -4422,9 +4426,34 @@ public final class MainActivity extends Activity {
             sourceSelectorOptions.addView(row, sourceRowParams(index));
             sourceCandidateViews.add(row);
         }
+        addChannelActionRows();
         fitSourceSelectorList(versions.size());
         sourceCandidateFocusIndex = 0;
         sourceCandidateViews.get(0).requestFocus();
+    }
+
+    /** Highfly y otros: una fila «Consultando…» del proveedor y las acciones del canal. */
+    private void renderLoadingPlaceholder(String provider) {
+        if (!isSourceSelectorVisible() || sourceCandidateTask == null) return;
+        sourceSelectorOptions.removeAllViews();
+        sourceCandidateViews.clear();
+        sourceActionRunnables.clear();
+        View row = sceneRow(getString(R.string.source_selector_provider_signal, provider),
+                getString(R.string.source_selector_consulting_row), "",
+                getString(R.string.source_selector_testing), false, true, false);
+        sourceSelectorOptions.addView(row, sourceRowParams(0));
+        sourceCandidateViews.add(row);
+        addChannelActionRows();
+        fitSourceSelectorList(sourceCandidateViews.size());
+        sourceCandidateFocusIndex = 0;
+        row.requestFocus();
+    }
+
+    private static String providerLabel(StreamResolver resolver) {
+        String id = resolver == null ? "" : resolver.getId();
+        if ("tvvoo".equalsIgnoreCase(id)) return "TvVoo";
+        if ("highfly".equalsIgnoreCase(id)) return "Highfly";
+        return AppStrings.isBlank(id) ? "" : id;
     }
 
     private LinearLayout.LayoutParams sourceRowParams(int index) {
@@ -4434,13 +4463,27 @@ public final class MainActivity extends Activity {
         return params;
     }
 
-    /** La lista mide lo que ocupan sus filas (hasta 5 visibles; más, se desplaza). */
-    private void fitSourceSelectorList(int rows) {
+    /**
+     * La lista mide lo que ocupa de verdad (rótulos «Calidades de…» y «Este canal»
+     * incluidos), hasta el alto de 5 filas; más, se desplaza. Antes contaba 42 dp por fila
+     * y con una sola opción cortaba la última acción (0.5.92).
+     */
+    private void fitSourceSelectorList(int ignoredRows) {
         View scroll = findViewById(R.id.source_selector_scroll);
         if (scroll == null || classicUi) return;
-        int visible = Math.max(1, Math.min(rows, SOURCE_ROWS_VISIBLE));
+        int max = dp(SOURCE_ROWS_VISIBLE * SOURCE_ROW_HEIGHT_DP + (SOURCE_ROWS_VISIBLE - 1) * SOURCE_ROW_GAP_DP);
+        int width = scroll.getWidth();
+        if (width <= 0) {
+            View panel = findViewById(R.id.source_selector_panel);
+            int panelWidth = panel != null && panel.getWidth() > 0 ? panel.getWidth()
+                    : panel != null ? panel.getLayoutParams().width : dp(560);
+            width = panelWidth - (panel != null ? panel.getPaddingLeft() + panel.getPaddingRight() : 0);
+        }
+        sourceSelectorOptions.measure(
+                View.MeasureSpec.makeMeasureSpec(Math.max(1, width), View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         ViewGroup.LayoutParams params = scroll.getLayoutParams();
-        params.height = dp(visible * SOURCE_ROW_HEIGHT_DP + (visible - 1) * SOURCE_ROW_GAP_DP);
+        params.height = Math.max(dp(SOURCE_ROW_HEIGHT_DP), Math.min(max, sourceSelectorOptions.getMeasuredHeight()));
         scroll.setLayoutParams(params);
         scroll.setOnScrollChangeListener((view, x, y, oldX, oldY) -> refreshSourceSelectorMoreHint());
         scroll.post(this::refreshSourceSelectorMoreHint);
@@ -4503,7 +4546,7 @@ public final class MainActivity extends Activity {
                     || !isSourceSelectorVisible()
                     || !isCurrentPlayback(channel, expectedGeneration)) return;
             if (!sourceSelectorFixedHint) {
-                sourceSelectorStatus.setText(sourceSelectorProgressText(progress));
+                sourceSelectorStatus.setText(sourceSelectorProgressText(progress, providerLabel(resolver)));
             }
         });
         sourceCandidateTask = playbackExecutor.submit(() -> {
@@ -4576,7 +4619,7 @@ public final class MainActivity extends Activity {
         renderDirectQualitySelector(channel);
     }
 
-    private String sourceSelectorProgressText(ResolutionProgress progress) {
+    private String sourceSelectorProgressText(ResolutionProgress progress, String provider) {
         if (progress == null || progress.getStage() == null) {
             return getString(R.string.source_selector_consulting);
         }
@@ -4586,7 +4629,10 @@ public final class MainActivity extends Activity {
             case ALIAS_ATTEMPT -> current > 0 && total > 1
                     ? "Consultando aliases " + current + "/" + total + "…"
                     : "Consultando aliases…";
-            case CATALOG_REQUEST, CATALOG_PAGE -> "Consultando catálogo TvVoo…";
+            // Highfly también pasa por aquí: antes decía «TvVoo» para todos (0.5.92).
+            case CATALOG_REQUEST, CATALOG_PAGE -> AppStrings.isBlank(provider)
+                    ? getString(R.string.source_selector_consulting)
+                    : getString(R.string.source_selector_catalog_of, provider);
             case CATALOG_PARSED -> "Procesando fuentes publicadas…";
             case SOURCE_REQUEST -> current > 0 && total > 1
                     ? "Solicitando fuentes " + current + "/" + total + "…"
@@ -4617,7 +4663,8 @@ public final class MainActivity extends Activity {
         renderPlaybackOptions(sourceSelectorFixedHint
                 ? getString(R.string.source_selector_versions_hint)
                 : available == sourceCandidates.size()
-                ? getString(R.string.source_selector_ready_count, available)
+                ? available == 1 ? getString(R.string.source_selector_ready_one)
+                : getString(R.string.source_selector_ready_count, available)
                 : getString(R.string.source_selector_versions_count, available,
                         sourceCandidates.size()));
     }
@@ -4713,8 +4760,10 @@ public final class MainActivity extends Activity {
         TextView state = new TextView(this);
         state.setText(stateText);
         state.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
-        state.setTextColor(selected ? 0xFF5BE9A0 : getColor(R.color.osd_muted));
+        // Con foco la fila es blanca: el chip pasa a tonos oscuros para leerse (0.5.92).
+        state.setTextColor(getColorStateList(selected ? R.color.scene_chip_text_ok : R.color.scene_chip_text));
         state.setBackgroundResource(selected ? R.drawable.scene_chip_ok : R.drawable.scene_chip);
+        state.setDuplicateParentStateEnabled(true);
         state.setPadding(dp(7), dp(3), dp(7), dp(3));
         state.setIncludeFontPadding(false);
         LinearLayout.LayoutParams stateParams = new LinearLayout.LayoutParams(
@@ -5065,7 +5114,7 @@ public final class MainActivity extends Activity {
                 && sourceCandidateFocusIndex < playbackOptions.size()) {
             selectPlaybackOption(sourceCandidateFocusIndex);
         } else {
-            int action = sourceCandidateFocusIndex - playbackOptions.size();
+            int action = sourceCandidateFocusIndex - (sourceCandidateViews.size() - sourceActionRunnables.size());
             if (action >= 0 && action < sourceActionRunnables.size()) sourceActionRunnables.get(action).run();
         }
     }

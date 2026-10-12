@@ -124,6 +124,9 @@
     <string name="source_selector_consulting">Consultando fuentes y calidades HLS…</string>
     <string name="source_selector_validating">Validando enlaces y calidades…</string>
     <string name="source_selector_ready">Selecciona una opción para reproducirla.</string>
+    <string name="source_selector_ready_one">1 opción disponible. Selecciona una para aplicarla.</string>
+    <string name="source_selector_catalog_of">Consultando catálogo %1$s…</string>
+    <string name="source_selector_provider_signal">Señal %1$s</string>
     <string name="source_selector_ready_count">%1$d opciones disponibles. Selecciona una para aplicarla.</string>
     <string name="source_selector_quality_count">%1$d calidades detectadas. Selecciona una para aplicarla.</string>
     <string name="source_selector_no_options">No se detectaron fuentes ni calidades disponibles.</string>

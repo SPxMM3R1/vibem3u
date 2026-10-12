@@ -7,7 +7,7 @@
 > actualiza este archivo en el mismo commit**: la sección «Hoy» si cambió el estado y una
 > línea nueva en «Bitácora».
 
-Última actualización: **2026-10-09** (America/Santiago).
+Última actualización: **2026-10-12** (America/Santiago).
 
 ## Hoy, en una mirada
 
@@ -140,6 +140,7 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-12** (UTC): 0.5.92 (`versionCode` 201), arreglos pedidos por el usuario con fotos de la TV. Selector «Fuentes y calidades»: (1) ya no reserva 5 filas vacías mientras consulta (el panel, anclado abajo, se encogía al cargar y parecía aparecer «hasta arriba»); ahora nace con las filas que tendrá: versiones TvVoo conocidas o una fila «Señal Highfly · Consultando…», más «Este canal»; (2) el alto de la lista se mide de verdad (rótulos incluidos) con tope de 5 filas: con una sola opción ya no corta «Enviar a la papelera» ni muestra «Mueve el control…»; (3) el estado de catálogo dice el proveedor real («Consultando catálogo Highfly…»; antes «TvVoo» fijo para todos); (4) «1 opción disponible»; (5) chips «✓ En uso»/«Disponible» con tonos oscuros sobre la fila blanca del foco (`scene_chip_text*`), antes verde claro sobre blanco. Las acciones de «Este canal» se ubican por posición (`sourceCandidateViews` − acciones), válido también con filas provisionales. Además, salir de la app ya no termina en cierre forzado: `SharedHttpClient.shutdownForProcessExit` cerraba TLS en el hilo principal (NetworkOnMainThreadException, desde `5114065`); ahora en un hilo aparte con espera de 500 ms. Probado en emulador: Highfly (023), TvVoo (025) y directo (059) y salida sin FATAL.
 - **2026-10-11** (UTC): 0.5.90 (`versionCode` 199), mockups aprobados por el usuario («Aplica»).
   - **Opciones como el mockup centrado aprobado**: la 0.5.58 solo había movido la posición y conservó los
     colores/tamaños de la 0.5.47 (lo hice yo; ver la conversación del 11-10). Ahora: pestaña activa, fila con

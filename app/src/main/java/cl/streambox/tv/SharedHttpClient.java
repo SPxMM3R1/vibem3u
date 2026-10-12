@@ -52,8 +52,19 @@ public final class SharedHttpClient {
      */
     static void shutdownForProcessExit() {
         INSTANCE.dispatcher().cancelAll();
-        INSTANCE.connectionPool().evictAll();
-        INSTANCE.dispatcher().executorService().shutdownNow();
+        // Cerrar conexiones TLS escribe en el socket: fuera del hilo principal, o Android
+        // lanza NetworkOnMainThreadException y la salida termina en cierre forzado (0.5.92).
+        Thread closer = new Thread(() -> {
+            INSTANCE.connectionPool().evictAll();
+            INSTANCE.dispatcher().executorService().shutdownNow();
+        }, "VibeM3U-http-exit");
+        closer.setDaemon(true);
+        closer.start();
+        try {
+            closer.join(500L);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /**
