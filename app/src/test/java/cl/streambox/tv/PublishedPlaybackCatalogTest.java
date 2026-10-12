@@ -345,28 +345,67 @@ public final class PublishedPlaybackCatalogTest {
     }
 
     @Test
-    public void staleNautaBackupDoesNotHideEitherIndependentChannel() throws Exception {
+    public void stableNautaBackupsAreHiddenAndResolvedInOrder() throws Exception {
+        String primaryId = "Nauta.4dec2794ee77cb450b79aa5b@Nauta";
+        String southId = "Nauta.dac26a78f5bdf111bc9b9ffc@Nauta";
+        String chileId = "Nauta.81dc69c20557da0672921475@Nauta";
         String edited = "{\"schemaVersion\":1,\"channels\":["
-                + "{\"kind\":\"m3u\",\"tvgId\":\"Nauta.hd@Nauta\",\"name\":\"Canal X HD\","
-                + "\"group\":\"Nauta\",\"sourceList\":\"1.m3u\",\"order\":1,\"number\":2,"
-                + "\"state\":\"active\",\"backupm3u\":[\"Nauta.sd@Nauta\"]},"
-                + "{\"kind\":\"m3u\",\"tvgId\":\"Nauta.sd@Nauta\",\"name\":\"Canal X\","
-                + "\"group\":\"Nauta\",\"sourceList\":\"1.m3u\",\"order\":2,\"number\":1,"
+                + "{\"kind\":\"m3u\",\"tvgId\":\"" + primaryId + "\",\"name\":\"ESPN 1 Argentina\","
+                + "\"group\":\"Nauta\",\"sourceList\":\"1.m3u\",\"order\":1,\"number\":33,"
+                + "\"state\":\"active\",\"backupm3u\":[\"" + southId + "\",\"" + chileId + "\"]},"
+                + "{\"kind\":\"m3u\",\"tvgId\":\"" + southId + "\",\"name\":\"ESPN 1 Sur\","
+                + "\"group\":\"Nauta\",\"sourceList\":\"1.m3u\",\"order\":2,\"number\":70,"
+                + "\"state\":\"active\"},"
+                + "{\"kind\":\"m3u\",\"tvgId\":\"" + chileId + "\",\"name\":\"ESPN 1 Chile\","
+                + "\"group\":\"Nauta\",\"sourceList\":\"1.m3u\",\"order\":3,\"number\":72,"
                 + "\"state\":\"active\"}]}";
         PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);
-        URI hdReference = DynamicSourceReference.create("nauta", "cat_4|Canal X HD");
-        URI sdReference = DynamicSourceReference.create("nauta", "cat_4|Canal X");
-        Channel hd = new Channel("Canal X HD", hdReference, null, "Nauta",
-                Collections.singletonMap("tvg-id", "Nauta.hd@Nauta"));
-        Channel sd = new Channel("Canal X", sdReference, null, "Nauta",
-                Collections.singletonMap("tvg-id", "Nauta.sd@Nauta"));
+        URI primaryReference = DynamicSourceReference.create("nauta", "nautatv_catalog|ESPN 1 | Argentina");
+        URI southReference = DynamicSourceReference.create("nauta", "nautatv_catalog|ESPN 1 | Sur");
+        URI chileReference = DynamicSourceReference.create("nauta", "nautatv_catalog|ESPN 1 | Chile");
+        Channel primary = new Channel("ESPN 1 Argentina", primaryReference, null, "Nauta",
+                Collections.singletonMap("tvg-id", primaryId));
+        Channel south = new Channel("ESPN 1 Sur", southReference, null, "Nauta",
+                Collections.singletonMap("tvg-id", southId));
+        Channel chile = new Channel("ESPN 1 Chile", chileReference, null, "Nauta",
+                Collections.singletonMap("tvg-id", chileId));
 
-        List<Channel> playback = catalog.applyToPlayback(Arrays.asList(hd, sd));
+        List<Channel> playback = catalog.applyToPlayback(Arrays.asList(primary, south, chile));
+
+        assertEquals(1, playback.size());
+        assertEquals(primaryReference, playback.get(0).getStreamUri());
+        assertEquals(Arrays.asList(southReference, chileReference), TvVooBackup.directBackupsOf(playback.get(0)));
+        for (int index = 0; index < 2; index++) {
+            Channel resolving = TvVooBackup.directResolutionChannel(playback.get(0), index);
+            assertTrue(new NautaStreamResolver().supports(resolving));
+        }
+        assertEquals(southId, TvVooBackup.directResolutionChannel(playback.get(0), 0).getTvgId());
+        assertEquals(chileId, TvVooBackup.directResolutionChannel(playback.get(0), 1).getTvgId());
+    }
+
+    @Test
+    public void malformedNautaBackupCannotHideAnIndependentChannel() throws Exception {
+        String edited = "{\"schemaVersion\":1,\"channels\":["
+                + "{\"kind\":\"m3u\",\"tvgId\":\"Nauta.4dec2794ee77cb450b79aa5b@Nauta\","
+                + "\"name\":\"ESPN 1 Argentina\",\"group\":\"Nauta\",\"sourceList\":\"1.m3u\","
+                + "\"order\":1,\"number\":33,\"state\":\"active\","
+                + "\"backupm3u\":[\"Nauta.not-stable@Nauta\"]},"
+                + "{\"kind\":\"m3u\",\"tvgId\":\"Nauta.not-stable@Nauta\",\"name\":\"Canal X\","
+                + "\"group\":\"Nauta\",\"sourceList\":\"1.m3u\",\"order\":2,\"number\":34,"
+                + "\"state\":\"active\"}]}";
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);
+        Channel primary = new Channel("ESPN 1 Argentina",
+                DynamicSourceReference.create("nauta", "nautatv_catalog|ESPN 1 | Argentina"), null, "Nauta",
+                Collections.singletonMap("tvg-id", "Nauta.4dec2794ee77cb450b79aa5b@Nauta"));
+        Channel independent = new Channel("Canal X",
+                DynamicSourceReference.create("nauta", "cat_4|Canal X"), null, "Nauta",
+                Collections.singletonMap("tvg-id", "Nauta.not-stable@Nauta"));
+
+        List<Channel> playback = catalog.applyToPlayback(Arrays.asList(primary, independent));
 
         assertEquals(2, playback.size());
-        assertEquals(hdReference, playback.get(0).getStreamUri());
-        assertEquals(sdReference, playback.get(1).getStreamUri());
         assertTrue(TvVooBackup.directBackupsOf(playback.get(0)).isEmpty());
+        assertEquals(independent.getStreamUri(), playback.get(1).getStreamUri());
     }
 
     private static String m3uRow(String tvgId, int order, int number) {

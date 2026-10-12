@@ -5307,6 +5307,22 @@ public final class MainActivity extends Activity {
             rememberSourceChoice(channel, backupIndex >= 0
                     ? PlaybackPreferences.directBackupChoice(source.getPlaybackUri())
                     : PlaybackPreferences.SOURCE_PRINCIPAL);
+            URI selectedReference = source.getPlaybackUri();
+            if (backupIndex >= 0
+                    && DynamicSourceReference.isAppOnly(selectedReference)
+                    && "nauta".equals(DynamicSourceReference.provider(selectedReference))) {
+                // Nauta backups are tokenless locators, not playable HTTP URLs. Resolve the
+                // selected row with its own identity through the normal resolver registry.
+                playbackHasStarted = false;
+                playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
+                playbackAutoRecoveryInFlight = false;
+                playbackRecoveryFailed = false;
+                resetPlaybackBitrateMeter();
+                setStatus("CARGANDO", R.color.amber);
+                showLoadingState(getString(R.string.source_selector_switching));
+                resolveAndPlay(channel, playbackGeneration, true);
+                return;
+            }
             if (backupIndex < 0 && streamResolverRegistry != null
                     && streamResolverRegistry.find(channel) != null) {
                 // «Directo» de un canal con resolutor (TVN): se pide de nuevo la señal oficial;

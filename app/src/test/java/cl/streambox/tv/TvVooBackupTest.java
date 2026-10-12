@@ -62,8 +62,23 @@ public final class TvVooBackupTest {
         URI validNautaReference = DynamicSourceReference.create("nauta", "cat_4|Canal X");
         assertNotNull(validNautaReference);
         Channel nauta = new Channel("Canal X", validNautaReference, null, "Nauta",
-                Collections.singletonMap("tvg-id", "Nauta.base@Nauta"));
+                Collections.singletonMap("tvg-id", "Nauta.invalid@Nauta"));
         assertFalse(TvVooBackup.has(TvVooBackup.withDirectBackups(direct(), Collections.singletonList(nauta))));
+    }
+
+    @Test public void stableNautaBackupKeepsItsResolverReferenceAndIdentity() {
+        String stableId = "Nauta.0123456789abcdef01234567@Nauta";
+        URI reference = DynamicSourceReference.create("nauta", "nautatv_catalog|Canal X");
+        Channel nauta = new Channel("Canal X", reference, null, "Nauta",
+                Collections.singletonMap("tvg-id", stableId));
+
+        Channel projected = TvVooBackup.withDirectBackups(direct(), Collections.singletonList(nauta));
+
+        assertEquals(Collections.singletonList(reference), TvVooBackup.directBackupsOf(projected));
+        Channel resolving = TvVooBackup.directResolutionChannel(projected, 0);
+        assertEquals(reference, resolving.getStreamUri());
+        assertEquals(stableId, resolving.getTvgId());
+        assertTrue(new NautaStreamResolver().supports(resolving));
     }
 
     @Test public void buildingBackupsDoesNotMutateInputs() {

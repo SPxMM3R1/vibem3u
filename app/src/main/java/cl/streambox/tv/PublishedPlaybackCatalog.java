@@ -455,11 +455,14 @@ final class PublishedPlaybackCatalog {
                     List<String> ids = new ArrayList<>();
                     for (int index = 0; index < backups.length() && ids.size() < 8; index++) {
                         String id = backups.optString(index, "").trim();
-                        // Nauta resolver references are not direct M3U backups. Ignore any stale
-                        // Nauta IDs before they hide those rows as independent channels.
-                        if (!id.regionMatches(true, 0, "Nauta.", 0, 6)
-                                && !id.isEmpty() && !id.contains("://") && id.length() <= 512
-                                && !id.equals(stableId) && !id.equals(preferredM3u)
+                        boolean nauta = id.regionMatches(true, 0, "Nauta.", 0, 6);
+                        boolean validNauta = nauta && id.matches("(?i)^Nauta\\.[0-9a-f]{24}@Nauta$");
+                        boolean validDirect = !nauta && !id.isEmpty() && !id.contains("://")
+                                && id.length() <= 512;
+                        // Stable Nauta identities may be linked explicitly: the M3U row still
+                        // carries only its tokenless vibem3u://resolver/nauta locator. Never allow
+                        // malformed/stale Nauta IDs to hide an independent channel.
+                        if ((validNauta || validDirect) && !id.equals(stableId) && !id.equals(preferredM3u)
                                 && !ids.contains(id)) ids.add(id);
                     }
                     backupm3u = Collections.unmodifiableList(ids);
