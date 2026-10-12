@@ -1550,6 +1550,8 @@ public final class MainActivity extends Activity {
         if (loadingPanel == null || isFinishing()) return;
         clearResourceWarning();
         loadingPanel.setVisibility(View.VISIBLE);
+        // Pantalla negra (sin imagen todavía): todo lo que se ve encima, al 70 % (0.5.90).
+        if (!classicUi) setBlackScreenDim(!hasRenderedVideoFrame());
         String safeMessage = SafePlaybackText.detail(message == null ? "" : message.trim());
         if (!classicUi) {
             showModernLoadingStep(stripTrailingEllipsis(safeMessage));
@@ -1704,6 +1706,23 @@ public final class MainActivity extends Activity {
         clearResourceWarning();
         stopLoadingTextAnimation();
         if (loadingPanel != null) loadingPanel.setVisibility(View.GONE);
+        setBlackScreenDim(false);
+    }
+
+    /** Brillo del OSD y la carga sobre la pantalla negra (aprobado 2026-10-11): 70 %. */
+    private static final float BLACK_SCREEN_ALPHA = 0.7f;
+    private boolean blackScreenDimmed;
+
+    private void setBlackScreenDim(boolean dim) {
+        if (dim == blackScreenDimmed) return;
+        blackScreenDimmed = dim;
+        float alpha = dim ? BLACK_SCREEN_ALPHA : 1f;
+        for (View view : new View[]{channelOverlay, loadingPanel}) {
+            if (view == null) continue;
+            view.animate().cancel();
+            if (dim) view.setAlpha(alpha);
+            else view.animate().alpha(alpha).setDuration(250L).start();
+        }
     }
 
     /**

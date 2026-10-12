@@ -157,6 +157,9 @@
     Contents) y el workflow «Pedidos de la app» lo aplica con `setRowState` del editor. Vinculación por código
     (GitHub Device Flow, Client ID público de la app OAuth de VibeM3U, scope `public_repo`; token cifrado con
     Keystore en `GitHubCredentialStore`). Mientras el runner no retira la fila, la TV la esconde (máx. 3 días).
+  - **Pantalla negra al cargar**: todo lo que se ve encima (OSD, logo o nombre, número, hora y la onda de carga)
+    queda al 70 % mientras no hay imagen (`setBlackScreenDim`); al ocultarse la carga vuelve al 100 % en 250 ms.
+    Aprobado por el usuario sobre el mockup del 11-10 («al 70, que todo se vea igual»).
 - **2026-10-11** (UTC): 0.5.89 (`versionCode` 198). Canales Nauta «se ven 5 s y se pegan». Diagnóstico: los 74 Nauta
   salen de un solo servidor (`m3u.tvcluboficial.com/free/`), una fuente y una calidad por canal, segmentos de 5 s que
   el servidor entrega en 2–18 s (0,16×–2,6× tiempo real según la hora) y una lista que avanza a saltos. En el emulador
