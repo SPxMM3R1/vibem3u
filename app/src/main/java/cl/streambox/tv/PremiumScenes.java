@@ -217,7 +217,7 @@ final class PremiumScenes {
         });
     }
 
-    private static Bitmap qrBitmap(String text, int size) throws WriterException {
+    static Bitmap qrBitmap(String text, int size) throws WriterException {
         BitMatrix matrix = new QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, size, size,
                 Collections.singletonMap(EncodeHintType.MARGIN, 0));
         int width = matrix.getWidth();

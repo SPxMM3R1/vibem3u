@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Riel del interruptor de Opciones (0.5.90): cyan encendido; gris apagado. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/cyan" />
+            <corners android:radius="999dp" />
+            <size android:width="26dp" android:height="15dp" />
+        </shape>
+    </item>
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#2E0B0D0F" />
+            <corners android:radius="999dp" />
+            <size android:width="26dp" android:height="15dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#2EFFFFFF" />
+            <corners android:radius="999dp" />
+            <size android:width="26dp" android:height="15dp" />
+        </shape>
+    </item>
+</selector>

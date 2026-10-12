@@ -10,9 +10,12 @@
     <color name="muted">#B8C4C9</color>
     <!-- Gris de textos secundarios de la Guía y el OSD. -->
     <color name="osd_muted">#9FB0B7</color>
-    <!-- Estilo de la Guía para menús: filas tenues, foco con velo cyan, texto sobre cyan. -->
+    <!-- Menús (0.5.90, mockup aprobado): filas tenues; con foco, tarjeta blanca y texto oscuro.
+         El cyan queda solo para los interruptores encendidos. -->
     <color name="menu_row">#0DFFFFFF</color>
-    <color name="menu_focus">#3800B8E6</color>
+    <color name="menu_focus">#FFFFFFFF</color>
+    <color name="on_white">#0B0D0F</color>
+    <color name="menu_input_focus">#38FFFFFF</color>
     <color name="menu_pill">#14FFFFFF</color>
     <color name="on_cyan">#021015</color>
     <color name="menu_text">#E9F1F4</color>

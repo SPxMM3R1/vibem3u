@@ -262,6 +262,18 @@ final class PublishedPlaybackCatalog {
         return result;
     }
 
+    /**
+     * Clave de la fila del editor web para este canal (0.5.90): {@code m3u:<tvg-id>} o
+     * {@code provider:<proveedor>:<catalogKey>}, igual que {@code rowKey} de editor-core.mjs.
+     */
+    static String editorRowKey(Channel channel) {
+        String key = keyFor(channel);
+        if (key.startsWith("tvvoo:")) return "provider:" + key;
+        if (key.startsWith("highfly:")) return "provider:" + key;
+        if (key.startsWith("m3u:tvg:")) return "m3u:" + key.substring("m3u:tvg:".length());
+        return "";
+    }
+
     private static String keyFor(Channel channel) {
         if (channel == null) return "";
         if (TvVooChannelMerge.isTvVoo(channel)) {

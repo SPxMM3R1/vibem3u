@@ -30,9 +30,18 @@ android {
         minSdk = 29
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 198
-        versionName = "0.5.89"
+        versionCode = 199
+        versionName = "0.5.90"
         buildConfigField("boolean", "ENABLE_APP_UPDATES", "true")
+        // Client ID público de la app OAuth de VibeM3U para el Device Flow de GitHub (papelera
+        // desde la TV, 0.5.90). No es un secreto; CI puede reemplazarlo con la variable del repo.
+        val githubDeviceClientId = (System.getenv("VIBEM3U_GITHUB_DEVICE_CLIENT_ID")
+            ?: project.findProperty("githubDeviceClientId")?.toString()
+            ?: "Ov23liJS3cyhfOtQyxLJ").trim().ifEmpty { "Ov23liJS3cyhfOtQyxLJ" }
+        require(Regex("[A-Za-z0-9._-]{8,64}").matches(githubDeviceClientId)) {
+            "Client ID de GitHub inválido"
+        }
+        buildConfigField("String", "GITHUB_DEVICE_CLIENT_ID", "\"$githubDeviceClientId\"")
     }
 
     buildTypes {

@@ -146,6 +146,10 @@
     <string name="mediaflow_status_unreachable">No se pudo contactar MediaFlow: %1$s</string>
     <string name="mediaflow_status_error">No se pudo guardar la configuración: %1$s</string>
 
+    <plurals name="resolver_group_count">
+        <item quantity="one">%1$d canal</item>
+        <item quantity="other">%1$d canales</item>
+    </plurals>
     <plurals name="resolver_group_channels">
         <item quantity="one">%1$s · %2$d canal</item>
         <item quantity="other">%1$s · %2$d canales</item>
@@ -318,4 +322,36 @@
     <string name="source_selector_backup_label">Respaldo</string>
     <string name="source_selector_backup_detail">Otra señal del mismo canal</string>
     <string name="source_selector_backup_numbered_label">Respaldo %1$d</string>
+    <!-- Canales ocultos y papelera desde la TV (0.5.90). -->
+    <string name="hidden_channels_title">Ocultos en esta TV</string>
+    <plurals name="hidden_channels_summary">
+        <item quantity="one">%1$d canal oculto</item>
+        <item quantity="other">%1$d canales ocultos</item>
+    </plurals>
+    <string name="hidden_channels_detail">Solo en esta TV. Puedes volver a mostrarlos.</string>
+    <string name="hidden_channels_show_list">Ver ›</string>
+    <string name="hidden_channels_hide_list">Cerrar ‹</string>
+    <string name="hidden_channel_detail">Oculto en esta TV</string>
+    <string name="hidden_channel_show">Mostrar ›</string>
+    <string name="channel_actions_title">Este canal</string>
+    <string name="source_selector_qualities_title">Calidades</string>
+    <string name="source_selector_qualities_of">Calidades de %1$s</string>
+    <string name="channel_hide_title">Ocultar en esta TV</string>
+    <string name="channel_hide_detail">Deja de aparecer solo aquí. Se recupera en Opciones › Canales.</string>
+    <string name="channel_trash_title">Enviar a la papelera</string>
+    <string name="channel_trash_detail">Lo quita de la lista en GitHub para todas tus TVs.</string>
+    <string name="channel_hidden_toast">%1$s oculto en esta TV</string>
+    <string name="channel_trash_confirm_title">¿Enviar %1$s a la papelera?</string>
+    <string name="channel_trash_confirm_message">Sale de Lista M3U en GitHub y desaparece de todas tus TVs en la próxima actualización. Queda en la papelera del editor: desde ahí se recupera o se borra para siempre.</string>
+    <string name="channel_trash_confirm">Enviar a la papelera</string>
+    <string name="channel_trash_sending">Enviando %1$s a la papelera…</string>
+    <string name="channel_trash_done">%1$s enviado a la papelera · GitHub actualizado</string>
+    <string name="channel_trash_failed">No se pudo enviar a la papelera: %1$s</string>
+    <string name="channel_trash_unavailable">Este canal no tiene una fila en el editor; solo se puede ocultar.</string>
+    <string name="github_link_kicker">Lista M3U · GitHub</string>
+    <string name="github_link_title">Vincular GitHub</string>
+    <string name="github_link_message">Solo la primera vez. Escanea el código con el teléfono, entra a GitHub y escribe este código. El acceso se guarda cifrado en esta TV.</string>
+    <string name="github_link_waiting">Esperando la autorización en GitHub…</string>
+    <string name="github_link_requesting">Pidiendo un código a GitHub…</string>
+    <string name="github_link_unconfigured">Esta versión no tiene configurada la vinculación con GitHub.</string>
 </resources>

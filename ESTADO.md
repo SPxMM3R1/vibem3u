@@ -140,6 +140,23 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-11** (UTC): 0.5.90 (`versionCode` 199), mockups aprobados por el usuario («Aplica»).
+  - **Opciones como el mockup centrado aprobado**: la 0.5.58 solo había movido la posición y conservó los
+    colores/tamaños de la 0.5.47 (lo hice yo; ver la conversación del 11-10). Ahora: pestaña activa, fila con
+    foco, calidad elegida y botones en blanco con texto oscuro (`menu_focus` = blanco, `on_white`); cyan solo
+    en interruptores encendidos (`settings_switch_track/thumb`, apagado gris, oscuro sobre la fila blanca);
+    Roboto 20 sp título, 11.5 sp filas, 8.5 sp descripciones, 9.5 sp valores, 11 sp datos de la señal.
+    Proveedores en una fila cada uno con «N canales» debajo y nombres sin «dinamico»/«externo». El clásico
+    pasa a `classic_segment_option*` y queda igual. Los mockups anteriores se dibujaban con Segoe UI (Roboto no
+    estaba instalada): los nuevos cargan la Roboto del emulador.
+  - **«Fuentes y calidades»**: con fuentes arriba (directo con respaldos), las calidades van con sangría, una
+    línea a la izquierda y el rótulo «Calidades de <fuente en uso>», filas de 32 dp.
+  - **«Este canal»** al final del selector: «Ocultar en esta TV» (`ChannelVisibility`, solo local; se
+    recupera en Opciones › Canales › Ocultos en esta TV) y «Enviar a la papelera» (confirmación con foco en
+    Cancelar). La papelera deja un pedido en `data/app-requests/` de Lista M3U (`GitHubChannelTrash`, API
+    Contents) y el workflow «Pedidos de la app» lo aplica con `setRowState` del editor. Vinculación por código
+    (GitHub Device Flow, Client ID público de la app OAuth de VibeM3U, scope `public_repo`; token cifrado con
+    Keystore en `GitHubCredentialStore`). Mientras el runner no retira la fila, la TV la esconde (máx. 3 días).
 - **2026-10-11** (UTC): 0.5.89 (`versionCode` 198). Canales Nauta «se ven 5 s y se pegan». Diagnóstico: los 74 Nauta
   salen de un solo servidor (`m3u.tvcluboficial.com/free/`), una fuente y una calidad por canal, segmentos de 5 s que
   el servidor entrega en 2–18 s (0,16×–2,6× tiempo real según la hora) y una lista que avanza a saltos. En el emulador

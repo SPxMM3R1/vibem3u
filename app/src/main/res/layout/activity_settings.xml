@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Opciones (moderno, centrado desde 2026-10-03): columna de 560 dp al centro con título y hora
-     arriba y pestañas centradas; el video asoma a los lados.
+     arriba y pestañas centradas. 0.5.90: colores y tamaños del mockup aprobado (blanco en lo
+     elegido y en el foco, cyan solo en interruptores encendidos, Roboto 20/11.5/8.5 sp).
      Generado desde el mockup aprobado; el estilo clásico vive en classic_activity_settings.xml. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/settings_root"
@@ -32,7 +33,7 @@
                 android:includeFontPadding="false"
                 android:text="@string/settings_title"
                 android:textColor="@color/white"
-                android:textSize="18sp"
+                android:textSize="20sp"
                 android:textStyle="bold" />
 
             <Space
@@ -224,16 +225,16 @@
                                 android:duplicateParentState="true"
                                 android:includeFontPadding="false"
                                 android:text="@string/settings_quality_title"
-                                android:textColor="@color/white"
-                                android:textSize="13sp" />
+                                android:textColor="@color/settings_row_title"
+                                android:textSize="11.5sp" />
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="2dp"
                                 android:duplicateParentState="true"
                                 android:text="@string/settings_quality_remembered"
-                                android:textColor="@color/osd_muted"
-                                android:textSize="10sp" />
+                                android:textColor="@color/settings_row_detail"
+                                android:textSize="8.5sp" />
                         </LinearLayout>
                         <LinearLayout
                             android:id="@+id/settings_quality_options"
@@ -252,9 +253,12 @@
                         android:paddingEnd="12dp"
                         android:text="@string/settings_quality_no_options"
                         android:textColor="@color/osd_muted"
-                        android:textSize="10sp"
+                        android:textSize="8.5sp"
                         android:visibility="gone" />
                     <Switch
+                        android:thumb="@drawable/settings_switch_thumb"
+                        android:track="@drawable/settings_switch_track"
+                        android:switchMinWidth="26dp"
                         android:id="@+id/settings_subtitles_switch"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -267,9 +271,8 @@
                         android:paddingEnd="12dp"
                         android:paddingBottom="8dp"
                         android:showText="false"
-                        android:textColor="@color/white"
-                        android:textSize="13sp"
-                        android:thumbTint="@color/cyan"
+                        android:textColor="@color/settings_row_title"
+                        android:textSize="11.5sp"
                         android:visibility="gone" />
                     <TextView
                         android:id="@+id/settings_subtitles_status"
@@ -284,7 +287,7 @@
                         android:paddingBottom="8dp"
                         android:text="@string/subtitles_waiting_for_text"
                         android:textColor="@color/white"
-                        android:textSize="13sp" />
+                        android:textSize="11.5sp" />
                     <LinearLayout
                         android:id="@+id/open_source_selector"
                         android:layout_width="match_parent"
@@ -312,16 +315,16 @@
                                 android:duplicateParentState="true"
                                 android:includeFontPadding="false"
                                 android:text="@string/settings_signal_source_title"
-                                android:textColor="@color/white"
-                                android:textSize="13sp" />
+                                android:textColor="@color/settings_row_title"
+                                android:textSize="11.5sp" />
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="2dp"
                                 android:duplicateParentState="true"
                                 android:text="@string/settings_signal_source_description"
-                                android:textColor="@color/osd_muted"
-                                android:textSize="10sp" />
+                                android:textColor="@color/settings_row_detail"
+                                android:textSize="8.5sp" />
                         </LinearLayout>
                         <TextView
                             android:layout_width="wrap_content"
@@ -329,8 +332,8 @@
                             android:layout_marginStart="12dp"
                             android:duplicateParentState="true"
                             android:text="@string/settings_signal_source_row_action"
-                            android:textColor="@color/osd_muted"
-                            android:textSize="10.5sp" />
+                            android:textColor="@color/settings_row_detail"
+                            android:textSize="9.5sp" />
                     </LinearLayout>
                     <!-- Tamaño del logo (0.5.60): OK vuelve al video y se ajusta en vivo. -->
                     <LinearLayout
@@ -361,16 +364,16 @@
                                 android:duplicateParentState="true"
                                 android:includeFontPadding="false"
                                 android:text="@string/logo_size_title"
-                                android:textColor="@color/white"
-                                android:textSize="13sp" />
+                                android:textColor="@color/settings_row_title"
+                                android:textSize="11.5sp" />
                             <TextView
                                 android:id="@+id/logo_size_description"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="2dp"
                                 android:duplicateParentState="true"
-                                android:textColor="@color/osd_muted"
-                                android:textSize="10sp" />
+                                android:textColor="@color/settings_row_detail"
+                                android:textSize="8.5sp" />
                         </LinearLayout>
                         <TextView
                             android:id="@+id/logo_size_action"
@@ -378,8 +381,8 @@
                             android:layout_height="wrap_content"
                             android:layout_marginStart="12dp"
                             android:duplicateParentState="true"
-                            android:textColor="@color/osd_muted"
-                            android:textSize="10.5sp" />
+                            android:textColor="@color/settings_row_detail"
+                            android:textSize="9.5sp" />
                     </LinearLayout>
                     <LinearLayout
                         android:id="@+id/signal_info_card"
@@ -431,7 +434,7 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:textColor="@color/white"
-                                        android:textSize="11.5sp" />
+                                        android:textSize="11sp" />
                                 </LinearLayout>
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -450,7 +453,7 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:textColor="@color/white"
-                                        android:textSize="11.5sp" />
+                                        android:textSize="11sp" />
                                 </LinearLayout>
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -469,7 +472,7 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:textColor="@color/white"
-                                        android:textSize="11.5sp" />
+                                        android:textSize="11sp" />
                                 </LinearLayout>
                             </LinearLayout>
                             <LinearLayout
@@ -495,7 +498,7 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:textColor="@color/white"
-                                        android:textSize="11.5sp" />
+                                        android:textSize="11sp" />
                                 </LinearLayout>
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -514,7 +517,7 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:textColor="@color/white"
-                                        android:textSize="11.5sp" />
+                                        android:textSize="11sp" />
                                 </LinearLayout>
                                 <Space
                                     android:layout_width="0dp"
@@ -532,6 +535,9 @@
                     android:orientation="vertical"
                     android:visibility="gone">
                     <Switch
+                        android:thumb="@drawable/settings_switch_thumb"
+                        android:track="@drawable/settings_switch_track"
+                        android:switchMinWidth="26dp"
                         android:id="@+id/normalize_volume"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -545,10 +551,12 @@
                         android:paddingBottom="8dp"
                         android:showText="false"
                         android:text="@string/normalize_volume"
-                        android:textColor="@color/white"
-                        android:textSize="13sp"
-                        android:thumbTint="@color/cyan" />
+                        android:textColor="@color/settings_row_title"
+                        android:textSize="11.5sp" />
                     <Switch
+                        android:thumb="@drawable/settings_switch_thumb"
+                        android:track="@drawable/settings_switch_track"
+                        android:switchMinWidth="26dp"
                         android:id="@+id/auto_reconnect"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -562,9 +570,8 @@
                         android:paddingBottom="8dp"
                         android:showText="false"
                         android:text="@string/settings_auto_reconnect"
-                        android:textColor="@color/white"
-                        android:textSize="13sp"
-                        android:thumbTint="@color/cyan" />
+                        android:textColor="@color/settings_row_title"
+                        android:textSize="11.5sp" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -597,16 +604,16 @@
                                 android:duplicateParentState="true"
                                 android:includeFontPadding="false"
                                 android:text="@string/settings_ui_style_title"
-                                android:textColor="@color/white"
-                                android:textSize="13sp" />
+                                android:textColor="@color/settings_row_title"
+                                android:textSize="11.5sp" />
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="2dp"
                                 android:duplicateParentState="true"
                                 android:text="@string/settings_ui_style_description"
-                                android:textColor="@color/osd_muted"
-                                android:textSize="10sp" />
+                                android:textColor="@color/settings_row_detail"
+                                android:textSize="8.5sp" />
                         </LinearLayout>
                         <LinearLayout
                             android:layout_width="wrap_content"
@@ -628,7 +635,7 @@
                                 android:paddingEnd="9dp"
                                 android:text="@string/settings_ui_style_modern"
                                 android:textColor="@color/segment_option_text"
-                                android:textSize="10sp" />
+                                android:textSize="8.5sp" />
                             <TextView
                                 android:id="@+id/ui_style_classic"
                                 android:layout_width="wrap_content"
@@ -642,7 +649,7 @@
                                 android:paddingEnd="9dp"
                                 android:text="@string/settings_ui_style_classic"
                                 android:textColor="@color/segment_option_text"
-                                android:textSize="10sp" />
+                                android:textSize="8.5sp" />
                         </LinearLayout>
                     </LinearLayout>
                     <LinearLayout
@@ -669,16 +676,16 @@
                                 android:duplicateParentState="true"
                                 android:includeFontPadding="false"
                                 android:text="@string/settings_channel_buttons_title"
-                                android:textColor="@color/white"
-                                android:textSize="13sp" />
+                                android:textColor="@color/settings_row_title"
+                                android:textSize="11.5sp" />
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="2dp"
                                 android:duplicateParentState="true"
                                 android:text="@string/invert_channel_keys_description"
-                                android:textColor="@color/osd_muted"
-                                android:textSize="10sp" />
+                                android:textColor="@color/settings_row_detail"
+                                android:textSize="8.5sp" />
                         </LinearLayout>
                         <LinearLayout
                             android:layout_width="wrap_content"
@@ -700,7 +707,7 @@
                                 android:paddingEnd="9dp"
                                 android:text="@string/settings_channel_buttons_standard"
                                 android:textColor="@color/segment_option_text"
-                                android:textSize="10sp" />
+                                android:textSize="8.5sp" />
                             <TextView
                                 android:id="@+id/channel_keys_inverted"
                                 android:layout_width="wrap_content"
@@ -714,10 +721,13 @@
                                 android:paddingEnd="9dp"
                                 android:text="@string/settings_channel_buttons_inverted"
                                 android:textColor="@color/segment_option_text"
-                                android:textSize="10sp" />
+                                android:textSize="8.5sp" />
                         </LinearLayout>
                     </LinearLayout>
                     <Switch
+                        android:thumb="@drawable/settings_switch_thumb"
+                        android:track="@drawable/settings_switch_track"
+                        android:switchMinWidth="26dp"
                         android:id="@+id/invert_channel_keys"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -731,9 +741,8 @@
                         android:paddingBottom="8dp"
                         android:showText="false"
                         android:text="@string/invert_channel_keys"
-                        android:textColor="@color/white"
-                        android:textSize="13sp"
-                        android:thumbTint="@color/cyan"
+                        android:textColor="@color/settings_row_title"
+                        android:textSize="11.5sp"
                         android:visibility="gone" />
                     <TextView
                         android:layout_width="match_parent"
@@ -780,7 +789,7 @@
                                     android:layout_marginTop="2dp"
                                     android:text="@string/settings_shortcut_ok_action"
                                     android:textColor="@color/white"
-                                    android:textSize="11.5sp" />
+                                    android:textSize="11sp" />
                             </LinearLayout>
                             <LinearLayout
                                 android:layout_width="0dp"
@@ -799,7 +808,7 @@
                                     android:layout_marginTop="2dp"
                                     android:text="@string/settings_shortcut_ok_twice_action"
                                     android:textColor="@color/white"
-                                    android:textSize="11.5sp" />
+                                    android:textSize="11sp" />
                             </LinearLayout>
                             <LinearLayout
                                 android:layout_width="0dp"
@@ -818,7 +827,7 @@
                                     android:layout_marginTop="2dp"
                                     android:text="@string/settings_shortcut_hold_ok_action"
                                     android:textColor="@color/white"
-                                    android:textSize="11.5sp" />
+                                    android:textSize="11sp" />
                             </LinearLayout>
                         </LinearLayout>
                         <LinearLayout
@@ -844,7 +853,7 @@
                                     android:layout_marginTop="2dp"
                                     android:text="@string/settings_shortcut_left_action"
                                     android:textColor="@color/white"
-                                    android:textSize="11.5sp" />
+                                    android:textSize="11sp" />
                             </LinearLayout>
                             <LinearLayout
                                 android:layout_width="0dp"
@@ -863,7 +872,7 @@
                                     android:layout_marginTop="2dp"
                                     android:text="@string/settings_shortcut_right_action"
                                     android:textColor="@color/white"
-                                    android:textSize="11.5sp" />
+                                    android:textSize="11sp" />
                             </LinearLayout>
                             <LinearLayout
                                 android:layout_width="0dp"
@@ -882,7 +891,7 @@
                                     android:layout_marginTop="2dp"
                                     android:text="@string/settings_shortcut_up_down_action"
                                     android:textColor="@color/white"
-                                    android:textSize="11.5sp" />
+                                    android:textSize="11sp" />
                             </LinearLayout>
                         </LinearLayout>
                     </LinearLayout>
@@ -916,7 +925,7 @@
                         android:paddingEnd="12dp"
                         android:text="@string/settings_reminders_empty"
                         android:textColor="@color/osd_muted"
-                        android:textSize="10sp" />
+                        android:textSize="8.5sp" />
                     <LinearLayout
                         android:id="@+id/reminders_list"
                         android:layout_width="match_parent"
@@ -931,7 +940,7 @@
                         android:paddingEnd="12dp"
                         android:text="@string/settings_reminders_add_hint"
                         android:textColor="@color/osd_muted"
-                        android:textSize="10sp" />
+                        android:textSize="8.5sp" />
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -971,16 +980,16 @@
                                 android:duplicateParentState="true"
                                 android:includeFontPadding="false"
                                 android:text="@string/settings_reminders_overlay_title"
-                                android:textColor="@color/white"
-                                android:textSize="13sp" />
+                                android:textColor="@color/settings_row_title"
+                                android:textSize="11.5sp" />
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="2dp"
                                 android:duplicateParentState="true"
                                 android:text="@string/settings_reminders_overlay_description"
-                                android:textColor="@color/osd_muted"
-                                android:textSize="10sp" />
+                                android:textColor="@color/settings_row_detail"
+                                android:textSize="8.5sp" />
                         </LinearLayout>
                         <TextView
                             android:layout_width="wrap_content"
@@ -988,8 +997,8 @@
                             android:layout_marginStart="12dp"
                             android:duplicateParentState="true"
                             android:text="@string/settings_reminders_permission_action"
-                            android:textColor="@color/osd_muted"
-                            android:textSize="10.5sp" />
+                            android:textColor="@color/settings_row_detail"
+                            android:textSize="9.5sp" />
                     </LinearLayout>
                     <LinearLayout
                         android:id="@+id/reminder_test_button"
@@ -1018,16 +1027,16 @@
                                 android:duplicateParentState="true"
                                 android:includeFontPadding="false"
                                 android:text="@string/settings_reminders_test"
-                                android:textColor="@color/white"
-                                android:textSize="13sp" />
+                                android:textColor="@color/settings_row_title"
+                                android:textSize="11.5sp" />
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="2dp"
                                 android:duplicateParentState="true"
                                 android:text="@string/settings_reminders_test_description"
-                                android:textColor="@color/osd_muted"
-                                android:textSize="10sp" />
+                                android:textColor="@color/settings_row_detail"
+                                android:textSize="8.5sp" />
                         </LinearLayout>
                         <TextView
                             android:layout_width="wrap_content"
@@ -1035,8 +1044,8 @@
                             android:layout_marginStart="12dp"
                             android:duplicateParentState="true"
                             android:text="@string/settings_reminders_test_action"
-                            android:textColor="@color/osd_muted"
-                            android:textSize="10.5sp" />
+                            android:textColor="@color/settings_row_detail"
+                            android:textSize="9.5sp" />
                     </LinearLayout>
                     <TextView
                         android:id="@+id/reminder_status"
@@ -1047,7 +1056,7 @@
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:textColor="@color/osd_muted"
-                        android:textSize="10sp" />
+                        android:textSize="8.5sp" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -1085,7 +1094,7 @@
                             android:layout_height="wrap_content"
                             android:text="@string/settings_primary_list_title"
                             android:textColor="@color/white"
-                            android:textSize="13sp" />
+                            android:textSize="11.5sp" />
                         <EditText
                             android:id="@+id/playlist_url"
                             android:layout_width="0dp"
@@ -1099,7 +1108,7 @@
                             android:singleLine="true"
                             android:textColor="@color/white"
                             android:textColorHint="#78909C"
-                            android:textSize="10sp" />
+                            android:textSize="8.5sp" />
                     </LinearLayout>
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -1118,7 +1127,7 @@
                             android:layout_height="wrap_content"
                             android:text="@string/settings_secondary_list_title"
                             android:textColor="@color/white"
-                            android:textSize="13sp" />
+                            android:textSize="11.5sp" />
                         <EditText
                             android:id="@+id/playlist_url_2"
                             android:layout_width="0dp"
@@ -1132,7 +1141,7 @@
                             android:singleLine="true"
                             android:textColor="@color/white"
                             android:textColorHint="#78909C"
-                            android:textSize="10sp" />
+                            android:textSize="8.5sp" />
                     </LinearLayout>
                     <LinearLayout
                         android:layout_width="wrap_content"
@@ -1155,7 +1164,7 @@
                             android:text="@string/save_and_play"
                             android:textAllCaps="false"
                             android:textColor="@color/focus_button_text"
-                            android:textSize="10.5sp" />
+                            android:textSize="9.5sp" />
                         <Button
                             android:id="@+id/cancel_button"
                             android:layout_width="wrap_content"
@@ -1172,7 +1181,7 @@
                             android:text="@string/cancel"
                             android:textAllCaps="false"
                             android:textColor="@color/focus_button_text"
-                            android:textSize="10.5sp" />
+                            android:textSize="9.5sp" />
                     </LinearLayout>
                     <TextView
                         android:id="@+id/url_error"
@@ -1183,7 +1192,7 @@
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:textColor="@color/red"
-                        android:textSize="10sp"
+                        android:textSize="8.5sp"
                         android:visibility="gone" />
                     <TextView
                         android:layout_width="match_parent"
@@ -1211,7 +1220,27 @@
                         android:paddingEnd="12dp"
                         android:text="@string/settings_provider_selection_web"
                         android:textColor="@color/osd_muted"
-                        android:textSize="10sp" />
+                        android:textSize="8.5sp" />
+                    <!-- Ocultos en esta TV (0.5.90): solo aparece si hay alguno. -->
+                    <TextView
+                        android:id="@+id/hidden_channels_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginBottom="6dp"
+                        android:letterSpacing="0.06"
+                        android:singleLine="true"
+                        android:text="@string/hidden_channels_title"
+                        android:textAllCaps="true"
+                        android:textColor="@color/osd_muted"
+                        android:textSize="8.5sp"
+                        android:visibility="gone" />
+                    <LinearLayout
+                        android:id="@+id/hidden_channels_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone" />
                     <!-- Highfly Premium (2026-10-03): se vincula con el teléfono (QR). -->
                     <TextView
                         android:layout_width="match_parent"
@@ -1253,8 +1282,8 @@
                                 android:duplicateParentState="true"
                                 android:includeFontPadding="false"
                                 android:text="@string/premium_link_title"
-                                android:textColor="@color/white"
-                                android:textSize="13sp" />
+                                android:textColor="@color/settings_row_title"
+                                android:textSize="11.5sp" />
                             <TextView
                                 android:id="@+id/premium_account_detail"
                                 android:layout_width="match_parent"
@@ -1262,8 +1291,8 @@
                                 android:layout_marginTop="2dp"
                                 android:duplicateParentState="true"
                                 android:text="@string/premium_link_description"
-                                android:textColor="@color/osd_muted"
-                                android:textSize="10sp" />
+                                android:textColor="@color/settings_row_detail"
+                                android:textSize="8.5sp" />
                         </LinearLayout>
                         <TextView
                             android:id="@+id/premium_account_action"
@@ -1272,8 +1301,8 @@
                             android:layout_marginStart="12dp"
                             android:duplicateParentState="true"
                             android:text="@string/premium_link_action"
-                            android:textColor="@color/osd_muted"
-                            android:textSize="10.5sp" />
+                            android:textColor="@color/settings_row_detail"
+                            android:textSize="9.5sp" />
                     </LinearLayout>
                     <LinearLayout
                         android:id="@+id/premium_region_row"
@@ -1295,7 +1324,7 @@
                             android:layout_weight="1"
                             android:text="@string/premium_region_title"
                             android:textColor="@color/white"
-                            android:textSize="13sp" />
+                            android:textSize="11.5sp" />
                         <LinearLayout
                             android:id="@+id/premium_region_options"
                             android:layout_width="wrap_content"
@@ -1334,7 +1363,7 @@
                             android:layout_height="wrap_content"
                             android:text="@string/highfly_manifest_title"
                             android:textColor="@color/white"
-                            android:textSize="13sp" />
+                            android:textSize="11.5sp" />
                         <EditText
                             android:id="@+id/highfly_manifest_url"
                             android:layout_width="0dp"
@@ -1348,7 +1377,7 @@
                             android:singleLine="true"
                             android:textColor="@color/white"
                             android:textColorHint="#78909C"
-                            android:textSize="10sp" />
+                            android:textSize="8.5sp" />
                     </LinearLayout>
                     <LinearLayout
                         android:id="@+id/mediaflow_settings_button"
@@ -1377,16 +1406,16 @@
                                 android:duplicateParentState="true"
                                 android:includeFontPadding="false"
                                 android:text="@string/mediaflow_open_settings"
-                                android:textColor="@color/white"
-                                android:textSize="13sp" />
+                                android:textColor="@color/settings_row_title"
+                                android:textSize="11.5sp" />
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="2dp"
                                 android:duplicateParentState="true"
                                 android:text="@string/settings_mediaflow_description"
-                                android:textColor="@color/osd_muted"
-                                android:textSize="10sp" />
+                                android:textColor="@color/settings_row_detail"
+                                android:textSize="8.5sp" />
                         </LinearLayout>
                         <TextView
                             android:layout_width="wrap_content"
@@ -1394,8 +1423,8 @@
                             android:layout_marginStart="12dp"
                             android:duplicateParentState="true"
                             android:text="@string/settings_mediaflow_action"
-                            android:textColor="@color/osd_muted"
-                            android:textSize="10.5sp" />
+                            android:textColor="@color/settings_row_detail"
+                            android:textSize="9.5sp" />
                     </LinearLayout>
                 </LinearLayout>
 
@@ -1429,16 +1458,16 @@
                                 android:layout_height="wrap_content"
                                 android:duplicateParentState="true"
                                 android:includeFontPadding="false"
-                                android:textColor="@color/white"
-                                android:textSize="13sp" />
+                                android:textColor="@color/settings_row_title"
+                                android:textSize="11.5sp" />
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="2dp"
                                 android:duplicateParentState="true"
                                 android:text="@string/settings_updates_description"
-                                android:textColor="@color/osd_muted"
-                                android:textSize="10sp" />
+                                android:textColor="@color/settings_row_detail"
+                                android:textSize="8.5sp" />
                         </LinearLayout>
                         <Button
                             android:id="@+id/check_updates_button"
@@ -1456,7 +1485,7 @@
                             android:text="@string/check_updates"
                             android:textAllCaps="false"
                             android:textColor="@color/focus_button_text"
-                            android:textSize="10.5sp" />
+                            android:textSize="9.5sp" />
                     </LinearLayout>
                     <TextView
                         android:id="@+id/update_status"
@@ -1467,7 +1496,7 @@
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:textColor="@color/osd_muted"
-                        android:textSize="10sp"
+                        android:textSize="8.5sp"
                         android:visibility="gone" />
                     <TextView
                         android:layout_width="match_parent"
@@ -1514,7 +1543,7 @@
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
                                     android:textColor="@color/white"
-                                    android:textSize="11.5sp" />
+                                    android:textSize="11sp" />
                             </LinearLayout>
                             <LinearLayout
                                 android:layout_width="0dp"
@@ -1533,7 +1562,7 @@
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
                                     android:textColor="@color/white"
-                                    android:textSize="11.5sp" />
+                                    android:textSize="11sp" />
                             </LinearLayout>
                             <LinearLayout
                                 android:layout_width="0dp"
@@ -1552,7 +1581,7 @@
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
                                     android:textColor="@color/white"
-                                    android:textSize="11.5sp" />
+                                    android:textSize="11sp" />
                             </LinearLayout>
                         </LinearLayout>
                     </LinearLayout>
@@ -1568,14 +1597,14 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:textColor="@color/osd_muted"
-                            android:textSize="10sp" />
+                            android:textSize="8.5sp" />
                         <TextView
                             android:id="@+id/info_device"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="10dp"
                             android:textColor="@color/osd_muted"
-                            android:textSize="10sp" />
+                            android:textSize="8.5sp" />
                     </LinearLayout>
                 </LinearLayout>
             </FrameLayout>

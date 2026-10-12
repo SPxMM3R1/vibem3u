@@ -185,6 +185,7 @@ public final class MainActivity extends Activity {
     private StreamResolverRegistry streamResolverRegistry;
     private Map<String, Integer> resolverChannelCounts = Collections.emptyMap();
     private final List<Channel> channels = new ArrayList<>();
+    private ChannelVisibility channelVisibility;
     private final Map<Integer, Playlist> playlistsBySource = new LinkedHashMap<>();
     private final Map<String, EpgData> epgDataByUrl = new LinkedHashMap<>();
     private final Set<String> activeEpgUrls = new LinkedHashSet<>();
@@ -495,6 +496,7 @@ public final class MainActivity extends Activity {
         channelLogoCache = new ChannelLogoCache(this);
         LogoScales.load(this);
         playbackPreferences = new PlaybackPreferences(this);
+        channelVisibility = new ChannelVisibility(this);
         resolverCatalogRepository = new ResolverCatalogRepository(this);
         resolverPreferences = new ResolverPreferences(this);
         PublishedPlaybackCatalogRepository.clearRetiredLocalSelections(this);
@@ -1154,11 +1156,18 @@ public final class MainActivity extends Activity {
         List<Channel> sourceChannels = buildOrderedChannelList(playlistsBySource);
         resolverChannelCounts = streamResolverRegistry.countChannels(sourceChannels);
         List<Channel> enabledChannels = new ArrayList<>();
+        long visibilityNow = System.currentTimeMillis();
+        java.util.Set<String> presentKeys = new java.util.HashSet<>();
         for (Channel candidate : sourceChannels) {
+            String rowKey = PublishedPlaybackCatalog.editorRowKey(candidate);
+            presentKeys.add(rowKey);
+            // Ocultos en esta TV o enviados a la papelera desde la TV (0.5.90).
+            if (channelVisibility.isHidden(rowKey, visibilityNow)) continue;
             if (streamResolverRegistry.isChannelEnabled(candidate)) {
                 enabledChannels.add(candidate);
             }
         }
+        if (!isWaitingForPublishedCatalog()) channelVisibility.prune(presentKeys, visibilityNow);
 
         channels.clear();
         channels.addAll(enabledChannels);
@@ -1315,6 +1324,13 @@ public final class MainActivity extends Activity {
         return player != null
                 && player.getCurrentMediaItem() != null
                 && player.getPlaybackState() == Player.STATE_READY;
+    }
+
+    /** Rehace la lista con las listas ya descargadas (canal oculto o vuelto a mostrar). */
+    private void reapplyChannelList() {
+        if (playlistsBySource.isEmpty() || isFinishing()) return;
+        applyPlaylists(new java.util.LinkedHashMap<>(playlistsBySource), loadedPlaylistSignature,
+                playlistGeneration, true);
     }
 
     private List<Channel> buildOrderedChannelList(Map<Integer, Playlist> playlists) {
@@ -4363,6 +4379,10 @@ public final class MainActivity extends Activity {
     /** TvVoo moderno: el subtítulo no cambia y las filas no se mueven mientras carga. */
     private boolean sourceSelectorFixedHint;
     private static final int SOURCE_ROW_HEIGHT_DP = 42;
+    /** Calidades agrupadas bajo su fuente (0.5.90): una sola línea, algo más bajas. */
+    private static final int SOURCE_QUALITY_ROW_HEIGHT_DP = 32;
+    /** Acciones de «Este canal»: van después de las opciones en sourceCandidateViews. */
+    private final List<Runnable> sourceActionRunnables = new ArrayList<>();
     private static final int SOURCE_ROW_GAP_DP = 4;
     private static final int SOURCE_ROWS_VISIBLE = 5;
 
@@ -4371,6 +4391,7 @@ public final class MainActivity extends Activity {
         if (versions == null || versions.isEmpty() || !isSourceSelectorVisible()) return;
         sourceSelectorOptions.removeAllViews();
         sourceCandidateViews.clear();
+        sourceActionRunnables.clear();
         sourceSelectorStatus.setText(R.string.source_selector_versions_hint);
         for (int index = 0; index < versions.size(); index++) {
             TvVooStreamResolver.PlannedVersion version = versions.get(index);
@@ -4444,6 +4465,7 @@ public final class MainActivity extends Activity {
         sourceCandidates.clear();
         playbackOptions.clear();
         sourceCandidateViews.clear();
+        sourceActionRunnables.clear();
         sourceCandidateFocusIndex = -1;
         sourceSelectorCloseFocused = false;
         sourceSelectorOptions.removeAllViews();
@@ -4525,6 +4547,7 @@ public final class MainActivity extends Activity {
         sourceCandidates.clear();
         playbackOptions.clear();
         sourceCandidateViews.clear();
+        sourceActionRunnables.clear();
         sourceCandidateFocusIndex = -1;
         sourceSelectorCloseFocused = false;
         sourceSelectorOptions.removeAllViews();
@@ -4664,6 +4687,7 @@ public final class MainActivity extends Activity {
             row.addView(quality, qualityParams);
         }
 
+        if (AppStrings.isBlank(stateText)) return row;
         TextView state = new TextView(this);
         state.setText(stateText);
         state.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
@@ -4721,8 +4745,13 @@ public final class MainActivity extends Activity {
                     quality == selected
             ));
         }
+        if (playbackOptions.isEmpty() && !classicUi) {
+            renderPlaybackOptions(getString(R.string.source_selector_no_options));
+            return;
+        }
         if (playbackOptions.isEmpty()) {
             sourceCandidateViews.clear();
+            sourceActionRunnables.clear();
             sourceSelectorOptions.removeAllViews();
             sourceSelectorStatus.setText(getString(R.string.source_selector_no_options));
             sourceSelectorCloseFocused = true;
@@ -4763,11 +4792,36 @@ public final class MainActivity extends Activity {
     private void renderPlaybackOptions(String status) {
         sourceSelectorOptions.removeAllViews();
         sourceCandidateViews.clear();
+        sourceActionRunnables.clear();
         sourceSelectorCloseFocused = false;
+        // Calidades bajo su fuente (0.5.90): con fuentes arriba, las calidades van con sangría,
+        // una línea a la izquierda y el rótulo «Calidades de <fuente en uso>».
+        boolean groupQualities = false;
+        String inUseSource = "";
+        boolean anySource = false;
+        boolean anyQuality = false;
+        for (PlaybackOption option : playbackOptions) {
+            if (option.sourceCandidate != null) {
+                anySource = true;
+                if (option.selected) inUseSource = option.label;
+            } else {
+                anyQuality = true;
+            }
+        }
+        groupQualities = !classicUi && anySource && anyQuality;
+        LinearLayout qualityGroup = null;
         for (int index = 0; index < playbackOptions.size(); index++) {
             final int candidateIndex = index;
             PlaybackOption playbackOption = playbackOptions.get(index);
             if (!classicUi) {
+                boolean grouped = groupQualities && playbackOption.sourceCandidate == null;
+                if (grouped && qualityGroup == null) {
+                    qualityGroup = sourceQualityGroup(inUseSource);
+                    LinearLayout.LayoutParams groupParams = new LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                    groupParams.setMargins(0, dp(SOURCE_ROW_GAP_DP), 0, 0);
+                    sourceSelectorOptions.addView((View) qualityGroup.getParent(), groupParams);
+                }
                 View row = sceneOptionRow(playbackOption);
                 row.setOnFocusChangeListener((view, focused) -> {
                     if (focused) {
@@ -4781,8 +4835,9 @@ public final class MainActivity extends Activity {
                         LinearLayout.LayoutParams.WRAP_CONTENT
                 );
                 rowParams.setMargins(0, index == 0 ? 0 : dp(SOURCE_ROW_GAP_DP), 0, 0);
-                rowParams.height = dp(SOURCE_ROW_HEIGHT_DP);
-                sourceSelectorOptions.addView(row, rowParams);
+                rowParams.height = dp(grouped ? SOURCE_QUALITY_ROW_HEIGHT_DP : SOURCE_ROW_HEIGHT_DP);
+                if (grouped) qualityGroup.addView(row, rowParams);
+                else sourceSelectorOptions.addView(row, rowParams);
                 sourceCandidateViews.add(row);
                 continue;
             }
@@ -4821,6 +4876,7 @@ public final class MainActivity extends Activity {
             sourceSelectorOptions.addView(option, params);
             sourceCandidateViews.add(option);
         }
+        if (!classicUi) addChannelActionRows();
         sourceSelectorStatus.setText(status);
         if (!classicUi) fitSourceSelectorList(sourceCandidateViews.size());
         if (!sourceCandidateViews.isEmpty()) {
@@ -4832,8 +4888,8 @@ public final class MainActivity extends Activity {
                     break;
                 }
             }
-            sourceCandidateFocusIndex = focusIndex;
-            sourceCandidateViews.get(focusIndex).requestFocus();
+            sourceCandidateFocusIndex = Math.min(focusIndex, sourceCandidateViews.size() - 1);
+            sourceCandidateViews.get(sourceCandidateFocusIndex).requestFocus();
             View last = sourceCandidateViews.get(sourceCandidateViews.size() - 1);
             last.setNextFocusDownId(sourceSelectorCloseButton.getId());
             sourceSelectorCloseButton.setNextFocusUpId(last.getId());
@@ -4985,7 +5041,145 @@ public final class MainActivity extends Activity {
         } else if (sourceCandidateFocusIndex >= 0
                 && sourceCandidateFocusIndex < playbackOptions.size()) {
             selectPlaybackOption(sourceCandidateFocusIndex);
+        } else {
+            int action = sourceCandidateFocusIndex - playbackOptions.size();
+            if (action >= 0 && action < sourceActionRunnables.size()) sourceActionRunnables.get(action).run();
         }
+    }
+
+    /** Contenedor de calidades con sangría: línea a la izquierda, rótulo y filas (0.5.90). */
+    private LinearLayout sourceQualityGroup(String sourceLabel) {
+        LinearLayout outer = new LinearLayout(this);
+        outer.setOrientation(LinearLayout.HORIZONTAL);
+        outer.setPadding(dp(9), 0, 0, 0);
+        View guide = new View(this);
+        guide.setBackgroundColor(0x73FFFFFF);
+        LinearLayout.LayoutParams guideParams = new LinearLayout.LayoutParams(
+                dp(1), LinearLayout.LayoutParams.MATCH_PARENT);
+        guideParams.setMarginEnd(dp(10));
+        guideParams.bottomMargin = dp(6);
+        outer.addView(guide, guideParams);
+        LinearLayout column = new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        TextView header = sourceSectionHeader(AppStrings.isBlank(sourceLabel)
+                ? getString(R.string.source_selector_qualities_title)
+                : getString(R.string.source_selector_qualities_of, sourceLabel));
+        column.addView(header);
+        outer.addView(column, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        return column;
+    }
+
+    private TextView sourceSectionHeader(String text) {
+        TextView header = new TextView(this);
+        header.setText(text.toUpperCase(Locale.forLanguageTag("es-CL")));
+        header.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
+        header.setLetterSpacing(0.1f);
+        header.setTextColor(getColor(R.color.osd_muted));
+        header.setIncludeFontPadding(false);
+        header.setPadding(0, dp(4), 0, dp(4));
+        return header;
+    }
+
+    /**
+     * «Este canal» al final del selector (0.5.90): ocultar en esta TV o enviar a la papelera de
+     * Lista M3U. Sus filas siguen a las opciones en {@link #sourceCandidateViews}.
+     */
+    private void addChannelActionRows() {
+        Channel channel = playbackChannel != null ? playbackChannel
+                : channels.isEmpty() ? null : channels.get(Math.max(0, Math.min(channelIndex, channels.size() - 1)));
+        if (channel == null) return;
+        TextView header = sourceSectionHeader(getString(R.string.channel_actions_title));
+        LinearLayout.LayoutParams headerParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        headerParams.topMargin = dp(12);
+        sourceSelectorOptions.addView(header, headerParams);
+        addChannelActionRow(getString(R.string.channel_hide_title), getString(R.string.channel_hide_detail),
+                false, () -> hideChannelOnThisTv(channel));
+        addChannelActionRow(getString(R.string.channel_trash_title), getString(R.string.channel_trash_detail),
+                true, () -> confirmTrashChannel(channel));
+    }
+
+    private void addChannelActionRow(String title, String detail, boolean danger, Runnable action) {
+        View row = sceneRow(title, detail, "›", "", false, true, false);
+        if (danger) {
+            TextView titleView = (TextView) ((ViewGroup) ((ViewGroup) ((ViewGroup) row).getChildAt(0))
+                    .getChildAt(0)).getChildAt(0);
+            titleView.setTextColor(getColorStateList(R.color.channel_trash_title));
+        }
+        final int rowIndex = sourceCandidateViews.size();
+        row.setOnFocusChangeListener((view, focused) -> {
+            if (focused) {
+                sourceCandidateFocusIndex = rowIndex;
+                sourceSelectorCloseFocused = false;
+            }
+        });
+        row.setOnClickListener(view -> action.run());
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(SOURCE_ROW_HEIGHT_DP));
+        params.setMargins(0, dp(SOURCE_ROW_GAP_DP), 0, 0);
+        sourceSelectorOptions.addView(row, params);
+        sourceCandidateViews.add(row);
+        sourceActionRunnables.add(action);
+    }
+
+    private void hideChannelOnThisTv(Channel channel) {
+        String key = PublishedPlaybackCatalog.editorRowKey(channel);
+        if (AppStrings.isBlank(key)) key = "m3u:" + PlaybackPreferences.channelIdentity(channel);
+        channelVisibility.hide(key, channel.getName(), System.currentTimeMillis());
+        closePlaybackSourceSelector();
+        Toast.makeText(this, getString(R.string.channel_hidden_toast, channel.getName()), Toast.LENGTH_SHORT).show();
+        reapplyChannelList();
+    }
+
+    private void confirmTrashChannel(Channel channel) {
+        String key = PublishedPlaybackCatalog.editorRowKey(channel);
+        if (AppStrings.isBlank(key)) {
+            Toast.makeText(this, R.string.channel_trash_unavailable, Toast.LENGTH_LONG).show();
+            return;
+        }
+        closePlaybackSourceSelector();
+        ChannelActionScenes.showTrashConfirm(this, channel.getName(), () -> {
+            if (new GitHubCredentialStore(this).linked()) sendChannelToTrash(channel, key, true);
+            else ChannelActionScenes.showGitHubLink(this, () -> sendChannelToTrash(channel, key, true));
+        });
+    }
+
+    /** Deja el pedido en GitHub; si el acceso ya no sirve, pide vincular otra vez (una vez). */
+    private void sendChannelToTrash(Channel channel, String key, boolean mayRelink) {
+        String name = channel.getName();
+        Toast.makeText(this, getString(R.string.channel_trash_sending, name), Toast.LENGTH_SHORT).show();
+        GitHubCredentialStore store = new GitHubCredentialStore(this);
+        String token = store.token();
+        if (token == null) {
+            if (mayRelink) ChannelActionScenes.showGitHubLink(this, () -> sendChannelToTrash(channel, key, false));
+            return;
+        }
+        networkExecutor.execute(() -> {
+            try {
+                new GitHubChannelTrash().requestTrash(token, key, name, BuildConfig.VERSION_NAME);
+                mainHandler.post(() -> {
+                    if (isFinishing()) return;
+                    channelVisibility.markTrashed(key, name, System.currentTimeMillis());
+                    Toast.makeText(this, getString(R.string.channel_trash_done, name), Toast.LENGTH_LONG).show();
+                    reapplyChannelList();
+                });
+            } catch (GitHubChannelTrash.UnauthorizedException unauthorized) {
+                store.clear();
+                mainHandler.post(() -> {
+                    if (isFinishing()) return;
+                    if (mayRelink) {
+                        ChannelActionScenes.showGitHubLink(this, () -> sendChannelToTrash(channel, key, false));
+                    } else {
+                        Toast.makeText(this, getString(R.string.channel_trash_failed,
+                                unauthorized.getMessage()), Toast.LENGTH_LONG).show();
+                    }
+                });
+            } catch (java.io.IOException error) {
+                mainHandler.post(() -> Toast.makeText(this, getString(R.string.channel_trash_failed,
+                        AppStrings.isBlank(error.getMessage()) ? "sin conexión" : error.getMessage()),
+                        Toast.LENGTH_LONG).show());
+            }
+        });
     }
 
     private void selectPlaybackOption(int index) {
@@ -5090,6 +5284,7 @@ public final class MainActivity extends Activity {
         sourceCandidates.clear();
         playbackOptions.clear();
         sourceCandidateViews.clear();
+        sourceActionRunnables.clear();
         sourceCandidateFocusIndex = -1;
         sourceSelectorCloseFocused = false;
         if (sourceSelectorOptions != null) sourceSelectorOptions.removeAllViews();
@@ -5580,6 +5775,12 @@ public final class MainActivity extends Activity {
         if (appUpdater != null && appUpdater.onActivityResult(requestCode)) return;
         if (requestCode == SETTINGS_REQUEST) {
             settingsOpen = false;
+            // Opciones › Canales puede volver a mostrar canales ocultos (0.5.90).
+            String previousVisibility = channelVisibility.signature();
+            channelVisibility = new ChannelVisibility(this);
+            if (!previousVisibility.equals(channelVisibility.signature())) {
+                mainHandler.post(this::reapplyChannelList);
+            }
             // Con la configuración abierta la precarga de vecinos se detiene: se retoma al volver.
             if (playbackHasStarted) scheduleNeighborPrefetch();
             String resolverSnapshotBefore = resolverSettingsSnapshotBeforeSettings;

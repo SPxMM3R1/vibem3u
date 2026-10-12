@@ -673,7 +673,7 @@ public final class SettingsActivity extends Activity {
         chip.setMinimumWidth(0);
         chip.setPadding(dp(11), 0, dp(11), 0);
         chip.setStateListAnimator(null);
-        chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
+        chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
         chip.setAllCaps(false);
         chip.setText(text);
         return chip;
@@ -875,6 +875,7 @@ public final class SettingsActivity extends Activity {
         try {
             resolverCatalog = resolverCatalogRepository.load();
             renderResolverOptions();
+            renderHiddenChannels();
         } catch (Exception error) {
             // The catalogue is bundled with the APK. A parse failure simply
             // leaves the resolver switches empty; there is no remote resolver
@@ -888,24 +889,14 @@ public final class SettingsActivity extends Activity {
         resolverGroupSwitches.clear();
 
         if (!classicUi) {
-            LinearLayout line = null;
+            // Una fila por proveedor (0.5.90, mockup aprobado): nombre y, debajo, sus canales.
             for (ResolverDefinition definition : resolverCatalog.getProviders()) {
-                if (line == null || line.getChildCount() == 2) {
-                    line = new LinearLayout(this);
-                    line.setOrientation(LinearLayout.HORIZONTAL);
-                    resolverGroupsContainer.addView(line, new LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.MATCH_PARENT,
-                            LinearLayout.LayoutParams.WRAP_CONTENT));
-                }
                 Switch groupSwitch = createResolverGroupSwitch(definition);
-                LinearLayout.LayoutParams cell = new LinearLayout.LayoutParams(0, dp(36), 1f);
-                cell.bottomMargin = dp(4);
-                if (line.getChildCount() == 1) cell.setMarginStart(dp(4));
-                line.addView(groupSwitch, cell);
+                LinearLayout.LayoutParams row = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, dp(38));
+                row.bottomMargin = dp(4);
+                resolverGroupsContainer.addView(groupSwitch, row);
                 resolverGroupSwitches.put(definition.getId(), groupSwitch);
-            }
-            if (line != null && line.getChildCount() == 1) {
-                line.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
             }
             return;
         }
@@ -937,26 +928,164 @@ public final class SettingsActivity extends Activity {
         groupSwitch.setGravity(Gravity.CENTER_VERTICAL);
         groupSwitch.setPadding(dp(12), 0, dp(12), 0);
         groupSwitch.setShowText(false);
-        groupSwitch.setTextColor(getColor(R.color.white));
+        Integer storedCount = resolverGroupCounts.get(definition.getId());
+        int channelCount = storedCount == null ? 0 : storedCount;
         if (classicUi) {
+            groupSwitch.setTextColor(getColor(R.color.white));
             groupSwitch.setTextSize(
                     TypedValue.COMPLEX_UNIT_PX,
                     getResources().getDimension(R.dimen.settings_control_text_size)
             );
+            groupSwitch.setText(getResources().getQuantityString(
+                    R.plurals.resolver_group_channels,
+                    channelCount,
+                    definition.getDisplayName(),
+                    channelCount
+            ));
+            groupSwitch.setThumbTintList(getColorStateList(R.color.cyan));
         } else {
-            groupSwitch.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+            // Nombre a 11.5 sp y, debajo, «N canales» a 8.5 sp en gris (oscuro con foco).
+            String name = providerDisplayName(definition);
+            String count = getResources().getQuantityString(
+                    R.plurals.resolver_group_count, channelCount, channelCount);
+            android.text.SpannableString text = new android.text.SpannableString(name + "
+" + count);
+            int start = name.length() + 1;
+            text.setSpan(new android.text.style.RelativeSizeSpan(8.5f / 11.5f), start, text.length(), 0);
+            text.setSpan(new android.text.style.ForegroundColorSpan(0), start, text.length(), 0);
+            groupSwitch.setText(text);
+            groupSwitch.setTextColor(getColorStateList(R.color.settings_row_title));
+            groupSwitch.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+            groupSwitch.setLineSpacing(dp(2), 1f);
+            groupSwitch.setThumbResource(R.drawable.settings_switch_thumb);
+            groupSwitch.setTrackResource(R.drawable.settings_switch_track);
+            groupSwitch.setSwitchMinWidth(dp(26));
+            groupSwitch.setThumbTintList(null);
+            groupSwitch.setTrackTintList(null);
+            groupSwitch.setOnFocusChangeListener((view, focused) -> tintProviderCount(groupSwitch, focused));
+            tintProviderCount(groupSwitch, false);
         }
-        Integer storedCount = resolverGroupCounts.get(definition.getId());
-        int channelCount = storedCount == null ? 0 : storedCount;
-        groupSwitch.setText(getResources().getQuantityString(
-                R.plurals.resolver_group_channels,
-                channelCount,
-                definition.getDisplayName(),
-                channelCount
-        ));
         groupSwitch.setChecked(resolverPreferences.isEnabled(definition));
-        groupSwitch.setThumbTintList(getColorStateList(R.color.cyan));
         return groupSwitch;
+    }
+
+    private boolean hiddenChannelsExpanded;
+
+    /**
+     * Opciones › Canales › Ocultos en esta TV (0.5.90): una fila resumen; OK despliega una fila
+     * por canal y OK sobre un canal lo vuelve a mostrar. La lista de canales se rehace al volver.
+     */
+    private void renderHiddenChannels() {
+        TextView title = findViewById(R.id.hidden_channels_title);
+        LinearLayout container = findViewById(R.id.hidden_channels_container);
+        if (title == null || container == null || classicUi) return;
+        java.util.List<ChannelVisibility.Entry> hidden = new ChannelVisibility(this).hiddenEntries();
+        container.removeAllViews();
+        int visibility = hidden.isEmpty() ? View.GONE : View.VISIBLE;
+        title.setVisibility(visibility);
+        container.setVisibility(visibility);
+        if (hidden.isEmpty()) {
+            hiddenChannelsExpanded = false;
+            return;
+        }
+        View summary = settingsActionRow(
+                getResources().getQuantityString(R.plurals.hidden_channels_summary, hidden.size(), hidden.size()),
+                getString(R.string.hidden_channels_detail),
+                getString(hiddenChannelsExpanded ? R.string.hidden_channels_hide_list
+                        : R.string.hidden_channels_show_list));
+        summary.setOnClickListener(view -> {
+            hiddenChannelsExpanded = !hiddenChannelsExpanded;
+            renderHiddenChannels();
+            View first = container.getChildAt(0);
+            if (first != null) first.requestFocus();
+        });
+        container.addView(summary);
+        if (!hiddenChannelsExpanded) return;
+        for (ChannelVisibility.Entry entry : hidden) {
+            View row = settingsActionRow(
+                    AppStrings.isBlank(entry.name) ? entry.key : entry.name,
+                    getString(R.string.hidden_channel_detail),
+                    getString(R.string.hidden_channel_show));
+            row.setOnClickListener(view -> {
+                new ChannelVisibility(this).show(entry.key);
+                int index = container.indexOfChild(view);
+                renderHiddenChannels();
+                View next = container.getChildAt(Math.min(index, container.getChildCount() - 1));
+                if (next != null) next.requestFocus();
+            });
+            container.addView(row);
+        }
+    }
+
+    /** Fila de Opciones con título, detalle y valor a la derecha (estilo moderno 0.5.90). */
+    private View settingsActionRow(String titleText, String detailText, String valueText) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setBackgroundResource(R.drawable.settings_section_card);
+        row.setFocusable(true);
+        row.setClickable(true);
+        row.setId(View.generateViewId());
+        row.setPadding(dp(12), dp(8), dp(12), dp(8));
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.setDuplicateParentStateEnabled(true);
+        TextView title = new TextView(this);
+        title.setText(titleText);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+        title.setTextColor(getColorStateList(R.color.settings_row_title));
+        title.setSingleLine(true);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        title.setIncludeFontPadding(false);
+        title.setDuplicateParentStateEnabled(true);
+        texts.addView(title);
+        TextView detail = new TextView(this);
+        detail.setText(detailText);
+        detail.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
+        detail.setTextColor(getColorStateList(R.color.settings_row_detail));
+        detail.setIncludeFontPadding(false);
+        detail.setDuplicateParentStateEnabled(true);
+        LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        detailParams.topMargin = dp(3);
+        texts.addView(detail, detailParams);
+        row.addView(texts, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        TextView value = new TextView(this);
+        value.setText(valueText);
+        value.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
+        value.setTextColor(getColorStateList(R.color.settings_row_title));
+        value.setIncludeFontPadding(false);
+        value.setDuplicateParentStateEnabled(true);
+        row.addView(value);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.bottomMargin = dp(4);
+        row.setLayoutParams(params);
+        return row;
+    }
+
+    /** Nombre corto del proveedor: el catálogo trae «Meganoticias dinamico» o «TvVoo externo». */
+    static String providerDisplayName(ResolverDefinition definition) {
+        String name = definition.getDisplayName() == null ? "" : definition.getDisplayName().trim();
+        return name.replaceAll("(?i)\s+(din[aá]mico|externo)$", "").trim();
+    }
+
+    /** La línea «N canales» va en gris; sobre la tarjeta blanca del foco, en gris oscuro. */
+    private void tintProviderCount(Switch groupSwitch, boolean focused) {
+        CharSequence current = groupSwitch.getText();
+        if (!(current instanceof android.text.Spanned)) return;
+        android.text.SpannableString text = new android.text.SpannableString(current);
+        for (android.text.style.ForegroundColorSpan span
+                : text.getSpans(0, text.length(), android.text.style.ForegroundColorSpan.class)) {
+            int start = text.getSpanStart(span);
+            int end = text.getSpanEnd(span);
+            text.removeSpan(span);
+            text.setSpan(new android.text.style.ForegroundColorSpan(
+                    getColorStateList(R.color.settings_row_detail).getColorForState(
+                            focused ? new int[]{android.R.attr.state_focused} : new int[0], 0)),
+                    start, end, 0);
+        }
+        groupSwitch.setText(text);
     }
 
     private void moveTabFromRemote(int delta) {
@@ -1261,8 +1390,10 @@ public final class SettingsActivity extends Activity {
             TextView chip = new TextView(this);
             chip.setLayoutParams(new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT));
-            chip.setBackgroundResource(R.drawable.segment_option);
-            chip.setTextColor(getColorStateList(R.color.segment_option_text));
+            chip.setBackgroundResource(classicUi
+                    ? R.drawable.classic_segment_option : R.drawable.segment_option);
+            chip.setTextColor(getColorStateList(classicUi
+                    ? R.color.classic_segment_option_text : R.color.segment_option_text));
             chip.setGravity(Gravity.CENTER);
             chip.setIncludeFontPadding(false);
             chip.setPadding(dp(9), 0, dp(9), 0);

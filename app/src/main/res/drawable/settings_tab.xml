@@ -1,22 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Pestañas como los filtros de la Guía: la activa en cyan; con foco, un anillo blanco. -->
+<!-- Pestañas de Opciones (0.5.90): la activa, píldora blanca; con foco, un halo. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_selected="true" android:state_focused="true">
         <shape android:shape="rectangle">
-            <solid android:color="@color/cyan" />
-            <stroke android:width="2dp" android:color="@color/white" />
+            <solid android:color="@color/white" />
+            <stroke android:width="3dp" android:color="#59FFFFFF" />
             <corners android:radius="999dp" />
         </shape>
     </item>
     <item android:state_selected="true">
         <shape android:shape="rectangle">
-            <solid android:color="@color/cyan" />
+            <solid android:color="@color/white" />
             <corners android:radius="999dp" />
         </shape>
     </item>
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <solid android:color="#24FFFFFF" />
+            <stroke android:width="2dp" android:color="@color/white" />
             <corners android:radius="999dp" />
         </shape>
     </item>

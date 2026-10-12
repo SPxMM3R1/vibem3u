@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Opciones de lista: el foco es el velo cyan de la fila; el texto queda blanco. -->
+<!-- Opciones de lista (0.5.90): con foco la fila es blanca y el texto oscuro. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_focused="true" android:color="@color/white" />
+    <item android:state_focused="true" android:color="@color/on_white" />
     <item android:color="@color/menu_text" />
 </selector>
