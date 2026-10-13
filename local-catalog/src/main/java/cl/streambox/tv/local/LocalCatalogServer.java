@@ -176,6 +176,11 @@ public final class LocalCatalogServer {
                     .put("sha", result.commitSha));
             return true;
         }
+        if ("POST".equals(method) && "/api/publish-epg-manual".equals(path)) {
+            GitHubPublisher.PublishResult result = publisher.publishEpgManual(readJson(exchange));
+            sendJson(exchange, 200, new JSONObject().put("sha", result.commitSha));
+            return true;
+        }
         if ("POST".equals(method) && "/api/resolve".equals(path)) {
             JSONObject payload = readJson(exchange);
             JSONObject channelPayload = payload.optJSONObject("channel");

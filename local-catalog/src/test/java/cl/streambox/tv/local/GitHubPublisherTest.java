@@ -37,6 +37,38 @@ public final class GitHubPublisherTest {
         assertFalse(api.usedContentsPreflight);
     }
 
+    @Test
+    public void epgManualPublishesOnlyItsOwnGuideFile() throws Exception {
+        FakeGitHub api = new FakeGitHub();
+        GitHubPublisher publisher = new GitHubPublisher(api::execute);
+        GitHubPublisher.PublishResult result = publisher.publishEpgManual(new JSONObject()
+                .put("path", "epg/manual/Nauta.52bb@Nauta.xml")
+                .put("channel", "ESPN 7")
+                .put("content", "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<tv data-manual-of=\"x\"></tv>"));
+        assertEquals("editor-commit-2", result.commitSha);
+        assertEquals("Guía manual desde el editor local: ESPN 7", api.lastMessage);
+        assertEquals(List.of("epg/manual/Nauta.52bb@Nauta.xml"), api.lastPaths);
+    }
+
+    @Test
+    public void epgManualRejectsAnyOtherPathOrContent() {
+        GitHubPublisher publisher = new GitHubPublisher(new FakeGitHub()::execute);
+        for (String path : List.of("epg.xml", "epg/canales/0104.xml", "epg/manual/../m3u.m3u.xml",
+                "data/channel-editor-layout.json", "epg/manual/a/b.xml")) {
+            assertRejected(publisher, new JSONObject().put("path", path).put("content", "<tv/>"));
+        }
+        assertRejected(publisher, new JSONObject().put("path", "epg/manual/0104.xml").put("content", "{\"no\":1}"));
+    }
+
+    private static void assertRejected(GitHubPublisher publisher, JSONObject request) {
+        try {
+            publisher.publishEpgManual(request);
+        } catch (IOException expected) {
+            return;
+        }
+        throw new AssertionError("Se aceptó una corrección no permitida: " + request);
+    }
+
     private static final class FakeGitHub {
         private String head = "main-before-runner";
         private final Map<String, String> trees = new HashMap<>(Map.of(
@@ -49,6 +81,8 @@ public final class GitHubPublisherTest {
         private int commitCount;
         private int patchCount;
         private boolean usedContentsPreflight;
+        private String lastMessage = "";
+        private List<String> lastPaths = List.of();
 
         String execute(String method, String path, JSONObject body) throws IOException {
             if (path.startsWith("contents/")) {
@@ -64,11 +98,17 @@ public final class GitHubPublisherTest {
             }
             if ("POST".equals(method) && "git/trees".equals(path)) {
                 baseTrees.add(body.getString("base_tree"));
+                List<String> paths = new ArrayList<>();
+                for (int i = 0; i < body.getJSONArray("tree").length(); i++) {
+                    paths.add(body.getJSONArray("tree").getJSONObject(i).getString("path"));
+                }
+                lastPaths = paths;
                 String tree = "editor-tree-" + (++treeCount);
                 return new JSONObject().put("sha", tree).toString();
             }
             if ("POST".equals(method) && "git/commits".equals(path)) {
                 parents.add(body.getJSONArray("parents").getString(0));
+                lastMessage = body.getString("message");
                 String commit = "editor-commit-" + (++commitCount);
                 trees.put(commit, body.getString("tree"));
                 return new JSONObject().put("sha", commit).toString();

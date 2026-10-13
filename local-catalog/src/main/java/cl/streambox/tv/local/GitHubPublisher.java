@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /** Publishes the editor's three declared JSON documents with the local gh credential. */
 final class GitHubPublisher {
@@ -22,6 +23,9 @@ final class GitHubPublisher {
             "presentation-overrides.json"
     );
     private static final int MAX_DOCUMENT_BYTES = 1024 * 1024;
+    /** Corrección manual de la guía de un canal (Lista M3U, guía por canal desde 2026-10-12). */
+    static final Pattern EPG_MANUAL_PATH = Pattern.compile("^epg/manual/[A-Za-z0-9._@%~-]{1,200}\\.xml$");
+    private static final int MAX_EPG_MANUAL_BYTES = 256 * 1024;
     private static final int MAX_PUBLISH_ATTEMPTS = 6;
 
     @FunctionalInterface
@@ -84,6 +88,39 @@ final class GitHubPublisher {
             if (!ALLOWED_FILES.contains(key)) throw new IOException("El editor intentó publicar un archivo no permitido.");
         }
 
+        return new PublishResult(commitFiles(contentByPath,
+                "Actualiza catálogo editorial desde el editor local"));
+    }
+
+    /**
+     * Publica la corrección manual de la guía de un solo canal. Solo acepta una ruta
+     * {@code epg/manual/<canal>.xml} con un XMLTV {@code <tv>}; nada más del repositorio.
+     */
+    PublishResult publishEpgManual(JSONObject request) throws IOException {
+        String path = request.optString("path", "");
+        Object value = request.opt("content");
+        if (!EPG_MANUAL_PATH.matcher(path).matches() || path.contains("..")) {
+            throw new IOException("Ruta de corrección de guía no permitida.");
+        }
+        if (!(value instanceof String)) throw new IOException("Falta el contenido de la corrección.");
+        String content = (String) value;
+        if (content.getBytes(StandardCharsets.UTF_8).length > MAX_EPG_MANUAL_BYTES) {
+            throw new IOException("La corrección de guía supera el límite de tamaño.");
+        }
+        String trimmed = content.strip();
+        if (!(trimmed.startsWith("<?xml") || trimmed.startsWith("<tv")) || !trimmed.contains("<tv")
+                || !(trimmed.endsWith("</tv>") || trimmed.endsWith("/>"))) {
+            throw new IOException("La corrección de guía debe ser un XMLTV con raíz <tv>.");
+        }
+        String channel = request.optString("channel", "").replaceAll("[\r\n]", " ").strip();
+        if (channel.length() > 120) channel = channel.substring(0, 120);
+        Map<String, String> contentByPath = new LinkedHashMap<>();
+        contentByPath.put(path, content);
+        return new PublishResult(commitFiles(contentByPath,
+                "Guía manual desde el editor local" + (channel.isEmpty() ? "" : ": " + channel)));
+    }
+
+    private String commitFiles(Map<String, String> contentByPath, String message) throws IOException {
         String commitSha = null;
         for (int attempt = 1; attempt <= MAX_PUBLISH_ATTEMPTS; attempt++) {
             JSONObject ref = request("GET", "git/ref/heads/" + BRANCH, null);
@@ -106,7 +143,7 @@ final class GitHubPublisher {
                     .put("base_tree", baseCommit.getJSONObject("tree").getString("sha"))
                     .put("tree", treeEntries));
             JSONObject commit = request("POST", "git/commits", new JSONObject()
-                    .put("message", "Actualiza catálogo editorial desde el editor local")
+                    .put("message", message)
                     .put("tree", tree.getString("sha"))
                     .put("parents", new JSONArray().put(headSha)));
             String candidateSha = commit.getString("sha");
@@ -125,8 +162,8 @@ final class GitHubPublisher {
             }
         }
         if (commitSha == null) throw new IOException("No se pudo publicar el catálogo.");
+        return commitSha;
 
-        return new PublishResult(commitSha);
     }
 
     private JSONObject request(String method, String path, JSONObject body) throws IOException {
