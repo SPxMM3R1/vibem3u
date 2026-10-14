@@ -4222,7 +4222,10 @@ public final class MainActivity extends Activity {
         int keyCode = event.getKeyCode();
         boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
         if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_GUIDE) {
-            if (down && event.getRepeatCount() == 0) closeGuide();
+            if (down && event.getRepeatCount() == 0) {
+                closeGuide();
+                if (keyCode != KeyEvent.KEYCODE_GUIDE) markBackConsumedByPanel();
+            }
             return true;
         }
         if (guideFiltersFocused) return handleGuideFilterKey(keyCode, down);
@@ -5995,7 +5998,11 @@ public final class MainActivity extends Activity {
         if (sourceSelectorOverlay != null) sourceSelectorOverlay.setVisibility(View.GONE);
     }
 
-    /** BACK que cerró un panel (Guía, selector, ajuste del logo, aviso de calidad). */
+    /**
+     * BACK que cerró la Guía o el selector al bajar (0.5.96). Con «atrás predictivo» el sistema
+     * invoca el callback de atrás al soltar la tecla; sin esto, cerrar la Guía con BACK abría
+     * además «¿Salir de la app?».
+     */
     private boolean backDownConsumedByPanel;
     private long backDownConsumedAtElapsed;
 
@@ -6007,27 +6014,14 @@ public final class MainActivity extends Activity {
         return consumed;
     }
 
-    @Override
-    public boolean dispatchKeyEvent(KeyEvent event) {
-        // Con «atrás predictivo» el sistema resuelve BACK al soltar la tecla: si el BACK
-        // bajado ya cerró un panel, el soltar no debe abrir «¿Salir de la app?» (0.5.96).
-        if (event.getKeyCode() == KeyEvent.KEYCODE_BACK) {
-            if (event.getAction() == KeyEvent.ACTION_UP && takeBackConsumedByPanel()) {
-                return true;
-            }
-            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
-                boolean panelOpen = logoSizeAdjusting || isGuideVisible()
-                        || isQualityUpgradeVisible() || isSourceSelectorVisible();
-                boolean handled = dispatchPlayerKeyEvent(event);
-                backDownConsumedByPanel = panelOpen && handled;
-                backDownConsumedAtElapsed = SystemClock.elapsedRealtime();
-                return handled;
-            }
-        }
-        return dispatchPlayerKeyEvent(event);
+    /** El BACK bajado cerró un panel: el callback de atrás (al soltar) no hace nada más. */
+    private void markBackConsumedByPanel() {
+        backDownConsumedByPanel = true;
+        backDownConsumedAtElapsed = SystemClock.elapsedRealtime();
     }
 
-    private boolean dispatchPlayerKeyEvent(KeyEvent event) {
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
         if (logoSizeAdjusting && handleLogoSizeKey(event)) return true;
         if (isGuideVisible() && handleGuideKey(event)) return true;
@@ -6037,6 +6031,7 @@ public final class MainActivity extends Activity {
                 if (keyCode == KeyEvent.KEYCODE_BACK
                         && event.getRepeatCount() == 0) {
                     closePlaybackSourceSelector();
+                    markBackConsumedByPanel();
                     return true;
                 }
                 if (minimalSelector() && (keyCode == KeyEvent.KEYCODE_DPAD_UP
