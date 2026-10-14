@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aviso breve (0.5.99): una línea flotante abajo al centro sobre una sombra suave; reemplaza
+     los Toast grises de Android en el estilo moderno. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/notice_overlay"
+    android:layout_width="match_parent"
+    android:layout_height="170dp"
+    android:layout_gravity="bottom"
+    android:alpha="0"
+    android:background="@drawable/notice_shade"
+    android:focusable="false"
+    android:visibility="gone">
+
+    <TextView
+        android:id="@+id/notice_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="40dp"
+        android:drawablePadding="8dp"
+        android:ellipsize="end"
+        android:gravity="center_vertical"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:maxWidth="760dp"
+        android:shadowColor="#80000000"
+        android:shadowDy="1"
+        android:shadowRadius="6"
+        android:textColor="#E6FFFFFF"
+        android:textSize="11sp" />
+</FrameLayout>

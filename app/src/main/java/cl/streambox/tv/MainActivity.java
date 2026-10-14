@@ -196,6 +196,25 @@ public final class MainActivity extends Activity {
     private View channelOverlay;
     private View loadingPanel;
     private TextView loadingText;
+    /** «CONECTANDO» sobre el paso de carga (0.5.99, moderno). */
+    private TextView loadingKicker;
+    /** Pantalla de error y aviso breve (0.5.99, moderno; null en el clásico no se usan). */
+    private View playbackErrorOverlay;
+    private TextView playbackErrorTitle;
+    private TextView playbackErrorEyebrow;
+    private TextView playbackErrorMessage;
+    private TextView playbackErrorTried;
+    private TextView playbackErrorCode;
+    private TextView playbackErrorClock;
+    private TextView playbackErrorDate;
+    private TextView playbackErrorHint;
+    private ImageView playbackErrorLogo;
+    private android.widget.Button playbackErrorRetry;
+    private android.widget.Button playbackErrorSecondary;
+    /** true: falló la lista (Reintentar recarga, Opciones abre Opciones). */
+    private boolean playbackErrorIsPlaylist;
+    private View noticeOverlay;
+    private TextView noticeText;
     private TextView clock;
     private View programmeDetailOverlay;
     private TextView detailLive;
@@ -426,6 +445,10 @@ public final class MainActivity extends Activity {
                 }
                 osdClockTime.setText(currentTime);
                 osdClockDate.setText(date);
+                if (isPlaybackErrorVisible() && playbackErrorClock != null) {
+                    playbackErrorClock.setText(currentTime);
+                    playbackErrorDate.setText(date);
+                }
             }
             // La línea de la hora actual de la Guía avanza con el reloj.
             if (isGuideVisible()) guideSurface.refresh(System.currentTimeMillis());
@@ -563,6 +586,24 @@ public final class MainActivity extends Activity {
         }
         loadingPanel = findViewById(R.id.loading_panel);
         loadingText = findViewById(R.id.loading_text);
+        loadingKicker = findViewById(R.id.loading_kicker);
+        playbackErrorOverlay = findViewById(R.id.playback_error_overlay);
+        playbackErrorTitle = findViewById(R.id.playback_error_title);
+        playbackErrorEyebrow = findViewById(R.id.playback_error_eyebrow);
+        playbackErrorMessage = findViewById(R.id.playback_error_message);
+        playbackErrorTried = findViewById(R.id.playback_error_tried);
+        playbackErrorCode = findViewById(R.id.playback_error_code);
+        playbackErrorClock = findViewById(R.id.playback_error_clock);
+        playbackErrorDate = findViewById(R.id.playback_error_date);
+        playbackErrorHint = findViewById(R.id.playback_error_hint);
+        playbackErrorLogo = findViewById(R.id.playback_error_logo);
+        playbackErrorRetry = findViewById(R.id.playback_error_retry);
+        playbackErrorSecondary = findViewById(R.id.playback_error_secondary);
+        noticeOverlay = findViewById(R.id.notice_overlay);
+        noticeText = findViewById(R.id.notice_text);
+        if (playbackErrorRetry != null) {
+            SceneDialog.boldWhenFocused(playbackErrorRetry, playbackErrorSecondary);
+        }
         clock = findViewById(R.id.clock);
         android.view.ViewStub detailStub = findViewById(R.id.programme_detail_stub);
         detailStub.setLayoutResource(classicUi
@@ -826,6 +867,7 @@ public final class MainActivity extends Activity {
             }
         }
         loadFailed = false;
+        hidePlaybackErrorScreen();
         if (!keepCurrentUi) {
             showLoadingState(getString(R.string.loading_playlist));
         }
@@ -1382,6 +1424,13 @@ public final class MainActivity extends Activity {
 
     private void showPlaylistError(String detail) {
         loadFailed = true;
+        if (!classicUi && playbackErrorOverlay != null) {
+            clearResourceWarning();
+            stopLoadingTextAnimation();
+            if (loadingPanel != null) loadingPanel.setVisibility(View.GONE);
+            showPlaylistErrorScreen(detail);
+            return;
+        }
         clearResourceWarning();
         stopLoadingTextAnimation();
         loadingPanel.setVisibility(View.VISIBLE);
@@ -1446,6 +1495,7 @@ public final class MainActivity extends Activity {
         clearResourceWarning();
         showLoadingState(getString(messageId));
         resourceWarningVisible = true;
+        if (!classicUi && loadingKicker != null) loadingKicker.setText(R.string.loading_kicker_unstable);
         resourceWarningUntilElapsedRealtime = now + RESOURCE_WARNING_VISIBLE_MS;
         resourceWarningCooldownUntilElapsedRealtime =
                 now + RESOURCE_WARNING_COOLDOWN_MS;
@@ -1708,6 +1758,7 @@ public final class MainActivity extends Activity {
     }
 
     private void hideLoadingState() {
+        if (loadingKicker != null) loadingKicker.setVisibility(View.GONE);
         clearResourceWarning();
         stopLoadingTextAnimation();
         if (loadingPanel != null) loadingPanel.setVisibility(View.GONE);
@@ -1736,6 +1787,11 @@ public final class MainActivity extends Activity {
      */
     private void showModernLoadingStep(String step) {
         if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
+        if (loadingKicker != null) {
+            loadingKicker.setText(resourceWarningVisible
+                    ? R.string.loading_kicker_unstable : R.string.loading_kicker);
+            loadingKicker.setVisibility(View.VISIBLE);
+        }
         if (step.equals(loadingMessageBase)) return;
         loadingMessageBase = step;
         loadingText.animate().cancel();
@@ -1790,6 +1846,7 @@ public final class MainActivity extends Activity {
      * en ambos casos se programa la precarga de los vecinos una sola vez (0.5.86).
      */
     private void markPlaybackStarted() {
+        hidePlaybackErrorScreen();
         if (!playbackHasStarted) {
             scheduleNeighborPrefetch();
             maybeScheduleQualityUpgradeCheck();
@@ -1896,6 +1953,7 @@ public final class MainActivity extends Activity {
 
     private void playChannel(int requestedIndex, boolean revalidateLogo) {
         if (channels.isEmpty()) return;
+        hidePlaybackErrorScreen();
         mainHandler.removeCallbacks(commitZap);
         mainHandler.removeCallbacks(prefetchNeighbors);
         zapPreviewPending = false;
@@ -3172,6 +3230,10 @@ public final class MainActivity extends Activity {
         setStatus("ERROR", R.color.red);
         codecInfo.setText(PlaybackDiagnosticCode.display(lastPlaybackDiagnosticCode));
         hideLoadingState();
+        if (!classicUi && playbackErrorOverlay != null) {
+            showPlaybackErrorScreen();
+            return;
+        }
         overlayAwaitingPlayback = true;
         showOverlay(true);
     }
@@ -3605,7 +3667,16 @@ public final class MainActivity extends Activity {
     private void applyLogoSize() {
         LogoFit.setUserScale(logoSizeKey, logoSizeScale);
         if (displayedLogoBitmap != null) sizeModernLogo(displayedLogoBitmap);
-        logoSizeValue.setText(getString(R.string.logo_size_value, Math.round(logoSizeScale * 100f)));
+        String value = getString(R.string.logo_size_value, Math.round(logoSizeScale * 100f));
+        android.text.SpannableString styled = new android.text.SpannableString(value);
+        for (int index = 0; index < value.length(); index++) {
+            char c = value.charAt(index);
+            if (c == '◀' || c == '▶') {
+                styled.setSpan(new android.text.style.RelativeSizeSpan(0.5f), index, index + 1, 0);
+                styled.setSpan(new android.text.style.ForegroundColorSpan(0x8CFFFFFF), index, index + 1, 0);
+            }
+        }
+        logoSizeValue.setText(styled);
         positionLogoSizeAdjust();
     }
 
@@ -3632,7 +3703,12 @@ public final class MainActivity extends Activity {
                 || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER;
         if (!ours) {
             // Atrás, cambio de canal u otra tecla: se deshace el ajuste y la tecla sigue su curso.
-            if (event.getAction() == KeyEvent.ACTION_DOWN) finishLogoSizeAdjust(false);
+            // Si era Atrás, el callback de atrás (al soltar) no debe abrir «¿Salir de la app?»
+            // (0.5.99): se marca como consumida; otra tecla no pasa por ese callback.
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                finishLogoSizeAdjust(false);
+                markBackConsumedByPanel();
+            }
             return false;
         }
         if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
@@ -4060,6 +4136,8 @@ public final class MainActivity extends Activity {
     private void openGuide() {
         if (channels.isEmpty() || guideView == null || settingsOpen || exiting) return;
         closePlaybackSourceSelector();
+        // Moderno (0.5.99): la carga del canal no se trasluce detrás de la Guía.
+        if (!classicUi && loadingPanel != null) loadingPanel.setAlpha(0f);
         mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
         hideProgrammeDetail.run();
         mainHandler.removeCallbacks(hideOverlay);
@@ -4160,6 +4238,7 @@ public final class MainActivity extends Activity {
 
     private void closeGuide() {
         if (guideView != null) guideView.setVisibility(View.GONE);
+        if (loadingPanel != null) loadingPanel.setAlpha(1f);
     }
 
     private final EpgGuideView.Source guideSource = new EpgGuideView.Source() {
@@ -4343,7 +4422,7 @@ public final class MainActivity extends Activity {
         if (channel == null) return;
         EpgProgramme programme = guideNavigator.focusedProgramme(guideRowProgrammes());
         if (programme == null) {
-            Toast.makeText(this, R.string.reminder_no_programme, Toast.LENGTH_SHORT).show();
+            showNotice(NOTICE_WARN, R.string.notice_guide, getString(R.string.reminder_no_programme), false);
             return;
         }
         ProgramReminder reminder = new ProgramReminder(
@@ -4355,7 +4434,7 @@ public final class MainActivity extends Activity {
         );
         boolean alreadySet = reminderIds.contains(reminder.id());
         if (!alreadySet && programme.getStartMillis() <= System.currentTimeMillis()) {
-            Toast.makeText(this, R.string.reminder_already_started, Toast.LENGTH_SHORT).show();
+            showNotice(NOTICE_WARN, R.string.notice_guide, getString(R.string.reminder_already_started), false);
             return;
         }
         boolean added;
@@ -4367,10 +4446,17 @@ public final class MainActivity extends Activity {
         }
         refreshReminderIds();
         guideSurface.refresh(System.currentTimeMillis());
-        Toast.makeText(this, added
-                ? getString(R.string.reminder_added, programme.getTitle(),
-                        ReminderAlerts.when(programme.getStartMillis()))
-                : getString(R.string.reminder_removed), Toast.LENGTH_SHORT).show();
+        if (classicUi) {
+            Toast.makeText(this, added
+                    ? getString(R.string.reminder_added, programme.getTitle(),
+                            ReminderAlerts.when(programme.getStartMillis()))
+                    : getString(R.string.reminder_removed), Toast.LENGTH_SHORT).show();
+        } else {
+            showNotice(NOTICE_REMINDER, R.string.notice_reminder, added
+                    ? getString(R.string.notice_reminder_added, programme.getTitle(),
+                            ReminderAlerts.when(programme.getStartMillis()))
+                    : getString(R.string.notice_reminder_removed), false);
+        }
     }
 
     private void showProgrammeDetail() {
@@ -5810,14 +5896,19 @@ public final class MainActivity extends Activity {
         if (AppStrings.isBlank(key)) key = "m3u:" + PlaybackPreferences.channelIdentity(channel);
         channelVisibility.hide(key, channel.getName(), System.currentTimeMillis());
         closePlaybackSourceSelector();
-        Toast.makeText(this, getString(R.string.channel_hidden_toast, channel.getName()), Toast.LENGTH_SHORT).show();
+        if (classicUi) {
+            Toast.makeText(this, getString(R.string.channel_hidden_toast, channel.getName()), Toast.LENGTH_SHORT).show();
+        } else {
+            showNotice(NOTICE_OK, R.string.notice_this_tv,
+                    getString(R.string.notice_channel_hidden, channel.getName()), false);
+        }
         reapplyChannelList();
     }
 
     private void confirmTrashChannel(Channel channel) {
         String key = PublishedPlaybackCatalog.editorRowKey(channel);
         if (AppStrings.isBlank(key)) {
-            Toast.makeText(this, R.string.channel_trash_unavailable, Toast.LENGTH_LONG).show();
+            showNotice(NOTICE_WARN, R.string.notice_trash, getString(R.string.channel_trash_unavailable), true);
             return;
         }
         closePlaybackSourceSelector();
@@ -5830,7 +5921,7 @@ public final class MainActivity extends Activity {
     /** Deja el pedido en GitHub; si el acceso ya no sirve, pide vincular otra vez (una vez). */
     private void sendChannelToTrash(Channel channel, String key, boolean mayRelink) {
         String name = channel.getName();
-        Toast.makeText(this, getString(R.string.channel_trash_sending, name), Toast.LENGTH_SHORT).show();
+        showNotice(NOTICE_PROGRESS, R.string.notice_list, getString(R.string.channel_trash_sending, name), false);
         GitHubCredentialStore store = new GitHubCredentialStore(this);
         String token = store.token();
         if (token == null) {
@@ -5843,7 +5934,7 @@ public final class MainActivity extends Activity {
                 mainHandler.post(() -> {
                     if (isFinishing()) return;
                     channelVisibility.markTrashed(key, name, System.currentTimeMillis());
-                    Toast.makeText(this, getString(R.string.channel_trash_done, name), Toast.LENGTH_LONG).show();
+                    showNotice(NOTICE_OK, R.string.notice_list, getString(R.string.channel_trash_done, name), true);
                     reapplyChannelList();
                 });
             } catch (GitHubChannelTrash.UnauthorizedException unauthorized) {
@@ -5853,14 +5944,15 @@ public final class MainActivity extends Activity {
                     if (mayRelink) {
                         ChannelActionScenes.showGitHubLink(this, () -> sendChannelToTrash(channel, key, false));
                     } else {
-                        Toast.makeText(this, getString(R.string.channel_trash_failed,
-                                unauthorized.getMessage()), Toast.LENGTH_LONG).show();
+                        showNotice(NOTICE_WARN, R.string.notice_trash, getString(R.string.channel_trash_failed,
+                                unauthorized.getMessage()), true);
                     }
                 });
             } catch (java.io.IOException error) {
-                mainHandler.post(() -> Toast.makeText(this, getString(R.string.channel_trash_failed,
-                        AppStrings.isBlank(error.getMessage()) ? "sin conexión" : error.getMessage()),
-                        Toast.LENGTH_LONG).show());
+                mainHandler.post(() -> showNotice(NOTICE_WARN, R.string.notice_trash,
+                        getString(R.string.channel_trash_failed,
+                                AppStrings.isBlank(error.getMessage()) ? "sin conexión" : error.getMessage()),
+                        true));
             }
         });
     }
@@ -6027,6 +6119,7 @@ public final class MainActivity extends Activity {
         if (logoSizeAdjusting && handleLogoSizeKey(event)) return true;
         if (isGuideVisible() && handleGuideKey(event)) return true;
         if (isQualityUpgradeVisible() && handleQualityUpgradeKey(event)) return true;
+        if (isPlaybackErrorVisible() && handlePlaybackErrorKey(event)) return true;
         if (isSourceSelectorVisible()) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 if (keyCode == KeyEvent.KEYCODE_BACK
@@ -6179,10 +6272,232 @@ public final class MainActivity extends Activity {
         }
     }
 
+    // ---- Pantalla de error y avisos breves (0.5.99, «Flotante minimalista») -------------------
+
+    private static final int NOTICE_OK = 0;
+    private static final int NOTICE_WARN = 1;
+    private static final int NOTICE_PROGRESS = 2;
+    private static final int NOTICE_REMINDER = 3;
+    private final Runnable hideNotice = () -> {
+        if (noticeOverlay == null) return;
+        noticeOverlay.animate().cancel();
+        noticeOverlay.animate().alpha(0f).setDuration(220L)
+                .withEndAction(() -> noticeOverlay.setVisibility(View.GONE)).start();
+    };
+
+    /** Aviso breve; el clásico sigue usando el Toast de Android. */
+    private void showNotice(int kind, int kickerId, String text, boolean longDuration) {
+        if (classicUi || noticeOverlay == null || noticeText == null) {
+            Toast.makeText(this, text, longDuration ? Toast.LENGTH_LONG : Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String kicker = getString(kickerId);
+        android.text.SpannableStringBuilder line = new android.text.SpannableStringBuilder();
+        line.append(spacedCaps(kicker));
+        line.setSpan(new android.text.style.RelativeSizeSpan(0.7f), 0, line.length(), 0);
+        line.setSpan(new android.text.style.ForegroundColorSpan(0x8CFFFFFF), 0, line.length(), 0);
+        line.append("    ").append(text);
+        noticeText.setText(line);
+        android.graphics.drawable.GradientDrawable mark = new android.graphics.drawable.GradientDrawable();
+        mark.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        int size = dpToPx(kind == NOTICE_REMINDER ? 6 : 5);
+        mark.setSize(size, size);
+        if (kind == NOTICE_REMINDER) {
+            mark.setStroke(Math.max(1, dpToPx(1)), 0xFF00B8D9);
+        } else {
+            mark.setColor(kind == NOTICE_WARN ? 0xFFFFC266 : kind == NOTICE_PROGRESS ? 0xFF00B8D9 : 0xFF5BE9A0);
+        }
+        mark.setBounds(0, 0, size, size);
+        noticeText.setCompoundDrawablesRelative(mark, null, null, null);
+        mainHandler.removeCallbacks(hideNotice);
+        // En la Guía el aviso sube al espacio libre entre el detalle y la grilla; abajo tapaba
+        // la fila enfocada.
+        View root = findViewById(R.id.root);
+        noticeOverlay.setTranslationY(isGuideVisible() && root != null
+                ? -(root.getHeight() - dpToPx(272)) : 0f);
+        noticeOverlay.animate().cancel();
+        noticeOverlay.setVisibility(View.VISIBLE);
+        noticeOverlay.animate().alpha(1f).setDuration(180L).start();
+        mainHandler.postDelayed(hideNotice, longDuration ? 4_000L : 2_600L);
+    }
+
+    private boolean isPlaybackErrorVisible() {
+        return playbackErrorOverlay != null && playbackErrorOverlay.getVisibility() == View.VISIBLE;
+    }
+
+    private void hidePlaybackErrorScreen() {
+        if (playbackErrorOverlay == null || playbackErrorOverlay.getVisibility() != View.VISIBLE) return;
+        playbackErrorOverlay.setVisibility(View.GONE);
+    }
+
+    /** Canal que no abrió o se cortó: logo, «● SIN SEÑAL · 001 · TVN», causa y acciones. */
+    private void showPlaybackErrorScreen() {
+        Channel channel = channels.isEmpty() || channelIndex < 0 || channelIndex >= channels.size()
+                ? null : channels.get(channelIndex);
+        playbackErrorIsPlaylist = false;
+        mainHandler.removeCallbacks(hideOverlay);
+        hideOverlay.run();
+        android.graphics.drawable.Drawable logo = channelLogo == null ? null : channelLogo.getDrawable();
+        playbackErrorLogo.setImageDrawable(logo);
+        playbackErrorLogo.setVisibility(logo == null ? View.GONE : View.VISIBLE);
+        String where = "";
+        if (channel != null) {
+            where = String.format(Locale.ROOT, "%03d",
+                    publishedPlaybackCatalog.numberFor(channel, channelIndex + 1)) + " · " + channel.getName();
+        }
+        playbackErrorEyebrow.setText(warningEyebrow(getString(R.string.playback_error_no_signal), where));
+        List<String> tried = channel == null ? Collections.emptyList() : triedSources(channel);
+        if (tried.size() > 1) {
+            playbackErrorTitle.setText(R.string.playback_error_title_all);
+            playbackErrorMessage.setText(R.string.playback_error_all_message);
+            android.text.SpannableStringBuilder line = new android.text.SpannableStringBuilder();
+            for (String label : tried) {
+                if (line.length() > 0) line.append("      ");
+                line.append(label).append("  ");
+                int dot = line.length();
+                line.append("●");
+                line.setSpan(new android.text.style.ForegroundColorSpan(0xD9FF9A9A), dot, dot + 1, 0);
+                line.setSpan(new android.text.style.RelativeSizeSpan(0.6f), dot, dot + 1, 0);
+            }
+            playbackErrorTried.setText(line);
+            playbackErrorTried.setVisibility(View.VISIBLE);
+        } else {
+            playbackErrorTitle.setText(playbackHasStarted
+                    ? R.string.playback_error_title_dropped : R.string.playback_error_title_open);
+            playbackErrorMessage.setText(getString(playbackErrorCause(lastPlaybackDiagnosticCode))
+                    + " " + getString(R.string.playback_error_suffix));
+            playbackErrorTried.setVisibility(View.GONE);
+        }
+        String code = PlaybackDiagnosticCode.display(lastPlaybackDiagnosticCode);
+        playbackErrorCode.setText(code.isEmpty() ? "" : getString(R.string.playback_error_code, code));
+        playbackErrorSecondary.setText(R.string.playback_error_other_source);
+        playbackErrorHint.setVisibility(View.VISIBLE);
+        presentPlaybackErrorScreen();
+    }
+
+    private void showPlaylistErrorScreen(String detail) {
+        playbackErrorIsPlaylist = true;
+        mainHandler.removeCallbacks(hideOverlay);
+        hideOverlay.run();
+        playbackErrorLogo.setVisibility(View.GONE);
+        playbackErrorEyebrow.setText(warningEyebrow(getString(R.string.playback_error_no_connection),
+                getString(R.string.playlist_error_kicker)));
+        playbackErrorTitle.setText(R.string.playlist_error_title);
+        playbackErrorMessage.setText(R.string.playlist_error_message);
+        playbackErrorTried.setVisibility(View.GONE);
+        playbackErrorCode.setText(detail == null || AppStrings.isBlank(detail) ? ""
+                : SafePlaybackText.detail(detail.replace('\n', ' ')));
+        playbackErrorSecondary.setText(R.string.playback_error_settings);
+        playbackErrorHint.setVisibility(View.GONE);
+        presentPlaybackErrorScreen();
+    }
+
+    private void presentPlaybackErrorScreen() {
+        Date now = new Date();
+        playbackErrorClock.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(now));
+        playbackErrorDate.setText(new SimpleDateFormat("EEEE d 'de' MMMM",
+                Locale.forLanguageTag("es-CL")).format(now));
+        playbackErrorOverlay.setVisibility(View.VISIBLE);
+        playbackErrorRetry.requestFocus();
+    }
+
+    /** «● SIN SEÑAL · 001 · TVN»: punto y estado en ámbar (aviso, DISENO.md). */
+    private CharSequence warningEyebrow(String state, String where) {
+        android.text.SpannableStringBuilder text = new android.text.SpannableStringBuilder("●  ");
+        text.append(state);
+        text.setSpan(new android.text.style.ForegroundColorSpan(0xFFFFC266), 0, text.length(), 0);
+        if (!AppStrings.isBlank(where)) text.append(" · ").append(where);
+        return text;
+    }
+
+    /**
+     * Fuentes que la recuperación automática ya probó: con «Cambio automático» y respaldos,
+     * al llegar aquí pasó por todas. Sin respaldos (o con el cambio apagado), solo una.
+     */
+    private List<String> triedSources(Channel channel) {
+        List<String> labels = new ArrayList<>();
+        if (playbackPreferences == null || !playbackPreferences.isAutoBackupEnabled()) return labels;
+        int backups = TvVooBackup.directBackupsOf(channel).size();
+        if (backups == 0 && !TvVooBackup.hasTvVoo(channel)) return labels;
+        labels.add(getString(R.string.source_selector_direct_label));
+        if (TvVooBackup.hasTvVoo(channel)) {
+            labels.add("TvVoo");
+        } else if (backups == 1) {
+            labels.add(getString(R.string.source_selector_backup_label));
+        } else {
+            for (int index = 0; index < backups; index++) {
+                labels.add(getString(R.string.source_selector_backup_numbered_label, index + 1));
+            }
+        }
+        return labels;
+    }
+
+    /** Frase según la familia del código (PPSSCCC, ver PlaybackDiagnosticCode). */
+    private static int playbackErrorCause(long code) {
+        if (code <= 0) return R.string.playback_error_generic;
+        if (code >= 1_000_000_000L) return R.string.playback_error_format;
+        int subsystem = (int) (code / 100_000L);
+        int cause = (int) (code % 1_000L);
+        switch (subsystem) {
+            case 30:
+                if (cause == 401 || cause == 403) return R.string.playback_error_rejected;
+                if (cause == 404 || cause == 410) return R.string.playback_error_not_found;
+                if (cause >= 500 && cause <= 599) return R.string.playback_error_server;
+                return R.string.playback_error_network;
+            case 20:
+                return R.string.playback_error_resolver;
+            case 40:
+                return R.string.playback_error_format;
+            case 50:
+                return R.string.playback_error_dropped;
+            case 60:
+                return R.string.playback_error_memory;
+            default:
+                return R.string.playback_error_generic;
+        }
+    }
+
+    /** ◀ ▶ entre acciones, OK actúa; ▲ ▼ y el resto siguen su curso (cambiar de canal…). */
+    private boolean handlePlaybackErrorKey(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                if (down) playbackErrorRetry.requestFocus();
+                return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                if (down) playbackErrorSecondary.requestFocus();
+                return true;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+                if (down && event.getRepeatCount() == 0) {
+                    boolean secondary = playbackErrorSecondary.isFocused();
+                    hidePlaybackErrorScreen();
+                    if (playbackErrorIsPlaylist) {
+                        if (secondary) openSettings();
+                        else refreshPlaylists(getPlaylistSources());
+                    } else if (secondary) {
+                        openPlaybackSourceSelector();
+                    } else {
+                        startPlaybackFromInput();
+                    }
+                }
+                return true;
+            default:
+                if (isChannelNavigationKey(keyCode) && down) hidePlaybackErrorScreen();
+                return false;
+        }
+    }
+
     private void handleBackAction() {
         // El sistema invoca esto al soltar BACK: si al bajar ya cerró la Guía o el selector,
         // no se sigue con el OSD ni con «¿Salir de la app?».
         if (takeBackConsumedByPanel()) return;
+        if (isPlaybackErrorVisible()) {
+            // La pantalla de error se cierra y queda el video (o el negro) sin más.
+            hidePlaybackErrorScreen();
+            return;
+        }
         if (isQualityUpgradeVisible()) {
             hideQualityUpgrade();
             return;

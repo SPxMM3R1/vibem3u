@@ -18,6 +18,7 @@ Referencias aprobadas en `docs/diseno/`:
 | OSD | `osd.jpg` (app) | implementado (0.5.96) |
 | Escenas (salir, actualización, papelera, Premium, GitHub, token vencido) | `*-app.jpg` | implementado (0.5.98) |
 | Avisos (mejor calidad, recordatorio) y MediaFlow | `recordatorio-app.jpg`, `mediaflow-app.jpg` | implementado (0.5.98) |
+| Pantalla de error, ajuste del logo, avisos breves, «CONECTANDO» | `error-app.jpg`, `logo-ajuste-app.jpg`, `aviso-app.jpg` | implementado (0.5.99) |
 
 En la app no hay desenfoque detrás del texto (Android no puede desenfocar el video de un
 `SurfaceView`): por eso los degradados de la Guía y de Opciones son algo más oscuros que en los

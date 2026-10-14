@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pantalla de error (0.5.99, «Flotante minimalista», DISENO.md): como el OSD, abajo a la
+     izquierda sobre una sola capa oscura; acciones de texto. Solo el estilo moderno. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/playback_error_overlay"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:visibility="gone">
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#99000000" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="440dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/scene_scrim" />
+
+    <LinearLayout
+        android:layout_width="600dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="@dimen/channel_overlay_horizontal_margin"
+        android:layout_marginBottom="32dp"
+        android:orientation="vertical">
+
+        <ImageView
+            android:id="@+id/playback_error_logo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="11dp"
+            android:adjustViewBounds="true"
+            android:alpha="0.85"
+            android:contentDescription="@null"
+            android:maxHeight="28dp"
+            android:maxWidth="160dp"
+            android:scaleType="fitStart" />
+
+        <TextView
+            android:id="@+id/playback_error_eyebrow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
+            android:letterSpacing="0.2"
+            android:maxLines="1"
+            android:textAllCaps="true"
+            android:textColor="#9EFFFFFF"
+            android:textSize="7.5sp" />
+
+        <TextView
+            android:id="@+id/playback_error_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:includeFontPadding="false"
+            android:letterSpacing="-0.015"
+            android:textColor="@color/white"
+            android:textSize="30sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/playback_error_message"
+            android:layout_width="450dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="7dp"
+            android:lineSpacingMultiplier="1.4"
+            android:textColor="#BDFFFFFF"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/playback_error_tried"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="11dp"
+            android:includeFontPadding="false"
+            android:textColor="#80FFFFFF"
+            android:textSize="9.5sp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="15dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/playback_error_retry"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="23dp"
+                android:background="@drawable/scene_button"
+                android:includeFontPadding="false"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingBottom="7dp"
+                android:paddingEnd="0dp"
+                android:paddingStart="0dp"
+                android:paddingTop="4dp"
+                android:stateListAnimator="@null"
+                android:text="@string/playback_error_retry"
+                android:textAllCaps="false"
+                android:textColor="@color/scene_button_text"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/playback_error_secondary"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/scene_button"
+                android:includeFontPadding="false"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingBottom="7dp"
+                android:paddingEnd="0dp"
+                android:paddingStart="0dp"
+                android:paddingTop="4dp"
+                android:stateListAnimator="@null"
+                android:text="@string/playback_error_other_source"
+                android:textAllCaps="false"
+                android:textColor="@color/scene_button_text"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/playback_error_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:includeFontPadding="false"
+            android:text="@string/playback_error_hint"
+            android:textColor="#66FFFFFF"
+            android:textSize="8sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginBottom="32dp"
+        android:layout_marginEnd="@dimen/channel_overlay_horizontal_margin"
+        android:gravity="end"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/playback_error_clock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-light"
+            android:includeFontPadding="false"
+            android:textColor="@color/white"
+            android:textSize="32sp" />
+
+        <TextView
+            android:id="@+id/playback_error_date"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
+            android:letterSpacing="0.2"
+            android:textAllCaps="true"
+            android:textColor="#8CFFFFFF"
+            android:textSize="7.5sp" />
+
+        <TextView
+            android:id="@+id/playback_error_code"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="13dp"
+            android:includeFontPadding="false"
+            android:textColor="#66FFFFFF"
+            android:textSize="8sp" />
+    </LinearLayout>
+</FrameLayout>
