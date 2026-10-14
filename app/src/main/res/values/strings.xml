@@ -124,6 +124,17 @@
     <string name="source_selector_consulting">Consultando fuentes y calidades HLS…</string>
     <string name="source_selector_validating">Validando enlaces y calidades…</string>
     <string name="source_selector_ready">Selecciona una opción para reproducirla.</string>
+    <string name="source_selector_version_standard">Estándar</string>
+    <string name="source_selector_auto_backup">Cambio automático</string>
+    <string name="source_selector_trash_short">Papelera</string>
+    <string name="source_selector_no_signal_short">sin señal</string>
+    <string name="source_selector_principal_short">principal</string>
+    <string name="source_selector_quality_title">Calidad</string>
+    <string name="source_selector_section_versions">Versión</string>
+    <string name="source_selector_section_signal">Señal</string>
+    <string name="source_selector_section_quality">Calidad</string>
+    <string name="source_selector_testing_short">probando…</string>
+    <string name="source_selector_testing_versions">Probando versiones…</string>
     <string name="source_selector_ready_one">1 opción disponible. Selecciona una para aplicarla.</string>
     <string name="source_selector_catalog_of">Consultando catálogo %1$s…</string>
     <string name="source_selector_provider_signal">Señal %1$s</string>

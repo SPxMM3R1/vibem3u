@@ -633,6 +633,7 @@ public final class MainActivity extends Activity {
         streamStatus = findViewById(R.id.stream_status);
         // Al final: el estilo clásico toca vistas del selector que se buscan más arriba.
         if (classicUi) applyClassicChrome();
+        else applyMinimalSelectorShade();
     }
 
     private void createPlayer() {
@@ -2312,6 +2313,8 @@ public final class MainActivity extends Activity {
     private boolean switchToTvVooBackup(String reason) {
         Channel channel = playbackChannel;
         if (channel == null || !TvVooBackup.has(channel)) return false;
+        // «Cambio automático» apagado en el selector (0.5.95): se reintenta la señal elegida.
+        if (playbackPreferences != null && !playbackPreferences.isAutoBackupEnabled()) return false;
         if (tvvooBackupActive) {
             boolean moreDirect = !TvVooBackup.hasTvVoo(channel)
                     && directBackupIndex + 1 < TvVooBackup.directBackupsOf(channel).size();
@@ -3991,6 +3994,8 @@ public final class MainActivity extends Activity {
     }
 
     private void showOverlay(boolean keepVisible) {
+        // Moderno (0.5.95): con el selector abierto, el OSD del canal no compite con él.
+        if (!classicUi && isSourceSelectorVisible()) return;
         hideProgrammeDetail.run();
         mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
         channelOverlay.setVisibility(View.VISIBLE);
@@ -4381,9 +4386,26 @@ public final class MainActivity extends Activity {
 
         mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
         hideProgrammeDetail.run();
+        // Moderno: el selector flota a la derecha sin degradado inferior; la información del
+        // canal abajo a la izquierda competiría con él, así que se oculta (0.5.95).
+        if (!classicUi) {
+            mainHandler.removeCallbacks(hideOverlay);
+            hideOverlay.run();
+        }
         sourceSelectorTitle.setText(getString(R.string.source_selector_title));
-        sourceSelectorChannel.setText(playbackChannel.getName());
+        // Moderno: «TVN · 001», igual que el número que muestra el OSD.
+        sourceSelectorChannel.setText(classicUi ? playbackChannel.getName()
+                : playbackChannel.getName() + " · " + String.format(Locale.ROOT, "%03d",
+                        publishedPlaybackCatalog.numberFor(playbackChannel, channelIndex + 1)));
         sourceSelectorOverlay.setVisibility(View.VISIBLE);
+        // Moderno: «Cargando…» o «Buffer insuficiente» se centran en la zona libre, a la
+        // izquierda del selector, en vez de quedar debajo de su texto (0.5.95).
+        if (!classicUi && loadingPanel != null) {
+            View panel = findViewById(R.id.source_selector_panel);
+            int marginEnd = panel != null && panel.getLayoutParams() instanceof ViewGroup.MarginLayoutParams
+                    ? ((ViewGroup.MarginLayoutParams) panel.getLayoutParams()).getMarginEnd() : 0;
+            loadingPanel.setTranslationX(-(sourceSelectorPanelWidth() + marginEnd) / 2f);
+        }
         sourceSelectorFixedHint = !classicUi && resolver instanceof TvVooStreamResolver;
         if (resolver != null && supportsSourceSelector(resolver)) {
             startSourceSelectorQuery(playbackChannel, versionsChannel, resolver);
@@ -4412,9 +4434,491 @@ public final class MainActivity extends Activity {
     private static final int SOURCE_ROW_GAP_DP = 4;
     private static final int SOURCE_ROWS_VISIBLE = 5;
 
+    // ------------------------------------------------------------------------------------
+    // Selector moderno minimalista (0.5.95, mockup aprobado «Aplícalo»): texto flotante a la
+    // derecha sobre un difuminado horizontal, sin paneles ni tarjetas. Filas lógicas (señal o
+    // versión, calidad, acciones) que pasan a otra línea si no caben. ◀ ▶ recorre la fila,
+    // ▲ ▼ salta a la opción más cercana de la línea de arriba o de abajo, OK aplica.
+    // sourceCandidateViews conserva el orden de playbackOptions y después las acciones.
+
+    private static final int MINIMAL_GROUP_OPTIONS = 0;
+    private static final int MINIMAL_GROUP_ACTIONS = 1;
+    /** Por índice de sourceCandidateViews: grupo lógico y línea visual. */
+    private final List<Integer> minimalItemGroup = new ArrayList<>();
+    private final List<Integer> minimalItemLine = new ArrayList<>();
+    private int minimalLineCount;
+
+    private boolean minimalSelector() {
+        return !classicUi;
+    }
+
+    private void beginMinimalSelector() {
+        sourceSelectorOptions.removeAllViews();
+        sourceCandidateViews.clear();
+        sourceActionRunnables.clear();
+        minimalItemGroup.clear();
+        minimalItemLine.clear();
+        minimalLineCount = 0;
+        sourceSelectorCloseFocused = false;
+    }
+
+    private TextView minimalSectionLabel(String text, boolean first) {
+        TextView label = new TextView(this);
+        label.setText(text.toUpperCase(java.util.Locale.ROOT));
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
+        label.setLetterSpacing(0.2f);
+        label.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
+        label.setTextColor(0x6BFFFFFF);
+        label.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.topMargin = dp(first ? 2 : 22);
+        params.bottomMargin = dp(9);
+        label.setLayoutParams(params);
+        sourceSelectorOptions.addView(label);
+        return label;
+    }
+
+    /** Una opción de texto: título, subtítulo opcional, punto verde si está en uso. */
+    private View minimalOption(String title, String subtitle, boolean inUse, boolean off, boolean danger) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setFocusable(true);
+        box.setFocusableInTouchMode(true);
+        box.setPadding(0, 0, 0, dp(6));
+        LinearLayout titleLine = new LinearLayout(this);
+        titleLine.setOrientation(LinearLayout.HORIZONTAL);
+        titleLine.setGravity(Gravity.CENTER_VERTICAL);
+        TextView titleView = new TextView(this);
+        titleView.setText(title);
+        titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
+        titleView.setIncludeFontPadding(false);
+        titleView.setSingleLine(true);
+        int restColor = danger ? 0xFFFF9A9A : 0xB8FFFFFF;
+        titleView.setTextColor(restColor);
+        titleView.setShadowLayer(dp(3), 0, dp(1), 0x73000000);
+        titleLine.addView(titleView);
+        if (inUse) {
+            View dot = new View(this);
+            android.graphics.drawable.GradientDrawable circle = new android.graphics.drawable.GradientDrawable();
+            circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            circle.setColor(0xFF5BE9A0);
+            dot.setBackground(circle);
+            LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(5), dp(5));
+            dotParams.setMarginStart(dp(6));
+            titleLine.addView(dot, dotParams);
+        }
+        // WRAP_CONTENT: con el valor por defecto (MATCH_PARENT) la opción tomaba el ancho del
+        // subtítulo y cortaba el título.
+        box.addView(titleLine, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        TextView subtitleView = null;
+        if (!AppStrings.isBlank(subtitle)) {
+            subtitleView = new TextView(this);
+            subtitleView.setText(subtitle);
+            subtitleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
+            subtitleView.setIncludeFontPadding(false);
+            subtitleView.setSingleLine(true);
+            subtitleView.setTextColor(0x73FFFFFF);
+            LinearLayout.LayoutParams subParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            subParams.topMargin = dp(3);
+            box.addView(subtitleView, subParams);
+        }
+        View underline = new View(this);
+        underline.setBackgroundColor(0xFFFFFFFF);
+        underline.setVisibility(View.INVISIBLE);
+        LinearLayout.LayoutParams lineParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(1.5f));
+        lineParams.topMargin = dp(5);
+        box.addView(underline, lineParams);
+        if (off) box.setAlpha(0.4f);
+        final TextView subtitleRef = subtitleView;
+        box.setTag(R.id.source_selector_options, new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View view, boolean focused) {
+                titleView.setTextColor(focused ? (danger ? 0xFFFFB4B4 : 0xFFFFFFFF) : restColor);
+                titleView.setTypeface(null, focused ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+                if (subtitleRef != null) subtitleRef.setTextColor(focused ? 0xC0FFFFFF : 0x73FFFFFF);
+                underline.setVisibility(focused ? View.VISIBLE : View.INVISIBLE);
+            }
+        });
+        return box;
+    }
+
+    private int dp(float value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    /**
+     * Agrega una fila lógica: reparte las opciones en líneas según el ancho del panel y
+     * registra cada una en sourceCandidateViews con su grupo y su línea.
+     */
+    private void minimalRow(List<View> items, int group, List<Runnable> clicks) {
+        int available = sourceSelectorPanelWidth();
+        int gap = dp(24);
+        LinearLayout line = null;
+        int used = 0;
+        for (int index = 0; index < items.size(); index++) {
+            View item = items.get(index);
+            item.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            int width = item.getMeasuredWidth();
+            if (line == null || (used > 0 && used + gap + width > available)) {
+                line = new LinearLayout(this);
+                line.setOrientation(LinearLayout.HORIZONTAL);
+                LinearLayout.LayoutParams lineParams = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                if (used > 0) lineParams.topMargin = dp(8);
+                sourceSelectorOptions.addView(line, lineParams);
+                minimalLineCount++;
+                used = 0;
+            }
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            if (used > 0) params.setMarginStart(gap);
+            line.addView(item, params);
+            used += (used > 0 ? gap : 0) + width;
+            final int viewIndex = sourceCandidateViews.size();
+            final View.OnFocusChangeListener visual = (View.OnFocusChangeListener) item.getTag(R.id.source_selector_options);
+            item.setOnFocusChangeListener((view, focused) -> {
+                if (visual != null) visual.onFocusChange(view, focused);
+                if (focused) {
+                    sourceCandidateFocusIndex = viewIndex;
+                    sourceSelectorCloseFocused = false;
+                }
+            });
+            Runnable click = clicks.get(index);
+            item.setOnClickListener(view -> click.run());
+            sourceCandidateViews.add(item);
+            minimalItemGroup.add(group);
+            minimalItemLine.add(minimalLineCount - 1);
+        }
+    }
+
+    private int sourceSelectorPanelWidth() {
+        View panel = findViewById(R.id.source_selector_panel);
+        int width = panel == null ? 0 : panel.getWidth();
+        if (width <= 0 && panel != null) width = panel.getLayoutParams().width;
+        if (width <= 0) width = dp(330);
+        return width - (panel == null ? 0 : panel.getPaddingLeft() + panel.getPaddingRight());
+    }
+
+    /** «Cambio automático · Ocultar en esta TV · Papelera» en una línea de texto. */
+    private void minimalActions(boolean optionsFirst) {
+        Channel channel = playbackChannel;
+        if (channel == null) return;
+        List<View> items = new ArrayList<>();
+        List<Runnable> clicks = new ArrayList<>();
+        if (TvVooBackup.has(channel)) {
+            boolean on = playbackPreferences == null || playbackPreferences.isAutoBackupEnabled();
+            items.add(minimalToggle(getString(R.string.source_selector_auto_backup), on));
+            Runnable toggle = () -> {
+                if (playbackPreferences != null) playbackPreferences.setAutoBackupEnabled(!playbackPreferences.isAutoBackupEnabled());
+                refreshMinimalToggle();
+            };
+            clicks.add(toggle);
+            sourceActionRunnables.add(toggle);
+        }
+        items.add(minimalOption(getString(R.string.channel_hide_title), "", false, false, false));
+        Runnable hide = () -> hideChannelOnThisTv(channel);
+        clicks.add(hide);
+        sourceActionRunnables.add(hide);
+        items.add(minimalOption(getString(R.string.source_selector_trash_short), "", false, false, true));
+        Runnable trash = () -> confirmTrashChannel(channel);
+        clicks.add(trash);
+        sourceActionRunnables.add(trash);
+        View spacer = new View(this);
+        sourceSelectorOptions.addView(spacer, new LinearLayout.LayoutParams(1, dp(optionsFirst ? 22 : 4)));
+        minimalRow(items, MINIMAL_GROUP_ACTIONS, clicks);
+    }
+
+    private View minimalAutoToggleView;
+
+    private View minimalToggle(String label, boolean on) {
+        View option = minimalOption(label, "", false, false, false);
+        LinearLayout titleLine = (LinearLayout) ((LinearLayout) option).getChildAt(0);
+        FrameLayout track = new FrameLayout(this);
+        View knob = new View(this);
+        android.graphics.drawable.GradientDrawable knobShape = new android.graphics.drawable.GradientDrawable();
+        knobShape.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        knobShape.setColor(0xFFFFFFFF);
+        knob.setBackground(knobShape);
+        FrameLayout.LayoutParams knobParams = new FrameLayout.LayoutParams(dp(8), dp(8));
+        knobParams.gravity = Gravity.CENTER_VERTICAL | (on ? Gravity.END : Gravity.START);
+        knobParams.setMargins(dp(1.5f), 0, dp(1.5f), 0);
+        track.addView(knob, knobParams);
+        track.setBackground(minimalTrack(on));
+        LinearLayout.LayoutParams trackParams = new LinearLayout.LayoutParams(dp(19), dp(11));
+        trackParams.setMarginEnd(dp(7));
+        titleLine.addView(track, 0, trackParams);
+        option.setTag(R.id.source_selector_scroll, track);
+        minimalAutoToggleView = option;
+        return option;
+    }
+
+    private android.graphics.drawable.GradientDrawable minimalTrack(boolean on) {
+        android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable();
+        shape.setCornerRadius(dp(6));
+        shape.setColor(on ? getColor(R.color.cyan) : 0x59FFFFFF);
+        return shape;
+    }
+
+    private void refreshMinimalToggle() {
+        if (minimalAutoToggleView == null || playbackPreferences == null) return;
+        boolean on = playbackPreferences.isAutoBackupEnabled();
+        FrameLayout track = (FrameLayout) minimalAutoToggleView.getTag(R.id.source_selector_scroll);
+        if (track == null) return;
+        track.setBackground(minimalTrack(on));
+        View knob = track.getChildAt(0);
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) knob.getLayoutParams();
+        params.gravity = Gravity.CENTER_VERTICAL | (on ? Gravity.END : Gravity.START);
+        knob.setLayoutParams(params);
+    }
+
+    /** Línea técnica tenue al pie: resolución, cuadros, códec y tasa medida. */
+    private void minimalMeta() {
+        if (player == null) return;
+        Format video = player.getVideoFormat();
+        PlaybackDiagnosticsWorker.Snapshot measurements = playbackBitrateMeter == null
+                ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
+        List<String> parts = new ArrayList<>();
+        if (video != null && video.width > 0 && video.height > 0) parts.add(video.width + "×" + video.height);
+        if (measurements.displayFrameRate > 0) parts.add(trimDecimal(measurements.displayFrameRate) + " fps");
+        if (video != null && video.sampleMimeType != null) parts.add(codecName(video.sampleMimeType));
+        long bitrate = measurements.muxedStream ? measurements.streamBitrate : measurements.videoBitrate;
+        if (bitrate > 0) parts.add(formatBitrate(bitrate));
+        if (parts.isEmpty()) return;
+        TextView meta = new TextView(this);
+        meta.setText(TextUtils.join(" · ", parts));
+        meta.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
+        meta.setTextColor(0x80FFFFFF);
+        meta.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.topMargin = dp(12);
+        sourceSelectorOptions.addView(meta, params);
+    }
+
+    /** «Directo · 1080p · 5.1 Mbps»: lo que está sonando, para la línea bajo el título. */
+    private String minimalNowPlaying(String sourceLabel) {
+        List<String> parts = new ArrayList<>();
+        if (!AppStrings.isBlank(sourceLabel)) parts.add(sourceLabel);
+        Format video = player == null ? null : player.getVideoFormat();
+        if (video != null && video.height > 0) parts.add(video.height + "p");
+        PlaybackDiagnosticsWorker.Snapshot measurements = playbackBitrateMeter == null
+                ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
+        long bitrate = measurements.muxedStream ? measurements.streamBitrate : measurements.videoBitrate;
+        if (bitrate > 0) parts.add(formatBitrate(bitrate));
+        return TextUtils.join(" · ", parts);
+    }
+
+    private void setMinimalStatus(String text, boolean live) {
+        sourceSelectorStatus.setText(text);
+        if (live) {
+            android.graphics.drawable.GradientDrawable dot = new android.graphics.drawable.GradientDrawable();
+            dot.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            dot.setColor(0xFF5BE9A0);
+            dot.setSize(dp(6), dp(6));
+            sourceSelectorStatus.setCompoundDrawablesRelativeWithIntrinsicBounds(dot, null, null, null);
+            sourceSelectorStatus.setCompoundDrawablePadding(dp(7));
+        } else {
+            sourceSelectorStatus.setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, null, null);
+        }
+    }
+
+    /**
+     * Versiones TvVoo con el mismo nombre de canal («SKY SPORTS MAIN EVENT», «… HD»): se
+     * muestra solo lo que las distingue («Estándar», «HD»). Otros nombres quedan iguales.
+     */
+    private List<String> shortVersionNames(List<String> names) {
+        List<String> result = new ArrayList<>(names);
+        if (names.size() < 2) return result;
+        String[] first = names.get(0).trim().split("\\s+");
+        int common = first.length;
+        for (String name : names) {
+            String[] words = name.trim().split("\\s+");
+            int same = 0;
+            while (same < Math.min(common, words.length) && words[same].equalsIgnoreCase(first[same])) same++;
+            common = same;
+        }
+        if (common < 2) return result;
+        for (int index = 0; index < names.size(); index++) {
+            String[] words = names.get(index).trim().split("\\s+");
+            String rest = String.join(" ", java.util.Arrays.copyOfRange(words, Math.min(common, words.length), words.length));
+            result.set(index, rest.isEmpty() ? getString(R.string.source_selector_version_standard) : rest);
+        }
+        return result;
+    }
+
+    private static String qualityTitle(PlaybackOption option) {
+        if (option.automatic) return "Auto";
+        String label = option.label == null ? "" : option.label;
+        int split = label.indexOf(" · ");
+        return split > 0 ? label.substring(0, split) : label;
+    }
+
+    private static String qualitySubtitle(PlaybackOption option) {
+        if (option.automatic) return "";
+        String label = option.label == null ? "" : option.label;
+        int split = label.indexOf(" · ");
+        return split > 0 ? label.substring(split + 3) : "";
+    }
+
+    /** Render final: señales/versiones, calidades, acciones y datos técnicos. */
+    private void renderMinimalOptions(String fallbackStatus) {
+        beginMinimalSelector();
+        List<View> sources = new ArrayList<>();
+        List<Runnable> sourceClicks = new ArrayList<>();
+        List<View> qualities = new ArrayList<>();
+        List<Runnable> qualityClicks = new ArrayList<>();
+        String inUseSource = "";
+        List<String> sourceNames = new ArrayList<>();
+        for (PlaybackOption option : playbackOptions) {
+            if (option.sourceCandidate != null) sourceNames.add(option.label);
+        }
+        List<String> shortNames = sourceSelectorFixedHint ? shortVersionNames(sourceNames) : sourceNames;
+        int sourcePosition = 0;
+        for (int index = 0; index < playbackOptions.size(); index++) {
+            final int optionIndex = index;
+            PlaybackOption option = playbackOptions.get(index);
+            if (option.sourceCandidate != null) {
+                String shortName = shortNames.get(sourcePosition++);
+                ResolvedPlaybackCandidate candidate = option.sourceCandidate;
+                String subtitle = !candidate.isAvailable() ? getString(R.string.source_selector_no_signal_short)
+                        : !AppStrings.isBlank(candidate.getQuality()) ? candidate.getQuality()
+                        : candidate.isPreferred() ? getString(R.string.source_selector_principal_short) : "";
+                sources.add(minimalOption(shortName, subtitle, option.selected, !candidate.isAvailable(), false));
+                sourceClicks.add(() -> selectPlaybackOption(optionIndex));
+                if (option.selected) inUseSource = shortName;
+            } else {
+                qualities.add(minimalOption(qualityTitle(option), qualitySubtitle(option), option.selected, false, false));
+                qualityClicks.add(() -> selectPlaybackOption(optionIndex));
+            }
+        }
+        boolean versions = sourceSelectorFixedHint;
+        sourceSelectorTitle.setText(sources.isEmpty()
+                ? getString(R.string.source_selector_quality_title) : getString(R.string.source_selector_title));
+        if (!sources.isEmpty()) {
+            minimalSectionLabel(getString(versions ? R.string.source_selector_section_versions
+                    : R.string.source_selector_section_signal), true);
+            minimalRow(sources, MINIMAL_GROUP_OPTIONS, sourceClicks);
+        }
+        if (!qualities.isEmpty()) {
+            minimalSectionLabel(getString(R.string.source_selector_section_quality), sources.isEmpty());
+            minimalRow(qualities, MINIMAL_GROUP_OPTIONS, qualityClicks);
+        }
+        boolean anyOption = !sources.isEmpty() || !qualities.isEmpty();
+        if (anyOption) {
+            setMinimalStatus(minimalNowPlaying(inUseSource), true);
+        } else {
+            setMinimalStatus(fallbackStatus, false);
+        }
+        minimalActions(anyOption);
+        minimalMeta();
+        fitSourceSelectorList(sourceCandidateViews.size());
+        int focusIndex = 0;
+        for (int index = 0; index < playbackOptions.size(); index++) {
+            if (playbackOptions.get(index).selected) {
+                focusIndex = index;
+                break;
+            }
+        }
+        if (!sourceCandidateViews.isEmpty()) {
+            sourceCandidateFocusIndex = Math.min(focusIndex, sourceCandidateViews.size() - 1);
+            sourceCandidateViews.get(sourceCandidateFocusIndex).requestFocus();
+        }
+    }
+
+    /** Mientras consulta: las filas que tendrá (versiones conocidas o «Señal X») y las acciones. */
+    private void renderMinimalPlaceholders(List<String> names, List<Boolean> preferred, String status) {
+        beginMinimalSelector();
+        sourceSelectorTitle.setText(getString(R.string.source_selector_title));
+        setMinimalStatus(status, false);
+        List<View> items = new ArrayList<>();
+        List<Runnable> clicks = new ArrayList<>();
+        names = sourceSelectorFixedHint ? shortVersionNames(names) : names;
+        for (int index = 0; index < names.size(); index++) {
+            items.add(minimalOption(names.get(index), getString(R.string.source_selector_testing_short),
+                    false, false, false));
+            clicks.add(() -> { });
+        }
+        minimalSectionLabel(getString(sourceSelectorFixedHint ? R.string.source_selector_section_versions
+                : R.string.source_selector_section_signal), true);
+        minimalRow(items, MINIMAL_GROUP_OPTIONS, clicks);
+        minimalActions(true);
+        fitSourceSelectorList(sourceCandidateViews.size());
+        sourceCandidateFocusIndex = 0;
+        if (!sourceCandidateViews.isEmpty()) sourceCandidateViews.get(0).requestFocus();
+    }
+
+    /** ◀ ▶ dentro de la fila lógica; devuelve false si no hay a dónde ir. */
+    private boolean moveMinimalHorizontal(int delta) {
+        int current = sourceCandidateFocusIndex;
+        if (current < 0 || current >= sourceCandidateViews.size()) return false;
+        int target = current + delta;
+        if (target < 0 || target >= sourceCandidateViews.size()) return false;
+        if (!minimalItemGroup.get(target).equals(minimalItemGroup.get(current))) return false;
+        // Señal y calidad comparten grupo pero no fila visual distinta de sección: no cruzar secciones.
+        if (minimalSection(target) != minimalSection(current)) return false;
+        sourceCandidateViews.get(target).requestFocus();
+        return true;
+    }
+
+    /** Sección = bloque bajo un mismo rótulo; dos opciones son de la misma si las une un parent común. */
+    private int minimalSection(int index) {
+        View view = sourceCandidateViews.get(index);
+        View line = (View) view.getParent();
+        int section = 0;
+        for (int child = 0; child < sourceSelectorOptions.getChildCount(); child++) {
+            View node = sourceSelectorOptions.getChildAt(child);
+            if (node instanceof TextView || !(node instanceof LinearLayout)) section++;
+            if (node == line) return section;
+        }
+        return section;
+    }
+
+    /** ▲ ▼ a la opción más cercana en horizontal de la línea vecina. */
+    private void moveMinimalVertical(int delta) {
+        int current = sourceCandidateFocusIndex;
+        if (current < 0 || current >= sourceCandidateViews.size()) {
+            if (!sourceCandidateViews.isEmpty()) sourceCandidateViews.get(0).requestFocus();
+            return;
+        }
+        int targetLine = minimalItemLine.get(current) + delta;
+        if (targetLine < 0 || targetLine >= minimalLineCount) return;
+        View from = sourceCandidateViews.get(current);
+        int[] location = new int[2];
+        from.getLocationOnScreen(location);
+        float center = location[0] + from.getWidth() / 2f;
+        int best = -1;
+        float bestDistance = Float.MAX_VALUE;
+        for (int index = 0; index < sourceCandidateViews.size(); index++) {
+            if (minimalItemLine.get(index) != targetLine) continue;
+            View candidate = sourceCandidateViews.get(index);
+            candidate.getLocationOnScreen(location);
+            float distance = Math.abs(location[0] + candidate.getWidth() / 2f - center);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = index;
+            }
+        }
+        if (best >= 0) sourceCandidateViews.get(best).requestFocus();
+    }
+
     /** Una fila por versión conocida, con «Probando…», en el mismo lugar que tendrá al final. */
     private void renderSourcePlaceholders(List<TvVooStreamResolver.PlannedVersion> versions) {
         if (versions == null || versions.isEmpty() || !isSourceSelectorVisible()) return;
+        if (minimalSelector()) {
+            List<String> names = new ArrayList<>();
+            List<Boolean> preferred = new ArrayList<>();
+            for (TvVooStreamResolver.PlannedVersion version : versions) {
+                names.add(version.name);
+                preferred.add(version.preferred);
+            }
+            renderMinimalPlaceholders(names, preferred, getString(R.string.source_selector_testing_versions));
+            return;
+        }
         sourceSelectorOptions.removeAllViews();
         sourceCandidateViews.clear();
         sourceActionRunnables.clear();
@@ -4435,6 +4939,13 @@ public final class MainActivity extends Activity {
     /** Highfly y otros: una fila «Consultando…» del proveedor y las acciones del canal. */
     private void renderLoadingPlaceholder(String provider) {
         if (!isSourceSelectorVisible() || sourceCandidateTask == null) return;
+        if (minimalSelector()) {
+            renderMinimalPlaceholders(
+                    java.util.Collections.singletonList(getString(R.string.source_selector_provider_signal, provider)),
+                    java.util.Collections.singletonList(false),
+                    getString(R.string.source_selector_catalog_of, provider));
+            return;
+        }
         sourceSelectorOptions.removeAllViews();
         sourceCandidateViews.clear();
         sourceActionRunnables.clear();
@@ -4471,6 +4982,15 @@ public final class MainActivity extends Activity {
     private void fitSourceSelectorList(int ignoredRows) {
         View scroll = findViewById(R.id.source_selector_scroll);
         if (scroll == null || classicUi) return;
+        if (minimalSelector()) {
+            ViewGroup.LayoutParams wrap = scroll.getLayoutParams();
+            wrap.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            scroll.setLayoutParams(wrap);
+            scroll.setVerticalFadingEdgeEnabled(false);
+            View hint = findViewById(R.id.source_selector_more_hint);
+            if (hint != null) hint.setVisibility(View.GONE);
+            return;
+        }
         int max = dp(SOURCE_ROWS_VISIBLE * SOURCE_ROW_HEIGHT_DP + (SOURCE_ROWS_VISIBLE - 1) * SOURCE_ROW_GAP_DP);
         int width = scroll.getWidth();
         if (width <= 0) {
@@ -4687,6 +5207,7 @@ public final class MainActivity extends Activity {
                     isCurrentSource(candidate.getSource())
             ));
         }
+        if (minimalSelector() && playbackChannel != null) appendQualityOptions(playbackChannel);
         int available = 0;
         for (ResolvedPlaybackCandidate candidate : sourceCandidates) {
             if (candidate.isAvailable()) available++;
@@ -4843,21 +5364,7 @@ public final class MainActivity extends Activity {
                 playbackOptions.add(PlaybackOption.source(candidate, selected));
             }
         }
-        List<VideoTrackOption> qualities = player == null
-                ? Collections.emptyList()
-                : collectVideoTrackOptions(player.getCurrentTracks());
-        if (qualities.size() > 1) {
-            boolean automatic = playbackPreferences != null
-                    && playbackPreferences.isAutomaticQuality(channel);
-            playbackOptions.add(PlaybackOption.automatic(automatic));
-        }
-        VideoTrackOption selected = selectedQualityOption(channel, qualities);
-        for (VideoTrackOption quality : qualities) {
-            playbackOptions.add(PlaybackOption.quality(
-                    quality,
-                    quality == selected
-            ));
-        }
+        List<VideoTrackOption> qualities = appendQualityOptions(channel);
         if (playbackOptions.isEmpty() && !classicUi) {
             renderPlaybackOptions(getString(R.string.source_selector_no_options));
             return;
@@ -4878,6 +5385,26 @@ public final class MainActivity extends Activity {
                 : getString(R.string.source_selector_quality_count, qualities.size())
                 : playbackOptions.size() == 1 ? getString(R.string.source_selector_ready_one)
                 : getString(R.string.source_selector_ready_count, playbackOptions.size()));
+    }
+
+    /** Agrega «Auto» y las calidades del stream en reproducción; devuelve las calidades. */
+    private List<VideoTrackOption> appendQualityOptions(Channel channel) {
+        List<VideoTrackOption> qualities = player == null
+                ? Collections.emptyList()
+                : collectVideoTrackOptions(player.getCurrentTracks());
+        if (qualities.size() > 1) {
+            boolean automatic = playbackPreferences != null
+                    && playbackPreferences.isAutomaticQuality(channel);
+            playbackOptions.add(PlaybackOption.automatic(automatic));
+        }
+        VideoTrackOption selected = selectedQualityOption(channel, qualities);
+        for (VideoTrackOption quality : qualities) {
+            playbackOptions.add(PlaybackOption.quality(
+                    quality,
+                    quality == selected
+            ));
+        }
+        return qualities;
     }
 
     private VideoTrackOption selectedQualityOption(
@@ -4906,6 +5433,10 @@ public final class MainActivity extends Activity {
     }
 
     private void renderPlaybackOptions(String status) {
+        if (minimalSelector()) {
+            renderMinimalOptions(status);
+            return;
+        }
         sourceSelectorOptions.removeAllViews();
         sourceCandidateViews.clear();
         sourceActionRunnables.clear();
@@ -5326,13 +5857,21 @@ public final class MainActivity extends Activity {
                 || playbackChannel == null
                 || player == null) return;
         ResolvedPlaybackCandidate candidate = sourceCandidates.get(index);
-        if (candidate.isStale()
+        // Directo y respaldos directos salen del catálogo, sin sesión del resolutor: no caducan.
+        // Antes, con el selector abierto un rato, elegir un respaldo Nauta consultaba al
+        // resolutor del canal y la fila quedaba solo con «Fuente actual» (0.5.95).
+        boolean catalogSource = candidate.getSource() != null && !candidate.getSource().hasResolver();
+        if (!catalogSource && (candidate.isStale()
                 || candidate.getSource() == null
-                || candidate.getSource().isExpired(System.currentTimeMillis())) {
+                || candidate.getSource().isExpired(System.currentTimeMillis()))) {
             Channel versions = TvVooBackup.hasTvVoo(playbackChannel)
                     ? TvVooBackup.resolutionChannel(playbackChannel) : playbackChannel;
             StreamResolver resolver = versions == null ? null : streamResolverRegistry.find(versions);
-            if (resolver != null) startSourceSelectorQuery(playbackChannel, versions, resolver);
+            if (resolver != null && supportsSourceSelector(resolver)) {
+                startSourceSelectorQuery(playbackChannel, versions, resolver);
+            } else {
+                renderDirectQualitySelector(playbackChannel);
+            }
             return;
         }
 
@@ -5410,6 +5949,7 @@ public final class MainActivity extends Activity {
 
     private void closePlaybackSourceSelector() {
         sourceCandidateRequestId++;
+        if (loadingPanel != null) loadingPanel.setTranslationX(0f);
         if (sourceCandidateContext != null) sourceCandidateContext.cancel();
         sourceCandidateContext = null;
         if (sourceCandidateTask != null) sourceCandidateTask.cancel(true);
@@ -5435,6 +5975,20 @@ public final class MainActivity extends Activity {
                 if (keyCode == KeyEvent.KEYCODE_BACK
                         && event.getRepeatCount() == 0) {
                     closePlaybackSourceSelector();
+                    return true;
+                }
+                if (minimalSelector() && (keyCode == KeyEvent.KEYCODE_DPAD_UP
+                        || keyCode == KeyEvent.KEYCODE_DPAD_DOWN)) {
+                    moveMinimalVertical(keyCode == KeyEvent.KEYCODE_DPAD_UP ? -1 : 1);
+                    return true;
+                }
+                if (minimalSelector() && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    moveMinimalHorizontal(1);
+                    return true;
+                }
+                if (minimalSelector() && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    // En la primera opción de una fila, ◀ cierra como antes.
+                    if (!moveMinimalHorizontal(-1)) closePlaybackSourceSelector();
                     return true;
                 }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_UP
@@ -6047,6 +6601,18 @@ public final class MainActivity extends Activity {
     }
 
     /** Estilo clásico (0.5.40): reloj en pastilla, carga en texto y selector en panel. */
+    /** Difuminado desde el borde derecho (moderno, 0.5.95): sin bordes ni panel. */
+    private void applyMinimalSelectorShade() {
+        View shade = findViewById(R.id.source_selector_shade);
+        if (shade == null) return;
+        android.graphics.drawable.GradientDrawable gradient = new android.graphics.drawable.GradientDrawable();
+        gradient.setOrientation(android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT);
+        gradient.setColors(
+                new int[]{0x00000000, 0x00000000, 0x73000000, 0xCC000000, 0xDB000000},
+                new float[]{0f, 0.28f, 0.44f, 0.63f, 1f});
+        shade.setBackground(gradient);
+    }
+
     private void applyClassicChrome() {
         clock.setBackgroundResource(R.drawable.classic_panel_background);
         clock.setPadding(dpToPx(16), dpToPx(9), dpToPx(16), dpToPx(9));
@@ -6072,7 +6638,7 @@ public final class MainActivity extends Activity {
             selectorPanel.setLayoutParams(panelParams);
         }
         for (int id : new int[]{R.id.source_selector_dim, R.id.source_selector_scrim_start,
-                R.id.source_selector_scrim}) {
+                R.id.source_selector_scrim, R.id.source_selector_shade}) {
             View scrim = findViewById(id);
             if (scrim != null) scrim.setVisibility(View.GONE);
         }

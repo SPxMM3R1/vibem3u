@@ -42,6 +42,17 @@ final class PlaybackPreferences {
 
     private final SharedPreferences preferences;
 
+    private static final String KEY_AUTO_BACKUP = "auto_backup_enabled";
+
+    /** «Cambio automático» del selector (0.5.95): pasar sola a un respaldo si la señal cae. */
+    boolean isAutoBackupEnabled() {
+        return preferences.getBoolean(KEY_AUTO_BACKUP, true);
+    }
+
+    void setAutoBackupEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_AUTO_BACKUP, enabled).apply();
+    }
+
     PlaybackPreferences(Context context) {
         preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }

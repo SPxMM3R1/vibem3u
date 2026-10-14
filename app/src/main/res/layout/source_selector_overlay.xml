@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Fuentes y calidades (2026-10-03, estilo «escena»): pantalla completa sobre el video
-     atenuado, degradado del OSD y lista abajo a la izquierda. El clásico reacomoda este mismo
+<!-- Fuentes y calidades. Moderno (0.5.95, minimalista): texto flotante a la derecha sobre un
+     difuminado horizontal (source_selector_shade, se pinta en applyMinimalSelectorShade), sin
+     paneles ni bordes. Los degradados antiguos quedan ocultos. El clásico reacomoda este mismo
      layout en un panel centrado (applyClassicChrome), con los mismos IDs. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/source_selector_overlay"
@@ -11,30 +12,37 @@
 
     <View
         android:id="@+id/source_selector_dim"
+        android:visibility="gone"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#61000000" />
 
     <View
         android:id="@+id/source_selector_scrim_start"
+        android:visibility="gone"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="@drawable/scene_scrim_start" />
 
     <View
         android:id="@+id/source_selector_scrim"
+        android:visibility="gone"
         android:layout_width="match_parent"
         android:layout_height="440dp"
         android:layout_gravity="bottom"
         android:background="@drawable/scene_scrim" />
 
+    <View
+        android:id="@+id/source_selector_shade"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
     <LinearLayout
         android:id="@+id/source_selector_panel"
-        android:layout_width="560dp"
+        android:layout_width="330dp"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|start"
-        android:layout_marginStart="48dp"
-        android:layout_marginBottom="52dp"
+        android:layout_gravity="end|center_vertical"
+        android:layout_marginEnd="64dp"
         android:orientation="vertical">
 
         <TextView
@@ -43,10 +51,10 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:includeFontPadding="false"
-            android:letterSpacing="0.12"
+            android:letterSpacing="0.2"
             android:maxLines="1"
             android:textAllCaps="true"
-            android:textColor="@color/osd_muted"
+            android:textColor="#99FFFFFF"
             android:textSize="10sp" />
 
         <TextView
@@ -58,7 +66,7 @@
             android:letterSpacing="-0.01"
             android:text="@string/source_selector_title"
             android:textColor="@color/white"
-            android:textSize="32sp"
+            android:textSize="28sp"
             android:textStyle="bold" />
 
         <TextView
@@ -69,8 +77,8 @@
             android:maxLines="1"
             android:layout_marginTop="9dp"
             android:lineSpacingMultiplier="1.3"
-            android:textColor="#B7C4CA"
-            android:textSize="12.5sp" />
+            android:textColor="#A6FFFFFF"
+            android:textSize="11sp" />
 
         <FrameLayout
             android:layout_width="match_parent"
