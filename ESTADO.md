@@ -11,7 +11,7 @@
 
 ## Hoy, en una mirada
 
-- **0.5.97/206 (Guía, Opciones y OSD «Flotante minimalista»)**: el usuario pidió «Aplica t2» (todo) tras aprobar los mockups. Implementado en el moderno; el clásico no cambia. Queda pendiente migrar los diálogos «escena». La 0.5.96 no se publicó (lint; ver Bitácora): su etiqueta `v0.5.96` queda sin release y no se borra.
+- **0.5.97/206 (Guía, Opciones y OSD «Flotante minimalista»)**: el usuario pidió «Aplica t2» (todo) tras aprobar los mockups. Implementado en el moderno; el clásico no cambia. Queda pendiente migrar los diálogos «escena». La 0.5.96 no se publicó (lint; ver Bitácora): su etiqueta `v0.5.96` queda sin release y no se borra. **0.5.97 publicada y verificada**: commit/tag `62cd3cb` / `v0.5.97`; Android CI `38505436840` y Publicar APK `38505753645` success; release no draft/prerelease `VibeM3U-v0.5.97.apk`, 2.793.638 bytes, SHA-256 `ad3f00673598e1ae2e470ead6fe53db4265d30d1eabdf2b2ac4ce4a08cc1f0eb`. Probada en emulador; sin TV física.
 - **Línea oficial de diseño (2026-10-13)**: «Flotante minimalista» (`DISENO.md`, referencias en `docs/diseno/`).
 
 - **0.5.95/204 (selector minimalista)**: «Fuentes y calidades» moderno rediseñado según el mockup aprobado («Aplícalo»): texto flotante a la derecha sobre un difuminado horizontal, sin panel, bordes ni tarjetas; filas SEÑAL/VERSIÓN, CALIDAD y una línea de acciones (Cambio automático, Ocultar en esta TV, Papelera). El clásico no cambia. **Publicada y verificada**: commit/tag `e395b9d` / `v0.5.95`; Android CI `38490733944` y Publicar APK `38491117781` success; release no draft/prerelease `VibeM3U-v0.5.95.apk`, 2.788.595 bytes, SHA-256 `9a2a4ef96c79c360f85ace3e21fc8b6ffc3b5520ab2dc5852def564108421810`. Probado en emulador; sin prueba en TV física.
