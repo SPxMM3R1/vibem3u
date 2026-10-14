@@ -68,6 +68,9 @@ public final class SettingsActivity extends Activity {
     public static final String EXTRA_CHANNEL_INDEX = "channel_index";
     public static final String EXTRA_CHANNEL_TVG_ID = "channel_tvg_id";
     public static final String EXTRA_CHANNEL_NAME = "channel_name";
+    /** Moderno (0.5.96): número publicado y programa en curso, para «● TVN · 001 · …». */
+    public static final String EXTRA_CHANNEL_NUMBER = "channel_number";
+    public static final String EXTRA_PROGRAMME_TITLE = "programme_title";
     public static final String EXTRA_QUALITY_LABELS = "quality_labels";
     public static final String EXTRA_QUALITY_BITRATES = "quality_bitrates";
     public static final String EXTRA_QUALITY_WIDTHS = "quality_widths";
@@ -214,6 +217,7 @@ public final class SettingsActivity extends Activity {
 
         settingsRoot = findViewById(R.id.settings_root);
         settingsPanel = findViewById(R.id.settings_panel);
+        if (!classicUi) installMinimalFocus();
         settingsRoot.addOnLayoutChangeListener((view, left, top, right, bottom,
                                                  oldLeft, oldTop, oldRight, oldBottom) ->
                 updateSettingsPanelWidth()
@@ -510,12 +514,16 @@ public final class SettingsActivity extends Activity {
 
     private void updateSettingsPanelWidth() {
         if (settingsRoot == null || settingsPanel == null || settingsRoot.getWidth() <= 0) return;
-        // Moderno: columna de 560 dp centrada arriba; clásico: ancho de pantalla con márgenes.
+        // Moderno (0.5.96): pantalla completa con la columna a la izquierda (el layout fija
+        // 390 dp para el contenido); clásico: ancho de pantalla con márgenes.
         int width = classicUi
                 ? OverlayPanelWidth.resolveWidthPx(
                         settingsRoot.getWidth(), getResources().getDisplayMetrics().density)
-                : Math.min(dp(560), settingsRoot.getWidth());
-        int gravity = classicUi ? Gravity.CENTER : Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+                : settingsRoot.getWidth();
+        int gravity = classicUi ? Gravity.CENTER : Gravity.TOP | Gravity.START;
+        if (!classicUi && settingsPanel.getPaddingStart() != dp(48)) {
+            settingsPanel.setPaddingRelative(dp(48), 0, dp(36), 0);
+        }
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) settingsPanel.getLayoutParams();
         if (params.width == width && params.gravity == gravity) return;
         params.width = width;
@@ -531,6 +539,26 @@ public final class SettingsActivity extends Activity {
         currentChannelName.setText(hasCurrentChannel
                 ? channelName
                 : getString(R.string.settings_no_current_channel));
+        TextView eyebrow = findViewById(R.id.settings_current_eyebrow);
+        TextView programmeTitle = findViewById(R.id.settings_current_programme);
+        if (eyebrow != null && programmeTitle != null) {
+            // Moderno: «● TVN · 001 · EN REPRODUCCIÓN» y el programa en curso debajo.
+            int number = intent.getIntExtra(EXTRA_CHANNEL_NUMBER, -1);
+            String label = hasCurrentChannel ? channelName : getString(R.string.settings_no_current_channel);
+            if (hasCurrentChannel && number > 0) label += " · " + String.format(Locale.ROOT, "%03d", number);
+            if (hasCurrentChannel) label += " · " + getString(R.string.settings_tab_playback);
+            android.text.SpannableString text = new android.text.SpannableString(
+                    (hasCurrentChannel ? "●  " : "") + label);
+            if (hasCurrentChannel) {
+                text.setSpan(new android.text.style.ForegroundColorSpan(0xFF5BE9A0), 0, 1,
+                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            eyebrow.setText(text);
+            String programme = safeString(intent.getStringExtra(EXTRA_PROGRAMME_TITLE));
+            programmeTitle.setText(programme);
+            programmeTitle.setVisibility(AppStrings.isBlank(programme) ? View.GONE : View.VISIBLE);
+            currentChannelName.setVisibility(View.GONE);
+        }
         if (!classicUi && !hasCurrentChannel) {
             findViewById(R.id.current_channel_playback_card).setVisibility(View.GONE);
         }
@@ -661,27 +689,31 @@ public final class SettingsActivity extends Activity {
         if (line.getChildCount() == 0) {
             ((LinearLayout.LayoutParams) option.getLayoutParams()).setMarginStart(0);
         }
+        if (lines > 0 && line.getChildCount() == 0) {
+            ((LinearLayout.LayoutParams) line.getLayoutParams()).topMargin = dp(8);
+        }
         line.addView(option);
     }
 
     private Button createQualityChip(String text) {
         Button chip = new Button(this);
+        // Moderno (0.5.96): opción de texto; la elegida con punto verde, el foco con línea.
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, dp(24));
-        params.setMarginStart(dp(6));
+                LinearLayout.LayoutParams.WRAP_CONTENT, dp(26));
+        params.setMarginEnd(dp(20));
         chip.setLayoutParams(params);
         chip.setId(View.generateViewId());
         chip.setBackgroundResource(R.drawable.segment_option);
         chip.setTextColor(getColorStateList(R.color.segment_option_text));
-        chip.setGravity(Gravity.CENTER);
+        chip.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
         chip.setIncludeFontPadding(false);
         chip.setMinHeight(0);
         chip.setMinWidth(0);
         chip.setMinimumHeight(0);
         chip.setMinimumWidth(0);
-        chip.setPadding(dp(11), 0, dp(11), 0);
+        chip.setPadding(0, 0, dp(10), 0);
         chip.setStateListAnimator(null);
-        chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
+        chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
         chip.setAllCaps(false);
         chip.setText(text);
         return chip;
@@ -689,15 +721,16 @@ public final class SettingsActivity extends Activity {
 
     private void updateQualityOptionLabels() {
         if (automaticQualityButton != null) {
+            // Moderno: lo elegido lo marca el punto verde, sin «✓».
             automaticQualityButton.setText(
-                    (automaticQuality ? "\u2713 " : "")
+                    (automaticQuality && classicUi ? "\u2713 " : "")
                             + getString(R.string.stream_quality_automatic)
             );
         }
         if (automaticQualityButton != null) automaticQualityButton.setSelected(automaticQuality);
         for (int index = 0; index < qualityOptionButtons.size(); index++) {
             qualityOptionButtons.get(index).setText(
-                    (index == selectedQualityIndex ? "\u2713 " : "")
+                    (index == selectedQualityIndex && classicUi ? "\u2713 " : "")
                             + qualityLabels.get(index)
             );
             qualityOptionButtons.get(index).setSelected(!automaticQuality
@@ -775,16 +808,20 @@ public final class SettingsActivity extends Activity {
             Button item = new Button(this);
             // Fila del estilo de la Guía, con la campana cyan del recordatorio.
             item.setBackgroundResource(classicUi
-                    ? R.drawable.classic_focus_button : R.drawable.settings_section_card);
+                    ? R.drawable.classic_focus_button : R.drawable.focus_button);
             item.setTextColor(getColorStateList(classicUi
-                    ? R.color.classic_focus_button_text : R.color.focus_option_text));
-            item.setPadding(Math.round(14 * density), 0, Math.round(14 * density), 0);
-            android.graphics.drawable.Drawable bell = getDrawable(R.drawable.ic_reminder_bell);
-            if (bell != null && !classicUi) {
-                int size = Math.round(12 * density);
-                bell.setBounds(0, 0, size, size);
-                item.setCompoundDrawablesRelative(bell, null, null, null);
-                item.setCompoundDrawablePadding(Math.round(8 * density));
+                    ? R.color.classic_focus_button_text : R.color.settings_row_title));
+            int side = Math.round((classicUi ? 14 : 0) * density);
+            item.setPadding(side, 0, side, 0);
+            if (!classicUi) {
+                // Recordatorio: anillo cian sin relleno (DISENO.md).
+                android.graphics.drawable.GradientDrawable ring = new android.graphics.drawable.GradientDrawable();
+                ring.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+                ring.setStroke(Math.max(1, Math.round(1.5f * density)), 0xFF00B8D9);
+                int size = Math.round(6 * density);
+                ring.setBounds(0, 0, size, size);
+                item.setCompoundDrawablesRelative(ring, null, null, null);
+                item.setCompoundDrawablePadding(Math.round(9 * density));
             }
             item.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX,
                     getResources().getDimension(R.dimen.settings_action_text_size));
@@ -934,7 +971,7 @@ public final class SettingsActivity extends Activity {
                 ? R.drawable.classic_settings_section_card : R.drawable.settings_section_card);
         groupSwitch.setFocusable(true);
         groupSwitch.setGravity(Gravity.CENTER_VERTICAL);
-        groupSwitch.setPadding(dp(12), 0, dp(12), 0);
+        groupSwitch.setPadding(classicUi ? dp(12) : 0, 0, classicUi ? dp(12) : 0, 0);
         groupSwitch.setShowText(false);
         Integer storedCount = resolverGroupCounts.get(definition.getId());
         int channelCount = storedCount == null ? 0 : storedCount;
@@ -1034,7 +1071,7 @@ public final class SettingsActivity extends Activity {
         row.setFocusable(true);
         row.setClickable(true);
         row.setId(View.generateViewId());
-        row.setPadding(dp(12), dp(8), dp(12), dp(8));
+        row.setPadding(0, dp(9), 0, dp(9));
         LinearLayout texts = new LinearLayout(this);
         texts.setOrientation(LinearLayout.VERTICAL);
         texts.setDuplicateParentStateEnabled(true);
@@ -1079,6 +1116,74 @@ public final class SettingsActivity extends Activity {
     }
 
     /** La línea «N canales» va en gris; sobre la tarjeta blanca del foco, en gris oscuro. */
+    /** Foco «Flotante minimalista» (0.5.96, DISENO.md): negrita y, en filas, línea fina. */
+    private static final class FocusBold extends android.text.style.StyleSpan {
+        FocusBold() { super(android.graphics.Typeface.BOLD); }
+    }
+
+    private static final class FocusLine extends android.text.style.UnderlineSpan {
+    }
+
+    private void installMinimalFocus() {
+        getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener(
+                (oldFocus, newFocus) -> {
+                    styleMinimalFocus(oldFocus, false);
+                    styleMinimalFocus(newFocus, true);
+                });
+    }
+
+    /**
+     * Las filas (y los interruptores) ponen su título en negrita con una línea fina debajo;
+     * las opciones y acciones de texto solo en negrita (su línea la dibuja el fondo). Los
+     * spans propios se quitan al perder el foco, sin tocar el resto del texto.
+     */
+    private void styleMinimalFocus(View view, boolean focused) {
+        if (view == null || view instanceof EditText) return;
+        if (tabs != null) {
+            for (TextView tab : tabs) if (tab == view) return;
+        }
+        TextView target;
+        boolean line;
+        if (view instanceof Switch) {
+            target = (TextView) view;
+            line = true;
+        } else if (view instanceof TextView) {
+            target = (TextView) view;
+            line = false;
+        } else if (view instanceof android.view.ViewGroup) {
+            target = firstTextView((android.view.ViewGroup) view);
+            line = true;
+        } else {
+            return;
+        }
+        if (target == null) return;
+        CharSequence current = target.getText();
+        if (current == null || current.length() == 0) return;
+        android.text.SpannableString text = new android.text.SpannableString(current);
+        for (Object span : text.getSpans(0, text.length(), FocusBold.class)) text.removeSpan(span);
+        for (Object span : text.getSpans(0, text.length(), FocusLine.class)) text.removeSpan(span);
+        if (focused) {
+            int end = android.text.TextUtils.indexOf(text, '\n');
+            if (end < 0) end = text.length();
+            text.setSpan(new FocusBold(), 0, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            if (line) text.setSpan(new FocusLine(), 0, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        target.setText(text);
+    }
+
+    private static TextView firstTextView(android.view.ViewGroup group) {
+        for (int index = 0; index < group.getChildCount(); index++) {
+            View child = group.getChildAt(index);
+            if (child.getVisibility() != View.VISIBLE) continue;
+            if (child instanceof TextView) return (TextView) child;
+            if (child instanceof android.view.ViewGroup) {
+                TextView found = firstTextView((android.view.ViewGroup) child);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
     private void tintProviderCount(Switch groupSwitch, boolean focused) {
         CharSequence current = groupSwitch.getText();
         if (!(current instanceof android.text.Spanned)) return;

@@ -14,9 +14,14 @@ Referencias aprobadas en `docs/diseno/`:
 | Pantalla | Archivo | Estado |
 | --- | --- | --- |
 | Selector «Fuentes y calidades» | `selector-respaldos.jpg` | implementado (0.5.95) |
-| Guía, programa en emisión | `guia-ahora.jpg` | mockup aprobado |
-| Guía, programa futuro | `guia-futuro.jpg` | mockup aprobado |
-| Opciones › En reproducción / Interfaz / Sistema | `opciones-*.jpg` | mockup aprobado |
+| Guía | `guia-ahora.jpg`, `guia-futuro.jpg` (mockup) · `guia-app.jpg` (app) | implementado (0.5.96) |
+| Opciones | `opciones-*.jpg` (mockup) · `opciones-*-app.jpg` (app) | implementado (0.5.96) |
+| OSD | `osd.jpg` (app) | implementado (0.5.96) |
+| Diálogos «escena» (salir, actualización, Premium) | — | pendiente: aún con píldoras |
+
+En la app no hay desenfoque detrás del texto (Android no puede desenfocar el video de un
+`SurfaceView`): por eso los degradados de la Guía y de Opciones son algo más oscuros que en los
+mockups.
 
 ## Principios
 

@@ -54,6 +54,25 @@
             </FrameLayout>
         </LinearLayout>
 
+        <!-- «● 033 · NOMBRE · CATEGORÍA» (0.5.96, línea «Flotante minimalista»): el número
+             del canal vive aquí, en la misma etiqueta que el selector y la Guía. -->
+        <TextView
+            android:id="@+id/osd_eyebrow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="11dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
+            android:letterSpacing="0.2"
+            android:maxLines="1"
+            android:shadowColor="#73000000"
+            android:shadowDy="1"
+            android:shadowRadius="5"
+            android:textAllCaps="true"
+            android:textColor="#9EFFFFFF"
+            android:textSize="7.5sp" />
+
         <!-- Solo para accesibilidad y respaldo: el logo reemplaza al nombre. -->
         <TextView
             android:id="@+id/channel_name"
@@ -65,11 +84,12 @@
             android:id="@+id/content_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="5dp"
+            android:letterSpacing="-0.015"
             android:maxLines="1"
             android:text="@string/live_content"
             android:textColor="@color/white"
-            android:textSize="29sp"
+            android:textSize="30sp"
             android:textStyle="bold" />
 
         <TextView
@@ -94,22 +114,22 @@
             <ProgressBar
                 android:id="@+id/live_progress"
                 style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="200dp"
-                android:layout_height="3dp"
+                android:layout_width="150dp"
+                android:layout_height="1dp"
                 android:indeterminate="true"
                 android:indeterminateTint="@color/cyan"
-                android:progressBackgroundTint="#24FFFFFF"
+                android:progressBackgroundTint="#2EFFFFFF"
                 android:progressTint="@color/cyan" />
 
             <TextView
                 android:id="@+id/programme_time"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="9dp"
+                android:layout_marginStart="10dp"
                 android:includeFontPadding="false"
                 android:maxLines="1"
-                android:textColor="@color/osd_muted"
-                android:textSize="10sp"
+                android:textColor="#9EFFFFFF"
+                android:textSize="9sp"
                 android:visibility="gone" />
         </LinearLayout>
 
@@ -136,6 +156,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="end|center_vertical"
         android:layout_marginEnd="@dimen/channel_overlay_horizontal_margin"
+        android:visibility="gone"
         android:fontFamily="sans-serif-light"
         android:includeFontPadding="false"
         android:letterSpacing="0.02"
@@ -170,10 +191,13 @@
             android:id="@+id/osd_clock_date"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="6dp"
+            android:fontFamily="sans-serif-medium"
             android:includeFontPadding="false"
-            android:textColor="@color/osd_muted"
-            android:textSize="11sp" />
+            android:letterSpacing="0.2"
+            android:textAllCaps="true"
+            android:textColor="#8CFFFFFF"
+            android:textSize="7.5sp" />
     </LinearLayout>
 
     <LinearLayout

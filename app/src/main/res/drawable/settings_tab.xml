@@ -1,30 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Pestañas de Opciones (0.5.90): la activa, píldora blanca; con foco, un halo. -->
+<!-- Pestañas de Opciones (0.5.96): texto; la activa con línea fina debajo, plena con foco. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_selected="true" android:state_focused="true">
-        <shape android:shape="rectangle">
-            <solid android:color="@color/white" />
-            <stroke android:width="3dp" android:color="#59FFFFFF" />
-            <corners android:radius="999dp" />
-        </shape>
-    </item>
-    <item android:state_selected="true">
-        <shape android:shape="rectangle">
-            <solid android:color="@color/white" />
-            <corners android:radius="999dp" />
-        </shape>
+        <layer-list>
+            <item android:gravity="bottom|fill_horizontal" android:height="1.5dp">
+                <shape><solid android:color="@color/white" /></shape>
+            </item>
+        </layer-list>
     </item>
     <item android:state_focused="true">
-        <shape android:shape="rectangle">
-            <solid android:color="#24FFFFFF" />
-            <stroke android:width="2dp" android:color="@color/white" />
-            <corners android:radius="999dp" />
-        </shape>
+        <layer-list>
+            <item android:gravity="bottom|fill_horizontal" android:height="1.5dp">
+                <shape><solid android:color="@color/white" /></shape>
+            </item>
+        </layer-list>
     </item>
-    <item>
-        <shape android:shape="rectangle">
-            <solid android:color="@color/menu_row" />
-            <corners android:radius="999dp" />
-        </shape>
+    <item android:state_selected="true">
+        <layer-list>
+            <item android:gravity="bottom|fill_horizontal" android:height="1.5dp">
+                <shape><solid android:color="#8CFFFFFF" /></shape>
+            </item>
+        </layer-list>
     </item>
+    <item android:drawable="@android:color/transparent" />
 </selector>

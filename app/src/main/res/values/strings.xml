@@ -111,6 +111,11 @@
     <string name="guide_next">Después · %1$s</string>
     <string name="guide_remaining">quedan %1$s</string>
     <string name="guide_starts_in">empieza en %1$s</string>
+    <string name="guide_key_ok">OK</string>
+    <string name="guide_key_hold">Mantener OK</string>
+    <string name="guide_hint_watch">Ver ahora en %1$s</string>
+    <string name="guide_hint_remind">Avisarme al comenzar</string>
+    <string name="guide_hint_unremind">Quitar el aviso</string>
     <string name="detail_meta_live">%1$s · %2$s · quedan %3$s</string>
     <string name="detail_meta">%1$s · %2$s</string>
     <string name="light_epg_now">Ahora</string>
@@ -221,7 +226,7 @@
     <string name="settings_shortcut_left">◀</string>
     <string name="settings_shortcut_left_action">Guía de programación</string>
     <string name="settings_shortcut_right">▶</string>
-    <string name="settings_shortcut_right_action">Fuente de la señal</string>
+    <string name="settings_shortcut_right_action">Fuentes y calidades</string>
     <string name="settings_shortcut_up_down">▲ ▼</string>
     <string name="settings_shortcut_up_down_action">Cambiar de canal</string>
     <string name="settings_shortcut_hold_ok">Mantener OK</string>

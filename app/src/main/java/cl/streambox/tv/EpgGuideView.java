@@ -8,7 +8,6 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.Typeface;
-import android.graphics.drawable.Drawable;
 import android.text.Layout;
 import android.text.StaticLayout;
 import android.text.TextPaint;
@@ -23,11 +22,13 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Guía completa a pantalla completa, dibujada en un solo canvas. Arriba un «hero» con el
- * programa enfocado sobre el video (que se ve a la derecha), luego los filtros por categoría,
- * el eje de horas y las filas: número y logo del canal a la izquierda y bloques de programas
- * sobre {@link EpgGuideNavigator#WINDOW_MILLIS}. El foco solo marca el canal seleccionado; el
- * programa enfocado se lee en el hero.
+ * Guía completa a pantalla completa, dibujada en un solo canvas, con la línea «Flotante
+ * minimalista» (0.5.96, `DISENO.md`): todo es texto sobre una sola capa oscura que deja ver el
+ * video arriba a la derecha. Arriba «GUÍA», los filtros como texto y la hora; luego el detalle
+ * del programa enfocado; debajo el eje de horas y las filas: número y logo del canal a la
+ * izquierda y los programas como texto, separados por una línea vertical tenue, sobre
+ * {@link EpgGuideNavigator#WINDOW_MILLIS}. Foco = negrita blanca con línea fina debajo; el canal
+ * que se está viendo lleva un punto verde; la hora actual es una línea cian.
  */
 public final class EpgGuideView extends View implements GuideSurface {
     /** Datos que la guía lee por fila (canal). */
@@ -41,7 +42,7 @@ public final class EpgGuideView extends View implements GuideSurface {
         Bitmap logo(int row);
         List<EpgProgramme> programmes(int row, long fromMillis, long toMillis);
         int playingRow();
-        /** True si el programa tiene un recordatorio (se dibuja una campana). */
+        /** True si el programa tiene un recordatorio (se dibuja un anillo cian). */
         boolean hasReminder(int row, EpgProgramme programme);
         /** Filtros de categoría; el primero es «Todos». */
         List<String> filters();
@@ -50,32 +51,33 @@ public final class EpgGuideView extends View implements GuideSurface {
         boolean filtersFocused();
     }
 
-    private static final int CYAN = 0xFF00B8E6;
+    private static final int CYAN = 0xFF00B8D9;
+    private static final int GREEN = 0xFF5BE9A0;
     private static final int WHITE = 0xFFFFFFFF;
-    private static final int TEXT = 0xFFE9F1F4;
-    private static final int MUTED = 0xFF9FB0B7;
     private static final int BASE = 0xFF000000;
-    private static final int CHIP = 0x0DFFFFFF;
-    private static final int CHIP_ON_TEXT = 0xFF021015;
-    private static final int BLOCK_ON_AIR = 0x16FFFFFF;
-    private static final int BLOCK_PAST = 0x08FFFFFF;
-    private static final int BLOCK_FUTURE = 0x0DFFFFFF;
-    /** Velo cyan del programa enfocado (se mueve con ◀ ▶). */
-    private static final int FOCUSED_PROGRAMME = 0x3800B8E6;
-    /** Recuadro gris semitransparente del reloj, para leerlo sobre cualquier imagen. */
-    private static final int CLOCK_BOX = 0x9E3A444A;
-    private static final int CLOCK_DAY = 0xFFC9D3D7;
-    private static final int TICK = 0x2EFFFFFF;
-    private static final int TRACK = 0x24FFFFFF;
-    /** Cyan al 45 %: la línea de la hora actual no compite con los títulos. */
-    private static final int NOW_LINE = 0x7300B8E6;
-    private static final int NOW_EDGE = 0x0000B8E6;
+    // Blancos con alfa: normal, apagado, etiquetas.
+    private static final int TEXT_ON_AIR = 0xDBFFFFFF;
+    private static final int TEXT_FUTURE = 0x8CFFFFFF;
+    private static final int TEXT_PAST = 0x61FFFFFF;
+    private static final int TIME_FOCUSED = 0xC7FFFFFF;
+    private static final int TIME_ON_AIR = 0x80FFFFFF;
+    private static final int TIME_OTHER = 0x57FFFFFF;
+    private static final int LABEL = 0x6BFFFFFF;
+    private static final int EYEBROW = 0x9EFFFFFF;
+    private static final int TAB = 0x80FFFFFF;
+    private static final int DESCRIPTION = 0xB8FFFFFF;
+    private static final int META = 0x9EFFFFFF;
+    private static final int NEXT_LABEL = 0x73FFFFFF;
+    private static final int NEXT_TITLE = 0xD9FFFFFF;
+    private static final int DIVIDER = 0x1FFFFFFF;
+    private static final int TRACK = 0x2EFFFFFF;
     /** Opacidad de la fila que se asoma bajo la última completa. */
     private static final int PEEK_ALPHA = 89;
 
     private final TextPaint heroTitlePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint textPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint smallPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+    private final TextPaint labelPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint descriptionPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint shaderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -83,11 +85,11 @@ public final class EpgGuideView extends View implements GuideSurface {
     private final RectF rect = new RectF();
     private final Typeface bold = Typeface.create(Typeface.DEFAULT, Typeface.BOLD);
     private final Typeface regular = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL);
+    private final Typeface medium = Typeface.create("sans-serif-medium", Typeface.NORMAL);
     private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
     private final SimpleDateFormat dayFormat = new SimpleDateFormat("EEEE d", Locale.forLanguageTag("es-CL"));
     private final SimpleDateFormat dayKeyFormat = new SimpleDateFormat("yyyyMMdd", Locale.ROOT);
 
-    private Drawable reminderBell;
     private Source source;
     private EpgGuideNavigator navigator;
     private long nowMillis;
@@ -99,8 +101,21 @@ public final class EpgGuideView extends View implements GuideSurface {
         super(context, attrs);
         heroTitlePaint.setTypeface(bold);
         heroTitlePaint.setColor(WHITE);
-        descriptionPaint.setColor(MUTED);
+        heroTitlePaint.setLetterSpacing(-0.015f);
+        descriptionPaint.setColor(DESCRIPTION);
+        labelPaint.setTypeface(medium);
+        labelPaint.setLetterSpacing(0.2f);
+        // Sombra suave para leer el texto sobre video claro.
+        int shadow = 0x73000000;
+        for (TextPaint paint : new TextPaint[] {heroTitlePaint, textPaint, smallPaint, labelPaint, descriptionPaint}) {
+            paint.setShadowLayer(dpRaw(context, 5), 0f, dpRaw(context, 0.5f), shadow);
+        }
         setWillNotDraw(false);
+    }
+
+    private static float dpRaw(Context context, float value) {
+        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value,
+                context.getResources().getDisplayMetrics());
     }
 
     @Override public void bind(Source source, EpgGuideNavigator navigator, long nowMillis) {
@@ -133,22 +148,22 @@ public final class EpgGuideView extends View implements GuideSurface {
         float width = getWidth();
         float height = getHeight();
         float left = dp(32);
-        float right = width - dp(32);
+        float right = width - dp(36);
         if (right <= left) return;
 
-        // Geometría: hero arriba, eje y filas debajo.
-        float axisTop = dp(260);
-        float rowsTop = dp(283);
-        float rowHeight = dp(32);
-        float rowPitch = dp(38);
+        // Geometría: detalle arriba, eje y filas debajo.
+        float axisBaseline = dp(262);
+        float rowsTop = dp(278);
+        float rowHeight = dp(30);
+        float rowPitch = dp(39);
         float gridLeft = dp(150);
         float gridWidth = right - gridLeft;
         long windowStart = navigator.getWindowStart();
         long windowEnd = navigator.getWindowEnd();
 
-        drawBackground(canvas, width, height, rowsTop);
+        drawBackground(canvas, width, height);
 
-        int visibleRows = Math.max(1, (int) ((height - rowsTop - dp(24)) / rowPitch));
+        int visibleRows = Math.max(1, (int) ((height - rowsTop - dp(12)) / rowPitch));
         int focusedRow = navigator.getRow();
         if (focusedRow < firstVisibleRow) firstVisibleRow = focusedRow;
         if (focusedRow >= firstVisibleRow + visibleRows) firstVisibleRow = focusedRow - visibleRows + 1;
@@ -156,7 +171,7 @@ public final class EpgGuideView extends View implements GuideSurface {
 
         drawHeader(canvas, left, right);
         drawHero(canvas, left, right, focusedRow);
-        drawAxis(canvas, gridLeft, gridWidth, axisTop, windowStart, windowEnd);
+        drawAxis(canvas, gridLeft, gridWidth, axisBaseline, windowStart, windowEnd);
 
         boolean filtersFocused = source.filtersFocused();
         int shownRows = 0;
@@ -174,111 +189,89 @@ public final class EpgGuideView extends View implements GuideSurface {
         }
 
         if (nowMillis >= windowStart && nowMillis < windowEnd && shownRows > 0) {
-            // Hora actual: línea continua de cyan translúcido exactamente de borde a
-            // borde de las filas visibles, con el mismo difuminado arriba y abajo.
+            // Hora actual: línea cian fina desde el eje hasta el final de las filas visibles.
             float nowX = xFor(nowMillis, gridLeft, gridWidth, windowStart);
-            float lineTop = rowsTop;
-            float lineBottom = rowsTop + shownRows * rowPitch - (rowPitch - rowHeight);
-            float fade = Math.min(0.45f, dp(14) / Math.max(1f, lineBottom - lineTop));
+            float lineTop = axisBaseline + dp(6);
+            float lineBottom = rowsTop + shownRows * rowPitch;
             shaderPaint.setShader(new LinearGradient(0f, lineTop, 0f, lineBottom,
-                    new int[] {NOW_EDGE, NOW_LINE, NOW_LINE, NOW_EDGE},
-                    new float[] {0f, fade, 1f - fade, 1f},
-                    Shader.TileMode.CLAMP));
-            rect.set(nowX - dp(1), lineTop, nowX + dp(1), lineBottom);
-            canvas.drawRect(rect, shaderPaint);
+                    CYAN, 0x5900B8D9, Shader.TileMode.CLAMP));
+            canvas.drawRect(nowX - dp(0.5f), lineTop, nowX + dp(0.5f), lineBottom, shaderPaint);
             shaderPaint.setShader(null);
         }
 
         // Pie: la última fila se funde con el fondo.
-        float footerTop = height - dp(32);
+        float footerTop = height - dp(24);
         shaderPaint.setShader(new LinearGradient(0f, footerTop, 0f, height,
-                new int[] {BASE & 0x00FFFFFF, BASE, BASE}, new float[] {0f, 0.6f, 1f},
+                new int[] {BASE & 0x00FFFFFF, 0xF5000000, 0xF5000000}, new float[] {0f, 0.7f, 1f},
                 Shader.TileMode.CLAMP));
         canvas.drawRect(0f, footerTop, width, height, shaderPaint);
         shaderPaint.setShader(null);
     }
 
-    private void drawBackground(Canvas canvas, float width, float height, float rowsTop) {
-        // Hero: oscuro a la izquierda y el video asomándose a la derecha.
-        float heroBottom = rowsTop;
+    /** Una sola capa: el video se apaga hacia abajo (grilla) y hacia la izquierda (detalle). */
+    private void drawBackground(Canvas canvas, float width, float height) {
+        shaderPaint.setShader(new LinearGradient(0f, 0f, 0f, height,
+                new int[] {0x9E000000, 0x4D000000, 0x5C000000, 0xDB000000, 0xF2000000, 0xF7000000},
+                new float[] {0f, 0.14f, 0.30f, 0.48f, 0.60f, 1f}, Shader.TileMode.CLAMP));
+        canvas.drawRect(0f, 0f, width, height, shaderPaint);
         shaderPaint.setShader(new LinearGradient(0f, 0f, width, 0f,
-                new int[] {BASE, 0xF5000000, 0x8C000000, 0x40000000},
-                new float[] {0f, 0.34f, 0.64f, 1f}, Shader.TileMode.CLAMP));
-        canvas.drawRect(0f, 0f, width, heroBottom, shaderPaint);
-        // ...que baja fundiéndose hacia la grilla.
-        float fadeTop = heroBottom - dp(75);
-        shaderPaint.setShader(new LinearGradient(0f, fadeTop, 0f, heroBottom,
-                BASE & 0x00FFFFFF, BASE, Shader.TileMode.CLAMP));
-        canvas.drawRect(0f, fadeTop, width, heroBottom, shaderPaint);
+                new int[] {0x9E000000, 0x40000000, 0x00000000},
+                new float[] {0f, 0.40f, 0.62f}, Shader.TileMode.CLAMP));
+        canvas.drawRect(0f, 0f, width, height, shaderPaint);
         shaderPaint.setShader(null);
-        fillPaint.setColor(BASE);
-        canvas.drawRect(0f, heroBottom, width, height, fillPaint);
     }
 
     private void drawHeader(Canvas canvas, float left, float right) {
-        float chipTop = dp(24);
-        float chipHeight = dp(24);
-        float baseline = chipTop + chipHeight / 2f + sp(5.5f);
+        float baseline = dp(36);
 
-        textPaint.setTypeface(bold);
-        textPaint.setTextSize(sp(16));
-        textPaint.setColor(WHITE);
-        String title = getContext().getString(R.string.guide_title);
-        canvas.drawText(title, left, baseline, textPaint);
-        float chipsLeft = left + textPaint.measureText(title) + dp(16);
+        // «GUÍA» como etiqueta.
+        labelPaint.setTextSize(sp(7.5f));
+        labelPaint.setColor(EYEBROW);
+        String title = getContext().getString(R.string.guide_title).toUpperCase(Locale.forLanguageTag("es-CL"));
+        canvas.drawText(title, left, baseline, labelPaint);
+        float tabsLeft = left + labelPaint.measureText(title) + dp(23);
 
-        // Fecha del foco y hora actual, arriba a la derecha.
-        textPaint.setTypeface(regular);
-        textPaint.setTextSize(sp(13));
+        // Fecha del foco y hora actual, arriba a la derecha, como texto.
+        textPaint.setTextSize(sp(10.5f));
+        textPaint.setTypeface(medium);
         String time = timeFormat.format(new Date(nowMillis));
-        String day = capitalize(dayFormat.format(new Date(navigator.getFocusMillis()))) + "  ·  ";
         float timeWidth = textPaint.measureText(time);
+        textPaint.setTypeface(regular);
+        String day = capitalize(dayFormat.format(new Date(navigator.getFocusMillis()))) + " · ";
         float dayWidth = textPaint.measureText(day);
-        float boxPadding = dp(12);
-        float textRight = right - boxPadding;
-        rect.set(textRight - timeWidth - dayWidth - boxPadding, baseline - sp(13) - dp(4),
-                right, baseline + dp(9));
-        fillPaint.setColor(CLOCK_BOX);
-        canvas.drawRoundRect(rect, dp(8), dp(8), fillPaint);
+        textPaint.setColor(0xB8FFFFFF);
+        canvas.drawText(day, right - timeWidth - dayWidth, baseline, textPaint);
+        textPaint.setTypeface(medium);
         textPaint.setColor(WHITE);
-        canvas.drawText(time, textRight - timeWidth, baseline, textPaint);
-        textPaint.setColor(CLOCK_DAY);
-        canvas.drawText(day, textRight - timeWidth - dayWidth, baseline, textPaint);
-        float chipsRight = rect.left - dp(24);
+        canvas.drawText(time, right - timeWidth, baseline, textPaint);
+        textPaint.setTypeface(regular);
+        float tabsRight = right - timeWidth - dayWidth - dp(24);
 
-        // Filtros: el activo en cyan; con foco en ellos, además un anillo blanco.
+        // Filtros como texto: el elegido en negrita blanca con línea fina debajo; la línea es
+        // plena con el foco en los filtros y tenue con el foco en la grilla.
         List<String> filters = source.filters();
         if (filters == null || filters.isEmpty()) return;
         int selected = Math.max(0, Math.min(source.selectedFilter(), filters.size() - 1));
-        textPaint.setTextSize(sp(11));
-        float gap = dp(11);
-        float padding = dp(11);
+        textPaint.setTextSize(sp(10.5f));
+        float gap = dp(19);
         float[] widths = new float[filters.size()];
         for (int i = 0; i < filters.size(); i++) {
             textPaint.setTypeface(i == selected ? bold : regular);
-            widths[i] = textPaint.measureText(filters.get(i)) + padding * 2f;
+            widths[i] = textPaint.measureText(filters.get(i));
         }
         int first = 0;
-        while (first < selected && span(widths, first, selected, gap) > chipsRight - chipsLeft) first++;
-        float x = chipsLeft;
-        float chipBaseline = chipTop + chipHeight / 2f + sp(4f);
+        while (first < selected && span(widths, first, selected, gap) > tabsRight - tabsLeft) first++;
+        float x = tabsLeft;
         for (int i = first; i < filters.size(); i++) {
-            if (x + widths[i] > chipsRight) break;
+            if (x + widths[i] > tabsRight) break;
             boolean on = i == selected;
-            rect.set(x, chipTop, x + widths[i], chipTop + chipHeight);
-            fillPaint.setColor(on ? CYAN : CHIP);
-            canvas.drawRoundRect(rect, chipHeight / 2f, chipHeight / 2f, fillPaint);
-            if (on && source.filtersFocused()) {
-                fillPaint.setStyle(Paint.Style.STROKE);
-                fillPaint.setStrokeWidth(dp(2));
-                fillPaint.setColor(WHITE);
-                rect.inset(-dp(3), -dp(3));
-                canvas.drawRoundRect(rect, chipHeight / 2f + dp(3), chipHeight / 2f + dp(3), fillPaint);
-                fillPaint.setStyle(Paint.Style.FILL);
-            }
             textPaint.setTypeface(on ? bold : regular);
-            textPaint.setColor(on ? CHIP_ON_TEXT : MUTED);
-            canvas.drawText(filters.get(i), x + padding, chipBaseline, textPaint);
+            textPaint.setColor(on ? WHITE : TAB);
+            canvas.drawText(filters.get(i), x, baseline, textPaint);
+            if (on) {
+                fillPaint.setColor(source.filtersFocused() ? WHITE : 0x8CFFFFFF);
+                canvas.drawRect(x, baseline + dp(5), x + widths[i], baseline + dp(6.5f), fillPaint);
+            }
             x += widths[i] + gap;
         }
         textPaint.setTypeface(regular);
@@ -292,32 +285,25 @@ public final class EpgGuideView extends View implements GuideSurface {
         EpgProgramme programme = EpgGuideNavigator.programmeAt(programmes, navigator.getFocusMillis());
         float heroWidth = Math.min(dp(500), (right - left) * 0.56f);
 
-        // Logo + número · categoría.
-        float logoTop = dp(74);
-        float logoHeight = dp(LogoFit.OSD_LOGO_MAX_HEIGHT_DP);
-        Bitmap logo = source.logo(row);
-        float metaLeft = left;
-        if (logo != null) {
-            // Mismo tamaño óptico que el logo del OSD.
-            float drawnWidth = drawBitmapFit(canvas, logo, left, logoTop, logoHeight,
-                    dp(LogoFit.OSD_LOGO_AREA_WIDTH_DP) * dp(LogoFit.OSD_LOGO_AREA_HEIGHT_DP),
-                    dp(LogoFit.OSD_LOGO_MAX_WIDTH_DP), dp(LogoFit.OSD_LOGO_MAX_HEIGHT_DP),
-                    false);
-            metaLeft = left + drawnWidth + dp(10);
+        // «● TVN · 001 · NACIONALES»: el punto verde, si es el canal que se está viendo.
+        float eyebrowBaseline = dp(89);
+        float x = left;
+        if (row == source.playingRow()) {
+            fillPaint.setColor(GREEN);
+            canvas.drawCircle(x + dp(2), eyebrowBaseline - sp(2.6f), dp(2), fillPaint);
+            x += dp(10);
         }
-        smallPaint.setTypeface(regular);
-        smallPaint.setTextSize(sp(10.5f));
-        smallPaint.setColor(MUTED);
-        String meta = source.number(row);
+        String meta = source.name(row) + " · " + source.number(row);
         String category = source.category(row);
-        if (!TextUtils.isEmpty(category)) meta += "  ·  " + category;
-        if (logo == null) meta += "  ·  " + source.name(row);
-        canvas.drawText(TextUtils.ellipsize(meta, smallPaint, heroWidth, TextUtils.TruncateAt.END).toString(),
-                metaLeft, logoTop + logoHeight / 2f + sp(3.8f), smallPaint);
+        if (!TextUtils.isEmpty(category)) meta += " · " + category;
+        labelPaint.setTextSize(sp(7.5f));
+        labelPaint.setColor(EYEBROW);
+        canvas.drawText(TextUtils.ellipsize(meta.toUpperCase(Locale.forLanguageTag("es-CL")), labelPaint,
+                heroWidth, TextUtils.TruncateAt.END).toString(), x, eyebrowBaseline, labelPaint);
 
         // Título grande.
-        heroTitlePaint.setTextSize(sp(29));
-        float titleBaseline = logoTop + logoHeight + dp(8) + sp(25);
+        heroTitlePaint.setTextSize(sp(30));
+        float titleBaseline = eyebrowBaseline + dp(32);
         String title = programme != null ? programme.getTitle()
                 : getContext().getString(R.string.epg_no_information);
         canvas.drawText(TextUtils.ellipsize(title, heroTitlePaint, heroWidth,
@@ -325,14 +311,14 @@ public final class EpgGuideView extends View implements GuideSurface {
         if (programme == null) return;
 
         // Descripción: hasta dos líneas.
-        float y = titleBaseline + dp(12);
+        float y = titleBaseline + dp(10);
         String description = programme.getDescription();
         if (!description.isEmpty()) {
             descriptionPaint.setTextSize(sp(11));
             StaticLayout layout = StaticLayout.Builder
                     .obtain(description, 0, description.length(), descriptionPaint, (int) (heroWidth * 0.9f))
                     .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-                    .setLineSpacing(0f, 1.3f)
+                    .setLineSpacing(0f, 1.35f)
                     .setMaxLines(2)
                     .setEllipsize(TextUtils.TruncateAt.END)
                     .build();
@@ -343,32 +329,40 @@ public final class EpgGuideView extends View implements GuideSurface {
             y += layout.getHeight();
         }
 
-        // Progreso (si está al aire) y horario.
-        float progressCenter = y + dp(14);
+        // Avance (si está al aire), recordatorio y horario.
+        float lineCenter = y + dp(13);
         float textLeft = left;
         boolean onAir = programme.getStartMillis() <= nowMillis && nowMillis < programme.getStopMillis();
         if (onAir) {
-            float barWidth = dp(200);
-            float barHeight = dp(3);
-            rect.set(left, progressCenter - barHeight / 2f, left + barWidth, progressCenter + barHeight / 2f);
+            float barWidth = dp(150);
+            float barHeight = dp(1);
             fillPaint.setColor(TRACK);
-            canvas.drawRoundRect(rect, barHeight / 2f, barHeight / 2f, fillPaint);
+            canvas.drawRect(left, lineCenter - barHeight / 2f, left + barWidth, lineCenter + barHeight / 2f, fillPaint);
             float fraction = (nowMillis - programme.getStartMillis())
                     / (float) Math.max(1L, programme.getStopMillis() - programme.getStartMillis());
-            rect.right = left + barWidth * Math.max(0f, Math.min(1f, fraction));
             fillPaint.setColor(CYAN);
-            canvas.drawRoundRect(rect, barHeight / 2f, barHeight / 2f, fillPaint);
-            textLeft = left + barWidth + dp(9);
+            canvas.drawRect(left, lineCenter - barHeight / 2f,
+                    left + barWidth * Math.max(0f, Math.min(1f, fraction)), lineCenter + barHeight / 2f, fillPaint);
+            textLeft = left + barWidth + dp(10);
         }
-        smallPaint.setTextSize(sp(10));
-        float lineBaseline = progressCenter + sp(3.5f);
-        if (source.hasReminder(row, programme)) {
-            textLeft += drawBell(canvas, textLeft, lineBaseline, dp(10)) + dp(5);
+        smallPaint.setTypeface(regular);
+        smallPaint.setTextSize(sp(9));
+        float lineBaseline = lineCenter + sp(3.2f);
+        boolean reminded = source.hasReminder(row, programme);
+        if (reminded) {
+            drawReminderRing(canvas, textLeft + dp(3), lineBaseline - sp(3.2f));
+            textLeft += dp(11);
         }
-        String schedule = scheduleText(programme);
-        smallPaint.setColor(MUTED);
-        canvas.drawText(TextUtils.ellipsize(schedule, smallPaint, right - textLeft,
+        smallPaint.setColor(META);
+        canvas.drawText(TextUtils.ellipsize(scheduleText(programme), smallPaint, right - textLeft,
                 TextUtils.TruncateAt.END).toString(), textLeft, lineBaseline, smallPaint);
+
+        float nextBaseline = lineBaseline + dp(21);
+        if (programme.getStartMillis() > nowMillis) {
+            // Programa futuro: lo que hacen OK y OK mantenido, como texto.
+            drawKeyHints(canvas, left, nextBaseline, row, reminded);
+            return;
+        }
 
         // Después: el programa siguiente del mismo canal.
         EpgProgramme next = null;
@@ -376,67 +370,88 @@ public final class EpgGuideView extends View implements GuideSurface {
             if (candidate.getStartMillis() >= programme.getStopMillis()) { next = candidate; break; }
         }
         if (next == null) return;
-        float nextBaseline = lineBaseline + dp(20);
         float nextLeft = left;
         if (source.hasReminder(row, next)) {
-            nextLeft += drawBell(canvas, nextLeft, nextBaseline, dp(10)) + dp(5);
+            drawReminderRing(canvas, nextLeft + dp(3), nextBaseline - sp(2.6f));
+            nextLeft += dp(11);
         }
         String prefix = getContext().getString(R.string.guide_next,
-                timeFormat.format(new Date(next.getStartMillis()))) + "  ";
-        smallPaint.setColor(MUTED);
-        canvas.drawText(prefix, nextLeft, nextBaseline, smallPaint);
-        nextLeft += smallPaint.measureText(prefix);
-        smallPaint.setColor(WHITE);
+                timeFormat.format(new Date(next.getStartMillis()))).toUpperCase(Locale.forLanguageTag("es-CL"));
+        labelPaint.setTextSize(sp(7.5f));
+        labelPaint.setColor(NEXT_LABEL);
+        canvas.drawText(prefix, nextLeft, nextBaseline, labelPaint);
+        nextLeft += labelPaint.measureText(prefix) + dp(7);
+        smallPaint.setColor(NEXT_TITLE);
         canvas.drawText(TextUtils.ellipsize(next.getTitle(), smallPaint, Math.max(0f, left + heroWidth - nextLeft),
                 TextUtils.TruncateAt.END).toString(), nextLeft, nextBaseline, smallPaint);
     }
 
-    private void drawAxis(Canvas canvas, float gridLeft, float gridWidth, float axisTop,
+    /** «OK Ver ahora en TVN   Mantener OK Avisarme al comenzar». */
+    private void drawKeyHints(Canvas canvas, float left, float baseline, int row, boolean reminded) {
+        String[][] hints = {
+                {getContext().getString(R.string.guide_key_ok),
+                        getContext().getString(R.string.guide_hint_watch, source.name(row))},
+                {getContext().getString(R.string.guide_key_hold),
+                        getContext().getString(reminded ? R.string.guide_hint_unremind : R.string.guide_hint_remind)},
+        };
+        float x = left;
+        smallPaint.setTextSize(sp(9.5f));
+        for (String[] hint : hints) {
+            smallPaint.setTypeface(medium);
+            smallPaint.setColor(0xDBFFFFFF);
+            canvas.drawText(hint[0], x, baseline, smallPaint);
+            x += smallPaint.measureText(hint[0]) + dp(6);
+            smallPaint.setTypeface(regular);
+            smallPaint.setColor(META);
+            canvas.drawText(hint[1], x, baseline, smallPaint);
+            x += smallPaint.measureText(hint[1]) + dp(20);
+        }
+    }
+
+    private void drawAxis(Canvas canvas, float gridLeft, float gridWidth, float baseline,
                           long windowStart, long windowEnd) {
         smallPaint.setTypeface(regular);
-        smallPaint.setTextSize(sp(9.5f));
-        float baseline = axisTop + sp(9.5f);
-        boolean nowVisible = nowMillis >= windowStart && nowMillis < windowEnd;
-        float nowX = xFor(nowMillis, gridLeft, gridWidth, windowStart);
-        String nowLabel = timeFormat.format(new Date(nowMillis));
-        float nowLabelLeft = nowX - smallPaint.measureText(nowLabel) / 2f;
-        float nowLabelRight = nowX + smallPaint.measureText(nowLabel) / 2f;
-        boolean nowLabelClashes = false;
+        smallPaint.setTextSize(sp(7.5f));
+        smallPaint.setLetterSpacing(0.06f);
         int slots = (int) (EpgGuideNavigator.WINDOW_MILLIS / EpgGuideNavigator.SLOT_MILLIS);
         for (int slot = 0; slot < slots; slot++) {
             long time = windowStart + slot * EpgGuideNavigator.SLOT_MILLIS;
-            String label = timeFormat.format(new Date(time));
-            float labelLeft = xFor(time, gridLeft, gridWidth, windowStart);
-            float labelRight = labelLeft + smallPaint.measureText(label);
-            // Las horas del eje mandan: si la hora actual se les encima, esa no se dibuja.
-            if (labelLeft - dp(6) < nowLabelRight && nowLabelLeft < labelRight + dp(6)) {
-                nowLabelClashes = true;
-            }
-            smallPaint.setColor(MUTED);
-            canvas.drawText(label, labelLeft, baseline, smallPaint);
-            rect.set(labelLeft, axisTop + dp(14), labelLeft + dp(1), axisTop + dp(18));
-            fillPaint.setColor(TICK);
-            canvas.drawRoundRect(rect, dp(0.5f), dp(0.5f), fillPaint);
+            smallPaint.setColor(LABEL);
+            canvas.drawText(timeFormat.format(new Date(time)), xFor(time, gridLeft, gridWidth, windowStart),
+                    baseline, smallPaint);
         }
-        if (nowVisible && !nowLabelClashes) {
-            // Hora actual: mismo tamaño que el eje, en cyan, centrada sobre la línea.
+        if (nowMillis >= windowStart && nowMillis < windowEnd) {
+            // Hora actual: en cian sobre el eje, centrada en su línea.
+            String nowLabel = timeFormat.format(new Date(nowMillis));
+            float nowX = xFor(nowMillis, gridLeft, gridWidth, windowStart);
+            smallPaint.setTypeface(medium);
             smallPaint.setColor(CYAN);
-            canvas.drawText(nowLabel, nowLabelLeft, baseline, smallPaint);
+            canvas.drawText(nowLabel, nowX - smallPaint.measureText(nowLabel) / 2f, baseline - dp(13), smallPaint);
+            smallPaint.setTypeface(regular);
         }
+        smallPaint.setLetterSpacing(0f);
     }
 
     private void drawRow(Canvas canvas, int row, float rowTop, float rowHeight, float left, float right,
                          float gridLeft, float gridWidth, long windowStart, long windowEnd,
                          boolean selected) {
-        // Canal: número y logo. El foco no marca el canal (solo su número en blanco),
-        // sino el programa enfocado de esa fila.
-        float cellWidth = dp(110);
+        // Canal: número (blanco si es el de la fila enfocada o el que se ve; este con punto
+        // verde) y logo.
+        boolean playing = row == source.playingRow();
         textPaint.setTypeface(regular);
-        textPaint.setTextSize(sp(10));
-        textPaint.setColor(selected ? WHITE : row == source.playingRow() ? CYAN : MUTED);
-        float centerBaseline = rowTop + rowHeight / 2f + sp(3.5f);
-        canvas.drawText(source.number(row), left + dp(8), centerBaseline, textPaint);
-        float logoLeft = left + dp(38);
+        textPaint.setTextSize(sp(9));
+        textPaint.setLetterSpacing(0.04f);
+        textPaint.setColor(selected || playing ? WHITE : LABEL);
+        float centerBaseline = rowTop + rowHeight / 2f + sp(3.2f);
+        String number = source.number(row);
+        canvas.drawText(number, left, centerBaseline, textPaint);
+        if (playing) {
+            fillPaint.setColor(GREEN);
+            canvas.drawCircle(left + textPaint.measureText(number) + dp(6), centerBaseline - sp(3.1f),
+                    dp(1.75f), fillPaint);
+        }
+        textPaint.setLetterSpacing(0f);
+        float logoLeft = left + dp(33);
         float logoWidth = dp(60 * LogoFit.LOGO_SCALE);
         Bitmap logo = source.logo(row);
         if (logo != null) {
@@ -444,8 +459,8 @@ public final class EpgGuideView extends View implements GuideSurface {
                     dp(44 * LogoFit.LOGO_SCALE) * dp(15 * LogoFit.LOGO_SCALE), logoWidth,
                     dp(22 * LogoFit.LOGO_SCALE), true);
         } else {
-            textPaint.setColor(selected ? WHITE : MUTED);
-            canvas.drawText(TextUtils.ellipsize(source.name(row), textPaint, cellWidth - dp(42),
+            textPaint.setColor(selected ? WHITE : TEXT_FUTURE);
+            canvas.drawText(TextUtils.ellipsize(source.name(row), textPaint, gridLeft - logoLeft - dp(8),
                     TextUtils.TruncateAt.END).toString(), logoLeft, centerBaseline, textPaint);
         }
 
@@ -454,57 +469,68 @@ public final class EpgGuideView extends View implements GuideSurface {
                 ? EpgGuideNavigator.programmeAt(programmes, navigator.getFocusMillis())
                 : null;
         if (programmes.isEmpty()) {
-            textPaint.setColor(MUTED);
+            textPaint.setTextSize(sp(10));
+            textPaint.setColor(TEXT_PAST);
             canvas.drawText(getContext().getString(R.string.epg_no_information),
                     gridLeft + dp(9), centerBaseline, textPaint);
             return;
         }
         for (EpgProgramme programme : programmes) {
-            float blockLeft = Math.max(gridLeft, xFor(programme.getStartMillis(), gridLeft, gridWidth, windowStart));
-            float blockRight = Math.min(right, xFor(programme.getStopMillis(), gridLeft, gridWidth, windowStart)) - dp(4);
+            float startX = xFor(programme.getStartMillis(), gridLeft, gridWidth, windowStart);
+            float blockLeft = Math.max(gridLeft, startX);
+            float blockRight = Math.min(right, xFor(programme.getStopMillis(), gridLeft, gridWidth, windowStart));
             if (blockRight - blockLeft < dp(6)) continue;
+            if (startX > gridLeft) {
+                // Separador tenue al inicio de cada programa (no al borde de la ventana).
+                fillPaint.setColor(DIVIDER);
+                canvas.drawRect(blockLeft, rowTop + dp(1), blockLeft + Math.max(1f, dp(0.5f)),
+                        rowTop + rowHeight, fillPaint);
+            }
             boolean past = programme.getStopMillis() <= nowMillis;
             boolean onAir = programme.getStartMillis() <= nowMillis && !past;
-            rect.set(blockLeft, rowTop, blockRight, rowTop + rowHeight);
             boolean focused = programme == focusedProgramme;
-            fillPaint.setColor(focused ? FOCUSED_PROGRAMME
-                    : onAir ? BLOCK_ON_AIR : past ? BLOCK_PAST : BLOCK_FUTURE);
-            canvas.drawRoundRect(rect, dp(6), dp(6), fillPaint);
 
             float textLeft = blockLeft + dp(9);
-            float textWidth = blockRight - textLeft - dp(6);
+            float textWidth = blockRight - textLeft - dp(7);
             if (textWidth < dp(14)) continue;
-            float titleBaseline = rowTop + dp(15);
-            if (source.hasReminder(row, programme) && textWidth > dp(24)) {
-                // Campana cyan antes del título: el programa tiene recordatorio.
-                float used = drawBell(canvas, textLeft, titleBaseline, dp(9)) + dp(4);
-                textLeft += used;
-                textWidth -= used;
-            }
             String title = programme.getStartMillis() < windowStart
                     ? "‹ " + programme.getTitle() : programme.getTitle();
-            textPaint.setTextSize(sp(11));
+            boolean reminded = source.hasReminder(row, programme);
+            textPaint.setTextSize(sp(10));
             textPaint.setTypeface(focused ? bold : regular);
-            textPaint.setColor(focused ? WHITE : past ? MUTED : TEXT);
-            canvas.drawText(TextUtils.ellipsize(title, textPaint, textWidth,
-                    TextUtils.TruncateAt.END).toString(), textLeft, titleBaseline, textPaint);
+            textPaint.setColor(focused ? WHITE : onAir ? TEXT_ON_AIR : past ? TEXT_PAST : TEXT_FUTURE);
+            float titleRoom = reminded ? textWidth - dp(10) : textWidth;
+            String shownTitle = TextUtils.ellipsize(title, textPaint, Math.max(0f, titleRoom),
+                    TextUtils.TruncateAt.END).toString();
+            float titleBaseline = rowTop + dp(12);
+            canvas.drawText(shownTitle, textLeft, titleBaseline, textPaint);
+            float titleWidth = textPaint.measureText(shownTitle);
+            if (reminded && titleRoom > dp(14)) {
+                drawReminderRing(canvas, textLeft + titleWidth + dp(6), titleBaseline - sp(3.3f));
+            }
             textPaint.setTypeface(regular);
             smallPaint.setTypeface(regular);
-            smallPaint.setTextSize(sp(8.5f));
-            smallPaint.setColor(MUTED);
-            canvas.drawText(TextUtils.ellipsize(range(programme), smallPaint, textWidth,
-                    TextUtils.TruncateAt.END).toString(), textLeft, rowTop + dp(27), smallPaint);
+            smallPaint.setTextSize(sp(7));
+            smallPaint.setColor(focused ? TIME_FOCUSED : onAir ? TIME_ON_AIR : TIME_OTHER);
+            String range = TextUtils.ellipsize(range(programme), smallPaint, textWidth,
+                    TextUtils.TruncateAt.END).toString();
+            canvas.drawText(range, textLeft, rowTop + dp(23), smallPaint);
+            if (focused) {
+                // Foco: línea blanca fina debajo, del ancho del texto.
+                float lineWidth = Math.min(textWidth, Math.max(titleWidth, smallPaint.measureText(range)));
+                fillPaint.setColor(WHITE);
+                canvas.drawRect(textLeft, rowTop + rowHeight - dp(1), textLeft + lineWidth, rowTop + rowHeight, fillPaint);
+            }
         }
     }
 
-    /** Dibuja la campana con la base en {@code baseline}; devuelve el ancho usado. */
-    private float drawBell(Canvas canvas, float x, float baseline, float size) {
-        if (reminderBell == null) reminderBell = getContext().getDrawable(R.drawable.ic_reminder_bell);
-        if (reminderBell == null) return 0f;
-        int top = Math.round(baseline - size + dp(1));
-        reminderBell.setBounds(Math.round(x), top, Math.round(x + size), Math.round(top + size));
-        reminderBell.draw(canvas);
-        return size;
+    /** Recordatorio: anillo cian sin relleno, centrado en ({@code cx}, {@code cy}). */
+    private void drawReminderRing(Canvas canvas, float cx, float cy) {
+        fillPaint.setStyle(Paint.Style.STROKE);
+        fillPaint.setStrokeWidth(dp(0.75f));
+        fillPaint.setColor(CYAN);
+        canvas.drawCircle(cx, cy, dp(2.4f), fillPaint);
+        fillPaint.setStyle(Paint.Style.FILL);
     }
 
     /**
@@ -532,14 +558,14 @@ public final class EpgGuideView extends View implements GuideSurface {
     private String scheduleText(EpgProgramme programme) {
         String text = range(programme);
         if (!sameDay(programme.getStartMillis(), nowMillis)) {
-            text = capitalize(dayFormat.format(new Date(programme.getStartMillis()))) + "  ·  " + text;
+            text = capitalize(dayFormat.format(new Date(programme.getStartMillis()))) + " · " + text;
         }
         if (programme.getStartMillis() <= nowMillis && nowMillis < programme.getStopMillis()) {
-            return text + "  ·  " + getContext().getString(R.string.guide_remaining,
+            return text + " · " + getContext().getString(R.string.guide_remaining,
                     formatDuration(programme.getStopMillis() - nowMillis));
         }
         if (programme.getStartMillis() > nowMillis) {
-            return text + "  ·  " + getContext().getString(R.string.guide_starts_in,
+            return text + " · " + getContext().getString(R.string.guide_starts_in,
                     formatDuration(programme.getStartMillis() - nowMillis));
         }
         return text;

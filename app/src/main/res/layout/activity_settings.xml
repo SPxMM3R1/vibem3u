@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Opciones (moderno, centrado desde 2026-10-03): columna de 560 dp al centro con título y hora
+<!-- Opciones (moderno). 0.5.96: línea «Flotante minimalista» (DISENO.md): «OPCIONES», pestañas
+     de texto y hora arriba; columna de 390 dp a la izquierda sobre una sola capa oscura, filas sin
+     tarjeta (el foco es negrita con línea fina) y opciones de texto con punto verde.
+     Antes: centrado desde 2026-10-03: columna de 560 dp al centro con título y hora
      arriba y pestañas centradas. 0.5.90: colores y tamaños del mockup aprobado (blanco en lo
      elegido y en el foco, cyan solo en interruptores encendidos, Roboto 20/11.5/8.5 sp).
      Generado desde el mockup aprobado; el estilo clásico vive en classic_activity_settings.xml. -->
@@ -31,10 +34,143 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:includeFontPadding="false"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.2"
                 android:text="@string/settings_title"
-                android:textColor="@color/white"
-                android:textSize="20sp"
-                android:textStyle="bold" />
+                android:textAllCaps="true"
+                android:textColor="#9EFFFFFF"
+                android:textSize="7.5sp" />
+
+            <LinearLayout
+                android:id="@+id/settings_tabs"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="23dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+    
+    
+                <TextView
+                    android:id="@+id/tab_playback"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="19dp"
+                    android:background="@drawable/settings_tab"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:nextFocusLeft="@id/tab_updates"
+                    android:nextFocusRight="@id/tab_general"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="0dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="5dp"
+                    android:text="@string/settings_tab_playback"
+                    android:textColor="@color/white"
+                    android:textSize="10.5sp" />
+    
+                <TextView
+                    android:id="@+id/tab_general"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="19dp"
+                    android:background="@drawable/settings_tab"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:nextFocusLeft="@id/tab_playback"
+                    android:nextFocusRight="@id/tab_interface"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="0dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="5dp"
+                    android:text="@string/settings_tab_general"
+                    android:textColor="@color/white"
+                    android:textSize="10.5sp" />
+    
+                <TextView
+                    android:id="@+id/tab_interface"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="19dp"
+                    android:background="@drawable/settings_tab"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:nextFocusLeft="@id/tab_general"
+                    android:nextFocusRight="@id/tab_reminders"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="0dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="5dp"
+                    android:text="@string/settings_tab_interface"
+                    android:textColor="@color/white"
+                    android:textSize="10.5sp" />
+    
+                <TextView
+                    android:id="@+id/tab_reminders"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="19dp"
+                    android:background="@drawable/settings_tab"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:nextFocusLeft="@id/tab_interface"
+                    android:nextFocusRight="@id/tab_source"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="0dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="5dp"
+                    android:text="@string/settings_tab_reminders"
+                    android:textColor="@color/white"
+                    android:textSize="10.5sp" />
+    
+                <TextView
+                    android:id="@+id/tab_source"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="19dp"
+                    android:background="@drawable/settings_tab"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:nextFocusLeft="@id/tab_reminders"
+                    android:nextFocusRight="@id/tab_updates"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="0dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="5dp"
+                    android:text="@string/settings_tab_source"
+                    android:textColor="@color/white"
+                    android:textSize="10.5sp" />
+    
+                <TextView
+                    android:id="@+id/tab_updates"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="19dp"
+                    android:background="@drawable/settings_tab"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:nextFocusLeft="@id/tab_source"
+                    android:nextFocusRight="@id/tab_playback"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="0dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="5dp"
+                    android:text="@string/settings_tab_updates"
+                    android:textColor="@color/white"
+                    android:textSize="10.5sp" />
+    
+            </LinearLayout>
 
             <Space
                 android:layout_width="0dp"
@@ -46,134 +182,16 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:includeFontPadding="false"
-                android:textColor="@color/clock_day"
-                android:textSize="12sp" />
+                android:textColor="#B8FFFFFF"
+                android:textSize="10.5sp" />
         </LinearLayout>
 
-        <LinearLayout
-            android:id="@+id/settings_tabs"
-            android:layout_width="match_parent"
-            android:layout_height="32dp"
-            android:layout_marginTop="12dp"
-            android:gravity="center"
-            android:orientation="horizontal">
-
-
-            <TextView
-                android:id="@+id/tab_playback"
-                android:layout_width="wrap_content"
-                android:layout_height="24dp"
-                android:layout_marginEnd="11dp"
-                android:background="@drawable/settings_tab"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:nextFocusLeft="@id/tab_updates"
-                android:nextFocusRight="@id/tab_general"
-                android:paddingStart="11dp"
-                android:paddingEnd="11dp"
-                android:text="@string/settings_tab_playback"
-                android:textColor="@color/white"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/tab_general"
-                android:layout_width="wrap_content"
-                android:layout_height="24dp"
-                android:layout_marginEnd="11dp"
-                android:background="@drawable/settings_tab"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:nextFocusLeft="@id/tab_playback"
-                android:nextFocusRight="@id/tab_interface"
-                android:paddingStart="11dp"
-                android:paddingEnd="11dp"
-                android:text="@string/settings_tab_general"
-                android:textColor="@color/white"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/tab_interface"
-                android:layout_width="wrap_content"
-                android:layout_height="24dp"
-                android:layout_marginEnd="11dp"
-                android:background="@drawable/settings_tab"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:nextFocusLeft="@id/tab_general"
-                android:nextFocusRight="@id/tab_reminders"
-                android:paddingStart="11dp"
-                android:paddingEnd="11dp"
-                android:text="@string/settings_tab_interface"
-                android:textColor="@color/white"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/tab_reminders"
-                android:layout_width="wrap_content"
-                android:layout_height="24dp"
-                android:layout_marginEnd="11dp"
-                android:background="@drawable/settings_tab"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:nextFocusLeft="@id/tab_interface"
-                android:nextFocusRight="@id/tab_source"
-                android:paddingStart="11dp"
-                android:paddingEnd="11dp"
-                android:text="@string/settings_tab_reminders"
-                android:textColor="@color/white"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/tab_source"
-                android:layout_width="wrap_content"
-                android:layout_height="24dp"
-                android:layout_marginEnd="11dp"
-                android:background="@drawable/settings_tab"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:nextFocusLeft="@id/tab_reminders"
-                android:nextFocusRight="@id/tab_updates"
-                android:paddingStart="11dp"
-                android:paddingEnd="11dp"
-                android:text="@string/settings_tab_source"
-                android:textColor="@color/white"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/tab_updates"
-                android:layout_width="wrap_content"
-                android:layout_height="24dp"
-                android:layout_marginEnd="11dp"
-                android:background="@drawable/settings_tab"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:nextFocusLeft="@id/tab_source"
-                android:nextFocusRight="@id/tab_playback"
-                android:paddingStart="11dp"
-                android:paddingEnd="11dp"
-                android:text="@string/settings_tab_updates"
-                android:textColor="@color/white"
-                android:textSize="11sp" />
-
-        </LinearLayout>
 
         <ScrollView
             android:id="@+id/settings_content"
-            android:layout_width="match_parent"
+            android:layout_width="390dp"
             android:layout_height="0dp"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="34dp"
             android:layout_weight="1"
             android:clipToPadding="false"
             android:fadingEdge="none"
@@ -189,18 +207,45 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical">
                     <TextView
+                        android:id="@+id/settings_current_eyebrow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:fontFamily="sans-serif-medium"
+                        android:includeFontPadding="false"
+                        android:letterSpacing="0.2"
+                        android:singleLine="true"
+                        android:textAllCaps="true"
+                        android:textColor="#9EFFFFFF"
+                        android:textSize="7.5sp" />
+                    <TextView
+                        android:id="@+id/settings_current_programme"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:layout_marginBottom="10dp"
+                        android:ellipsize="end"
+                        android:includeFontPadding="false"
+                        android:letterSpacing="-0.015"
+                        android:singleLine="true"
+                        android:textColor="@color/white"
+                        android:textSize="23sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+                    <TextView
                         android:id="@+id/settings_current_channel_name"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="0dp"
                         android:layout_marginBottom="6dp"
-                        android:letterSpacing="0.06"
+                        android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="0.2"
                         android:singleLine="true"
                         android:ellipsize="end"
                         android:text="@string/settings_no_current_channel"
                         android:textAllCaps="true"
-                        android:textColor="@color/osd_muted"
-                        android:textSize="8.5sp" />
+                        android:textColor="#6BFFFFFF"
+                        android:textSize="7sp" />
                     <LinearLayout
                         android:id="@+id/current_channel_playback_card"
                         android:layout_width="match_parent"
@@ -210,10 +255,10 @@
                         android:gravity="center_vertical"
                         android:minHeight="40dp"
                         android:orientation="vertical"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp">
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp">
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -249,8 +294,8 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:layout_marginBottom="4dp"
-                        android:paddingStart="12dp"
-                        android:paddingEnd="12dp"
+                        android:paddingStart="0dp"
+                        android:paddingEnd="0dp"
                         android:text="@string/settings_quality_no_options"
                         android:textColor="@color/osd_muted"
                         android:textSize="8.5sp"
@@ -266,10 +311,10 @@
                         android:background="@drawable/settings_section_card"
                         android:focusable="true"
                         android:minHeight="40dp"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp"
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp"
                         android:showText="false"
                         android:textColor="@color/settings_row_title"
                         android:textSize="11.5sp"
@@ -281,10 +326,10 @@
                         android:layout_marginBottom="4dp"
                         android:background="@drawable/settings_section_card"
                         android:minHeight="40dp"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp"
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp"
                         android:text="@string/subtitles_waiting_for_text"
                         android:textColor="@color/white"
                         android:textSize="11.5sp" />
@@ -297,10 +342,10 @@
                         android:gravity="center_vertical"
                         android:minHeight="40dp"
                         android:orientation="horizontal"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp"
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp"
                         android:clickable="true"
                         android:focusable="true">
                         <LinearLayout
@@ -345,10 +390,10 @@
                         android:gravity="center_vertical"
                         android:minHeight="40dp"
                         android:orientation="horizontal"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp"
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp"
                         android:clickable="true"
                         android:focusable="true"
                         android:visibility="gone">
@@ -392,24 +437,25 @@
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="16dp"
+                            android:layout_marginTop="20dp"
                             android:layout_marginBottom="6dp"
-                            android:letterSpacing="0.06"
+                            android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="0.2"
                             android:singleLine="true"
                             android:ellipsize="end"
                             android:text="@string/settings_section_signal_info"
                             android:textAllCaps="true"
-                            android:textColor="@color/osd_muted"
-                            android:textSize="8.5sp" />
+                            android:textColor="#6BFFFFFF"
+                            android:textSize="7sp" />
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginBottom="4dp"
                             android:background="@drawable/settings_section_card"
                             android:orientation="vertical"
-                            android:paddingStart="12dp"
+                            android:paddingStart="0dp"
                             android:paddingTop="9dp"
-                            android:paddingEnd="12dp"
+                            android:paddingEnd="0dp"
                             android:paddingBottom="9dp">
                             <LinearLayout
                                 android:layout_width="match_parent"
@@ -545,10 +591,10 @@
                         android:background="@drawable/settings_section_card"
                         android:focusable="true"
                         android:minHeight="40dp"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp"
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp"
                         android:showText="false"
                         android:text="@string/normalize_volume"
                         android:textColor="@color/settings_row_title"
@@ -564,10 +610,10 @@
                         android:background="@drawable/settings_section_card"
                         android:focusable="true"
                         android:minHeight="40dp"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp"
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp"
                         android:showText="false"
                         android:text="@string/settings_auto_reconnect"
                         android:textColor="@color/settings_row_title"
@@ -587,15 +633,14 @@
                         android:background="@drawable/settings_section_card"
                         android:gravity="center_vertical"
                         android:minHeight="40dp"
-                        android:orientation="horizontal"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp">
+                        android:orientation="vertical"
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp">
                         <LinearLayout
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
                             android:duplicateParentState="true"
                             android:orientation="vertical">
                             <TextView
@@ -617,39 +662,41 @@
                         </LinearLayout>
                         <LinearLayout
                             android:layout_width="wrap_content"
-                            android:layout_height="24dp"
-                            android:layout_marginStart="12dp"
-                            android:background="@drawable/segment_track"
+                            android:layout_height="26dp"
+                            android:layout_marginTop="8dp"
+                            android:background="@android:color/transparent"
                             android:orientation="horizontal"
-                            android:padding="2dp">
+                            android:padding="0dp">
                             <TextView
                                 android:id="@+id/ui_style_modern"
                                 android:layout_width="wrap_content"
                                 android:layout_height="match_parent"
+                                android:layout_marginEnd="20dp"
                                 android:background="@drawable/segment_option"
                                 android:clickable="true"
                                 android:focusable="true"
-                                android:gravity="center"
+                                android:gravity="center_vertical|start"
                                 android:includeFontPadding="false"
-                                android:paddingStart="9dp"
-                                android:paddingEnd="9dp"
+                                android:paddingStart="0dp"
+                                android:paddingEnd="10dp"
                                 android:text="@string/settings_ui_style_modern"
                                 android:textColor="@color/segment_option_text"
-                                android:textSize="8.5sp" />
+                                android:textSize="11sp" />
                             <TextView
                                 android:id="@+id/ui_style_classic"
                                 android:layout_width="wrap_content"
                                 android:layout_height="match_parent"
+                                android:layout_marginEnd="20dp"
                                 android:background="@drawable/segment_option"
                                 android:clickable="true"
                                 android:focusable="true"
-                                android:gravity="center"
+                                android:gravity="center_vertical|start"
                                 android:includeFontPadding="false"
-                                android:paddingStart="9dp"
-                                android:paddingEnd="9dp"
+                                android:paddingStart="0dp"
+                                android:paddingEnd="10dp"
                                 android:text="@string/settings_ui_style_classic"
                                 android:textColor="@color/segment_option_text"
-                                android:textSize="8.5sp" />
+                                android:textSize="11sp" />
                         </LinearLayout>
                     </LinearLayout>
                     <LinearLayout
@@ -659,15 +706,14 @@
                         android:background="@drawable/settings_section_card"
                         android:gravity="center_vertical"
                         android:minHeight="40dp"
-                        android:orientation="horizontal"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp">
+                        android:orientation="vertical"
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp">
                         <LinearLayout
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
                             android:duplicateParentState="true"
                             android:orientation="vertical">
                             <TextView
@@ -689,39 +735,41 @@
                         </LinearLayout>
                         <LinearLayout
                             android:layout_width="wrap_content"
-                            android:layout_height="24dp"
-                            android:layout_marginStart="12dp"
-                            android:background="@drawable/segment_track"
+                            android:layout_height="26dp"
+                            android:layout_marginTop="8dp"
+                            android:background="@android:color/transparent"
                             android:orientation="horizontal"
-                            android:padding="2dp">
+                            android:padding="0dp">
                             <TextView
                                 android:id="@+id/channel_keys_standard"
                                 android:layout_width="wrap_content"
                                 android:layout_height="match_parent"
+                                android:layout_marginEnd="20dp"
                                 android:background="@drawable/segment_option"
                                 android:clickable="true"
                                 android:focusable="true"
-                                android:gravity="center"
+                                android:gravity="center_vertical|start"
                                 android:includeFontPadding="false"
-                                android:paddingStart="9dp"
-                                android:paddingEnd="9dp"
+                                android:paddingStart="0dp"
+                                android:paddingEnd="10dp"
                                 android:text="@string/settings_channel_buttons_standard"
                                 android:textColor="@color/segment_option_text"
-                                android:textSize="8.5sp" />
+                                android:textSize="11sp" />
                             <TextView
                                 android:id="@+id/channel_keys_inverted"
                                 android:layout_width="wrap_content"
                                 android:layout_height="match_parent"
+                                android:layout_marginEnd="20dp"
                                 android:background="@drawable/segment_option"
                                 android:clickable="true"
                                 android:focusable="true"
-                                android:gravity="center"
+                                android:gravity="center_vertical|start"
                                 android:includeFontPadding="false"
-                                android:paddingStart="9dp"
-                                android:paddingEnd="9dp"
+                                android:paddingStart="0dp"
+                                android:paddingEnd="10dp"
                                 android:text="@string/settings_channel_buttons_inverted"
                                 android:textColor="@color/segment_option_text"
-                                android:textSize="8.5sp" />
+                                android:textSize="11sp" />
                         </LinearLayout>
                     </LinearLayout>
                     <Switch
@@ -735,10 +783,10 @@
                         android:background="@drawable/settings_section_card"
                         android:focusable="true"
                         android:minHeight="40dp"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp"
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp"
                         android:showText="false"
                         android:text="@string/invert_channel_keys"
                         android:textColor="@color/settings_row_title"
@@ -747,24 +795,25 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
+                        android:layout_marginTop="20dp"
                         android:layout_marginBottom="6dp"
-                        android:letterSpacing="0.06"
+                        android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="0.2"
                         android:singleLine="true"
                         android:ellipsize="end"
                         android:text="@string/settings_shortcuts_title"
                         android:textAllCaps="true"
-                        android:textColor="@color/osd_muted"
-                        android:textSize="8.5sp" />
+                        android:textColor="#6BFFFFFF"
+                        android:textSize="7sp" />
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="4dp"
                         android:background="@drawable/settings_section_card"
                         android:orientation="vertical"
-                        android:paddingStart="12dp"
+                        android:paddingStart="0dp"
                         android:paddingTop="9dp"
-                        android:paddingEnd="12dp"
+                        android:paddingEnd="0dp"
                         android:paddingBottom="9dp">
                         <LinearLayout
                             android:layout_width="match_parent"
@@ -908,21 +957,22 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="0dp"
                         android:layout_marginBottom="6dp"
-                        android:letterSpacing="0.06"
+                        android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="0.2"
                         android:singleLine="true"
                         android:ellipsize="end"
                         android:text="@string/settings_section_scheduled"
                         android:textAllCaps="true"
-                        android:textColor="@color/osd_muted"
-                        android:textSize="8.5sp" />
+                        android:textColor="#6BFFFFFF"
+                        android:textSize="7sp" />
                     <TextView
                         android:id="@+id/reminders_empty"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:layout_marginBottom="4dp"
-                        android:paddingStart="12dp"
-                        android:paddingEnd="12dp"
+                        android:paddingStart="0dp"
+                        android:paddingEnd="0dp"
                         android:text="@string/settings_reminders_empty"
                         android:textColor="@color/osd_muted"
                         android:textSize="8.5sp" />
@@ -936,23 +986,24 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:layout_marginBottom="4dp"
-                        android:paddingStart="12dp"
-                        android:paddingEnd="12dp"
+                        android:paddingStart="0dp"
+                        android:paddingEnd="0dp"
                         android:text="@string/settings_reminders_add_hint"
                         android:textColor="@color/osd_muted"
                         android:textSize="8.5sp" />
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
+                        android:layout_marginTop="20dp"
                         android:layout_marginBottom="6dp"
-                        android:letterSpacing="0.06"
+                        android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="0.2"
                         android:singleLine="true"
                         android:ellipsize="end"
                         android:text="@string/settings_section_alerts"
                         android:textAllCaps="true"
-                        android:textColor="@color/osd_muted"
-                        android:textSize="8.5sp" />
+                        android:textColor="#6BFFFFFF"
+                        android:textSize="7sp" />
                     <LinearLayout
                         android:id="@+id/reminder_permission_button"
                         android:layout_width="match_parent"
@@ -962,10 +1013,10 @@
                         android:gravity="center_vertical"
                         android:minHeight="40dp"
                         android:orientation="horizontal"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp"
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp"
                         android:clickable="true"
                         android:focusable="true">
                         <LinearLayout
@@ -1009,10 +1060,10 @@
                         android:gravity="center_vertical"
                         android:minHeight="40dp"
                         android:orientation="horizontal"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp"
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp"
                         android:clickable="true"
                         android:focusable="true">
                         <LinearLayout
@@ -1053,8 +1104,8 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:layout_marginBottom="4dp"
-                        android:paddingStart="12dp"
-                        android:paddingEnd="12dp"
+                        android:paddingStart="0dp"
+                        android:paddingEnd="0dp"
                         android:textColor="@color/osd_muted"
                         android:textSize="8.5sp" />
                 </LinearLayout>
@@ -1070,13 +1121,14 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="0dp"
                         android:layout_marginBottom="6dp"
-                        android:letterSpacing="0.06"
+                        android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="0.2"
                         android:singleLine="true"
                         android:ellipsize="end"
                         android:text="@string/settings_section_lists"
                         android:textAllCaps="true"
-                        android:textColor="@color/osd_muted"
-                        android:textSize="8.5sp" />
+                        android:textColor="#6BFFFFFF"
+                        android:textSize="7sp" />
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -1085,10 +1137,10 @@
                         android:gravity="center_vertical"
                         android:minHeight="40dp"
                         android:orientation="horizontal"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp">
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp">
                         <TextView
                             android:layout_width="108dp"
                             android:layout_height="wrap_content"
@@ -1118,10 +1170,10 @@
                         android:gravity="center_vertical"
                         android:minHeight="40dp"
                         android:orientation="horizontal"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp">
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp">
                         <TextView
                             android:layout_width="108dp"
                             android:layout_height="wrap_content"
@@ -1158,30 +1210,34 @@
                             android:includeFontPadding="false"
                             android:minHeight="0dp"
                             android:minWidth="0dp"
+                            android:paddingStart="0dp"
+                            android:paddingEnd="0dp"
                             android:paddingTop="0dp"
                             android:paddingBottom="0dp"
                             android:stateListAnimator="@null"
                             android:text="@string/save_and_play"
                             android:textAllCaps="false"
-                            android:textColor="@color/focus_button_text"
-                            android:textSize="9.5sp" />
+                            android:textColor="@color/minimal_button_text"
+                            android:textSize="10.5sp" />
                         <Button
                             android:id="@+id/cancel_button"
                             android:layout_width="wrap_content"
                             android:layout_height="28dp"
-                            android:layout_marginStart="8dp"
+                            android:layout_marginStart="22dp"
                             android:background="@drawable/focus_button"
                             android:focusable="true"
                             android:includeFontPadding="false"
                             android:minHeight="0dp"
                             android:minWidth="0dp"
+                            android:paddingStart="0dp"
+                            android:paddingEnd="0dp"
                             android:paddingTop="0dp"
                             android:paddingBottom="0dp"
                             android:stateListAnimator="@null"
                             android:text="@string/cancel"
                             android:textAllCaps="false"
-                            android:textColor="@color/focus_button_text"
-                            android:textSize="9.5sp" />
+                            android:textColor="@color/minimal_button_text"
+                            android:textSize="10.5sp" />
                     </LinearLayout>
                     <TextView
                         android:id="@+id/url_error"
@@ -1189,23 +1245,24 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:layout_marginBottom="4dp"
-                        android:paddingStart="12dp"
-                        android:paddingEnd="12dp"
+                        android:paddingStart="0dp"
+                        android:paddingEnd="0dp"
                         android:textColor="@color/red"
                         android:textSize="8.5sp"
                         android:visibility="gone" />
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
+                        android:layout_marginTop="20dp"
                         android:layout_marginBottom="6dp"
-                        android:letterSpacing="0.06"
+                        android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="0.2"
                         android:singleLine="true"
                         android:ellipsize="end"
                         android:text="@string/resolver_groups_title"
                         android:textAllCaps="true"
-                        android:textColor="@color/osd_muted"
-                        android:textSize="8.5sp" />
+                        android:textColor="#6BFFFFFF"
+                        android:textSize="7sp" />
                     <LinearLayout
                         android:id="@+id/resolver_groups_container"
                         android:layout_width="match_parent"
@@ -1216,8 +1273,8 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:layout_marginBottom="4dp"
-                        android:paddingStart="12dp"
-                        android:paddingEnd="12dp"
+                        android:paddingStart="0dp"
+                        android:paddingEnd="0dp"
                         android:text="@string/settings_provider_selection_web"
                         android:textColor="@color/osd_muted"
                         android:textSize="8.5sp" />
@@ -1226,14 +1283,15 @@
                         android:id="@+id/hidden_channels_title"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
+                        android:layout_marginTop="20dp"
                         android:layout_marginBottom="6dp"
-                        android:letterSpacing="0.06"
+                        android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="0.2"
                         android:singleLine="true"
                         android:text="@string/hidden_channels_title"
                         android:textAllCaps="true"
-                        android:textColor="@color/osd_muted"
-                        android:textSize="8.5sp"
+                        android:textColor="#6BFFFFFF"
+                        android:textSize="7sp"
                         android:visibility="gone" />
                     <LinearLayout
                         android:id="@+id/hidden_channels_container"
@@ -1245,15 +1303,16 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
+                        android:layout_marginTop="20dp"
                         android:layout_marginBottom="6dp"
-                        android:letterSpacing="0.06"
+                        android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="0.2"
                         android:singleLine="true"
                         android:ellipsize="end"
                         android:text="@string/premium_kicker"
                         android:textAllCaps="true"
-                        android:textColor="@color/osd_muted"
-                        android:textSize="8.5sp" />
+                        android:textColor="#6BFFFFFF"
+                        android:textSize="7sp" />
                     <LinearLayout
                         android:id="@+id/premium_account_row"
                         android:layout_width="match_parent"
@@ -1265,10 +1324,10 @@
                         android:gravity="center_vertical"
                         android:minHeight="40dp"
                         android:orientation="horizontal"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp">
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp">
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
@@ -1313,10 +1372,10 @@
                         android:gravity="center_vertical"
                         android:minHeight="40dp"
                         android:orientation="horizontal"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp"
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp"
                         android:visibility="gone">
                         <TextView
                             android:layout_width="0dp"
@@ -1328,24 +1387,25 @@
                         <LinearLayout
                             android:id="@+id/premium_region_options"
                             android:layout_width="wrap_content"
-                            android:layout_height="24dp"
-                            android:layout_marginStart="12dp"
-                            android:background="@drawable/segment_track"
+                            android:layout_height="26dp"
+                            android:layout_marginTop="8dp"
+                            android:background="@android:color/transparent"
                             android:orientation="horizontal"
-                            android:padding="2dp" />
+                            android:padding="0dp" />
                     </LinearLayout>
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
+                        android:layout_marginTop="20dp"
                         android:layout_marginBottom="6dp"
-                        android:letterSpacing="0.06"
+                        android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="0.2"
                         android:singleLine="true"
                         android:ellipsize="end"
                         android:text="@string/settings_section_advanced"
                         android:textAllCaps="true"
-                        android:textColor="@color/osd_muted"
-                        android:textSize="8.5sp" />
+                        android:textColor="#6BFFFFFF"
+                        android:textSize="7sp" />
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -1354,10 +1414,10 @@
                         android:gravity="center_vertical"
                         android:minHeight="40dp"
                         android:orientation="horizontal"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp">
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp">
                         <TextView
                             android:layout_width="108dp"
                             android:layout_height="wrap_content"
@@ -1388,10 +1448,10 @@
                         android:gravity="center_vertical"
                         android:minHeight="40dp"
                         android:orientation="horizontal"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp"
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp"
                         android:clickable="true"
                         android:focusable="true">
                         <LinearLayout
@@ -1439,12 +1499,13 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="6dp"
-                        android:letterSpacing="0.06"
+                        android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="0.2"
                         android:singleLine="true"
                         android:text="@string/system_links_title"
                         android:textAllCaps="true"
-                        android:textColor="@color/osd_muted"
-                        android:textSize="8.5sp" />
+                        android:textColor="#6BFFFFFF"
+                        android:textSize="7sp" />
                     <LinearLayout
                         android:id="@+id/system_links_container"
                         android:layout_width="match_parent"
@@ -1458,10 +1519,10 @@
                         android:gravity="center_vertical"
                         android:minHeight="40dp"
                         android:orientation="horizontal"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp">
+                        android:paddingStart="0dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="0dp"
+                        android:paddingBottom="9dp">
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
@@ -1495,13 +1556,15 @@
                             android:includeFontPadding="false"
                             android:minHeight="0dp"
                             android:minWidth="0dp"
+                            android:paddingStart="0dp"
+                            android:paddingEnd="0dp"
                             android:paddingTop="0dp"
                             android:paddingBottom="0dp"
                             android:stateListAnimator="@null"
                             android:text="@string/check_updates"
                             android:textAllCaps="false"
-                            android:textColor="@color/focus_button_text"
-                            android:textSize="9.5sp" />
+                            android:textColor="@color/minimal_button_text"
+                            android:textSize="10.5sp" />
                     </LinearLayout>
                     <TextView
                         android:id="@+id/update_status"
@@ -1509,32 +1572,33 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:layout_marginBottom="4dp"
-                        android:paddingStart="12dp"
-                        android:paddingEnd="12dp"
+                        android:paddingStart="0dp"
+                        android:paddingEnd="0dp"
                         android:textColor="@color/osd_muted"
                         android:textSize="8.5sp"
                         android:visibility="gone" />
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
+                        android:layout_marginTop="20dp"
                         android:layout_marginBottom="6dp"
-                        android:letterSpacing="0.06"
+                        android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="0.2"
                         android:singleLine="true"
                         android:ellipsize="end"
                         android:text="@string/settings_section_service"
                         android:textAllCaps="true"
-                        android:textColor="@color/osd_muted"
-                        android:textSize="8.5sp" />
+                        android:textColor="#6BFFFFFF"
+                        android:textSize="7sp" />
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="4dp"
                         android:background="@drawable/settings_section_card"
                         android:orientation="vertical"
-                        android:paddingStart="12dp"
+                        android:paddingStart="0dp"
                         android:paddingTop="9dp"
-                        android:paddingEnd="12dp"
+                        android:paddingEnd="0dp"
                         android:paddingBottom="9dp">
                         <LinearLayout
                             android:layout_width="match_parent"
@@ -1606,8 +1670,8 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:orientation="horizontal"
-                        android:paddingStart="12dp"
-                        android:paddingEnd="12dp">
+                        android:paddingStart="0dp"
+                        android:paddingEnd="0dp">
                         <TextView
                             android:id="@+id/info_app"
                             android:layout_width="wrap_content"

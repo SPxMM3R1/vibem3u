@@ -269,6 +269,8 @@ public final class MainActivity extends Activity {
     private View osdHero;
     private TextView osdDescription;
     private TextView osdNext;
+    /** Moderno (0.5.96): «● 033 · NOMBRE · CATEGORÍA» sobre el título; null en el clásico. */
+    private TextView osdEyebrow;
     private TextView osdClockTime;
     private TextView osdClockDate;
     private View loadingProgress;
@@ -624,6 +626,7 @@ public final class MainActivity extends Activity {
         osdHero = findViewById(R.id.osd_hero);
         osdDescription = findViewById(R.id.osd_description);
         osdNext = findViewById(R.id.osd_next);
+        osdEyebrow = findViewById(R.id.osd_eyebrow);
         osdClockTime = findViewById(R.id.osd_clock_time);
         osdClockDate = findViewById(R.id.osd_clock_date);
         loadingProgress = findViewById(R.id.loading_progress);
@@ -3244,6 +3247,26 @@ public final class MainActivity extends Activity {
     private void bindOsdChannel(int displayNumber, Channel channel) {
         channelNumber.setText(String.format(Locale.ROOT, "%03d", displayNumber));
         channelName.setText(channel.getName());
+        if (osdEyebrow != null) {
+            // Línea «Flotante minimalista»: el punto verde marca lo que se está viendo.
+            String eyebrow = String.format(Locale.ROOT, "%03d", displayNumber) + " · " + channel.getName();
+            if (!AppStrings.isBlank(channel.getGroup())) eyebrow += " · " + channel.getGroup().trim();
+            android.text.SpannableString text = new android.text.SpannableString("●  " + eyebrow);
+            text.setSpan(new android.text.style.ForegroundColorSpan(0xFF5BE9A0), 0, 1,
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            osdEyebrow.setText(text);
+        }
+    }
+
+    /** Etiqueta en mayúsculas espaciadas dentro de un texto mixto (no hay span de interletrado). */
+    static String spacedCaps(String value) {
+        String upper = value.toUpperCase(Locale.forLanguageTag("es-CL"));
+        StringBuilder out = new StringBuilder(upper.length() * 2);
+        for (int index = 0; index < upper.length(); index++) {
+            if (index > 0) out.append('\u200A');
+            out.append(upper.charAt(index));
+        }
+        return out.toString();
     }
 
     private void updateProgrammeInfo() {
@@ -3312,10 +3335,18 @@ public final class MainActivity extends Activity {
             return;
         }
         String prefix = getString(R.string.guide_next,
-                timeFormat.format(new Date(next.getStartMillis()))) + "  ";
+                timeFormat.format(new Date(next.getStartMillis())));
+        // Moderno: «DESPUÉS · 03:30» como etiqueta (mayúsculas espaciadas, tenue y más chica).
+        prefix = (classicUi ? prefix : spacedCaps(prefix)) + "   ";
         android.text.SpannableString text = new android.text.SpannableString(prefix + next.getTitle());
-        text.setSpan(new android.text.style.ForegroundColorSpan(getColor(R.color.white)),
+        text.setSpan(new android.text.style.ForegroundColorSpan(classicUi ? getColor(R.color.white) : 0xD9FFFFFF),
                 prefix.length(), text.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if (!classicUi) {
+            text.setSpan(new android.text.style.RelativeSizeSpan(0.82f), 0, prefix.length(),
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            text.setSpan(new android.text.style.ForegroundColorSpan(0x73FFFFFF), 0, prefix.length(),
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
         osdNext.setText(text);
         refreshReminderIds();
         boolean reminded = reminderIds.contains(
@@ -5964,8 +5995,39 @@ public final class MainActivity extends Activity {
         if (sourceSelectorOverlay != null) sourceSelectorOverlay.setVisibility(View.GONE);
     }
 
+    /** BACK que cerró un panel (Guía, selector, ajuste del logo, aviso de calidad). */
+    private boolean backDownConsumedByPanel;
+    private long backDownConsumedAtElapsed;
+
+    /** True (una sola vez) si el BACK que se suelta ya cerró un panel al bajar. */
+    private boolean takeBackConsumedByPanel() {
+        boolean consumed = backDownConsumedByPanel
+                && SystemClock.elapsedRealtime() - backDownConsumedAtElapsed < 2_000L;
+        backDownConsumedByPanel = false;
+        return consumed;
+    }
+
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        // Con «atrás predictivo» el sistema resuelve BACK al soltar la tecla: si el BACK
+        // bajado ya cerró un panel, el soltar no debe abrir «¿Salir de la app?» (0.5.96).
+        if (event.getKeyCode() == KeyEvent.KEYCODE_BACK) {
+            if (event.getAction() == KeyEvent.ACTION_UP && takeBackConsumedByPanel()) {
+                return true;
+            }
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                boolean panelOpen = logoSizeAdjusting || isGuideVisible()
+                        || isQualityUpgradeVisible() || isSourceSelectorVisible();
+                boolean handled = dispatchPlayerKeyEvent(event);
+                backDownConsumedByPanel = panelOpen && handled;
+                backDownConsumedAtElapsed = SystemClock.elapsedRealtime();
+                return handled;
+            }
+        }
+        return dispatchPlayerKeyEvent(event);
+    }
+
+    private boolean dispatchPlayerKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
         if (logoSizeAdjusting && handleLogoSizeKey(event)) return true;
         if (isGuideVisible() && handleGuideKey(event)) return true;
@@ -6122,6 +6184,9 @@ public final class MainActivity extends Activity {
     }
 
     private void handleBackAction() {
+        // El sistema invoca esto al soltar BACK: si al bajar ya cerró la Guía o el selector,
+        // no se sigue con el OSD ni con «¿Salir de la app?».
+        if (takeBackConsumedByPanel()) return;
         if (isQualityUpgradeVisible()) {
             hideQualityUpgrade();
             return;
@@ -6345,6 +6410,12 @@ public final class MainActivity extends Activity {
         intent.putExtra(SettingsActivity.EXTRA_CHANNEL_INDEX, channelIndex)
                 .putExtra(SettingsActivity.EXTRA_CHANNEL_TVG_ID, channel.getTvgId())
                 .putExtra(SettingsActivity.EXTRA_CHANNEL_NAME, channel.getName());
+        if (!classicUi) {
+            intent.putExtra(SettingsActivity.EXTRA_CHANNEL_NUMBER,
+                    publishedPlaybackCatalog.numberFor(channel, channelIndex + 1));
+            EpgProgramme programme = epgData.findCurrent(channel.getTvgId(), System.currentTimeMillis());
+            if (programme != null) intent.putExtra(SettingsActivity.EXTRA_PROGRAMME_TITLE, programme.getTitle());
+        }
         if (!classicUi && displayedLogoBitmap != null && displayedLogoKey != null) {
             intent.putExtra(SettingsActivity.EXTRA_CHANNEL_LOGO_KEY, displayedLogoKey);
         }

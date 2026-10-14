@@ -1,16 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Fila de Opciones (0.5.90): fondo tenue sin borde; con foco, tarjeta blanca. -->
+<!-- Fila de Opciones (0.5.96, «Flotante minimalista», DISENO.md): sin tarjeta. El foco lo
+     marca el título en negrita blanca con línea fina debajo (SettingsActivity). -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_focused="true">
-        <shape android:shape="rectangle">
-            <solid android:color="@color/menu_focus" />
-            <corners android:radius="6dp" />
-        </shape>
-    </item>
-    <item>
-        <shape android:shape="rectangle">
-            <solid android:color="@color/menu_row" />
-            <corners android:radius="6dp" />
-        </shape>
-    </item>
+    <item android:drawable="@android:color/transparent" />
 </selector>

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Texto del control segmentado (0.5.90): oscuro sobre la opción elegida (blanca). -->
+<!-- Opción elegible de Opciones (0.5.96): blanca con foco; la elegida casi blanca. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_selected="true" android:color="@color/on_white" />
     <item android:state_focused="true" android:color="@color/white" />
-    <item android:color="@color/menu_text" />
+    <item android:state_selected="true" android:color="#DBFFFFFF" />
+    <item android:color="#9EFFFFFF" />
 </selector>

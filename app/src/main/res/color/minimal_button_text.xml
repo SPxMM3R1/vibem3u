@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Acción de texto (0.5.96, «Flotante minimalista»): blanca con foco. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:color="@color/white" />
+    <item android:color="#B8FFFFFF" />
+</selector>

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Pestañas de Opciones (0.5.90): la activa es una píldora blanca con texto oscuro. -->
+<!-- Pestañas de Opciones (0.5.96): la activa y la enfocada en blanco; el resto tenues. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_selected="true" android:color="@color/on_white" />
+    <item android:state_selected="true" android:color="@color/white" />
     <item android:state_focused="true" android:color="@color/white" />
-    <item android:color="@color/osd_muted" />
+    <item android:color="#80FFFFFF" />
 </selector>
