@@ -9,7 +9,7 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#61000000" />
+        android:background="#33000000" />
 
     <View
         android:layout_width="match_parent"
@@ -18,7 +18,7 @@
 
     <View
         android:layout_width="match_parent"
-        android:layout_height="360dp"
+        android:layout_height="440dp"
         android:layout_gravity="bottom"
         android:background="@drawable/scene_scrim" />
 
@@ -27,38 +27,39 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|start"
         android:layout_marginStart="48dp"
-        android:layout_marginBottom="52dp"
+        android:layout_marginBottom="48dp"
         android:orientation="vertical">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:includeFontPadding="false"
-            android:letterSpacing="0.12"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.2"
             android:text="@string/premium_kicker"
             android:textAllCaps="true"
-            android:textColor="@color/osd_muted"
-            android:textSize="10sp" />
+            android:textColor="#9EFFFFFF"
+            android:textSize="7.5sp" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="9dp"
             android:includeFontPadding="false"
-            android:letterSpacing="-0.01"
+            android:letterSpacing="-0.015"
             android:text="@string/premium_pair_title"
             android:textColor="@color/white"
-            android:textSize="32sp"
+            android:textSize="30sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="500dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="9dp"
-            android:lineSpacingMultiplier="1.3"
+            android:lineSpacingMultiplier="1.4"
             android:text="@string/premium_pair_message"
-            android:textColor="#B7C4CA"
-            android:textSize="12.5sp" />
+            android:textColor="#BDFFFFFF"
+            android:textSize="11sp" />
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -68,54 +69,54 @@
 
             <TextView
                 android:id="@+id/premium_pair_digit_0"
-                android:layout_width="37dp"
-                android:layout_height="44dp"
-                android:layout_marginEnd="6dp"
+                android:layout_width="wrap_content"
+                android:layout_height="52dp"
+                android:layout_marginEnd="22dp"
                 android:background="@drawable/scene_code_cell"
-                android:fontFamily="monospace"
+                android:fontFamily="sans-serif-light"
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:textColor="@color/white"
-                android:textSize="24sp"
-                android:textStyle="bold" />
+                android:textSize="38sp"
+                android:letterSpacing="0.16" />
 
             <TextView
                 android:id="@+id/premium_pair_digit_1"
-                android:layout_width="37dp"
-                android:layout_height="44dp"
-                android:layout_marginEnd="6dp"
+                android:layout_width="wrap_content"
+                android:layout_height="52dp"
+                android:layout_marginEnd="22dp"
                 android:background="@drawable/scene_code_cell"
-                android:fontFamily="monospace"
+                android:fontFamily="sans-serif-light"
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:textColor="@color/white"
-                android:textSize="24sp"
-                android:textStyle="bold" />
+                android:textSize="38sp"
+                android:letterSpacing="0.16" />
 
             <TextView
                 android:id="@+id/premium_pair_digit_2"
-                android:layout_width="37dp"
-                android:layout_height="44dp"
-                android:layout_marginEnd="6dp"
+                android:layout_width="wrap_content"
+                android:layout_height="52dp"
+                android:layout_marginEnd="22dp"
                 android:background="@drawable/scene_code_cell"
-                android:fontFamily="monospace"
+                android:fontFamily="sans-serif-light"
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:textColor="@color/white"
-                android:textSize="24sp"
-                android:textStyle="bold" />
+                android:textSize="38sp"
+                android:letterSpacing="0.16" />
 
             <TextView
                 android:id="@+id/premium_pair_digit_3"
-                android:layout_width="37dp"
-                android:layout_height="44dp"
+                android:layout_width="wrap_content"
+                android:layout_height="52dp"
                 android:background="@drawable/scene_code_cell"
-                android:fontFamily="monospace"
+                android:fontFamily="sans-serif-light"
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:textColor="@color/white"
-                android:textSize="24sp"
-                android:textStyle="bold" />
+                android:textSize="38sp"
+                android:letterSpacing="0.16" />
 
         </LinearLayout>
 
@@ -125,7 +126,10 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="13dp"
             android:includeFontPadding="false"
-            android:textColor="@color/osd_muted"
+            android:drawablePadding="7dp"
+            android:drawableStart="@drawable/scene_status_dot"
+            android:gravity="center_vertical"
+            android:textColor="#9EFFFFFF"
             android:textSize="10.5sp" />
 
         <LinearLayout
@@ -137,19 +141,20 @@
             <Button
                 android:id="@+id/premium_pair_cancel_button"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="wrap_content"
                 android:background="@drawable/scene_button"
-                android:fontFamily="sans-serif-medium"
-                android:includeFontPadding="false"
+                                android:includeFontPadding="false"
                 android:minHeight="0dp"
                 android:minWidth="0dp"
-                android:paddingStart="19dp"
-                android:paddingEnd="19dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="7dp"
                 android:stateListAnimator="@null"
                 android:text="@string/cancel"
                 android:textAllCaps="false"
                 android:textColor="@color/scene_button_text"
-                android:textSize="12sp" />
+                android:textSize="11sp" />
 
         </LinearLayout>
 
@@ -160,7 +165,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_marginEnd="48dp"
-        android:layout_marginBottom="52dp"
+        android:layout_marginBottom="48dp"
         android:gravity="center_horizontal"
         android:orientation="vertical">
 

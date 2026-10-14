@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Panel del OSD con esquinas de 14 dp, sin borde. -->
+<!-- Recordatorio (0.5.98): sombra suave centrada bajo el texto, que se desvanece antes de los
+     bordes de la ventana (arriba y a la derecha llega al borde de la pantalla). Sin panel. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="@color/panel" />
-    <corners android:radius="14dp" />
+    <gradient
+        android:centerColor="#C7000000"
+        android:centerX="0.72"
+        android:centerY="0.18"
+        android:endColor="#00000000"
+        android:gradientRadius="320dp"
+        android:startColor="#F0000000"
+        android:type="radial" />
 </shape>

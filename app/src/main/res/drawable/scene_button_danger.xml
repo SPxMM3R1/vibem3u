@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Acción peligrosa (Papelera, 0.5.98): texto rosa; con foco, línea rosa fina debajo. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <layer-list>
+            <item android:gravity="bottom|fill_horizontal" android:height="1.5dp">
+                <shape><solid android:color="#FF9A9A" /></shape>
+            </item>
+        </layer-list>
+    </item>
+    <item android:drawable="@android:color/transparent" />
+</selector>

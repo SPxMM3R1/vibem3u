@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Aviso «Mejor calidad disponible» (2026-10-03): no detiene el video ni lo atenúa; solo una
-     sombra abajo a la izquierda. Se cierra solo; si el cambio falla, la app vuelve a la anterior. -->
+<!-- Aviso «Mejor calidad disponible»: no detiene el video ni lo atenúa. 0.5.98: flota a la
+     derecha sobre una sombra desde el borde, como el selector (antes, abajo a la izquierda). Se cierra solo; si el cambio falla, la app vuelve a la anterior. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/quality_upgrade_overlay"
     android:layout_width="match_parent"
@@ -8,28 +8,31 @@
     android:visibility="gone">
 
     <View
-        android:layout_width="680dp"
-        android:layout_height="300dp"
-        android:layout_gravity="bottom|start"
+        android:layout_width="560dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="end"
         android:background="@drawable/quality_toast_scrim" />
 
     <LinearLayout
-        android:layout_width="460dp"
+        android:layout_width="320dp"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|start"
-        android:layout_marginStart="48dp"
-        android:layout_marginBottom="44dp"
+        android:layout_gravity="end|center_vertical"
+        android:layout_marginEnd="60dp"
         android:orientation="vertical">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:includeFontPadding="false"
-            android:letterSpacing="0.12"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.2"
+            android:drawablePadding="7dp"
+            android:drawableStart="@drawable/minimal_live_dot"
+            android:gravity="center_vertical"
             android:text="@string/quality_upgrade_kicker"
             android:textAllCaps="true"
-            android:textColor="@color/osd_muted"
-            android:textSize="10sp" />
+            android:textColor="#9EFFFFFF"
+            android:textSize="7.5sp" />
 
         <TextView
             android:id="@+id/quality_upgrade_title"
@@ -37,8 +40,9 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:includeFontPadding="false"
+            android:letterSpacing="-0.015"
             android:textColor="@color/white"
-            android:textSize="23sp"
+            android:textSize="26sp"
             android:textStyle="bold" />
 
         <TextView
@@ -46,9 +50,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:lineSpacingMultiplier="1.3"
-            android:textColor="#B7C4CA"
-            android:textSize="11.5sp" />
+            android:lineSpacingMultiplier="1.4"
+            android:textColor="#BDFFFFFF"
+            android:textSize="11sp" />
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -59,48 +63,50 @@
             <Button
                 android:id="@+id/quality_upgrade_switch"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:layout_marginEnd="7dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="23dp"
                 android:background="@drawable/scene_button"
-                android:fontFamily="sans-serif-medium"
-                android:includeFontPadding="false"
+                                android:includeFontPadding="false"
                 android:minHeight="0dp"
                 android:minWidth="0dp"
-                android:paddingStart="19dp"
-                android:paddingEnd="19dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="7dp"
                 android:stateListAnimator="@null"
                 android:text="@string/quality_upgrade_switch"
                 android:textAllCaps="false"
                 android:textColor="@color/scene_button_text"
-                android:textSize="12sp" />
+                android:textSize="11sp" />
 
             <Button
                 android:id="@+id/quality_upgrade_dismiss"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="wrap_content"
                 android:background="@drawable/scene_button"
-                android:fontFamily="sans-serif-medium"
-                android:includeFontPadding="false"
+                                android:includeFontPadding="false"
                 android:minHeight="0dp"
                 android:minWidth="0dp"
-                android:paddingStart="19dp"
-                android:paddingEnd="19dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="7dp"
                 android:stateListAnimator="@null"
                 android:text="@string/quality_upgrade_dismiss"
                 android:textAllCaps="false"
                 android:textColor="@color/scene_button_text"
-                android:textSize="12sp" />
+                android:textSize="11sp" />
         </LinearLayout>
 
         <ProgressBar
             android:id="@+id/quality_upgrade_timer"
             style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="210dp"
-            android:layout_height="2dp"
+            android:layout_width="110dp"
+            android:layout_height="1dp"
             android:layout_marginTop="13dp"
             android:max="1000"
             android:progress="1000"
-            android:progressBackgroundTint="#24FFFFFF"
+            android:progressBackgroundTint="#2EFFFFFF"
             android:progressTint="@color/cyan" />
     </LinearLayout>
 </FrameLayout>

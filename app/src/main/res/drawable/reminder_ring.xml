@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Recordatorio (0.5.98, DISENO.md): anillo cian sin relleno. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <stroke android:width="1.5dp" android:color="@color/cyan" />
+    <size android:width="7dp" android:height="7dp" />
+</shape>

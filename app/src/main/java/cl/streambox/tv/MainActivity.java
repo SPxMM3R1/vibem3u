@@ -599,6 +599,7 @@ public final class MainActivity extends Activity {
         qualityUpgradeMessage = findViewById(R.id.quality_upgrade_message);
         qualityUpgradeSwitch = findViewById(R.id.quality_upgrade_switch);
         qualityUpgradeDismiss = findViewById(R.id.quality_upgrade_dismiss);
+        SceneDialog.boldWhenFocused(qualityUpgradeSwitch, qualityUpgradeDismiss);
         qualityUpgradeTimer = findViewById(R.id.quality_upgrade_timer);
         qualityUpgradeSwitch.setOnClickListener(view -> acceptQualityUpgrade());
         qualityUpgradeDismiss.setOnClickListener(view -> hideQualityUpgrade());

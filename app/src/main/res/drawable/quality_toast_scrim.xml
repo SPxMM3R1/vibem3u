@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Sombra difusa abajo a la izquierda: el aviso flota sin tapar el partido. -->
+<!-- «Mejor calidad disponible» (0.5.98): sombra desde el borde derecho, como el selector. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <gradient
-        android:centerColor="#BF000000"
-        android:centerX="0.0"
-        android:centerY="1.0"
+        android:angle="180"
+        android:centerColor="#B3000000"
+        android:centerX="0.32"
         android:endColor="#00000000"
-        android:gradientRadius="560dp"
-        android:startColor="#EB000000"
-        android:type="radial" />
+        android:startColor="#E6000000"
+        android:type="linear" />
 </shape>

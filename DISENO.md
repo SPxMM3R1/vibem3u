@@ -3,8 +3,7 @@
 > Adoptada por el usuario el 2026-10-13 («déjalo incorporar al proyecto como línea oficial de
 > diseño»). Nació con el selector «Fuentes y calidades» de la 0.5.95 y se extendió en mockups a
 > la Guía y a Opciones. Todo diseño nuevo del estilo **moderno** sigue estas reglas; el estilo
-> clásico (0.5.40) no se toca. Lo que hoy en la app todavía usa tarjetas, píldoras o velo cyan
-> es diseño anterior pendiente de migrar, no un ejemplo a copiar.
+> clásico (0.5.40) no se toca. Desde la 0.5.98 todas las pantallas del moderno siguen esta línea.
 >
 > El proceso no cambia: todo cambio visual se muestra primero como mockup (imagen, sobre un
 > fotograma real de canal) y solo se implementa con «aplícalo» del usuario.
@@ -17,7 +16,8 @@ Referencias aprobadas en `docs/diseno/`:
 | Guía | `guia-ahora.jpg`, `guia-futuro.jpg` (mockup) · `guia-app.jpg` (app) | implementado (0.5.96) |
 | Opciones | `opciones-*.jpg` (mockup) · `opciones-*-app.jpg` (app) | implementado (0.5.96) |
 | OSD | `osd.jpg` (app) | implementado (0.5.96) |
-| Diálogos «escena» (salir, actualización, Premium) | — | pendiente: aún con píldoras |
+| Escenas (salir, actualización, papelera, Premium, GitHub, token vencido) | `*-app.jpg` | implementado (0.5.98) |
+| Avisos (mejor calidad, recordatorio) y MediaFlow | `recordatorio-app.jpg`, `mediaflow-app.jpg` | implementado (0.5.98) |
 
 En la app no hay desenfoque detrás del texto (Android no puede desenfocar el video de un
 `SurfaceView`): por eso los degradados de la Guía y de Opciones son algo más oscuros que en los

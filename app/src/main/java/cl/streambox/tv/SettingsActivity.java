@@ -328,8 +328,12 @@ public final class SettingsActivity extends Activity {
         });
         bindLogoSizeRow(getIntent());
         initializeResolverOptions(getIntent());
-        mediaFlowSettingsButton.setOnClickListener(view ->
-                startActivity(new Intent(this, MediaFlowSettingsActivity.class)));
+        mediaFlowSettingsButton.setOnClickListener(view -> {
+            // Moderno (0.5.98): MediaFlow es translúcido sobre el video; Opciones se oculta
+            // mientras tanto para que no se vea debajo. Vuelve en onResume.
+            if (!classicUi && settingsRoot != null) settingsRoot.setVisibility(View.INVISIBLE);
+            startActivity(new Intent(this, MediaFlowSettingsActivity.class));
+        });
 
         // Cancelar deshace lo escrito en las listas; no cierra Opciones.
         cancelButton.setOnClickListener(v -> revertPlaylistFields());
@@ -898,8 +902,12 @@ public final class SettingsActivity extends Activity {
             }
             case TAB_SOURCE:
                 return urlInput;
-            case TAB_UPDATES:
-                return updateButton;
+            case TAB_UPDATES: {
+                // Moderno: Vinculaciones va arriba; antes ▲ desde «Buscar actualizaciones»
+                // saltaba a las pestañas y Premium/GitHub quedaban fuera de alcance (0.5.98).
+                LinearLayout links = findViewById(R.id.system_links_container);
+                return links != null && links.getChildCount() > 0 ? links.getChildAt(0) : updateButton;
+            }
             default:
                 return playbackFirstFocus == null ? tabs[TAB_PLAYBACK] : playbackFirstFocus;
         }
@@ -1124,12 +1132,29 @@ public final class SettingsActivity extends Activity {
     private static final class FocusLine extends android.text.style.UnderlineSpan {
     }
 
+    /** Último texto marcado: se limpia siempre, aunque Android no avise quién perdió el foco. */
+    private TextView minimalFocusTarget;
+
     private void installMinimalFocus() {
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener(
                 (oldFocus, newFocus) -> {
+                    if (minimalFocusTarget != null) clearMinimalFocus(minimalFocusTarget);
+                    minimalFocusTarget = null;
                     styleMinimalFocus(oldFocus, false);
                     styleMinimalFocus(newFocus, true);
                 });
+    }
+
+    private static void clearMinimalFocus(TextView target) {
+        CharSequence current = target.getText();
+        if (!(current instanceof android.text.Spanned)) return;
+        android.text.Spanned spanned = (android.text.Spanned) current;
+        if (spanned.getSpans(0, spanned.length(), FocusBold.class).length == 0
+                && spanned.getSpans(0, spanned.length(), FocusLine.class).length == 0) return;
+        android.text.SpannableString text = new android.text.SpannableString(current);
+        for (Object span : text.getSpans(0, text.length(), FocusBold.class)) text.removeSpan(span);
+        for (Object span : text.getSpans(0, text.length(), FocusLine.class)) text.removeSpan(span);
+        target.setText(text);
     }
 
     /**
@@ -1167,6 +1192,7 @@ public final class SettingsActivity extends Activity {
             if (end < 0) end = text.length();
             text.setSpan(new FocusBold(), 0, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             if (line) text.setSpan(new FocusLine(), 0, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            minimalFocusTarget = target;
         }
         target.setText(text);
     }
@@ -1273,15 +1299,18 @@ public final class SettingsActivity extends Activity {
         return focusedView == saveButton || focusedView == cancelButton;
     }
 
+    /** Búsqueda en curso: el botón no se deshabilita para no perder el foco (0.5.98). */
+    private boolean checkingUpdates;
+
     private void checkForUpdates() {
-        if (!BuildConfig.ENABLE_APP_UPDATES) return;
-        updateButton.setEnabled(false);
+        if (!BuildConfig.ENABLE_APP_UPDATES || checkingUpdates) return;
+        checkingUpdates = true;
         updateStatus.setText(R.string.update_checking);
         updateStatus.setVisibility(View.VISIBLE);
         appUpdater.checkForUpdates(new AppUpdater.CheckListener() {
             @Override
             public void onUpdateAvailable(UpdateInfo update) {
-                updateButton.setEnabled(true);
+                checkingUpdates = false;
                 updateStatus.setText(getString(
                         R.string.update_found,
                         update.getVersionName()
@@ -1290,13 +1319,13 @@ public final class SettingsActivity extends Activity {
 
             @Override
             public void onUpToDate() {
-                updateButton.setEnabled(true);
+                checkingUpdates = false;
                 updateStatus.setText(R.string.update_up_to_date);
             }
 
             @Override
             public void onError(Throwable error) {
-                updateButton.setEnabled(true);
+                checkingUpdates = false;
                 updateStatus.setText(getString(
                         R.string.update_check_error,
                         error == null || error.getMessage() == null
@@ -1653,6 +1682,7 @@ public final class SettingsActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (settingsRoot != null) settingsRoot.setVisibility(View.VISIBLE);
         mainHandler.removeCallbacks(updateSettingsClock);
         updateSettingsClock.run();
         refreshReminderStatus();

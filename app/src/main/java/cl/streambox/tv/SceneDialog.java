@@ -24,8 +24,35 @@ final class SceneDialog {
             window.setLayout(WindowManager.LayoutParams.MATCH_PARENT,
                     WindowManager.LayoutParams.MATCH_PARENT);
             window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            // «Flotante minimalista» (0.5.98): la acción con foco va en negrita.
+            window.getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener(
+                    (oldFocus, newFocus) -> {
+                        setBold(oldFocus, false);
+                        setBold(newFocus, true);
+                    });
         }
         return dialog;
+    }
+
+    /** Negrita en la acción con foco (Button); el resto de los textos no cambia. */
+    static void setBold(View view, boolean bold) {
+        if (!(view instanceof android.widget.Button)) return;
+        ((android.widget.Button) view).setTypeface(android.graphics.Typeface.create(
+                android.graphics.Typeface.DEFAULT, bold ? android.graphics.Typeface.BOLD
+                        : android.graphics.Typeface.NORMAL));
+    }
+
+    /** Lo mismo para acciones fuera de una escena (aviso de calidad, MediaFlow). */
+    static void boldWhenFocused(View... views) {
+        for (View view : views) {
+            if (view == null) continue;
+            View.OnFocusChangeListener previous = view.getOnFocusChangeListener();
+            view.setOnFocusChangeListener((v, focused) -> {
+                setBold(v, focused);
+                if (previous != null) previous.onFocusChange(v, focused);
+            });
+            setBold(view, view.isFocused());
+        }
     }
 
     /**

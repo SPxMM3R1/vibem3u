@@ -9,7 +9,7 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#61000000" />
+        android:background="#33000000" />
 
     <View
         android:layout_width="match_parent"
@@ -18,7 +18,7 @@
 
     <View
         android:layout_width="match_parent"
-        android:layout_height="360dp"
+        android:layout_height="440dp"
         android:layout_gravity="bottom"
         android:background="@drawable/scene_scrim" />
 
@@ -27,18 +27,19 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|start"
         android:layout_marginStart="48dp"
-        android:layout_marginBottom="52dp"
+        android:layout_marginBottom="48dp"
         android:orientation="vertical">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:includeFontPadding="false"
-            android:letterSpacing="0.12"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.2"
             android:text="@string/scene_update_kicker"
             android:textAllCaps="true"
-            android:textColor="@color/osd_muted"
-            android:textSize="10sp" />
+            android:textColor="#9EFFFFFF"
+            android:textSize="7.5sp" />
 
         <TextView
             android:id="@+id/update_title"
@@ -46,10 +47,10 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="9dp"
             android:includeFontPadding="false"
-            android:letterSpacing="-0.01"
+            android:letterSpacing="-0.015"
             android:text="@string/update_title"
             android:textColor="@color/white"
-            android:textSize="32sp"
+            android:textSize="30sp"
             android:textStyle="bold" />
 
         <TextView
@@ -57,19 +58,19 @@
             android:layout_width="450dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="9dp"
-            android:lineSpacingMultiplier="1.3"
-            android:textColor="#B7C4CA"
+            android:lineSpacingMultiplier="1.4"
+            android:textColor="#BDFFFFFF"
             android:maxLines="3"
-            android:textSize="12.5sp" />
+            android:textSize="11sp" />
 
         <ProgressBar
             android:id="@+id/update_progress"
             style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="300dp"
-            android:layout_height="3dp"
+            android:layout_height="1dp"
             android:layout_marginTop="12dp"
             android:max="100"
-            android:progressBackgroundTint="#24FFFFFF"
+            android:progressBackgroundTint="#2EFFFFFF"
             android:progressTint="@color/cyan"
             android:visibility="gone" />
 
@@ -82,37 +83,39 @@
             <Button
                 android:id="@+id/update_install_button"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:layout_marginEnd="7dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="23dp"
                 android:background="@drawable/scene_button"
-                android:fontFamily="sans-serif-medium"
-                android:includeFontPadding="false"
+                                android:includeFontPadding="false"
                 android:minHeight="0dp"
                 android:minWidth="0dp"
-                android:paddingStart="19dp"
-                android:paddingEnd="19dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="7dp"
                 android:stateListAnimator="@null"
                 android:text="@string/update_now"
                 android:textAllCaps="false"
                 android:textColor="@color/scene_button_text"
-                android:textSize="12sp" />
+                android:textSize="11sp" />
 
             <Button
                 android:id="@+id/update_later_button"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="wrap_content"
                 android:background="@drawable/scene_button"
-                android:fontFamily="sans-serif-medium"
-                android:includeFontPadding="false"
+                                android:includeFontPadding="false"
                 android:minHeight="0dp"
                 android:minWidth="0dp"
-                android:paddingStart="19dp"
-                android:paddingEnd="19dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="7dp"
                 android:stateListAnimator="@null"
                 android:text="@string/update_later"
                 android:textAllCaps="false"
                 android:textColor="@color/scene_button_text"
-                android:textSize="12sp" />
+                android:textSize="11sp" />
 
         </LinearLayout>
 

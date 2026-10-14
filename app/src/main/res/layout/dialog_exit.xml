@@ -9,7 +9,7 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#61000000" />
+        android:background="#33000000" />
 
     <View
         android:layout_width="match_parent"
@@ -18,7 +18,7 @@
 
     <View
         android:layout_width="match_parent"
-        android:layout_height="360dp"
+        android:layout_height="440dp"
         android:layout_gravity="bottom"
         android:background="@drawable/scene_scrim" />
 
@@ -27,27 +27,27 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|start"
         android:layout_marginStart="48dp"
-        android:layout_marginBottom="52dp"
+        android:layout_marginBottom="48dp"
         android:orientation="vertical">
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:includeFontPadding="false"
-            android:letterSpacing="-0.01"
+            android:letterSpacing="-0.015"
             android:text="@string/scene_exit_title"
             android:textColor="@color/white"
-            android:textSize="32sp"
+            android:textSize="30sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="450dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="9dp"
-            android:lineSpacingMultiplier="1.3"
+            android:lineSpacingMultiplier="1.4"
             android:text="@string/exit_dialog_message"
-            android:textColor="#B7C4CA"
-            android:textSize="12.5sp" />
+            android:textColor="#BDFFFFFF"
+            android:textSize="11sp" />
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -58,37 +58,39 @@
             <Button
                 android:id="@+id/exit_button"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:layout_marginEnd="7dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="23dp"
                 android:background="@drawable/scene_button"
-                android:fontFamily="sans-serif-medium"
-                android:includeFontPadding="false"
+                                android:includeFontPadding="false"
                 android:minHeight="0dp"
                 android:minWidth="0dp"
-                android:paddingStart="19dp"
-                android:paddingEnd="19dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="7dp"
                 android:stateListAnimator="@null"
                 android:text="@string/exit"
                 android:textAllCaps="false"
                 android:textColor="@color/scene_button_text"
-                android:textSize="12sp" />
+                android:textSize="11sp" />
 
             <Button
                 android:id="@+id/stay_button"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="wrap_content"
                 android:background="@drawable/scene_button"
-                android:fontFamily="sans-serif-medium"
-                android:includeFontPadding="false"
+                                android:includeFontPadding="false"
                 android:minHeight="0dp"
                 android:minWidth="0dp"
-                android:paddingStart="19dp"
-                android:paddingEnd="19dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="7dp"
                 android:stateListAnimator="@null"
                 android:text="@string/stay_watching"
                 android:textAllCaps="false"
                 android:textColor="@color/scene_button_text"
-                android:textSize="12sp" />
+                android:textSize="11sp" />
 
         </LinearLayout>
 

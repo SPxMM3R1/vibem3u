@@ -28,6 +28,9 @@ final class ChannelActionScenes {
         Button secondary = dialog.findViewById(R.id.scene_secondary);
         primary.setText(R.string.channel_trash_confirm);
         secondary.setText(R.string.cancel);
+        // Acción peligrosa en rosa (DISENO.md); el foco sigue partiendo en Cancelar.
+        primary.setBackgroundResource(R.drawable.scene_button_danger);
+        primary.setTextColor(activity.getColorStateList(R.color.scene_button_danger_text));
         primary.setOnClickListener(view -> {
             dialog.dismiss();
             onConfirm.run();

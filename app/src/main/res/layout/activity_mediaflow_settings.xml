@@ -1,75 +1,101 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- MediaFlow (0.5.98, «Flotante minimalista»): como Opciones, columna de 390 dp a la izquierda
+     sobre el mismo fondo; campos con una línea debajo y acciones de texto. -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/menu_backdrop"
+    android:background="@drawable/menu_backdrop_center"
     android:fillViewport="true">
 
     <LinearLayout
-        android:layout_width="match_parent"
+        android:layout_width="390dp"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="32dp">
+        android:paddingStart="48dp"
+        android:paddingTop="27dp"
+        android:paddingBottom="32dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
+            android:letterSpacing="0.2"
+            android:text="@string/mediaflow_breadcrumb"
+            android:textAllCaps="true"
+            android:textColor="#9EFFFFFF"
+            android:textSize="7.5sp" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="36dp"
+            android:includeFontPadding="false"
+            android:letterSpacing="-0.015"
             android:text="@string/mediaflow_settings_title"
             android:textColor="@color/white"
-            android:textSize="26sp"
+            android:textSize="23sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
+            android:lineSpacingMultiplier="1.35"
             android:text="@string/mediaflow_settings_description"
-            android:textColor="@color/muted"
-            android:textSize="16sp" />
+            android:textColor="#9EFFFFFF"
+            android:textSize="9sp" />
 
         <Switch
             android:id="@+id/mediaflow_enabled"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="28dp"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/settings_section_card"
+            android:paddingBottom="9dp"
+            android:paddingTop="9dp"
+            android:showText="false"
+            android:switchMinWidth="26dp"
             android:text="@string/mediaflow_enabled"
-            android:textColor="@color/white"
-            android:textSize="18sp" />
-
-        <TextView
-            android:id="@+id/mediaflow_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:textColor="@color/muted"
-            android:textSize="14sp" />
+            android:textColor="@color/settings_row_title"
+            android:textSize="11.5sp"
+            android:thumb="@drawable/settings_switch_thumb"
+            android:track="@drawable/settings_switch_track" />
 
         <EditText
             android:id="@+id/mediaflow_origin"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
+            android:layout_height="36dp"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/settings_input"
             android:hint="@string/mediaflow_origin_hint"
             android:inputType="textUri"
+            android:paddingStart="0dp"
+            android:paddingEnd="0dp"
             android:singleLine="true"
             android:textColor="@color/white"
-            android:textColorHint="@color/muted" />
+            android:textColorHint="#66FFFFFF"
+            android:textSize="11sp" />
 
         <EditText
             android:id="@+id/mediaflow_password"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_height="36dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/settings_input"
             android:hint="@string/mediaflow_password_hint"
             android:inputType="textPassword"
+            android:paddingStart="0dp"
+            android:paddingEnd="0dp"
             android:singleLine="true"
             android:textColor="@color/white"
-            android:textColorHint="@color/muted" />
+            android:textColorHint="#66FFFFFF"
+            android:textSize="11sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
+            android:layout_marginTop="20dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
@@ -77,14 +103,42 @@
                 android:id="@+id/mediaflow_save"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/mediaflow_save" />
+                android:layout_marginEnd="23dp"
+                android:background="@drawable/scene_button"
+                android:includeFontPadding="false"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingBottom="7dp"
+                android:paddingTop="4dp"
+                android:stateListAnimator="@null"
+                android:text="@string/mediaflow_save"
+                android:textAllCaps="false"
+                android:textColor="@color/scene_button_text"
+                android:textSize="11sp" />
 
             <Button
                 android:id="@+id/mediaflow_test"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:text="@string/mediaflow_test" />
+                android:background="@drawable/scene_button"
+                android:includeFontPadding="false"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingBottom="7dp"
+                android:paddingTop="4dp"
+                android:stateListAnimator="@null"
+                android:text="@string/mediaflow_test"
+                android:textAllCaps="false"
+                android:textColor="@color/scene_button_text"
+                android:textSize="11sp" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/mediaflow_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:textColor="#80FFFFFF"
+            android:textSize="8.5sp" />
     </LinearLayout>
 </ScrollView>

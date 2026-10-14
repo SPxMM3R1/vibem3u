@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Punto verde «en uso / disponible» (DISENO.md). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="#5BE9A0" />
+    <size android:width="4dp" android:height="4dp" />
+</shape>

@@ -23,9 +23,9 @@ import android.widget.TextView;
  */
 final class ReminderOverlay {
     static final long AUTO_DISMISS_MS = 15_000L;
-    /** Área segura de TV. */
-    private static final int MARGIN_SIDE_DP = 48;
-    private static final int MARGIN_TOP_DP = 27;
+
+    private static final int WINDOW_WIDTH_DP = 520;
+    private static final int WINDOW_HEIGHT_DP = 380;
 
     private static View current;
 
@@ -73,17 +73,21 @@ final class ReminderOverlay {
         });
 
         float density = app.getResources().getDisplayMetrics().density;
+        // Tamaño fijo (0.5.98): la sombra nace en la esquina y necesita espacio para
+        // desvanecerse; con WRAP_CONTENT quedaba como una caja de bordes duros.
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
+                Math.round(WINDOW_WIDTH_DP * density),
+                Math.round(WINDOW_HEIGHT_DP * density),
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT
         );
         params.gravity = Gravity.TOP | Gravity.END;
-        params.x = Math.round(MARGIN_SIDE_DP * density);
-        params.y = Math.round(MARGIN_TOP_DP * density);
+        // 0.5.98: la ventana llega a la esquina (su sombra nace ahí); el texto lleva los
+        // márgenes de TV dentro del layout.
+        params.x = 0;
+        params.y = 0;
         params.windowAnimations = android.R.style.Animation_Toast;
         params.setTitle("VibeM3U recordatorio");
         try {
@@ -97,7 +101,7 @@ final class ReminderOverlay {
         return true;
     }
 
-    /** «Recordatorio» en cyan y « · canal» en gris; la campana va como drawable. */
+    /** «Recordatorio» en cyan y « · canal» en gris; el anillo cian va como drawable. */
     private static CharSequence kicker(Context context, String channelName) {
         SpannableStringBuilder text = new SpannableStringBuilder();
         String label = context.getString(R.string.reminder_label);

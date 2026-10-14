@@ -62,6 +62,12 @@ public final class MediaFlowSettingsActivity extends Activity {
         Button save = findViewById(R.id.mediaflow_save);
         save.setOnClickListener(view -> saveConfiguration(enabled.isChecked()));
         Button test = findViewById(R.id.mediaflow_test);
+        SceneDialog.boldWhenFocused(save, test);
+        if (enabled != null) {
+            enabled.setOnFocusChangeListener((view, focused) -> enabled.setTypeface(
+                    android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT,
+                            focused ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL)));
+        }
         test.setOnClickListener(this::testServer);
     }
 
