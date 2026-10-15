@@ -57,15 +57,18 @@
                 android:id="@+id/loading_text"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="9dp"
                 android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
                 android:gravity="center"
+                android:letterSpacing="0.2"
+                android:textAllCaps="true"
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:paddingHorizontal="32dp"
                 android:text="@string/loading_playlist"
-                android:textColor="@color/osd_muted"
-                android:textSize="11sp" />
+                android:textColor="#80FFFFFF"
+                android:textSize="7.5sp" />
         </LinearLayout>
     </FrameLayout>
 

@@ -40,6 +40,8 @@ mockups.
 4. **Mismo código visual en toda la app** (ver «Estados»). Quien aprende el selector ya sabe
    usar la Guía y Opciones.
 
+Colores de texto: blancos con transparencia (`minimal_muted` = #9EFFFFFF para lo secundario). El gris azulado `osd_muted` es del estilo anterior y solo queda en el clásico.
+
 ## Estados (iguales en todas las pantallas)
 
 | Estado | Cómo se ve |

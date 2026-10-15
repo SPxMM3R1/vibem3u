@@ -111,7 +111,7 @@ final class ReminderOverlay {
         if (channelName != null && !channelName.trim().isEmpty()) {
             int start = text.length();
             text.append(" · ").append(channelName.trim());
-            text.setSpan(new ForegroundColorSpan(context.getColor(R.color.muted)),
+            text.setSpan(new ForegroundColorSpan(context.getColor(R.color.minimal_muted)),
                     start, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         return text;

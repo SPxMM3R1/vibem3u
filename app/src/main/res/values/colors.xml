@@ -10,6 +10,8 @@
     <color name="muted">#B8C4C9</color>
     <!-- Gris de textos secundarios de la Guía y el OSD. -->
     <color name="osd_muted">#9FB0B7</color>
+    <!-- Gris neutro de la línea «Flotante minimalista» (0.6.00): blanco al 62 %, sin tinte azul. -->
+    <color name="minimal_muted">#9EFFFFFF</color>
     <!-- Menús (0.5.90, mockup aprobado): filas tenues; con foco, tarjeta blanca y texto oscuro.
          El cyan queda solo para los interruptores encendidos. -->
     <color name="menu_row">#0DFFFFFF</color>

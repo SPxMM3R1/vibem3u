@@ -297,7 +297,7 @@
                         android:paddingStart="0dp"
                         android:paddingEnd="0dp"
                         android:text="@string/settings_quality_no_options"
-                        android:textColor="@color/osd_muted"
+                        android:textColor="@color/minimal_muted"
                         android:textSize="8.5sp"
                         android:visibility="gone" />
                     <Switch
@@ -472,7 +472,7 @@
                                         android:layout_width="match_parent"
                                         android:layout_height="wrap_content"
                                         android:text="@string/settings_signal_resolution"
-                                        android:textColor="@color/osd_muted"
+                                        android:textColor="@color/minimal_muted"
                                         android:textSize="8.5sp" />
                                     <TextView
                                         android:id="@+id/signal_resolution"
@@ -491,7 +491,7 @@
                                         android:layout_width="match_parent"
                                         android:layout_height="wrap_content"
                                         android:text="@string/settings_signal_frame_rate"
-                                        android:textColor="@color/osd_muted"
+                                        android:textColor="@color/minimal_muted"
                                         android:textSize="8.5sp" />
                                     <TextView
                                         android:id="@+id/signal_frame_rate"
@@ -510,7 +510,7 @@
                                         android:layout_width="match_parent"
                                         android:layout_height="wrap_content"
                                         android:text="@string/settings_signal_bitrate"
-                                        android:textColor="@color/osd_muted"
+                                        android:textColor="@color/minimal_muted"
                                         android:textSize="8.5sp" />
                                     <TextView
                                         android:id="@+id/signal_bitrate"
@@ -536,7 +536,7 @@
                                         android:layout_width="match_parent"
                                         android:layout_height="wrap_content"
                                         android:text="@string/settings_signal_video_codec"
-                                        android:textColor="@color/osd_muted"
+                                        android:textColor="@color/minimal_muted"
                                         android:textSize="8.5sp" />
                                     <TextView
                                         android:id="@+id/signal_video"
@@ -555,7 +555,7 @@
                                         android:layout_width="match_parent"
                                         android:layout_height="wrap_content"
                                         android:text="@string/settings_signal_audio_codec"
-                                        android:textColor="@color/osd_muted"
+                                        android:textColor="@color/minimal_muted"
                                         android:textSize="8.5sp" />
                                     <TextView
                                         android:id="@+id/signal_codecs"
@@ -830,7 +830,7 @@
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_shortcut_ok"
-                                    android:textColor="@color/osd_muted"
+                                    android:textColor="@color/minimal_muted"
                                     android:textSize="8.5sp" />
                                 <TextView
                                     android:layout_width="match_parent"
@@ -849,7 +849,7 @@
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_shortcut_ok_twice"
-                                    android:textColor="@color/osd_muted"
+                                    android:textColor="@color/minimal_muted"
                                     android:textSize="8.5sp" />
                                 <TextView
                                     android:layout_width="match_parent"
@@ -868,7 +868,7 @@
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_shortcut_hold_ok"
-                                    android:textColor="@color/osd_muted"
+                                    android:textColor="@color/minimal_muted"
                                     android:textSize="8.5sp" />
                                 <TextView
                                     android:layout_width="match_parent"
@@ -894,7 +894,7 @@
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_shortcut_left"
-                                    android:textColor="@color/osd_muted"
+                                    android:textColor="@color/minimal_muted"
                                     android:textSize="8.5sp" />
                                 <TextView
                                     android:layout_width="match_parent"
@@ -913,7 +913,7 @@
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_shortcut_right"
-                                    android:textColor="@color/osd_muted"
+                                    android:textColor="@color/minimal_muted"
                                     android:textSize="8.5sp" />
                                 <TextView
                                     android:layout_width="match_parent"
@@ -932,7 +932,7 @@
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_shortcut_up_down"
-                                    android:textColor="@color/osd_muted"
+                                    android:textColor="@color/minimal_muted"
                                     android:textSize="8.5sp" />
                                 <TextView
                                     android:layout_width="match_parent"
@@ -974,7 +974,7 @@
                         android:paddingStart="0dp"
                         android:paddingEnd="0dp"
                         android:text="@string/settings_reminders_empty"
-                        android:textColor="@color/osd_muted"
+                        android:textColor="@color/minimal_muted"
                         android:textSize="8.5sp" />
                     <LinearLayout
                         android:id="@+id/reminders_list"
@@ -989,7 +989,7 @@
                         android:paddingStart="0dp"
                         android:paddingEnd="0dp"
                         android:text="@string/settings_reminders_add_hint"
-                        android:textColor="@color/osd_muted"
+                        android:textColor="@color/minimal_muted"
                         android:textSize="8.5sp" />
                     <TextView
                         android:layout_width="match_parent"
@@ -1106,7 +1106,7 @@
                         android:layout_marginBottom="4dp"
                         android:paddingStart="0dp"
                         android:paddingEnd="0dp"
-                        android:textColor="@color/osd_muted"
+                        android:textColor="@color/minimal_muted"
                         android:textSize="8.5sp" />
                 </LinearLayout>
 
@@ -1276,7 +1276,7 @@
                         android:paddingStart="0dp"
                         android:paddingEnd="0dp"
                         android:text="@string/settings_provider_selection_web"
-                        android:textColor="@color/osd_muted"
+                        android:textColor="@color/minimal_muted"
                         android:textSize="8.5sp" />
                     <!-- Ocultos en esta TV (0.5.90): solo aparece si hay alguno. -->
                     <TextView
@@ -1574,7 +1574,7 @@
                         android:layout_marginBottom="4dp"
                         android:paddingStart="0dp"
                         android:paddingEnd="0dp"
-                        android:textColor="@color/osd_muted"
+                        android:textColor="@color/minimal_muted"
                         android:textSize="8.5sp"
                         android:visibility="gone" />
                     <TextView
@@ -1615,7 +1615,7 @@
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_status_catalog"
-                                    android:textColor="@color/osd_muted"
+                                    android:textColor="@color/minimal_muted"
                                     android:textSize="8.5sp" />
                                 <TextView
                                     android:id="@+id/status_catalog"
@@ -1634,7 +1634,7 @@
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_status_epg"
-                                    android:textColor="@color/osd_muted"
+                                    android:textColor="@color/minimal_muted"
                                     android:textSize="8.5sp" />
                                 <TextView
                                     android:id="@+id/status_epg"
@@ -1653,7 +1653,7 @@
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:text="@string/settings_status_highfly"
-                                    android:textColor="@color/osd_muted"
+                                    android:textColor="@color/minimal_muted"
                                     android:textSize="8.5sp" />
                                 <TextView
                                     android:id="@+id/status_highfly"
@@ -1676,14 +1676,14 @@
                             android:id="@+id/info_app"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:textColor="@color/osd_muted"
+                            android:textColor="@color/minimal_muted"
                             android:textSize="8.5sp" />
                         <TextView
                             android:id="@+id/info_device"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="10dp"
-                            android:textColor="@color/osd_muted"
+                            android:textColor="@color/minimal_muted"
                             android:textSize="8.5sp" />
                     </LinearLayout>
                 </LinearLayout>

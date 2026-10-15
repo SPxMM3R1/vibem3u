@@ -1776,9 +1776,16 @@ public final class MainActivity extends Activity {
         for (View view : new View[]{channelOverlay, loadingPanel}) {
             if (view == null) continue;
             view.animate().cancel();
-            if (dim) view.setAlpha(alpha);
-            else view.animate().alpha(alpha).setDuration(250L).start();
+            // Con la Guía moderna abierta la carga no se ve (vuelve al cerrarla).
+            float target = view == loadingPanel && guideCoversPlayback() ? 0f : alpha;
+            if (dim) view.setAlpha(target);
+            else view.animate().alpha(target).setDuration(250L).start();
         }
+    }
+
+    /** Guía moderna abierta: ni la carga ni el OSD se traslucen debajo (0.6.00). */
+    private boolean guideCoversPlayback() {
+        return !classicUi && isGuideVisible();
     }
 
     /**
@@ -4102,8 +4109,9 @@ public final class MainActivity extends Activity {
     }
 
     private void showOverlay(boolean keepVisible) {
-        // Moderno (0.5.95): con el selector abierto, el OSD del canal no compite con él.
-        if (!classicUi && isSourceSelectorVisible()) return;
+        // Moderno (0.5.95): con el selector abierto, el OSD del canal no compite con él; con la
+        // Guía abierta tampoco (0.6.00: los pasos de carga lo volvían a mostrar debajo).
+        if (!classicUi && (isSourceSelectorVisible() || isGuideVisible())) return;
         hideProgrammeDetail.run();
         mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
         channelOverlay.setVisibility(View.VISIBLE);
@@ -4136,8 +4144,10 @@ public final class MainActivity extends Activity {
     private void openGuide() {
         if (channels.isEmpty() || guideView == null || settingsOpen || exiting) return;
         closePlaybackSourceSelector();
-        // Moderno (0.5.99): la carga del canal no se trasluce detrás de la Guía.
+        // Moderno (0.5.99): la carga del canal no se trasluce detrás de la Guía; desde la 0.6.00
+        // tampoco el OSD (se veía tenue bajo la grilla).
         if (!classicUi && loadingPanel != null) loadingPanel.setAlpha(0f);
+        if (!classicUi) hideOverlay.run();
         mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
         hideProgrammeDetail.run();
         mainHandler.removeCallbacks(hideOverlay);
@@ -4238,7 +4248,7 @@ public final class MainActivity extends Activity {
 
     private void closeGuide() {
         if (guideView != null) guideView.setVisibility(View.GONE);
-        if (loadingPanel != null) loadingPanel.setAlpha(1f);
+        if (loadingPanel != null) loadingPanel.setAlpha(blackScreenDimmed ? BLACK_SCREEN_ALPHA : 1f);
     }
 
     private final EpgGuideView.Source guideSource = new EpgGuideView.Source() {
@@ -5701,7 +5711,7 @@ public final class MainActivity extends Activity {
                     }
                 }
                 // Las tres descargas en paralelo: ninguna espera a la otra.
-                catalogExecutor.execute(() -> {
+                executeUnlessClosing(catalogExecutor, () -> {
                     try {
                         // Enlaces directos Highfly: el canal Highfly abre sin consultar la API.
                         PublishedHighflyLinks.update(repository.fetchHighflyLinks(),
@@ -5710,7 +5720,7 @@ public final class MainActivity extends Activity {
                         // Sin enlaces publicados, Highfly se resuelve como siempre.
                     }
                 });
-                catalogExecutor.execute(() -> {
+                executeUnlessClosing(catalogExecutor, () -> {
                     try {
                         // Hermanas de cada canal TvVoo (HD, FHD, BACKUP): respaldo si la elegida cae.
                         PublishedTvVooVariants.update(repository.fetchTvVooVariants(),
@@ -6489,6 +6499,18 @@ public final class MainActivity extends Activity {
         }
     }
 
+    /**
+     * Encarga una tarea a un ejecutor que puede estar apagándose (la app se cierra): en ese
+     * caso se descarta. Antes, RejectedExecutionException cerraba la app al salir (0.6.00).
+     */
+    private static void executeUnlessClosing(java.util.concurrent.Executor executor, Runnable task) {
+        try {
+            executor.execute(task);
+        } catch (java.util.concurrent.RejectedExecutionException closing) {
+            // La actividad se está destruyendo: la descarga ya no sirve.
+        }
+    }
+
     private void handleBackAction() {
         // El sistema invoca esto al soltar BACK: si al bajar ya cerró la Guía o el selector,
         // no se sigue con el OSD ni con «¿Salir de la app?».
@@ -7008,6 +7030,9 @@ public final class MainActivity extends Activity {
         if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
         loadingText.setTextColor(getColor(R.color.white));
         loadingText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);
+        loadingText.setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL));
+        loadingText.setAllCaps(false);
+        loadingText.setLetterSpacing(0f);
         View selectorPanel = findViewById(R.id.source_selector_panel);
         if (selectorPanel != null) {
             selectorPanel.setBackgroundResource(R.drawable.classic_source_selector_background);

@@ -184,7 +184,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:includeFontPadding="false"
-            android:textColor="@color/osd_muted"
+            android:textColor="@color/minimal_muted"
             android:textSize="9.5sp" />
     </LinearLayout>
 </FrameLayout>

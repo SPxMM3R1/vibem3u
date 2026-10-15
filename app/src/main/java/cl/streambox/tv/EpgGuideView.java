@@ -208,15 +208,19 @@ public final class EpgGuideView extends View implements GuideSurface {
         shaderPaint.setShader(null);
     }
 
-    /** Una sola capa: el video se apaga hacia abajo (grilla) y hacia la izquierda (detalle). */
+    /**
+     * Una sola capa: el video se apaga hacia abajo (grilla) y hacia la izquierda (detalle).
+     * 0.6.00: la parte de arriba (filtros, hora y detalle) más oscura; con video claro la
+     * lectura no era buena (foto del usuario). Sin desenfoque: no se puede sobre el video.
+     */
     private void drawBackground(Canvas canvas, float width, float height) {
         shaderPaint.setShader(new LinearGradient(0f, 0f, 0f, height,
-                new int[] {0x9E000000, 0x4D000000, 0x5C000000, 0xDB000000, 0xF2000000, 0xF7000000},
-                new float[] {0f, 0.14f, 0.30f, 0.48f, 0.60f, 1f}, Shader.TileMode.CLAMP));
+                new int[] {0xE6000000, 0xD1000000, 0xB3000000, 0xE0000000, 0xF5000000, 0xF7000000},
+                new float[] {0f, 0.12f, 0.30f, 0.46f, 0.58f, 1f}, Shader.TileMode.CLAMP));
         canvas.drawRect(0f, 0f, width, height, shaderPaint);
         shaderPaint.setShader(new LinearGradient(0f, 0f, width, 0f,
-                new int[] {0x9E000000, 0x40000000, 0x00000000},
-                new float[] {0f, 0.40f, 0.62f}, Shader.TileMode.CLAMP));
+                new int[] {0xB8000000, 0x73000000, 0x00000000},
+                new float[] {0f, 0.45f, 0.72f}, Shader.TileMode.CLAMP));
         canvas.drawRect(0f, 0f, width, height, shaderPaint);
         shaderPaint.setShader(null);
     }

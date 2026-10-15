@@ -117,7 +117,7 @@
             android:layout_marginTop="8dp"
             android:includeFontPadding="false"
             android:text="@string/source_selector_more_hint"
-            android:textColor="@color/osd_muted"
+            android:textColor="@color/minimal_muted"
             android:textSize="9.5sp"
             android:visibility="gone" />
 
