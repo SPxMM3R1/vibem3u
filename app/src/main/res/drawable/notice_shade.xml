@@ -1,12 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Sombra del aviso breve (0.5.99): nace abajo al centro y se desvanece hacia los lados. -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+<!-- Sombra del aviso breve (0.5.99). 0.6.05: el radio cabe en la vista (170 dp) y llega a
+     transparente antes del borde; antes medía 360 dp y se cortaba en seco arriba (foto del
+     usuario). La vista se estira a lo ancho (scaleX) para que sea un óvalo. Con tramado para
+     que no se vean anillos sobre video claro. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:dither="true"
+    android:shape="rectangle">
     <gradient
-        android:centerColor="#B8000000"
+        android:centerColor="#8C000000"
         android:centerX="0.5"
         android:centerY="1.0"
         android:endColor="#00000000"
-        android:gradientRadius="360dp"
-        android:startColor="#E6000000"
+        android:gradientRadius="168dp"
+        android:startColor="#D9000000"
         android:type="radial" />
 </shape>

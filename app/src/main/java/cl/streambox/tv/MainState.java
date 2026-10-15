@@ -314,8 +314,6 @@ abstract class MainState extends Activity {
      * identidad que debe seguir en respaldo cuando una recuperación vuelve a abrir el canal.
      */
     boolean tvvooBackupActive;
-    /** Arranque lento ya probado en esta apertura (SlowStartBackupPolicy, 0.6.04). */
-    boolean slowStartBackupTried;
     String pendingTvVooBackupIdentity;
     /** Respaldo directo en uso (0 = el primero) mientras tvvooBackupActive; 0.5.72. */
     int directBackupIndex;

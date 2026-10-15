@@ -382,7 +382,6 @@ abstract class MainPlayback extends MainState {
             directBackupIndex = Math.max(0, pendingDirectBackupIndex);
         } else {
             tvvooBackupActive = false;
-            slowStartBackupTried = false;
             directBackupIndex = 0;
             backupReturnedToPrincipal = false;
             rememberedBackupStart = applyRememberedSourceChoice(channel);
@@ -540,11 +539,6 @@ abstract class MainPlayback extends MainState {
             // Startup buffering belongs to Media3. Once this channel has
             // rendered a frame, the same state means a post-start stall and
             // must not wait forever for Media3 to emit a fatal error.
-            if (!playbackHasStarted && shouldTryBackupForSlowStart(nowMs)) {
-                slowStartBackupTried = true;
-                Log.i(PLAYBACK_HEALTH_TAG, "slow start: backup");
-                if (switchToTvVooBackup("arranque lento")) return;
-            }
             PlaybackDiagnosticsWorker.Snapshot measurements = playbackBitrateMeter == null
                     ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
             if (playbackHasStarted
@@ -581,16 +575,6 @@ abstract class MainPlayback extends MainState {
                 PLAYBACK_FREEZE_TIMEOUT_MS)) {
             requestFullPlaybackRecovery(classifyPlaybackStall(measurements));
         }
-    }
-
-    /** Señal principal lenta en arrancar y canal con respaldo: ver {@link SlowStartBackupPolicy}. */
-    boolean shouldTryBackupForSlowStart(long nowMs) {
-        if (playbackChannel == null || currentPlaybackSource == null) return false;
-        PlaybackStartupMetrics.Sample sample = startupMetrics.snapshot();
-        return sample != null && SlowStartBackupPolicy.shouldTryBackup(slowStartBackupTried,
-                tvvooBackupActive, TvVooBackup.has(playbackChannel),
-                isSlowRelay(currentPlaybackSource), currentSourceStartedElapsedRealtime, nowMs,
-                sample.manifestMs);
     }
 
     String classifyPlaybackStall(PlaybackDiagnosticsWorker.Snapshot measurements) {

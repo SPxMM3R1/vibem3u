@@ -7,9 +7,17 @@
     android:layout_height="170dp"
     android:layout_gravity="bottom"
     android:alpha="0"
-    android:background="@drawable/notice_shade"
     android:focusable="false"
     android:visibility="gone">
+
+    <!-- Sombra: círculo de 170 dp que se desvanece dentro de su caja, estirado a lo ancho. -->
+    <View
+        android:layout_width="340dp"
+        android:layout_height="170dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:background="@drawable/notice_shade"
+        android:scaleX="3.2"
+        android:transformPivotY="170dp" />
 
     <TextView
         android:id="@+id/notice_text"
