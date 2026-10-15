@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Opciones › updates (moderno). Se incluye desde activity_settings.xml (0.6.02). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/tab_page_updates"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:visibility="gone">
+    <!-- Vinculaciones (0.5.91): Highfly Premium y GitHub, con QR. -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="6dp"
+        android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.2"
+        android:singleLine="true"
+        android:text="@string/system_links_title"
+        android:textAllCaps="true"
+        android:textColor="#6BFFFFFF"
+        android:textSize="7sp" />
+    <LinearLayout
+        android:id="@+id/system_links_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:background="@drawable/settings_section_card"
+        android:gravity="center_vertical"
+        android:minHeight="40dp"
+        android:orientation="horizontal"
+        android:paddingStart="0dp"
+        android:paddingTop="9dp"
+        android:paddingEnd="0dp"
+        android:paddingBottom="9dp">
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:duplicateParentState="true"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/current_version"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:duplicateParentState="true"
+                android:includeFontPadding="false"
+                android:textColor="@color/settings_row_title"
+                android:textSize="11.5sp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:duplicateParentState="true"
+                android:text="@string/settings_updates_description"
+                android:textColor="@color/settings_row_detail"
+                android:textSize="8.5sp" />
+        </LinearLayout>
+        <Button
+            android:id="@+id/check_updates_button"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:layout_marginStart="12dp"
+            android:background="@drawable/focus_button"
+            android:focusable="true"
+            android:includeFontPadding="false"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:paddingStart="0dp"
+            android:paddingEnd="0dp"
+            android:paddingTop="0dp"
+            android:paddingBottom="0dp"
+            android:stateListAnimator="@null"
+            android:text="@string/check_updates"
+            android:textAllCaps="false"
+            android:textColor="@color/minimal_button_text"
+            android:textSize="10.5sp" />
+    </LinearLayout>
+    <TextView
+        android:id="@+id/update_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="4dp"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp"
+        android:textColor="@color/minimal_muted"
+        android:textSize="8.5sp"
+        android:visibility="gone" />
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:layout_marginBottom="6dp"
+        android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.2"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:text="@string/settings_section_service"
+        android:textAllCaps="true"
+        android:textColor="#6BFFFFFF"
+        android:textSize="7sp" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:background="@drawable/settings_section_card"
+        android:orientation="vertical"
+        android:paddingStart="0dp"
+        android:paddingTop="9dp"
+        android:paddingEnd="0dp"
+        android:paddingBottom="9dp">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="0dp"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_status_catalog"
+                    android:textColor="@color/minimal_muted"
+                    android:textSize="8.5sp" />
+                <TextView
+                    android:id="@+id/status_catalog"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textColor="@color/white"
+                    android:textSize="11sp" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_status_epg"
+                    android:textColor="@color/minimal_muted"
+                    android:textSize="8.5sp" />
+                <TextView
+                    android:id="@+id/status_epg"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textColor="@color/white"
+                    android:textSize="11sp" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_status_highfly"
+                    android:textColor="@color/minimal_muted"
+                    android:textSize="8.5sp" />
+                <TextView
+                    android:id="@+id/status_highfly"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textColor="@color/white"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:orientation="horizontal"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp">
+        <TextView
+            android:id="@+id/info_app"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/minimal_muted"
+            android:textSize="8.5sp" />
+        <TextView
+            android:id="@+id/info_device"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textColor="@color/minimal_muted"
+            android:textSize="8.5sp" />
+    </LinearLayout>
+</LinearLayout>

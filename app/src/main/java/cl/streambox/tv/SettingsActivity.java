@@ -125,6 +125,12 @@ public final class SettingsActivity extends Activity {
     private ScrollView settingsContent;
     private ViewTreeObserver.OnGlobalFocusChangeListener focusVisibilityListener;
     private int selectedTabIndex;
+    /**
+     * Moderno (0.6.02, opción A aprobada): «Proveedores» va entre Canales y Sistema, así que
+     * Sistema pasa a ser la séptima pestaña. El clásico conserva sus seis.
+     */
+    private int providersTab = -1;
+    private int updatesTab = TAB_UPDATES;
     private boolean classicUi;
     private TextView currentChannelName;
     private LinearLayout qualityOptionsContainer;
@@ -263,22 +269,24 @@ public final class SettingsActivity extends Activity {
         subtitlesSwitch = findViewById(R.id.settings_subtitles_switch);
         subtitlesStatus = findViewById(R.id.settings_subtitles_status);
         resolverGroupsContainer = findViewById(R.id.resolver_groups_container);
-        tabs = new TextView[]{
-                findViewById(R.id.tab_playback),
-                findViewById(R.id.tab_general),
-                findViewById(R.id.tab_interface),
-                findViewById(R.id.tab_reminders),
-                findViewById(R.id.tab_source),
-                findViewById(R.id.tab_updates)
-        };
-        tabPages = new View[]{
-                findViewById(R.id.tab_page_playback),
-                findViewById(R.id.tab_page_general),
-                findViewById(R.id.tab_page_interface),
-                findViewById(R.id.tab_page_reminders),
-                findViewById(R.id.tab_page_source),
-                findViewById(R.id.tab_page_updates)
-        };
+        int[] tabIds = {R.id.tab_playback, R.id.tab_general, R.id.tab_interface,
+                R.id.tab_reminders, R.id.tab_source, R.id.tab_providers, R.id.tab_updates};
+        int[] pageIds = {R.id.tab_page_playback, R.id.tab_page_general, R.id.tab_page_interface,
+                R.id.tab_page_reminders, R.id.tab_page_source, R.id.tab_page_providers,
+                R.id.tab_page_updates};
+        ArrayList<TextView> foundTabs = new ArrayList<>();
+        ArrayList<View> foundPages = new ArrayList<>();
+        for (int index = 0; index < tabIds.length; index++) {
+            TextView tab = findViewById(tabIds[index]);
+            View page = findViewById(pageIds[index]);
+            if (tab == null || page == null) continue; // el clásico no tiene «Proveedores»
+            if (tabIds[index] == R.id.tab_providers) providersTab = foundTabs.size();
+            foundTabs.add(tab);
+            foundPages.add(page);
+        }
+        tabs = foundTabs.toArray(new TextView[0]);
+        tabPages = foundPages.toArray(new View[0]);
+        updatesTab = tabs.length - 1;
 
         appUpdater = new AppUpdater(this, updateExecutor, mainHandler);
         resolverCatalogRepository = new ResolverCatalogRepository(this);
@@ -441,6 +449,11 @@ public final class SettingsActivity extends Activity {
             setSignalCell(R.id.signal_video, codec, 0);
             setSignalCell(R.id.signal_codecs, codec, 1);
             setSignalCell(R.id.signal_bitrate, codec, 2);
+            // Sin ningún dato: una sola línea (mockup aprobado 0.6.02).
+            boolean noData = isUnavailable(picture, 0) && isUnavailable(picture, 1)
+                    && isUnavailable(codec, 0) && isUnavailable(codec, 1) && isUnavailable(codec, 2);
+            findViewById(R.id.signal_info_grid).setVisibility(noData ? View.GONE : View.VISIBLE);
+            findViewById(R.id.signal_info_empty).setVisibility(noData ? View.VISIBLE : View.GONE);
         }
         int visibility = hasCurrentChannel ? View.VISIBLE : View.GONE;
         findViewById(R.id.signal_info_card).setVisibility(visibility);
@@ -469,6 +482,11 @@ public final class SettingsActivity extends Activity {
             adjustLogoSizeOnSave = true;
             save();
         });
+    }
+
+    private static boolean isUnavailable(String[] parts, int index) {
+        String value = index < parts.length ? parts[index].trim() : "";
+        return AppStrings.isBlank(value) || value.startsWith("—");
     }
 
     private void setSignalCell(int viewId, String[] parts, int index) {
@@ -671,8 +689,14 @@ public final class SettingsActivity extends Activity {
         return button;
     }
 
-    /** Calidades por línea en el moderno: si el canal trae más, pasan a la línea siguiente. */
-    private static final int QUALITY_CHIPS_PER_LINE = 5;
+    /**
+     * Calidades en el moderno: pasan a la línea siguiente cuando no caben en la columna (390 dp).
+     * Antes iban de a 5 por línea sin medir y la cuarta se partía («480p · 1.2 / Mbps», 0.6.02).
+     */
+    private static final int QUALITY_COLUMN_DP = 390;
+    /** Margen, relleno y el punto verde de «en uso» que se suma al texto de cada opción. */
+    private static final int QUALITY_CHIP_EXTRA_DP = 20 + 10 + 16;
+    private int qualityLineWidth;
 
     private void addQualityOption(Button option) {
         if (classicUi) {
@@ -682,7 +706,11 @@ public final class SettingsActivity extends Activity {
         int lines = qualityOptionsContainer.getChildCount();
         LinearLayout line = lines == 0 ? null
                 : (LinearLayout) qualityOptionsContainer.getChildAt(lines - 1);
-        if (line == null || line.getChildCount() >= QUALITY_CHIPS_PER_LINE) {
+        int width = Math.round(option.getPaint().measureText(option.getText().toString()))
+                + dp(QUALITY_CHIP_EXTRA_DP);
+        if (line == null || (line.getChildCount() > 0
+                && qualityLineWidth + width > dp(QUALITY_COLUMN_DP))) {
+            qualityLineWidth = 0;
             line = new LinearLayout(this);
             line.setOrientation(LinearLayout.HORIZONTAL);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
@@ -697,6 +725,7 @@ public final class SettingsActivity extends Activity {
             ((LinearLayout.LayoutParams) line.getLayoutParams()).topMargin = dp(8);
         }
         line.addView(option);
+        qualityLineWidth += width;
     }
 
     private Button createQualityChip(String text) {
@@ -889,6 +918,17 @@ public final class SettingsActivity extends Activity {
     }
 
     private View firstFocusForTab(int tabIndex) {
+        if (tabIndex == providersTab) {
+            LinearLayout groups = resolverGroupsContainer;
+            return groups != null && groups.getChildCount() > 0
+                    ? groups.getChildAt(0) : findViewById(R.id.premium_account_row);
+        }
+        if (tabIndex == updatesTab) {
+            // Moderno: Vinculaciones va arriba; antes ▲ desde «Buscar actualizaciones»
+            // saltaba a las pestañas y GitHub quedaba fuera de alcance (0.5.98).
+            LinearLayout links = findViewById(R.id.system_links_container);
+            return links != null && links.getChildCount() > 0 ? links.getChildAt(0) : updateButton;
+        }
         switch (tabIndex) {
             case TAB_GENERAL:
                 return normalizeVolume;
@@ -902,12 +942,6 @@ public final class SettingsActivity extends Activity {
             }
             case TAB_SOURCE:
                 return urlInput;
-            case TAB_UPDATES: {
-                // Moderno: Vinculaciones va arriba; antes ▲ desde «Buscar actualizaciones»
-                // saltaba a las pestañas y Premium/GitHub quedaban fuera de alcance (0.5.98).
-                LinearLayout links = findViewById(R.id.system_links_container);
-                return links != null && links.getChildCount() > 0 ? links.getChildAt(0) : updateButton;
-            }
             default:
                 return playbackFirstFocus == null ? tabs[TAB_PLAYBACK] : playbackFirstFocus;
         }
@@ -1063,7 +1097,7 @@ public final class SettingsActivity extends Activity {
                 int index = container.indexOfChild(view);
                 renderHiddenChannels();
                 View next = container.getChildAt(Math.min(index, container.getChildCount() - 1));
-                if (next == null) next = findViewById(R.id.premium_account_row);
+                if (next == null) next = classicUi ? findViewById(R.id.premium_account_row) : urlInput2;
                 if (next != null) next.requestFocus();
             });
             container.addView(row);
@@ -1372,7 +1406,7 @@ public final class SettingsActivity extends Activity {
         if (!HighflyStreamResolver.isAllowedManifestUrl(highflyManifest)) {
             errorText.setText(R.string.highfly_manifest_url_required);
             errorText.setVisibility(View.VISIBLE);
-            showTab(TAB_SOURCE, false);
+            showTab(providersTab >= 0 ? providersTab : TAB_SOURCE, false);
             highflyManifestUrlInput.requestFocus();
             return;
         }
@@ -1500,7 +1534,7 @@ public final class SettingsActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
     }
 
-    /** Sistema › Vinculaciones (0.5.91): Premium y GitHub con el mismo QR de siempre. */
+    /** Sistema › Vinculaciones (0.5.91): GitHub. Premium vive en Proveedores desde la 0.6.02. */
     private void bindSystemLinks() {
         refreshSystemLinks();
     }
@@ -1509,29 +1543,13 @@ public final class SettingsActivity extends Activity {
         LinearLayout container = findViewById(R.id.system_links_container);
         if (container == null || classicUi) return;
         container.removeAllViews();
-        HighflyPremiumCredentialStore store = HighflyPremiumCredentialStore.getInstance(this);
-        boolean premiumLinked = store.hasCredential() && store.isUsable();
-        container.addView(settingsActionRow(
-                getString(R.string.premium_link_title),
-                getString(R.string.premium_link_description),
-                getString(premiumLinked ? R.string.premium_link_linked : R.string.premium_link_action)),
-                linkRowParams());
         container.addView(settingsActionRow(
                 getString(R.string.github_link_row_title),
                 getString(R.string.github_link_row_detail),
                 getString(new GitHubCredentialStore(this).linked()
                         ? R.string.github_link_linked : R.string.premium_link_action)),
                 linkRowParams());
-        View premiumRow = container.getChildAt(0);
-        premiumRow.setOnClickListener(view -> {
-            if (premiumLinked) {
-                SceneDialog.hideHostWhileShown(PremiumScenes.showManage(this,
-                        this::showPremiumPairing, this::refreshSystemLinks), settingsRoot);
-            } else {
-                showPremiumPairing();
-            }
-        });
-        View githubRow = container.getChildAt(1);
+        View githubRow = container.getChildAt(0);
         githubRow.setOnClickListener(view -> SceneDialog.hideHostWhileShown(
                 ChannelActionScenes.showGitHubLink(this, this::refreshSystemLinks), settingsRoot));
     }

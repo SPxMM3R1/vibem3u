@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Opciones › general (moderno). Se incluye desde activity_settings.xml (0.6.02). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/tab_page_general"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:visibility="gone">
+    <Switch
+        android:thumb="@drawable/settings_switch_thumb"
+        android:track="@drawable/settings_switch_track"
+        android:switchMinWidth="26dp"
+        android:id="@+id/normalize_volume"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:background="@drawable/settings_section_card"
+        android:focusable="true"
+        android:minHeight="40dp"
+        android:paddingStart="0dp"
+        android:paddingTop="9dp"
+        android:paddingEnd="0dp"
+        android:paddingBottom="9dp"
+        android:showText="false"
+        android:text="@string/normalize_volume"
+        android:textColor="@color/settings_row_title"
+        android:textSize="11.5sp" />
+    <Switch
+        android:thumb="@drawable/settings_switch_thumb"
+        android:track="@drawable/settings_switch_track"
+        android:switchMinWidth="26dp"
+        android:id="@+id/auto_reconnect"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:background="@drawable/settings_section_card"
+        android:focusable="true"
+        android:minHeight="40dp"
+        android:paddingStart="0dp"
+        android:paddingTop="9dp"
+        android:paddingEnd="0dp"
+        android:paddingBottom="9dp"
+        android:showText="false"
+        android:text="@string/settings_auto_reconnect"
+        android:textColor="@color/settings_row_title"
+        android:textSize="11.5sp" />
+</LinearLayout>

@@ -14,7 +14,7 @@ Referencias aprobadas en `docs/diseno/`:
 | --- | --- | --- |
 | Selector «Fuentes y calidades» | `selector-respaldos.jpg` | implementado (0.5.95) |
 | Guía | `guia-ahora.jpg`, `guia-futuro.jpg` (mockup) · `guia-app.jpg` (app) | implementado (0.5.96) |
-| Opciones | `opciones-*.jpg` (mockup) · `opciones-*-app.jpg` (app) | implementado (0.5.96) |
+| Opciones | `opciones-*.jpg` (mockup) · `opciones-*-app.jpg` (app); pestaña Proveedores: `opciones-canales-app.jpg`, `opciones-proveedores-app.jpg` | implementado (0.5.96); Proveedores en la 0.6.02 |
 | OSD | `osd.jpg` (app) | implementado (0.5.96) |
 | Escenas (salir, actualización, papelera, Premium, GitHub, token vencido) | `*-app.jpg` | implementado (0.5.98) |
 | Avisos (mejor calidad, recordatorio) y MediaFlow | `recordatorio-app.jpg`, `mediaflow-app.jpg` | implementado (0.5.98) |
@@ -83,6 +83,17 @@ El foco nunca es un fondo de color, un velo ni un recuadro.
 - **Guía**: programas como texto separados solo por una línea vertical tenue (blanco al 12 %)
   al inicio de cada uno; el que está en emisión, más claro que los futuros; línea de «ahora»
   cian con la hora encima; punto verde junto al número del canal que se está viendo.
+
+## Opciones (0.6.02, opción A aprobada)
+
+- Siete pestañas: En reproducción · Video y audio · Interfaz · Recordatorios · Canales ·
+  **Proveedores** · Sistema. Canales tiene las listas y los ocultos; Proveedores, los
+  interruptores de proveedores, Highfly Premium (vincular y región) y avanzado. Cada página es
+  una sola columna y cabe sin cortarse.
+- Highfly Premium aparece una sola vez (en Proveedores); Sistema › Vinculaciones solo tiene GitHub.
+- Debajo de Opciones solo se ve el video: ni OSD, ni pantalla de error, ni «CONECTANDO».
+- Sin ningún dato de la señal, «Información de la señal» es una sola línea.
+- Las opciones en línea (calidades) pasan a la línea siguiente cuando no caben; nunca se parten.
 
 ## Al implementar
 

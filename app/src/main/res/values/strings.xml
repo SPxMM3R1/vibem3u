@@ -78,6 +78,7 @@
     <string name="settings_tab_general">Video y audio</string>
     <string name="settings_tab_playback">En reproducción</string>
     <string name="settings_tab_source">Canales</string>
+    <string name="settings_tab_providers">Proveedores</string>
     <string name="settings_tab_interface">Interfaz</string>
     <string name="settings_tab_updates">Sistema</string>
     <string name="settings_cache_title">Caché de guía y logos</string>
@@ -202,6 +203,7 @@
     <string name="settings_signal_picture">Imagen</string>
     <string name="settings_signal_codecs">Códecs y tasa</string>
     <string name="settings_signal_unavailable">Sin datos todavía</string>
+    <string name="settings_signal_none">Sin datos de la señal todavía.</string>
     <string name="settings_auto_reconnect">Reconexión automática</string>
     <string name="settings_auto_reconnect_description">Restablece la señal si se interrumpe.</string>
     <string name="settings_ui_style_description">El estilo clásico recupera el diseño anterior. La app se recarga al cambiarlo.</string>
@@ -407,7 +409,6 @@
     <string name="github_link_row_title">Vincular GitHub</string>
     <string name="github_link_row_detail">Para enviar canales a la papelera de Lista M3U. Escanea un QR y escribe un código.</string>
     <string name="github_link_linked">Vinculado ›</string>
-    <string name="premium_link_linked">Gestionar ›</string>
     <string name="channel_logo_description">Logo del canal</string>
     <string name="classic_resolution_pending">Resolución pendiente</string>
     <string name="classic_analyzing_stream">Analizando stream…</string>

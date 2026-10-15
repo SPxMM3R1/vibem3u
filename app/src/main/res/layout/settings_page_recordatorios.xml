@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Opciones › reminders (moderno). Se incluye desde activity_settings.xml (0.6.02). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/tab_page_reminders"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:visibility="gone">
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="0dp"
+        android:layout_marginBottom="6dp"
+        android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.2"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:text="@string/settings_section_scheduled"
+        android:textAllCaps="true"
+        android:textColor="#6BFFFFFF"
+        android:textSize="7sp" />
+    <TextView
+        android:id="@+id/reminders_empty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="4dp"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp"
+        android:text="@string/settings_reminders_empty"
+        android:textColor="@color/minimal_muted"
+        android:textSize="8.5sp" />
+    <LinearLayout
+        android:id="@+id/reminders_list"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="4dp"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp"
+        android:text="@string/settings_reminders_add_hint"
+        android:textColor="@color/minimal_muted"
+        android:textSize="8.5sp" />
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:layout_marginBottom="6dp"
+        android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.2"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:text="@string/settings_section_alerts"
+        android:textAllCaps="true"
+        android:textColor="#6BFFFFFF"
+        android:textSize="7sp" />
+    <LinearLayout
+        android:id="@+id/reminder_permission_button"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:background="@drawable/settings_section_card"
+        android:gravity="center_vertical"
+        android:minHeight="40dp"
+        android:orientation="horizontal"
+        android:paddingStart="0dp"
+        android:paddingTop="9dp"
+        android:paddingEnd="0dp"
+        android:paddingBottom="9dp"
+        android:clickable="true"
+        android:focusable="true">
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:duplicateParentState="true"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:duplicateParentState="true"
+                android:includeFontPadding="false"
+                android:text="@string/settings_reminders_overlay_title"
+                android:textColor="@color/settings_row_title"
+                android:textSize="11.5sp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:duplicateParentState="true"
+                android:text="@string/settings_reminders_overlay_description"
+                android:textColor="@color/settings_row_detail"
+                android:textSize="8.5sp" />
+        </LinearLayout>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:duplicateParentState="true"
+            android:text="@string/settings_reminders_permission_action"
+            android:textColor="@color/settings_row_detail"
+            android:textSize="9.5sp" />
+    </LinearLayout>
+    <LinearLayout
+        android:id="@+id/reminder_test_button"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:background="@drawable/settings_section_card"
+        android:gravity="center_vertical"
+        android:minHeight="40dp"
+        android:orientation="horizontal"
+        android:paddingStart="0dp"
+        android:paddingTop="9dp"
+        android:paddingEnd="0dp"
+        android:paddingBottom="9dp"
+        android:clickable="true"
+        android:focusable="true">
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:duplicateParentState="true"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:duplicateParentState="true"
+                android:includeFontPadding="false"
+                android:text="@string/settings_reminders_test"
+                android:textColor="@color/settings_row_title"
+                android:textSize="11.5sp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:duplicateParentState="true"
+                android:text="@string/settings_reminders_test_description"
+                android:textColor="@color/settings_row_detail"
+                android:textSize="8.5sp" />
+        </LinearLayout>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:duplicateParentState="true"
+            android:text="@string/settings_reminders_test_action"
+            android:textColor="@color/settings_row_detail"
+            android:textSize="9.5sp" />
+    </LinearLayout>
+    <TextView
+        android:id="@+id/reminder_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="4dp"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp"
+        android:textColor="@color/minimal_muted"
+        android:textSize="8.5sp" />
+</LinearLayout>

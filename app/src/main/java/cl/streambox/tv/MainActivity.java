@@ -1837,7 +1837,8 @@ public final class MainActivity extends Activity {
 
     /** Guía moderna abierta: ni la carga ni el OSD se traslucen debajo (0.6.00). */
     private boolean guideCoversPlayback() {
-        return !classicUi && isGuideVisible();
+        // Opciones también (0.6.02): debajo del menú solo se ve el video.
+        return !classicUi && (isGuideVisible() || settingsOpen);
     }
 
     /**
@@ -4163,7 +4164,7 @@ public final class MainActivity extends Activity {
     private void showOverlay(boolean keepVisible) {
         // Moderno (0.5.95): con el selector abierto, el OSD del canal no compite con él; con la
         // Guía abierta tampoco (0.6.00: los pasos de carga lo volvían a mostrar debajo).
-        if (!classicUi && (isSourceSelectorVisible() || isGuideVisible())) return;
+        if (!classicUi && (isSourceSelectorVisible() || isGuideVisible() || settingsOpen)) return;
         hideProgrammeDetail.run();
         mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
         channelOverlay.setVisibility(View.VISIBLE);
@@ -4313,7 +4314,7 @@ public final class MainActivity extends Activity {
     }
 
     private final Runnable showDeferredPlaybackError = () -> {
-        if (!playbackErrorDeferred || isGuideVisible() || exiting) return;
+        if (!playbackErrorDeferred || isGuideVisible() || settingsOpen || exiting) return;
         mainHandler.removeCallbacks(hideOverlay);
         hideOverlay.run();
         presentPlaybackErrorScreen();
@@ -6476,7 +6477,7 @@ public final class MainActivity extends Activity {
     }
 
     private void presentPlaybackErrorScreen() {
-        if (isGuideVisible()) {
+        if (isGuideVisible() || (settingsOpen && !classicUi)) {
             playbackErrorDeferred = true;
             return;
         }
@@ -6884,6 +6885,15 @@ public final class MainActivity extends Activity {
         resolverSettingsSnapshotBeforeSettings = resolverSettingsSnapshot();
         playlistSourcesSnapshotBeforeSettings = playlistSourceSignature(getPlaylistSources());
         settingsOpen = true;
+        if (!classicUi) {
+            // Opciones flota sobre el video: sin OSD, error ni «CONECTANDO» debajo (0.6.02).
+            mainHandler.removeCallbacks(showDeferredPlaybackError);
+            if (isPlaybackErrorVisible()) {
+                playbackErrorOverlay.setVisibility(View.GONE);
+                playbackErrorDeferred = true;
+            }
+            if (loadingPanel != null) loadingPanel.setAlpha(0f);
+        }
         startActivityForResult(createSettingsIntent(initialTab), SETTINGS_REQUEST);
     }
 
@@ -6944,6 +6954,10 @@ public final class MainActivity extends Activity {
         if (appUpdater != null && appUpdater.onActivityResult(requestCode)) return;
         if (requestCode == SETTINGS_REQUEST) {
             settingsOpen = false;
+            if (!classicUi && loadingPanel != null) {
+                loadingPanel.setAlpha(blackScreenDimmed ? BLACK_SCREEN_ALPHA : 1f);
+            }
+            if (playbackErrorDeferred) mainHandler.post(showDeferredPlaybackError);
             // Opciones › Canales puede volver a mostrar canales ocultos (0.5.90).
             String previousVisibility = channelVisibility.signature();
             channelVisibility = new ChannelVisibility(this);
