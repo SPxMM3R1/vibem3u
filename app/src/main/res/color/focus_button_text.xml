@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Botón píldora (0.5.90): con foco el fondo es blanco y el texto oscuro. -->
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_focused="true" android:color="@color/on_white" />
-    <item android:color="@color/menu_text" />
-</selector>

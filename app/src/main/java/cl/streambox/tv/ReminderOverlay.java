@@ -27,6 +27,9 @@ final class ReminderOverlay {
     private static final int WINDOW_WIDTH_DP = 520;
     private static final int WINDOW_HEIGHT_DP = 380;
 
+    // Ventana del sistema inflada con el contexto de la aplicación: guardarla en un campo
+    // estático no retiene ninguna Activity (auditoría 0.6.01).
+    @android.annotation.SuppressLint("StaticFieldLeak")
     private static View current;
 
     private ReminderOverlay() {
@@ -44,6 +47,7 @@ final class ReminderOverlay {
         remove(windows);
 
         Context themed = new ContextThemeWrapper(app, R.style.Theme_VibeM3U);
+        @android.annotation.SuppressLint("InflateParams") // Ventana propia: no hay vista padre.
         View card = LayoutInflater.from(themed).inflate(R.layout.reminder_overlay, null);
         ((TextView) card.findViewById(R.id.reminder_kicker)).setText(kicker(app, channelName));
         ((TextView) card.findViewById(R.id.reminder_title)).setText(title);

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Avisos de lint aceptados a propósito (auditoría 0.6.01). Se silencian aquí para que los
+  avisos nuevos y reales no queden enterrados entre cientos repetidos.
+-->
+<lint>
+    <!-- Línea «Flotante minimalista» (DISENO.md): rótulos y versalitas de 7–11sp pensados para
+         verse a 3 m en una TV; no son texto de teléfono. -->
+    <issue id="SmallSp" severity="ignore" />
+    <!-- App solo de TV, siempre en horizontal; Android 16 ignora la orientación fija en
+         pantallas grandes y eso no cambia nada aquí. -->
+    <issue id="DiscouragedApi">
+        <ignore path="src/main/AndroidManifest.xml" />
+    </issue>
+    <!-- Glifos y valores de ejemplo (▲ ▼ ● 001 — · —) que el código reemplaza al enlazar datos. -->
+    <issue id="HardcodedText">
+        <ignore path="src/main/res/layout/classic_osd.xml" />
+        <ignore path="src/main/res/layout/osd_modern.xml" />
+        <ignore path="src/main/res/layout/classic_activity_settings.xml" />
+    </issue>
+    <!-- Solo español: números y separadores armados en código, sin traducciones. -->
+    <issue id="SetTextI18n" severity="ignore" />
+    <!-- Versiones: se actualizan a mano, probando en el emulador antes de publicar. -->
+    <issue id="GradleDependency" severity="informational" />
+    <issue id="NewerVersionAvailable" severity="informational" />
+    <!-- Solo TV en horizontal; el fallo de tema translúcido + orientación era de Android 8.0
+         (minSdk es 29). -->
+    <issue id="TranslucentOrientation" severity="ignore" />
+    <!-- Android TV no usa íconos temáticos monocromos. -->
+    <issue id="MonochromeLauncherIcon" severity="ignore" />
+    <!-- Botones de texto sin bordes: estilo propio de la línea «Flotante minimalista». -->
+    <issue id="ButtonStyle" severity="ignore" />
+    <!-- Solo español (izquierda a derecha). -->
+    <issue id="RtlSymmetry" severity="ignore" />
+    <!-- allowBackup="false" ya cubre Android 10–11; dataExtractionRules cubre 12+. -->
+    <issue id="DataExtractionRules" severity="ignore" />
+    <!-- Campos de MediaFlow y del modo clásico: en TV no hay servicio de autocompletado útil. -->
+    <issue id="Autofill" severity="ignore" />
+    <!-- MainActivity quita el fondo de la ventana en onCreate; la raíz es el único fondo. -->
+    <issue id="Overdraw">
+        <ignore path="src/main/res/layout/activity_main.xml" />
+    </issue>
+</lint>

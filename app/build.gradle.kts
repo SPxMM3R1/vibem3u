@@ -4,7 +4,7 @@ plugins {
 
 android {
     namespace = "cl.streambox.tv"
-    compileSdk = 36
+    compileSdk = 37
 
     buildFeatures {
         buildConfig = true
@@ -30,8 +30,8 @@ android {
         minSdk = 29
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 209
-        versionName = "0.6.00"
+        versionCode = 210
+        versionName = "0.6.01"
         buildConfigField("boolean", "ENABLE_APP_UPDATES", "true")
         // Client ID público de la app OAuth de VibeM3U para el Device Flow de GitHub (papelera
         // desde la TV, 0.5.90). No es un secreto; CI puede reemplazarlo con la variable del repo.
@@ -80,21 +80,21 @@ android {
 }
 
 dependencies {
-    implementation("androidx.core:core:1.17.0")
+    implementation("androidx.core:core:1.19.1")
     implementation("com.caverock:androidsvg-aar:1.4")
-    implementation("androidx.media3:media3-exoplayer:1.10.1")
-    implementation("androidx.media3:media3-exoplayer-hls:1.10.1")
-    implementation("androidx.media3:media3-exoplayer-dash:1.10.1")
-    implementation("androidx.media3:media3-datasource-okhttp:1.10.1")
-    implementation("androidx.media3:media3-ui:1.10.1")
+    implementation("androidx.media3:media3-exoplayer:1.11.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
+    implementation("androidx.media3:media3-exoplayer-dash:1.11.1")
+    implementation("androidx.media3:media3-datasource-okhttp:1.11.1")
+    implementation("androidx.media3:media3-ui:1.11.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // QR de vinculación de Highfly Premium (solo el codificador, sin cámara).
     implementation("com.google.zxing:core:3.5.3")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
-    androidTestImplementation("androidx.test:core:1.6.1")
-    androidTestImplementation("androidx.test:runner:1.6.2")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:core:1.7.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }

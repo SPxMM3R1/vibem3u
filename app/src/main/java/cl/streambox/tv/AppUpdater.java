@@ -14,9 +14,9 @@ import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
+import android.util.Log;
 import android.provider.Settings;
 import android.view.View;
 import android.view.Window;
@@ -34,6 +34,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 
 final class AppUpdater {
+    private static final String TAG = "VibeM3U-Update";
     static final int UNKNOWN_SOURCES_REQUEST = 1002;
     private static final String DOWNLOAD_PREFS = "vibem3u_update_download";
     private static final String DOWNLOAD_ID_KEY = "download_id";
@@ -128,8 +129,7 @@ final class AppUpdater {
         awaitingUnknownSources = false;
         if (pendingApk == null || !pendingApk.isFile()) return true;
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O
-                || activity.getPackageManager().canRequestPackageInstalls()) {
+        if (activity.getPackageManager().canRequestPackageInstalls()) {
             launchInstaller(pendingApk);
         } else if (availableUpdate != null) {
             installRequested = false;
@@ -143,8 +143,7 @@ final class AppUpdater {
         restorePendingApk();
         if (awaitingUnknownSources && pendingApk != null && pendingApk.isFile()) {
             awaitingUnknownSources = false;
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O
-                    || activity.getPackageManager().canRequestPackageInstalls()) {
+            if (activity.getPackageManager().canRequestPackageInstalls()) {
                 launchInstaller(pendingApk);
                 return;
             }
@@ -333,7 +332,8 @@ final class AppUpdater {
                     if (destroyed) return;
                     pendingApk = apk;
                 });
-            } catch (Exception ignored) {
+            } catch (Exception error) {
+                Log.w(TAG, "Descarga de la actualización falló", error);
                 mainHandler.post(() -> downloading = false);
             }
         });
@@ -379,7 +379,8 @@ final class AppUpdater {
                     .putString(DOWNLOAD_FILE_KEY, fileName)
                     .apply();
             return true;
-        } catch (Exception ignored) {
+        } catch (Exception error) {
+            Log.w(TAG, "Descarga diferida no válida", error);
             clearDeferredDownload(true);
             return false;
         }
@@ -421,7 +422,8 @@ final class AppUpdater {
                 clearDeferredDownload(true);
             }
             return null;
-        } catch (Exception ignored) {
+        } catch (Exception error) {
+            Log.w(TAG, "Copia del APK descargado falló", error);
             return destination.isFile() ? destination : null;
         }
     }
@@ -473,8 +475,7 @@ final class AppUpdater {
 
     private void requestInstallPermissionOrLaunch() {
         if (pendingApk == null || !pendingApk.isFile()) return;
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O
-                || activity.getPackageManager().canRequestPackageInstalls()) {
+        if (activity.getPackageManager().canRequestPackageInstalls()) {
             launchInstaller(pendingApk);
             return;
         }
@@ -558,7 +559,8 @@ final class AppUpdater {
             if (availableUpdate == null) {
                 availableUpdate = UpdateInfo.fromCachedApk(cachedVersion);
             }
-        } catch (Exception ignored) {
+        } catch (Exception error) {
+            Log.w(TAG, "APK descargado no pasó la verificación", error);
             if (isDeferredDownloadFile(cached)) {
                 clearDeferredDownload(true);
             } else if (cached.isFile()) {
@@ -570,9 +572,7 @@ final class AppUpdater {
 
     private String verifyDownloadedApk(File apk) throws Exception {
         PackageManager packageManager = activity.getPackageManager();
-        int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
-                ? PackageManager.GET_SIGNING_CERTIFICATES
-                : PackageManager.GET_SIGNATURES;
+        int flags = PackageManager.GET_SIGNING_CERTIFICATES;
 
         PackageInfo candidate = packageManager.getPackageArchiveInfo(apk.getAbsolutePath(), flags);
         PackageInfo installed = packageManager.getPackageInfo(activity.getPackageName(), flags);
@@ -580,12 +580,8 @@ final class AppUpdater {
             throw new SecurityException("El APK no pertenece a VibeM3U.");
         }
 
-        long candidateVersion = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
-                ? candidate.getLongVersionCode()
-                : candidate.versionCode;
-        long installedVersion = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
-                ? installed.getLongVersionCode()
-                : installed.versionCode;
+        long candidateVersion = candidate.getLongVersionCode();
+        long installedVersion = installed.getLongVersionCode();
         if (candidateVersion <= installedVersion) {
             throw new SecurityException("El APK no es una versión más reciente.");
         }
@@ -599,13 +595,8 @@ final class AppUpdater {
     }
 
     private static Set<String> signerDigests(PackageInfo packageInfo) throws Exception {
-        Signature[] signatures;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            if (packageInfo.signingInfo == null) return new HashSet<>();
-            signatures = packageInfo.signingInfo.getApkContentsSigners();
-        } else {
-            signatures = packageInfo.signatures;
-        }
+        if (packageInfo.signingInfo == null) return new HashSet<>();
+        Signature[] signatures = packageInfo.signingInfo.getApkContentsSigners();
 
         Set<String> result = new HashSet<>();
         if (signatures == null) return result;
@@ -623,9 +614,7 @@ final class AppUpdater {
     }
 
     private boolean canUseActivity() {
-        return !destroyed && !activity.isFinishing()
-                && (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1
-                || !activity.isDestroyed());
+        return !destroyed && !activity.isFinishing() && !activity.isDestroyed();
     }
 
     private String currentVersionName() {

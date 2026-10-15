@@ -45,6 +45,11 @@ public final class EpgGuideClassicView extends View implements GuideSurface {
     private final TextPaint descriptionPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Paint blockPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint nowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    // Reutilizados en onDraw (0.6.01): una sola fecha y el degradado de la hora actual.
+    private final Date drawDate = new Date();
+    private LinearGradient nowShade;
+    private float nowShadeTop = Float.NaN;
+    private float nowShadeBottom = Float.NaN;
     private final RectF rect = new RectF();
     private final Typeface bold = Typeface.create(Typeface.DEFAULT, Typeface.BOLD);
     private final Typeface regular = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL);
@@ -108,7 +113,8 @@ public final class EpgGuideClassicView extends View implements GuideSurface {
         textPaint.setTextSize(sp(12));
         textPaint.setColor(MUTED);
         long windowStart = navigator.getWindowStart();
-        String day = capitalize(dayFormat.format(new Date(navigator.getFocusMillis())));
+        drawDate.setTime(navigator.getFocusMillis());
+        String day = capitalize(dayFormat.format(drawDate));
         canvas.drawText(day, left + titleWidth + dp(14), headerBaseline, textPaint);
         smallPaint.setTextSize(sp(10));
         smallPaint.setColor(MUTED);
@@ -128,14 +134,16 @@ public final class EpgGuideClassicView extends View implements GuideSurface {
         smallPaint.setTextSize(sp(10));
         boolean nowVisible = nowMillis >= windowStart && nowMillis < navigator.getWindowEnd();
         float nowX = xFor(nowMillis, gridLeft, gridWidth, windowStart);
-        String nowLabel = timeFormat.format(new Date(nowMillis));
+        drawDate.setTime(nowMillis);
+        String nowLabel = timeFormat.format(drawDate);
         float nowLabelLeft = nowX - smallPaint.measureText(nowLabel) / 2f;
         float nowLabelRight = nowX + smallPaint.measureText(nowLabel) / 2f;
         boolean nowLabelClashes = false;
         int slots = (int) (EpgGuideNavigator.WINDOW_MILLIS / EpgGuideNavigator.SLOT_MILLIS);
         for (int slot = 0; slot < slots; slot++) {
             long time = windowStart + slot * EpgGuideNavigator.SLOT_MILLIS;
-            String label = timeFormat.format(new Date(time));
+            drawDate.setTime(time);
+            String label = timeFormat.format(drawDate);
             float labelLeft = xFor(time, gridLeft, gridWidth, windowStart);
             float labelRight = labelLeft + smallPaint.measureText(label);
             // Las horas del eje mandan: si la hora actual se les encima, esa no se dibuja.
@@ -242,10 +250,15 @@ public final class EpgGuideClassicView extends View implements GuideSurface {
                 float lineTop = rowsTop;
                 float lineBottom = rowsTop + shownRows * (rowHeight + rowGap) - rowGap;
                 float fade = Math.min(0.45f, dp(14) / Math.max(1f, lineBottom - lineTop));
-                nowPaint.setShader(new LinearGradient(0f, lineTop, 0f, lineBottom,
-                        new int[] {NOW_EDGE, NOW_LINE, NOW_LINE, NOW_EDGE},
-                        new float[] {0f, fade, 1f - fade, 1f},
-                        Shader.TileMode.CLAMP));
+                if (nowShade == null || lineTop != nowShadeTop || lineBottom != nowShadeBottom) {
+                    nowShade = new LinearGradient(0f, lineTop, 0f, lineBottom,
+                            new int[] {NOW_EDGE, NOW_LINE, NOW_LINE, NOW_EDGE},
+                            new float[] {0f, fade, 1f - fade, 1f},
+                            Shader.TileMode.CLAMP);
+                    nowShadeTop = lineTop;
+                    nowShadeBottom = lineBottom;
+                }
+                nowPaint.setShader(nowShade);
                 rect.set(nowX - dp(1), lineTop, nowX + dp(1), lineBottom);
                 canvas.drawRect(rect, nowPaint);
                 nowPaint.setShader(null);

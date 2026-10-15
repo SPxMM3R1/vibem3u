@@ -23,7 +23,7 @@
             android:id="@+id/channel_logo"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:contentDescription="Logo del canal"
+            android:contentDescription="@string/channel_logo_description"
             android:scaleType="centerInside" />
 
         <TextView
@@ -160,7 +160,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:text="Resolución pendiente"
+            android:text="@string/classic_resolution_pending"
             android:textColor="@color/white"
             android:textSize="13sp" />
 
@@ -171,7 +171,7 @@
             android:layout_marginTop="5dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:text="Analizando stream…"
+            android:text="@string/classic_analyzing_stream"
             android:textColor="@color/white"
             android:textSize="13sp" />
     </LinearLayout>
@@ -195,7 +195,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="7dp"
-            android:text="CARGANDO"
+            android:text="@string/classic_loading_caps"
             android:textColor="@color/white"
             android:textSize="13sp" />
     </LinearLayout>

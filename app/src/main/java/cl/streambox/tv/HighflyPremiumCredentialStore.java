@@ -193,6 +193,7 @@ final class HighflyPremiumCredentialStore implements HighflyPremiumLink.Source {
     }
 
     /** Borra el token y su estado. La clave del Keystore queda inerte y se reutiliza. */
+    @android.annotation.SuppressLint("ApplySharedPref") // Borrar un token no puede quedar a medias.
     void clear() {
         synchronized (lock) {
             clearMemoryTokenLocked();

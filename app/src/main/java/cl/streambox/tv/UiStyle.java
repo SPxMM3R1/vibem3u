@@ -28,6 +28,7 @@ final class UiStyle {
      * no terminó (la app se cerró al preparar la pantalla), vuelve al moderno: el estilo nunca
      * debe impedir que la app abra.
      */
+    @android.annotation.SuppressLint("ApplySharedPref") // La marca debe estar en disco antes de un posible cierre.
     static boolean beginStart(Context context) {
         SharedPreferences prefs = prefs(context);
         boolean classic = prefs.getBoolean(KEY_CLASSIC, false);

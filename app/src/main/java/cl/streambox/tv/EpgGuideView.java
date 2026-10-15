@@ -81,6 +81,16 @@ public final class EpgGuideView extends View implements GuideSurface {
     private final TextPaint descriptionPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint shaderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    // Degradados reutilizados (0.6.01): antes se creaban en cada cuadro de onDraw. Se rehacen
+    // solo si cambia la medida que los define.
+    private LinearGradient backgroundVertical;
+    private LinearGradient backgroundHorizontal;
+    private LinearGradient footerShade;
+    private LinearGradient nowLineShade;
+    private float shadeWidth = -1f;
+    private float shadeHeight = -1f;
+    private float nowLineTop = Float.NaN;
+    private float nowLineBottom = Float.NaN;
     private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final RectF rect = new RectF();
     private final Typeface bold = Typeface.create(Typeface.DEFAULT, Typeface.BOLD);
@@ -193,17 +203,21 @@ public final class EpgGuideView extends View implements GuideSurface {
             float nowX = xFor(nowMillis, gridLeft, gridWidth, windowStart);
             float lineTop = axisBaseline + dp(6);
             float lineBottom = rowsTop + shownRows * rowPitch;
-            shaderPaint.setShader(new LinearGradient(0f, lineTop, 0f, lineBottom,
-                    CYAN, 0x5900B8D9, Shader.TileMode.CLAMP));
+            if (nowLineShade == null || lineTop != nowLineTop || lineBottom != nowLineBottom) {
+                nowLineShade = new LinearGradient(0f, lineTop, 0f, lineBottom,
+                        CYAN, 0x5900B8D9, Shader.TileMode.CLAMP);
+                nowLineTop = lineTop;
+                nowLineBottom = lineBottom;
+            }
+            shaderPaint.setShader(nowLineShade);
             canvas.drawRect(nowX - dp(0.5f), lineTop, nowX + dp(0.5f), lineBottom, shaderPaint);
             shaderPaint.setShader(null);
         }
 
         // Pie: la última fila se funde con el fondo.
         float footerTop = height - dp(24);
-        shaderPaint.setShader(new LinearGradient(0f, footerTop, 0f, height,
-                new int[] {BASE & 0x00FFFFFF, 0xF5000000, 0xF5000000}, new float[] {0f, 0.7f, 1f},
-                Shader.TileMode.CLAMP));
+        ensureShades(width, height);
+        shaderPaint.setShader(footerShade);
         canvas.drawRect(0f, footerTop, width, height, shaderPaint);
         shaderPaint.setShader(null);
     }
@@ -214,15 +228,29 @@ public final class EpgGuideView extends View implements GuideSurface {
      * lectura no era buena (foto del usuario). Sin desenfoque: no se puede sobre el video.
      */
     private void drawBackground(Canvas canvas, float width, float height) {
-        shaderPaint.setShader(new LinearGradient(0f, 0f, 0f, height,
-                new int[] {0xE6000000, 0xD1000000, 0xB3000000, 0xE0000000, 0xF5000000, 0xF7000000},
-                new float[] {0f, 0.12f, 0.30f, 0.46f, 0.58f, 1f}, Shader.TileMode.CLAMP));
+        ensureShades(width, height);
+        shaderPaint.setShader(backgroundVertical);
         canvas.drawRect(0f, 0f, width, height, shaderPaint);
-        shaderPaint.setShader(new LinearGradient(0f, 0f, width, 0f,
-                new int[] {0xB8000000, 0x73000000, 0x00000000},
-                new float[] {0f, 0.45f, 0.72f}, Shader.TileMode.CLAMP));
+        shaderPaint.setShader(backgroundHorizontal);
         canvas.drawRect(0f, 0f, width, height, shaderPaint);
         shaderPaint.setShader(null);
+    }
+
+    /** Fondo y pie dependen solo del tamaño de la vista. */
+    private void ensureShades(float width, float height) {
+        if (width == shadeWidth && height == shadeHeight && footerShade != null) return;
+        shadeWidth = width;
+        shadeHeight = height;
+        backgroundVertical = new LinearGradient(0f, 0f, 0f, height,
+                new int[] {0xE6000000, 0xD1000000, 0xB3000000, 0xE0000000, 0xF5000000, 0xF7000000},
+                new float[] {0f, 0.12f, 0.30f, 0.46f, 0.58f, 1f}, Shader.TileMode.CLAMP);
+        backgroundHorizontal = new LinearGradient(0f, 0f, width, 0f,
+                new int[] {0xB8000000, 0x73000000, 0x00000000},
+                new float[] {0f, 0.45f, 0.72f}, Shader.TileMode.CLAMP);
+        float footerTop = height - dp(24);
+        footerShade = new LinearGradient(0f, footerTop, 0f, height,
+                new int[] {BASE & 0x00FFFFFF, 0xF5000000, 0xF5000000}, new float[] {0f, 0.7f, 1f},
+                Shader.TileMode.CLAMP);
     }
 
     private void drawHeader(Canvas canvas, float left, float right) {

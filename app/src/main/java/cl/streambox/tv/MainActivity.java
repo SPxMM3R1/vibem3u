@@ -78,7 +78,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -108,13 +107,13 @@ public final class MainActivity extends Activity {
     private static final String PLAYER_USER_AGENT = AppUserAgent.VALUE;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
+    private final ExecutorService networkExecutor = idlePool(2, "vibem3u-network", false);
     // Resolver calls can spend several seconds in provider HTTP/TLS
     // handshakes. Keep them out of the executor that refreshes the playlist,
     // EPG and logos so maintenance work cannot delay channel startup.
-    private final ExecutorService playbackExecutor = Executors.newFixedThreadPool(2);
-    private final ExecutorService logoCacheExecutor = Executors.newFixedThreadPool(2);
-    private final ExecutorService resourceCacheExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService playbackExecutor = idlePool(2, "vibem3u-playback", false);
+    private final ExecutorService logoCacheExecutor = idlePool(2, "vibem3u-logos", false);
+    private final ExecutorService resourceCacheExecutor = idlePool(1, "vibem3u-resources", false);
     /**
      * Guía (leer caché, descargar y mezclar ~3 MB de XML) y precarga de vecinos a baja prioridad:
      * no compiten con el arranque del video ni ocupan el hilo de red de la lista (0.5.85).
@@ -126,17 +125,34 @@ public final class MainActivity extends Activity {
     private final Runnable prefetchNeighbors = this::prefetchNeighborChannels;
 
     private static ExecutorService backgroundExecutor(String name) {
-        return Executors.newSingleThreadExecutor(runnable -> {
-            Thread thread = new Thread(() -> {
-                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
-                runnable.run();
-            }, name);
-            thread.setDaemon(true);
-            return thread;
-        });
+        return idlePool(1, name, true);
+    }
+
+    /**
+     * Grupo de hilos con nombre (0.6.01). Mismo tamaño y orden de tareas que antes
+     * (newFixedThreadPool), pero los hilos sin trabajo se cierran a los 30 s: con siete
+     * grupos eran hasta 12 hilos vivos toda la sesión aunque no hicieran nada.
+     */
+    private static ExecutorService idlePool(int threads, String name, boolean background) {
+        java.util.concurrent.atomic.AtomicInteger count = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.ThreadPoolExecutor pool = new java.util.concurrent.ThreadPoolExecutor(
+                threads, threads, 30L, java.util.concurrent.TimeUnit.SECONDS,
+                new java.util.concurrent.LinkedBlockingQueue<>(), runnable -> {
+                    Thread thread = new Thread(() -> {
+                        if (background) {
+                            android.os.Process.setThreadPriority(
+                                    android.os.Process.THREAD_PRIORITY_BACKGROUND);
+                        }
+                        runnable.run();
+                    }, threads == 1 ? name : name + "-" + count.incrementAndGet());
+                    thread.setDaemon(true);
+                    return thread;
+                });
+        pool.allowCoreThreadTimeOut(true);
+        return pool;
     }
     /** Catálogo, enlaces Highfly y variantes TvVoo: tres descargas en paralelo (0.5.85). */
-    private final ExecutorService catalogExecutor = Executors.newFixedThreadPool(3);
+    private final ExecutorService catalogExecutor = idlePool(3, "vibem3u-catalog", false);
     private boolean catalogRefreshRunning;
     /** Pausa del zapeo continuo antes de abrir el canal elegido (0.5.85). */
     private static final long ZAP_SETTLE_MS = 300L;
@@ -213,6 +229,12 @@ public final class MainActivity extends Activity {
     private android.widget.Button playbackErrorSecondary;
     /** true: falló la lista (Reintentar recarga, Opciones abre Opciones). */
     private boolean playbackErrorIsPlaylist;
+    /**
+     * La señal falló con la Guía abierta (0.6.01): la pantalla de error se superponía a la
+     * grilla. Queda pendiente y se muestra al cerrar la Guía, si nada la resolvió antes
+     * (otro canal, la señal que vuelve o una lista nueva).
+     */
+    private boolean playbackErrorDeferred;
     private View noticeOverlay;
     private TextView noticeText;
     private TextView clock;
@@ -240,7 +262,30 @@ public final class MainActivity extends Activity {
     private int guideFilterIndex;
     private boolean guideFiltersFocused;
     /** Logos ya cargados para la guía, por URI; solo se tocan en el hilo principal. */
-    private final java.util.Map<String, android.graphics.Bitmap> guideLogos = new java.util.HashMap<>();
+    /**
+     * Logos ya recortados de la guía (0.6.01): tope de 1/16 de la memoria de la app (entre 4 y
+     * 16 MB). Antes era un HashMap sin límite; en teles de 1 GB recorrer la guía varias veces
+     * podía terminar en falta de memoria. Un logo expulsado se vuelve a leer de la caché en disco.
+     */
+    private final android.util.LruCache<String, android.graphics.Bitmap> guideLogos =
+            new android.util.LruCache<String, android.graphics.Bitmap>(guideLogoCacheBytes()) {
+                @Override
+                protected int sizeOf(String key, android.graphics.Bitmap value) {
+                    return value.getAllocationByteCount();
+                }
+
+                @Override
+                protected void entryRemoved(boolean evicted, String key,
+                        android.graphics.Bitmap oldValue, android.graphics.Bitmap newValue) {
+                    // Expulsado: la próxima vez que se dibuje se vuelve a pedir.
+                    if (evicted) guideLogoRequests.remove(key);
+                }
+            };
+
+    private static int guideLogoCacheBytes() {
+        long sixteenth = Runtime.getRuntime().maxMemory() / 16L;
+        return (int) Math.max(4L << 20, Math.min(16L << 20, sixteenth));
+    }
     private final Set<String> guideLogoRequests = new HashSet<>();
     private View sourceSelectorOverlay;
     private TextView sourceSelectorTitle;
@@ -515,6 +560,9 @@ public final class MainActivity extends Activity {
             if (!isFinishing() && !isDestroyed()) ReminderAlerts.rescheduleAll(this);
         }, 10_000L);
         setContentView(R.layout.activity_main);
+        // La raíz ya pinta negro toda la pantalla: sin el fondo de la ventana no se dibuja dos
+        // veces cada cuadro (lint Overdraw, auditoría 0.6.01).
+        getWindow().setBackgroundDrawable(null);
         SettingsActivity.ensureDefaultPlaylistConfigured(this);
         repository = new PlaylistRepository(this);
         epgRepository = new EpgRepository(this);
@@ -556,7 +604,8 @@ public final class MainActivity extends Activity {
                     resolverCatalogRepository.load(),
                     resolverPreferences
             );
-        } catch (Exception ignored) {
+        } catch (Exception error) {
+            Log.w(RESOURCE_HEALTH_TAG, "Catálogo de resolutores no cargó; quedan los integrados", error);
             // The two original exact-ID resolvers remain available even if a
             // local catalogue update was interrupted or became incompatible.
             streamResolverRegistry = new StreamResolverRegistry();
@@ -924,7 +973,8 @@ public final class MainActivity extends Activity {
                 Playlist cached = null;
                 try {
                     cached = repository.loadCached(source.getUrl());
-                } catch (Exception ignored) {
+                } catch (Exception error) {
+                    Log.w(RESOURCE_HEALTH_TAG, "Lista en caché ilegible", error);
                     // The corresponding network result remains authoritative.
                 }
                 Playlist cachedResult = cached;
@@ -1093,7 +1143,8 @@ public final class MainActivity extends Activity {
                             EpgData cachedData = local;
                             mainHandler.post(() -> applyEpgData(cachedData, epgUri, generation));
                         }
-                    } catch (Exception ignored) {
+                    } catch (Exception error) {
+                        Log.w(RESOURCE_HEALTH_TAG, "EPG en caché ilegible", error);
                         // La reproducción continúa usando el grupo del canal como respaldo.
                     }
                     if (!isNetworkAvailable()) return;
@@ -1109,7 +1160,8 @@ public final class MainActivity extends Activity {
                                         generation
                                 ));
                             }
-                        } catch (Exception ignored) {
+                        } catch (Exception error) {
+                            Log.w(RESOURCE_HEALTH_TAG, "EPG no se pudo actualizar", error);
                             // La programación cacheada permanece visible.
                         }
                     });
@@ -4144,6 +4196,12 @@ public final class MainActivity extends Activity {
     private void openGuide() {
         if (channels.isEmpty() || guideView == null || settingsOpen || exiting) return;
         closePlaybackSourceSelector();
+        // Con la pantalla de error a la vista (la tecla GUÍA llega igual): se guarda y vuelve
+        // al cerrar la Guía, para que no quede encima de la grilla (0.6.01).
+        if (isPlaybackErrorVisible()) {
+            playbackErrorOverlay.setVisibility(View.GONE);
+            playbackErrorDeferred = true;
+        }
         // Moderno (0.5.99): la carga del canal no se trasluce detrás de la Guía; desde la 0.6.00
         // tampoco el OSD (se veía tenue bajo la grilla).
         if (!classicUi && loadingPanel != null) loadingPanel.setAlpha(0f);
@@ -4249,7 +4307,17 @@ public final class MainActivity extends Activity {
     private void closeGuide() {
         if (guideView != null) guideView.setVisibility(View.GONE);
         if (loadingPanel != null) loadingPanel.setAlpha(blackScreenDimmed ? BLACK_SCREEN_ALPHA : 1f);
+        // Después de lo que hizo cerrar la Guía: si eligió otro canal, playChannel ya descartó
+        // el error pendiente y no se muestra nada.
+        if (playbackErrorDeferred) mainHandler.post(showDeferredPlaybackError);
     }
+
+    private final Runnable showDeferredPlaybackError = () -> {
+        if (!playbackErrorDeferred || isGuideVisible() || exiting) return;
+        mainHandler.removeCallbacks(hideOverlay);
+        hideOverlay.run();
+        presentPlaybackErrorScreen();
+    };
 
     private final EpgGuideView.Source guideSource = new EpgGuideView.Source() {
         @Override public int rowCount() { return guideRows.size(); }
@@ -5705,7 +5773,8 @@ public final class MainActivity extends Activity {
                             if (!cached.isEmpty()) {
                                 mainHandler.post(() -> applyPublishedCatalog(cached, cachedLayout, false));
                             }
-                        } catch (Exception ignored) {
+                        } catch (Exception error) {
+                            Log.w(RESOURCE_HEALTH_TAG, "Layout publicado en caché dañado", error);
                             // Un archivo dañado se ignora: se espera la red como antes.
                         }
                     }
@@ -5716,7 +5785,8 @@ public final class MainActivity extends Activity {
                         // Enlaces directos Highfly: el canal Highfly abre sin consultar la API.
                         PublishedHighflyLinks.update(repository.fetchHighflyLinks(),
                                 System.currentTimeMillis());
-                    } catch (Exception ignored) {
+                    } catch (Exception error) {
+                        Log.w(RESOURCE_HEALTH_TAG, "Enlaces Highfly publicados no disponibles", error);
                         // Sin enlaces publicados, Highfly se resuelve como siempre.
                     }
                 });
@@ -5725,14 +5795,16 @@ public final class MainActivity extends Activity {
                         // Hermanas de cada canal TvVoo (HD, FHD, BACKUP): respaldo si la elegida cae.
                         PublishedTvVooVariants.update(repository.fetchTvVooVariants(),
                                 System.currentTimeMillis());
-                    } catch (Exception ignored) {
+                    } catch (Exception error) {
+                        Log.w(RESOURCE_HEALTH_TAG, "Variantes TvVoo publicadas no disponibles", error);
                         // Sin variantes, cada canal TvVoo usa solo su versión elegida.
                     }
                 });
                 try {
                     document = repository.fetchLayoutDocument();
                     refreshed = PublishedPlaybackCatalog.parse(document);
-                } catch (Exception ignored) {
+                } catch (Exception error) {
+                    Log.w(RESOURCE_HEALTH_TAG, "Layout publicado no se pudo descargar", error);
                     refreshed = null;
                 }
             } finally {
@@ -6336,6 +6408,7 @@ public final class MainActivity extends Activity {
     }
 
     private void hidePlaybackErrorScreen() {
+        playbackErrorDeferred = false;
         if (playbackErrorOverlay == null || playbackErrorOverlay.getVisibility() != View.VISIBLE) return;
         playbackErrorOverlay.setVisibility(View.GONE);
     }
@@ -6403,6 +6476,11 @@ public final class MainActivity extends Activity {
     }
 
     private void presentPlaybackErrorScreen() {
+        if (isGuideVisible()) {
+            playbackErrorDeferred = true;
+            return;
+        }
+        playbackErrorDeferred = false;
         Date now = new Date();
         playbackErrorClock.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(now));
         playbackErrorDate.setText(new SimpleDateFormat("EEEE d 'de' MMMM",

@@ -3,7 +3,6 @@ package cl.streambox.tv;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.PixelFormat;
-import android.os.Build;
 import android.text.Layout;
 import android.text.TextPaint;
 import android.text.TextUtils;
@@ -119,7 +118,7 @@ public final class ContinuousMarqueeTextView extends FrameLayout implements Surf
         return !released && !surfaceFailed && isAttachedToWindow() && isShown()
                 && getWindowVisibility() == VISIBLE && hasWindowFocus() && isHardwareAccelerated()
                 && getLayoutDirection() != LAYOUT_DIRECTION_RTL && !text.isEmpty()
-                && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || ValueAnimator.areAnimatorsEnabled());
+                && ValueAnimator.areAnimatorsEnabled();
     }
 
     private void scheduleAnimationUpdate() {

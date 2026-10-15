@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="es">
     <string name="app_name">VibeM3U</string>
     <string name="live">EN VIVO</string>
     <string name="live_content">Transmisión en directo</string>
     <string name="loading_playlist">Descargando lista de canales…</string>
-    <string name="loading_playlist_cache">Cargando lista desde caché…</string>
     <string name="loading_preparing_channel">Preparando reproducción…</string>
     <string name="loading_direct_source">Preparando fuente HLS…</string>
     <string name="loading_resolver_initializing">Preparando reproducción…</string>
@@ -30,19 +29,13 @@
     <string name="loading_resolver_cache_reused">Usando fuente en memoria…</string>
     <string name="loading_starting_playback">Iniciando reproducción…</string>
     <string name="loading_validating_segment">Validando segmento inicial…</string>
-    <string name="loading_retrying_source">Reintentando fuente HLS…</string>
-    <string name="loading_refreshing_source">Renovando autorización…</string>
     <string name="loading_reopening_source">Reabriendo fuente HLS…</string>
-    <string name="loading_fallback_source">Probando respaldo…</string>
-    <string name="loading_network_retry">Reintentando conexión…</string>
     <string name="resource_warning_buffer">Buffer insuficiente · esperando segmentos…</string>
     <string name="resource_warning_memory">Memoria baja · liberando buffer…</string>
     <string name="resource_warning_memory_critical">Memoria crítica · reproducción en riesgo…</string>
     <string name="empty_playlist">La lista no contiene canales reproducibles.</string>
     <string name="playlist_error">No se pudo descargar la lista. Pulsa OK para reintentar.</string>
     <string name="settings_title">Opciones</string>
-    <string name="settings_description">Organiza la fuente, la reproducción, el audio y las actualizaciones desde un solo lugar.</string>
-    <string name="settings_playback_title">Reproducción</string>
     <string name="playlist_url_hint">https://ejemplo.com/lista.m3u</string>
     <string name="playlist_url_2_hint">https://ejemplo.com/segunda-lista.m3u</string>
     <string name="highfly_manifest_title">Catálogo de Highfly</string>
@@ -58,7 +51,6 @@
     <string name="playlist_source_required">Activa al menos una lista M3U.</string>
     <string name="invert_channel_keys">Invertir botones arriba y abajo</string>
     <string name="invert_channel_keys_description">Invertidos: ▲ avanza al canal siguiente y ▼ vuelve al anterior.</string>
-    <string name="remote_help">Durante la reproducción: ↑/↓ cambia de canal · OK muestra información · mantener OK configuración.</string>
     <string name="update_title">Actualización disponible</string>
     <string name="update_available">VibeM3U %1$s está lista para instalar.</string>
     <string name="update_later">Más tarde</string>
@@ -68,7 +60,6 @@
     <string name="update_download_error">No se pudo actualizar: %1$s</string>
     <string name="update_permission_required">Activa “Permitir desde esta fuente” y vuelve para continuar.</string>
     <string name="update_permission_unavailable">Abre los ajustes del sistema y permite que VibeM3U instale aplicaciones.</string>
-    <string name="app_settings_title">Aplicación</string>
     <string name="current_version">Versión instalada · %1$s</string>
     <string name="settings_cache_description">La guía y los logos se muestran primero desde la caché y se actualizan en segundo plano sin interrumpir el canal.</string>
     <string name="check_updates">Buscar actualizaciones</string>
@@ -99,9 +90,7 @@
     <string name="resolver_groups_title">Proveedores de señal</string>
     <string name="resolver_groups_description">Apaga un proveedor para ocultar todos sus canales. Las fuentes directas de las listas no cambian.</string>
     <string name="settings_updates_description">Busca versiones nuevas de VibeM3U. Tu configuración se conserva.</string>
-    <string name="settings_remote_help">◀ ▶ Cambiar pestaña   ·   ▲ ▼ Navegar   ·   OK Seleccionar   ·   BACK Volver</string>
     <string name="epg_no_information">Sin información disponible</string>
-    <string name="epg_no_next_programme">No hay información siguiente</string>
     <string name="light_epg_live">● EN VIVO</string>
     <string name="guide_title">Guía</string>
     <string name="guide_classic_hints">OK ver canal · Mantén OK recordar · ◀▶ hora · BACK cerrar</string>
@@ -170,10 +159,12 @@
     <plurals name="resolver_group_count">
         <item quantity="one">%1$d canal</item>
         <item quantity="other">%1$d canales</item>
+        <item quantity="many">%1$d canales</item>
     </plurals>
     <plurals name="resolver_group_channels">
         <item quantity="one">%1$s · %2$d canal</item>
         <item quantity="other">%1$s · %2$d canales</item>
+        <item quantity="many">%1$s · %2$d canales</item>
     </plurals>
     <string name="reminder_label">Recordatorio</string>
     <string name="reminder_watch_now">Ver</string>
@@ -383,6 +374,7 @@
     <plurals name="hidden_channels_summary">
         <item quantity="one">%1$d canal oculto</item>
         <item quantity="other">%1$d canales ocultos</item>
+        <item quantity="many">%1$d canales ocultos</item>
     </plurals>
     <string name="hidden_channels_detail">Solo en esta TV. Puedes volver a mostrarlos.</string>
     <string name="hidden_channels_show_list">Ver ›</string>
@@ -416,4 +408,8 @@
     <string name="github_link_row_detail">Para enviar canales a la papelera de Lista M3U. Escanea un QR y escribe un código.</string>
     <string name="github_link_linked">Vinculado ›</string>
     <string name="premium_link_linked">Gestionar ›</string>
+    <string name="channel_logo_description">Logo del canal</string>
+    <string name="classic_resolution_pending">Resolución pendiente</string>
+    <string name="classic_analyzing_stream">Analizando stream…</string>
+    <string name="classic_loading_caps">CARGANDO</string>
 </resources>
