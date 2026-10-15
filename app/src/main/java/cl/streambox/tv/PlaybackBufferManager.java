@@ -28,6 +28,11 @@ final class PlaybackBufferManager implements AutoCloseable {
     private final DefaultAllocator allocator = new DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE);
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ArrayDeque<String> history = new ArrayDeque<>();
+    /**
+     * Entradas del historial aún no escritas en logcat (0.6.04). Antes cada «buffering» volvía a
+     * escribir las 24 entradas, y cada cambio de canal repetía las mismas líneas.
+     */
+    private int unlogged;
     private final int targetBytes;
     private ExoPlayer player;
     private PlaybackStartupMetrics metrics;
@@ -51,8 +56,7 @@ final class PlaybackBufferManager implements AutoCloseable {
                 MediaLoadData data, IOException error, boolean wasCanceled) {
             // A late failure from a previous media period is unrelated to the current buffer.
             if (player == null || !time.timeline.equals(player.getCurrentTimeline())) return;
-            record(wasCanceled ? "load_cancelled" : "load_error", 0, httpStatus(error), false);
-            if (!history.isEmpty()) Log.i(TAG, history.getLast());
+            record(wasCanceled ? "load_cancelled" : "load_error", 0, httpStatus(error), true);
         }
     };
 
@@ -164,7 +168,15 @@ final class PlaybackBufferManager implements AutoCloseable {
                 + " heapMax=" + runtime.maxMemory() + " error=" + error + " http=" + http;
         if (history.size() == 24) history.removeFirst();
         history.addLast(sample);
-        if (dump) for (String entry : history) Log.i(TAG, entry);
+        unlogged = Math.min(unlogged + 1, history.size());
+        if (dump) {
+            int skip = history.size() - unlogged;
+            for (String entry : history) {
+                if (skip-- > 0) continue;
+                Log.i(TAG, entry);
+            }
+            unlogged = 0;
+        }
     }
 
     @Override public void close() {
@@ -176,6 +188,7 @@ final class PlaybackBufferManager implements AutoCloseable {
         player = null;
         metrics = null;
         history.clear();
+        unlogged = 0;
         // The player's load control resets its allocator when released.
     }
 }
