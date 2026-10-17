@@ -260,6 +260,28 @@ public final class PublishedPlaybackCatalogTest {
     }
 
     @Test
+    public void highflyChannelCarriesItsTvVooBackupButTvVooRowsDoNot() throws Exception {
+        String backup = "unitedkingdom|vavoo_SKY%20SPORTS%20F1%7Cgroup%3Auk";
+        String edited = document()
+                .replace("\"name\":\"Sky Sports F1\",",
+                        "\"name\":\"Sky Sports F1\",\"backupTvVoo\":\"" + backup + "\",")
+                .replace("\"name\":\"ESPN 1\",",
+                        "\"name\":\"ESPN 1\",\"backupTvVoo\":\"" + backup + "\",");
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);
+
+        List<Channel> played = catalog.applyToPlayback(catalog.activeProviderChannels());
+
+        Channel highfly = played.get(0);
+        assertTrue(HighflyChannelMerge.isHighfly(highfly));
+        assertTrue(TvVooBackup.hasTvVoo(highfly));
+        assertEquals(backup, TvVooBackup.stableIdOf(highfly));
+        assertEquals("SkySportsF1.uk", highfly.getTvgId());
+        Channel tvvoo = played.get(1);
+        assertTrue(TvVooChannelMerge.isTvVoo(tvvoo));
+        assertFalse(TvVooBackup.has(tvvoo));
+    }
+
+    @Test
     public void malformedBackupIsIgnoredAndTheDirectChannelStillPlays() throws Exception {
         String edited = document().replace(
                 "\"name\":\"TVN\",", "\"name\":\"TVN\",\"backupTvVoo\":\"https://x\",");

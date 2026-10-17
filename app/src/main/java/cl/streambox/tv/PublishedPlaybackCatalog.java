@@ -502,6 +502,9 @@ final class PublishedPlaybackCatalog {
                     if (!identityState.equals("canonical") && !identityState.equals("provisional")) {
                         throw new IOException("identityState Highfly no permitido.");
                     }
+                    // Respaldo TvVoo también para Highfly (0.6.10); mal formado se ignora.
+                    String backup = value.optString("backupTvVoo", "").trim();
+                    if (TvVooCatalogChannel.isStableId(backup)) backupTvVoo = backup;
                 }
             }
             String name = safeText(value, "name", true);
