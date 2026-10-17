@@ -1726,6 +1726,13 @@ public final class MainActivity extends MainSelector {
             refreshAfterSettings = false;
             refreshPlaylists(getPlaylistSources());
         }
+        if (restartPlaybackAfterFocusLoss && !settingsOpen) {
+            // Pausa sin pasar por onStop (0.6.07): un intent con la app abierta, como «Ver» de
+            // un recordatorio del canal actual o de uno que ya no está. onStart no corre, así
+            // que el canal se reabre aquí; si el intent ya abrió otro canal, no se toca.
+            restartPlaybackAfterFocusLoss = false;
+            if (playbackChannel == null) restartCurrentPlaybackAfterFocusLoss();
+        }
         startPlaybackFromInput();
         updateDiagnosticsVisibility();
     }
