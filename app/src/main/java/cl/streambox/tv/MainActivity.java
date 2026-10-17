@@ -1389,6 +1389,29 @@ public final class MainActivity extends MainSelector {
                         SettingsActivity.EXTRA_SUBTITLES_ENABLED,
                         playbackPreferences.getSubtitles(channel)
                 );
+        // Pistas de audio (0.6.11): la fila solo aparece si hay más de una.
+        List<AudioTrackOptions.Option> audio = player == null
+                ? Collections.emptyList()
+                : AudioTrackOptions.collect(player.getCurrentTracks());
+        if (audio.size() > 1) {
+            ArrayList<String> audioLabels = new ArrayList<>();
+            ArrayList<String> audioKeys = new ArrayList<>();
+            int audioSelected = -1;
+            for (int index = 0; index < audio.size(); index++) {
+                audioLabels.add(audio.get(index).label);
+                audioKeys.add(audio.get(index).key);
+                if (audio.get(index).selected && audioSelected < 0) audioSelected = index;
+            }
+            intent.putStringArrayListExtra(SettingsActivity.EXTRA_AUDIO_LABELS, audioLabels)
+                    .putStringArrayListExtra(SettingsActivity.EXTRA_AUDIO_KEYS, audioKeys)
+                    .putExtra(SettingsActivity.EXTRA_AUDIO_SELECTED_INDEX, audioSelected);
+        }
+        Format playingAudio = player == null ? null : player.getAudioFormat();
+        String audioLanguage = playingAudio == null ? ""
+                : AudioTrackOptions.languageName(AudioTrackOptions.normalizeLanguage(playingAudio.language));
+        if (!audioLanguage.isEmpty()) {
+            intent.putExtra(SettingsActivity.EXTRA_SIGNAL_AUDIO_LANGUAGE, audioLanguage);
+        }
         return intent;
     }
 
@@ -1466,6 +1489,12 @@ public final class MainActivity extends MainSelector {
             );
             subtitlePreferenceAppliedFor = null;
             if (player != null) applySavedSubtitlePreference(player.getCurrentTracks());
+        }
+
+        if (data.hasExtra(SettingsActivity.EXTRA_AUDIO_KEY)) {
+            playbackPreferences.rememberAudio(
+                    channel, data.getStringExtra(SettingsActivity.EXTRA_AUDIO_KEY));
+            if (player != null) applySavedAudioPreference(player.getCurrentTracks());
         }
     }
 

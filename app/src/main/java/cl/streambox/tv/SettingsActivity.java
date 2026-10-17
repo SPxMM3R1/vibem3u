@@ -82,6 +82,14 @@ public final class SettingsActivity extends Activity {
     public static final String EXTRA_QUALITY_HEIGHT = "quality_height";
     public static final String EXTRA_SUBTITLES_AVAILABLE = "subtitles_available";
     public static final String EXTRA_SUBTITLES_ENABLED = "subtitles_enabled";
+    /** Pistas de audio del canal (0.6.11): nombres visibles, claves y la que suena. */
+    public static final String EXTRA_AUDIO_LABELS = "audio_labels";
+    public static final String EXTRA_AUDIO_KEYS = "audio_keys";
+    public static final String EXTRA_AUDIO_SELECTED_INDEX = "audio_selected_index";
+    /** Resultado: clave de la pista elegida. */
+    public static final String EXTRA_AUDIO_KEY = "audio_key";
+    /** Idioma de la pista que suena, para «Información de la señal». */
+    public static final String EXTRA_SIGNAL_AUDIO_LANGUAGE = "signal_audio_language";
     public static final String EXTRA_RESOLVER_IDS = "resolver_ids";
     public static final String EXTRA_RESOLVER_COUNTS = "resolver_counts";
     public static final String EXTRA_SIGNAL_VIDEO = "signal_video";
@@ -148,6 +156,11 @@ public final class SettingsActivity extends Activity {
     private String currentChannelTvgId = "";
     private boolean hasCurrentChannel;
     private boolean subtitlesAvailable;
+    private ArrayList<String> audioLabels = new ArrayList<>();
+    private ArrayList<String> audioKeys = new ArrayList<>();
+    private int selectedAudioIndex = -1;
+    private int initialAudioIndex = -1;
+    private final List<Button> audioOptionButtons = new ArrayList<>();
     private boolean automaticQuality;
     private int selectedQualityIndex = -1;
     private ArrayList<String> qualityLabels = new ArrayList<>();
@@ -448,6 +461,11 @@ public final class SettingsActivity extends Activity {
             setSignalCell(R.id.signal_frame_rate, picture, 1);
             setSignalCell(R.id.signal_video, codec, 0);
             setSignalCell(R.id.signal_codecs, codec, 1);
+            String audioLanguage = safeString(intent.getStringExtra(EXTRA_SIGNAL_AUDIO_LANGUAGE));
+            TextView audioCell = findViewById(R.id.signal_codecs);
+            if (audioCell != null && !audioLanguage.isEmpty() && !isUnavailable(codec, 1)) {
+                audioCell.setText(codec[1].trim() + " · " + audioLanguage);
+            }
             setSignalCell(R.id.signal_bitrate, codec, 2);
             // Sin ningún dato: una sola línea (mockup aprobado 0.6.02).
             boolean noData = isUnavailable(picture, 0) && isUnavailable(picture, 1)
@@ -618,7 +636,41 @@ public final class SettingsActivity extends Activity {
             subtitlesSwitch.setOnCheckedChangeListener((button, checked) ->
                     updateSubtitleSwitchLabel());
         }
+        bindAudioOptions(intent);
         updatePlaybackFirstFocus();
+    }
+
+    /** Fila «Audio» (0.6.11, mockup aprobado): solo en el moderno y con más de una pista. */
+    private void bindAudioOptions(Intent intent) {
+        View row = findViewById(R.id.settings_audio_row);
+        LinearLayout container = findViewById(R.id.settings_audio_options);
+        if (row == null || container == null) return;
+        ArrayList<String> labels = intent.getStringArrayListExtra(EXTRA_AUDIO_LABELS);
+        ArrayList<String> keys = intent.getStringArrayListExtra(EXTRA_AUDIO_KEYS);
+        boolean valid = !classicUi && labels != null && keys != null
+                && labels.size() > 1 && labels.size() == keys.size();
+        row.setVisibility(valid ? View.VISIBLE : View.GONE);
+        container.removeAllViews();
+        audioOptionButtons.clear();
+        if (!valid) return;
+        audioLabels = labels;
+        audioKeys = keys;
+        selectedAudioIndex = intent.getIntExtra(EXTRA_AUDIO_SELECTED_INDEX, -1);
+        if (selectedAudioIndex >= labels.size()) selectedAudioIndex = -1;
+        initialAudioIndex = selectedAudioIndex;
+        for (int index = 0; index < labels.size(); index++) {
+            final int optionIndex = index;
+            Button chip = createQualityChip(labels.get(index));
+            chip.setOnClickListener(view -> {
+                selectedAudioIndex = optionIndex;
+                for (int other = 0; other < audioOptionButtons.size(); other++) {
+                    audioOptionButtons.get(other).setSelected(other == selectedAudioIndex);
+                }
+            });
+            chip.setSelected(index == selectedAudioIndex);
+            addWrappedOption(container, chip);
+            audioOptionButtons.add(chip);
+        }
     }
 
     private void renderQualityOptions() {
@@ -696,36 +748,37 @@ public final class SettingsActivity extends Activity {
     private static final int QUALITY_COLUMN_DP = 390;
     /** Margen, relleno y el punto verde de «en uso» que se suma al texto de cada opción. */
     private static final int QUALITY_CHIP_EXTRA_DP = 20 + 10 + 16;
-    private int qualityLineWidth;
-
     private void addQualityOption(Button option) {
         if (classicUi) {
             qualityOptionsContainer.addView(option);
             return;
         }
-        int lines = qualityOptionsContainer.getChildCount();
+        addWrappedOption(qualityOptionsContainer, option);
+    }
+
+    /** Agrega una opción de texto y pasa a otra línea cuando no cabe en la columna. */
+    private void addWrappedOption(LinearLayout container, Button option) {
+        int lines = container.getChildCount();
         LinearLayout line = lines == 0 ? null
-                : (LinearLayout) qualityOptionsContainer.getChildAt(lines - 1);
+                : (LinearLayout) container.getChildAt(lines - 1);
         int width = Math.round(option.getPaint().measureText(option.getText().toString()))
                 + dp(QUALITY_CHIP_EXTRA_DP);
+        int lineWidth = line != null && line.getTag() instanceof Integer ? (Integer) line.getTag() : 0;
         if (line == null || (line.getChildCount() > 0
-                && qualityLineWidth + width > dp(QUALITY_COLUMN_DP))) {
-            qualityLineWidth = 0;
+                && lineWidth + width > dp(QUALITY_COLUMN_DP))) {
+            lineWidth = 0;
             line = new LinearLayout(this);
             line.setOrientation(LinearLayout.HORIZONTAL);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            if (lines > 0) params.topMargin = dp(6);
-            qualityOptionsContainer.addView(line, params);
+            if (lines > 0) params.topMargin = dp(8);
+            container.addView(line, params);
         }
         if (line.getChildCount() == 0) {
             ((LinearLayout.LayoutParams) option.getLayoutParams()).setMarginStart(0);
         }
-        if (lines > 0 && line.getChildCount() == 0) {
-            ((LinearLayout.LayoutParams) line.getLayoutParams()).topMargin = dp(8);
-        }
         line.addView(option);
-        qualityLineWidth += width;
+        line.setTag(lineWidth + width);
     }
 
     private Button createQualityChip(String text) {
@@ -1469,6 +1522,10 @@ public final class SettingsActivity extends Activity {
             }
             if (subtitlesAvailable) {
                 result.putExtra(EXTRA_SUBTITLES_ENABLED, subtitlesSwitch.isChecked());
+            }
+            if (selectedAudioIndex >= 0 && selectedAudioIndex != initialAudioIndex
+                    && selectedAudioIndex < audioKeys.size()) {
+                result.putExtra(EXTRA_AUDIO_KEY, audioKeys.get(selectedAudioIndex));
             }
         }
         setResult(RESULT_OK, result);

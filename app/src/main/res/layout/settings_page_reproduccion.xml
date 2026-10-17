@@ -132,6 +132,37 @@
         android:text="@string/subtitles_waiting_for_text"
         android:textColor="@color/white"
         android:textSize="11.5sp" />
+    <!-- Audio (0.6.11, mockup aprobado): solo con más de una pista. -->
+    <LinearLayout
+        android:id="@+id/settings_audio_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:orientation="vertical"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:visibility="gone">
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:includeFontPadding="false"
+            android:text="@string/settings_audio_title"
+            android:textColor="@color/settings_row_title"
+            android:textSize="11.5sp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/settings_audio_detail"
+            android:textColor="@color/settings_row_detail"
+            android:textSize="8.5sp" />
+        <LinearLayout
+            android:id="@+id/settings_audio_options"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="vertical" />
+    </LinearLayout>
     <LinearLayout
         android:id="@+id/open_source_selector"
         android:layout_width="match_parent"

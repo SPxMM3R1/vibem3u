@@ -20,6 +20,8 @@ final class PlaybackPreferences {
     private static final String QUALITY_PREFIX = "quality_";
     private static final String AUTOMATIC_QUALITY_VALUE = "auto";
     private static final String SUBTITLES_PREFIX = "subtitles_";
+    /** Pista de audio elegida en Opciones (0.6.11), por canal: clave de AudioTrackOptions. */
+    private static final String AUDIO_PREFIX = "audio_";
     /** Señal elegida a mano en «Fuentes y calidades» (0.5.75). */
     private static final String SOURCE_PREFIX = "source_";
     static final String SOURCE_PRINCIPAL = "principal";
@@ -204,6 +206,19 @@ final class PlaybackPreferences {
 
     void rememberSubtitles(Channel channel, boolean enabled) {
         preferences.edit().putBoolean(subtitlesKey(channel), enabled).apply();
+    }
+
+    String getAudio(Channel channel) {
+        return preferences.getString(AUDIO_PREFIX + sha256(channelIdentity(channel)), "");
+    }
+
+    void rememberAudio(Channel channel, String key) {
+        String preferenceKey = AUDIO_PREFIX + sha256(channelIdentity(channel));
+        if (key == null || key.isEmpty()) {
+            preferences.edit().remove(preferenceKey).apply();
+        } else {
+            preferences.edit().putString(preferenceKey, key).apply();
+        }
     }
 
     static int findChannelIndex(List<Channel> channels, String savedIdentity, int fallbackIndex) {

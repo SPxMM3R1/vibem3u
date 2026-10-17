@@ -185,6 +185,7 @@ abstract class MainPlayback extends MainState {
                 updateDiagnostics();
                 applySavedQualityPreference(tracks);
                 applySavedSubtitlePreference(tracks);
+                applySavedAudioPreference(tracks);
             }
 
             @Override public void onCues(CueGroup cueGroup) {
@@ -413,6 +414,7 @@ abstract class MainPlayback extends MainState {
             player.setTrackSelectionParameters(player.getTrackSelectionParameters()
                     .buildUpon()
                     .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                    .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
                     .build());
             player.stop();
             player.clearMediaItems();
@@ -1879,6 +1881,31 @@ abstract class MainPlayback extends MainState {
                 preference
         );
         if (option != null) applyFixedQuality(channel, option, false);
+    }
+
+    /**
+     * Pista de audio guardada para el canal (0.6.11). Solo actúa si suena otra: así no hay que
+     * recordar si ya se aplicó, y tras una reconexión (pistas nuevas) se vuelve a elegir sola.
+     */
+    void applySavedAudioPreference(Tracks tracks) {
+        if (player == null || channels.isEmpty()
+                || channelIndex < 0 || channelIndex >= channels.size()) return;
+        Channel channel = channels.get(channelIndex);
+        MediaItem mediaItem = player.getCurrentMediaItem();
+        if (mediaItem == null
+                || !PlaybackPreferences.channelIdentity(channel).equals(mediaItem.mediaId)) return;
+        String saved = playbackPreferences.getAudio(channel);
+        if (AppStrings.isBlank(saved)) return;
+        List<AudioTrackOptions.Option> options = AudioTrackOptions.collect(tracks);
+        if (options.size() < 2) return;
+        AudioTrackOptions.Option match = AudioTrackOptions.find(options, saved);
+        if (match == null || match.selected) return;
+        player.setTrackSelectionParameters(player.getTrackSelectionParameters()
+                .buildUpon()
+                .setOverrideForType(new TrackSelectionOverride(
+                        tracks.getGroups().get(match.groupIndex).getMediaTrackGroup(),
+                        match.trackIndex))
+                .build());
     }
 
     void applySavedSubtitlePreference(Tracks tracks) {
