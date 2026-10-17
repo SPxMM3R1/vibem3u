@@ -1,0 +1,3 @@
+# Vectores de prueba de audio: sin conversión de fin de línea.
+*.mp2 binary
+*.pcm binary

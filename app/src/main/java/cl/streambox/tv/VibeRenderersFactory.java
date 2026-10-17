@@ -7,6 +7,7 @@ import androidx.media3.common.audio.AudioProcessor;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.Renderer;
+import androidx.media3.exoplayer.audio.AudioRendererEventListener;
 import androidx.media3.exoplayer.audio.AudioSink;
 import androidx.media3.exoplayer.audio.DefaultAudioSink;
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
@@ -55,6 +56,31 @@ final class VibeRenderersFactory extends DefaultRenderersFactory {
                 return;
             }
         }
+    }
+
+    @Override
+    protected void buildAudioRenderers(
+            Context context,
+            int extensionRendererMode,
+            MediaCodecSelector mediaCodecSelector,
+            boolean enableDecoderFallback,
+            AudioSink audioSink,
+            Handler eventHandler,
+            AudioRendererEventListener eventListener,
+            ArrayList<Renderer> out
+    ) {
+        super.buildAudioRenderers(
+                context,
+                extensionRendererMode,
+                mediaCodecSelector,
+                enableDecoderFallback,
+                audioSink,
+                eventHandler,
+                eventListener,
+                out
+        );
+        // Al final: solo toma el MP2 cuando el equipo no tiene decodificador propio (0.6.06).
+        out.add(new Mp2AudioRenderer(eventHandler, eventListener, audioSink));
     }
 
     MediaCodecVideoRenderer getVideoRenderer() {

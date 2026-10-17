@@ -824,6 +824,7 @@ abstract class MainState extends Activity {
             case MimeTypes.AUDIO_AAC -> "AAC";
             case MimeTypes.AUDIO_AC3 -> "AC-3";
             case MimeTypes.AUDIO_E_AC3 -> "E-AC-3";
+            case MimeTypes.AUDIO_MPEG_L2 -> "MP2";
             case MimeTypes.AUDIO_OPUS -> "Opus";
             default -> mimeType.substring(mimeType.lastIndexOf('/') + 1).toUpperCase(Locale.ROOT);
         };
