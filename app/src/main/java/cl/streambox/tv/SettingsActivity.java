@@ -977,11 +977,11 @@ public final class SettingsActivity extends Activity {
 
         if (!classicUi) {
             // Una fila por proveedor (0.5.90, mockup aprobado): nombre y, debajo, sus canales.
+            // 32 dp sin margen (0.6.08, mockup aprobado): la pestaña cabe sin scroll.
             for (ResolverDefinition definition : resolverCatalog.getProviders()) {
                 Switch groupSwitch = createResolverGroupSwitch(definition);
                 LinearLayout.LayoutParams row = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, dp(38));
-                row.bottomMargin = dp(4);
+                        LinearLayout.LayoutParams.MATCH_PARENT, dp(32));
                 resolverGroupsContainer.addView(groupSwitch, row);
                 resolverGroupSwitches.put(definition.getId(), groupSwitch);
             }
