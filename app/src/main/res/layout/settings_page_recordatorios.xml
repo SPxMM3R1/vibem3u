@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="0dp"
-        android:layout_marginBottom="6dp"
+        android:layout_marginBottom="4dp"
         android:fontFamily="sans-serif-medium"
             android:letterSpacing="0.2"
         android:singleLine="true"
@@ -48,8 +48,8 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:layout_marginBottom="6dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="4dp"
         android:fontFamily="sans-serif-medium"
             android:letterSpacing="0.2"
         android:singleLine="true"
@@ -68,9 +68,9 @@
         android:minHeight="40dp"
         android:orientation="horizontal"
         android:paddingStart="0dp"
-        android:paddingTop="9dp"
+        android:paddingTop="6dp"
         android:paddingEnd="0dp"
-        android:paddingBottom="9dp"
+        android:paddingBottom="6dp"
         android:clickable="true"
         android:focusable="true">
         <LinearLayout
@@ -115,9 +115,9 @@
         android:minHeight="40dp"
         android:orientation="horizontal"
         android:paddingStart="0dp"
-        android:paddingTop="9dp"
+        android:paddingTop="6dp"
         android:paddingEnd="0dp"
-        android:paddingBottom="9dp"
+        android:paddingBottom="6dp"
         android:clickable="true"
         android:focusable="true">
         <LinearLayout

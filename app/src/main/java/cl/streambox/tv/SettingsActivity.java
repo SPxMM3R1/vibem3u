@@ -977,11 +977,12 @@ public final class SettingsActivity extends Activity {
 
         if (!classicUi) {
             // Una fila por proveedor (0.5.90, mockup aprobado): nombre y, debajo, sus canales.
-            // 32 dp sin margen (0.6.08, mockup aprobado): la pestaña cabe sin scroll.
+            // 38 dp + 4 dp (0.6.09): el usuario prefirió el espacio original entre interruptores.
             for (ResolverDefinition definition : resolverCatalog.getProviders()) {
                 Switch groupSwitch = createResolverGroupSwitch(definition);
                 LinearLayout.LayoutParams row = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, dp(32));
+                        LinearLayout.LayoutParams.MATCH_PARENT, dp(38));
+                row.bottomMargin = dp(4);
                 resolverGroupsContainer.addView(groupSwitch, row);
                 resolverGroupSwitches.put(definition.getId(), groupSwitch);
             }
@@ -1113,7 +1114,7 @@ public final class SettingsActivity extends Activity {
         row.setFocusable(true);
         row.setClickable(true);
         row.setId(View.generateViewId());
-        row.setPadding(0, dp(9), 0, dp(9));
+        row.setPadding(0, dp(6), 0, dp(6));
         LinearLayout texts = new LinearLayout(this);
         texts.setOrientation(LinearLayout.VERTICAL);
         texts.setDuplicateParentStateEnabled(true);

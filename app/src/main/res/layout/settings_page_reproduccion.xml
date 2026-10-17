@@ -36,7 +36,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="0dp"
-        android:layout_marginBottom="6dp"
+        android:layout_marginBottom="4dp"
         android:fontFamily="sans-serif-medium"
             android:letterSpacing="0.2"
         android:singleLine="true"
@@ -55,9 +55,9 @@
         android:minHeight="40dp"
         android:orientation="vertical"
         android:paddingStart="0dp"
-        android:paddingTop="9dp"
+        android:paddingTop="6dp"
         android:paddingEnd="0dp"
-        android:paddingBottom="9dp">
+        android:paddingBottom="6dp">
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -126,9 +126,9 @@
         android:background="@drawable/settings_section_card"
         android:minHeight="40dp"
         android:paddingStart="0dp"
-        android:paddingTop="9dp"
+        android:paddingTop="6dp"
         android:paddingEnd="0dp"
-        android:paddingBottom="9dp"
+        android:paddingBottom="6dp"
         android:text="@string/subtitles_waiting_for_text"
         android:textColor="@color/white"
         android:textSize="11.5sp" />
@@ -142,9 +142,9 @@
         android:minHeight="40dp"
         android:orientation="horizontal"
         android:paddingStart="0dp"
-        android:paddingTop="9dp"
+        android:paddingTop="6dp"
         android:paddingEnd="0dp"
-        android:paddingBottom="9dp"
+        android:paddingBottom="6dp"
         android:clickable="true"
         android:focusable="true">
         <LinearLayout
@@ -190,9 +190,9 @@
         android:minHeight="40dp"
         android:orientation="horizontal"
         android:paddingStart="0dp"
-        android:paddingTop="9dp"
+        android:paddingTop="6dp"
         android:paddingEnd="0dp"
-        android:paddingBottom="9dp"
+        android:paddingBottom="6dp"
         android:clickable="true"
         android:focusable="true"
         android:visibility="gone">
@@ -236,8 +236,8 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:layout_marginBottom="6dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="4dp"
             android:fontFamily="sans-serif-medium"
             android:letterSpacing="0.2"
             android:singleLine="true"
@@ -263,9 +263,9 @@
             android:background="@drawable/settings_section_card"
             android:orientation="vertical"
             android:paddingStart="0dp"
-            android:paddingTop="9dp"
+            android:paddingTop="6dp"
             android:paddingEnd="0dp"
-            android:paddingBottom="9dp">
+            android:paddingBottom="6dp">
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
