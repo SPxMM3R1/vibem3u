@@ -69,8 +69,14 @@ public final class EpgGuideView extends View implements GuideSurface {
     private static final int META = 0x9EFFFFFF;
     private static final int NEXT_LABEL = 0x73FFFFFF;
     private static final int NEXT_TITLE = 0xD9FFFFFF;
-    private static final int DIVIDER = 0x1FFFFFFF;
     private static final int TRACK = 0x2EFFFFFF;
+    // Bloques de programa (0.6.13, B1 aprobada): fondo tenue del largo del programa, más claro
+    // al aire, tramo ya emitido en cian suave y foco con fondo claro y borde blanco.
+    private static final int TILE = 0x0EFFFFFF;
+    private static final int TILE_ON_AIR = 0x17FFFFFF;
+    private static final int TILE_ELAPSED = 0x2100B8D9;
+    private static final int TILE_FOCUSED = 0x33FFFFFF;
+    private static final int TILE_FOCUS_BORDER = 0xD9FFFFFF;
     /** Opacidad de la fila que se asoma bajo la última completa. */
     private static final int PEEK_ALPHA = 89;
 
@@ -165,7 +171,8 @@ public final class EpgGuideView extends View implements GuideSurface {
         float axisBaseline = dp(262);
         float rowsTop = dp(278);
         float rowHeight = dp(30);
-        float rowPitch = dp(39);
+        // Bloques ajustados a sus dos líneas (0.6.13): menos aire entre filas, caben más canales.
+        float rowPitch = dp(34);
         float gridLeft = dp(150);
         float gridWidth = right - gridLeft;
         long windowStart = navigator.getWindowStart();
@@ -512,18 +519,38 @@ public final class EpgGuideView extends View implements GuideSurface {
             float blockLeft = Math.max(gridLeft, startX);
             float blockRight = Math.min(right, xFor(programme.getStopMillis(), gridLeft, gridWidth, windowStart));
             if (blockRight - blockLeft < dp(6)) continue;
-            if (startX > gridLeft) {
-                // Separador tenue al inicio de cada programa (no al borde de la ventana).
-                fillPaint.setColor(DIVIDER);
-                canvas.drawRect(blockLeft, rowTop + dp(1), blockLeft + Math.max(1f, dp(0.5f)),
-                        rowTop + rowHeight, fillPaint);
-            }
             boolean past = programme.getStopMillis() <= nowMillis;
             boolean onAir = programme.getStartMillis() <= nowMillis && !past;
             boolean focused = programme == focusedProgramme;
 
-            float textLeft = blockLeft + dp(9);
-            float textWidth = blockRight - textLeft - dp(7);
+            // Bloque: ocupa todo el programa (antes solo se veía el texto y parecía terminar ahí).
+            float tileLeft = blockLeft + dp(1);
+            float tileRight = blockRight - dp(1);
+            float radius = dp(3);
+            rect.set(tileLeft, rowTop, tileRight, rowTop + rowHeight);
+            fillPaint.setColor(focused ? TILE_FOCUSED : onAir ? TILE_ON_AIR : TILE);
+            canvas.drawRoundRect(rect, radius, radius, fillPaint);
+            if (onAir && !focused) {
+                float nowX = Math.min(tileRight, xFor(nowMillis, gridLeft, gridWidth, windowStart));
+                if (nowX > tileLeft) {
+                    int saved = canvas.save();
+                    canvas.clipRect(tileLeft, rowTop, nowX, rowTop + rowHeight);
+                    fillPaint.setColor(TILE_ELAPSED);
+                    canvas.drawRoundRect(rect, radius, radius, fillPaint);
+                    canvas.restoreToCount(saved);
+                }
+            }
+            if (focused) {
+                fillPaint.setStyle(Paint.Style.STROKE);
+                fillPaint.setStrokeWidth(dp(1));
+                fillPaint.setColor(TILE_FOCUS_BORDER);
+                rect.inset(dp(0.5f), dp(0.5f));
+                canvas.drawRoundRect(rect, radius, radius, fillPaint);
+                fillPaint.setStyle(Paint.Style.FILL);
+            }
+
+            float textLeft = tileLeft + dp(7);
+            float textWidth = tileRight - textLeft - dp(6);
             if (textWidth < dp(14)) continue;
             String title = programme.getStartMillis() < windowStart
                     ? "‹ " + programme.getTitle() : programme.getTitle();
@@ -534,7 +561,8 @@ public final class EpgGuideView extends View implements GuideSurface {
             float titleRoom = reminded ? textWidth - dp(10) : textWidth;
             String shownTitle = TextUtils.ellipsize(title, textPaint, Math.max(0f, titleRoom),
                     TextUtils.TruncateAt.END).toString();
-            float titleBaseline = rowTop + dp(12);
+            // Título y horario centrados en el alto del bloque.
+            float titleBaseline = rowTop + dp(13);
             canvas.drawText(shownTitle, textLeft, titleBaseline, textPaint);
             float titleWidth = textPaint.measureText(shownTitle);
             if (reminded && titleRoom > dp(14)) {
@@ -546,13 +574,7 @@ public final class EpgGuideView extends View implements GuideSurface {
             smallPaint.setColor(focused ? TIME_FOCUSED : onAir ? TIME_ON_AIR : TIME_OTHER);
             String range = TextUtils.ellipsize(range(programme), smallPaint, textWidth,
                     TextUtils.TruncateAt.END).toString();
-            canvas.drawText(range, textLeft, rowTop + dp(23), smallPaint);
-            if (focused) {
-                // Foco: línea blanca fina debajo, del ancho del texto.
-                float lineWidth = Math.min(textWidth, Math.max(titleWidth, smallPaint.measureText(range)));
-                fillPaint.setColor(WHITE);
-                canvas.drawRect(textLeft, rowTop + rowHeight - dp(1), textLeft + lineWidth, rowTop + rowHeight, fillPaint);
-            }
+            canvas.drawText(range, textLeft, rowTop + dp(23.5f), smallPaint);
         }
     }
 

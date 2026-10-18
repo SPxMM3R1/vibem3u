@@ -13,7 +13,7 @@ Referencias aprobadas en `docs/diseno/`:
 | Pantalla | Archivo | Estado |
 | --- | --- | --- |
 | Selector «Fuentes y calidades» | `selector-respaldos.jpg` | implementado (0.5.95) |
-| Guía | `guia-ahora.jpg`, `guia-futuro.jpg` (mockup) · `guia-app.jpg` (app) | implementado (0.5.96) |
+| Guía | `guia-ahora.jpg`, `guia-futuro.jpg` (mockup) · `guia-app.jpg` (app) · bloques: `guia-bloques-app.jpg` | implementado (0.5.96); bloques B1 en la 0.6.14 |
 | Opciones | `opciones-*.jpg` (mockup) · `opciones-*-app.jpg` (app); pestaña Proveedores: `opciones-canales-app.jpg`, `opciones-proveedores-app.jpg` | implementado (0.5.96); Proveedores en la 0.6.02 |
 | OSD | `osd.jpg` (app) | implementado (0.5.96) |
 | Escenas (salir, actualización, papelera, Premium, GitHub, token vencido) | `*-app.jpg` | implementado (0.5.98) |
@@ -83,9 +83,13 @@ El foco nunca es un fondo de color, un velo ni un recuadro.
   solo con **negrita** y la bolita blanca, **sin línea** debajo; su borde derecho se alinea con
   el de la última pestaña («Sistema»).
 - **Barra de avance**: línea de 2 dp, fondo blanco al 18 % y avance cian.
-- **Guía**: programas como texto separados solo por una línea vertical tenue (blanco al 12 %)
-  al inicio de cada uno; el que está en emisión, más claro que los futuros; línea de «ahora»
-  cian con la hora encima; punto verde junto al número del canal que se está viendo.
+- **Guía** (0.6.14, B1 aprobada; excepción a «sin cajas»): cada programa es un **bloque tenue**
+  del largo de su duración (blanco al 5,5 %, al aire 9 %, esquinas de 3 dp, 2 dp entre bloques),
+  porque solo con texto parecía terminar donde terminaba el título. Texto a la izquierda,
+  centrado en el alto; el tramo ya emitido del programa al aire en cian al 13 %; el **foco** es
+  el bloque más claro (20 %) con **borde blanco** de 1 dp (no línea bajo el texto). Filas cada
+  34 dp. Línea de «ahora» cian con la hora encima; punto verde junto al número del canal que se
+  está viendo. Referencia: `docs/diseno/guia-bloques-app.jpg`.
 
 ## Opciones (0.6.02, opción A aprobada)
 
