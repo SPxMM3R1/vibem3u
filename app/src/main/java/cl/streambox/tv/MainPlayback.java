@@ -1573,6 +1573,12 @@ abstract class MainPlayback extends MainState {
             dataSourceFactory.setDefaultRequestProperties(headers);
         }
         DataSource.Factory playbackDataSourceFactory = dataSourceFactory;
+        // Idioma de audio en TS con varias pistas (0.6.12): el filtro solo edita la tabla PMT.
+        TsAudioSession tsAudio = new TsAudioSession(TsAudioSession.languageOfPreference(
+                playbackPreferences == null ? "" : playbackPreferences.getAudio(channel)));
+        currentTsAudioSession = tsAudio;
+        playbackDataSourceFactory = new TsAudioFilterDataSource.Factory(
+                playbackDataSourceFactory, tsAudio);
         if (playbackManifestCache != null) {
             playbackDataSourceFactory = new ManifestHandoffDataSource.Factory(
                     playbackDataSourceFactory, playbackManifestCache);

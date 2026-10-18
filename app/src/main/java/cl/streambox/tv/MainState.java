@@ -393,6 +393,10 @@ abstract class MainState extends Activity {
     long tvvooNoSignalToken;
     String qualityPreferenceAppliedFor;
     String subtitlePreferenceAppliedFor;
+    /** Opciones de audio que vienen de la tabla PMT (no de Media3): «pmt|en». */
+    static final String TS_AUDIO_KEY_PREFIX = "pmt|";
+    /** Audio MPEG-TS de la fuente actual (0.6.12): idiomas que trae y el que se aplicó. */
+    TsAudioSession currentTsAudioSession;
     String subtitleTextObservedFor;
     int playlistGeneration;
     long logoRequestGeneration;

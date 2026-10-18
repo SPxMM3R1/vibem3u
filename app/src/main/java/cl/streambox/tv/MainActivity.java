@@ -1393,20 +1393,36 @@ public final class MainActivity extends MainSelector {
         List<AudioTrackOptions.Option> audio = player == null
                 ? Collections.emptyList()
                 : AudioTrackOptions.collect(player.getCurrentTracks());
+        Format playingAudio = player == null ? null : player.getAudioFormat();
+        ArrayList<String> audioLabels = new ArrayList<>();
+        ArrayList<String> audioKeys = new ArrayList<>();
+        int audioSelected = -1;
         if (audio.size() > 1) {
-            ArrayList<String> audioLabels = new ArrayList<>();
-            ArrayList<String> audioKeys = new ArrayList<>();
-            int audioSelected = -1;
             for (int index = 0; index < audio.size(); index++) {
                 audioLabels.add(audio.get(index).label);
                 audioKeys.add(audio.get(index).key);
                 if (audio.get(index).selected && audioSelected < 0) audioSelected = index;
             }
+        } else if (currentTsAudioSession != null && currentTsAudioSession.languages().size() > 1) {
+            // TS con varios audios (0.6.12): Media3 ve uno solo; los idiomas vienen de la PMT y
+            // elegir otro reabre el canal con el filtro aplicado.
+            String playing = AudioTrackOptions.normalizeLanguage(
+                    playingAudio == null ? null : playingAudio.language);
+            // Reconectando todavía no hay formato: se marca el idioma que el filtro aplicó.
+            if (playing.isEmpty()) playing = currentTsAudioSession.getAppliedLanguage();
+            List<String> languages = currentTsAudioSession.languages();
+            for (int index = 0; index < languages.size(); index++) {
+                String language = languages.get(index);
+                audioLabels.add(AudioTrackOptions.labelFor(language, "", 0, index + 1));
+                audioKeys.add(TS_AUDIO_KEY_PREFIX + language);
+                if (language.equals(playing)) audioSelected = index;
+            }
+        }
+        if (audioLabels.size() > 1) {
             intent.putStringArrayListExtra(SettingsActivity.EXTRA_AUDIO_LABELS, audioLabels)
                     .putStringArrayListExtra(SettingsActivity.EXTRA_AUDIO_KEYS, audioKeys)
                     .putExtra(SettingsActivity.EXTRA_AUDIO_SELECTED_INDEX, audioSelected);
         }
-        Format playingAudio = player == null ? null : player.getAudioFormat();
         String audioLanguage = playingAudio == null ? ""
                 : AudioTrackOptions.languageName(AudioTrackOptions.normalizeLanguage(playingAudio.language));
         if (!audioLanguage.isEmpty()) {
@@ -1492,9 +1508,18 @@ public final class MainActivity extends MainSelector {
         }
 
         if (data.hasExtra(SettingsActivity.EXTRA_AUDIO_KEY)) {
-            playbackPreferences.rememberAudio(
-                    channel, data.getStringExtra(SettingsActivity.EXTRA_AUDIO_KEY));
-            if (player != null) applySavedAudioPreference(player.getCurrentTracks());
+            String key = data.getStringExtra(SettingsActivity.EXTRA_AUDIO_KEY);
+            if (key != null && key.startsWith(TS_AUDIO_KEY_PREFIX)) {
+                // Idioma de un TS con varios audios: se guarda y el canal se reabre, porque
+                // Media3 lee la tabla de pistas una sola vez por apertura.
+                String language = key.substring(TS_AUDIO_KEY_PREFIX.length());
+                playbackPreferences.rememberAudio(
+                        channel, AudioTrackOptions.keyFor(language, 0, ""));
+                playChannel(channelIndex);
+            } else {
+                playbackPreferences.rememberAudio(channel, key);
+                if (player != null) applySavedAudioPreference(player.getCurrentTracks());
+            }
         }
     }
 
