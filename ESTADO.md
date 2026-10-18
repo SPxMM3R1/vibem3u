@@ -121,6 +121,7 @@
 
 ## Pendientes y decisiones abiertas
 
+- **Errores de conexión TvVoo y Nauta (medido 2026-10-18, emulador, 60 s por canal)**: con 0.6.12, TvVoo (DAZN F1, TNT Sports 1, Eurosport 1) 0 reconexiones; Nauta (ESPN 7, ESPN 1 Chile) 0, Discovery World 1 pausa por carga lenta. Con 0.6.11, DAZN F1 tuvo 2 reconexiones y 1 falla en el mismo minuto; ESPN 7 Nauta 0. En el emulador casi todos los segmentos de todos los proveedores llegan con 1–150 bytes menos y la sincronía TS rota en los últimos KB (7–12 por minuto); desde el PC con curl llegan completos. No se pudo aislar si es la red del emulador (el PC estaba con poca memoria y el emulador se cerró varias veces) o algo real: confirmar en la TV del usuario con `adb logcat -s VibeM3U-Playback` (líneas «segmento TS incompleto aceptado»). Si en la TV casi no aparecen, es del emulador.
 - **Opciones**: el diseño compacto (0.5.47) aún no se ha visto en la TV; pedir revisión.
   Regla del usuario: no agregar contenido de relleno para ocupar espacio. La reconexión automática apagada muestra el error de inmediato (OK reintenta).
 - **Pantalla de error**: implementada en la 0.5.99 con la línea «Flotante minimalista».
