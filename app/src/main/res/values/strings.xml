@@ -250,6 +250,11 @@
     <string name="settings_reminders_test_action">Enviar ›</string>
     <string name="settings_reminders_test_description">Llega en 1 minuto</string>
     <string name="settings_secondary_list_hint">Opcional · continúa la numeración</string>
+    <string name="settings_list_switch_on">Encendida</string>
+    <string name="settings_list_switch_off">Apagada</string>
+    <string name="settings_list_off">Sus canales no se cargan</string>
+    <string name="settings_primary_list_on">Desde el 001</string>
+    <string name="settings_secondary_list_on">Continúa la numeración</string>
     <string name="settings_signal_audio_codec">Audio</string>
     <string name="settings_signal_bitrate">Tasa de bits</string>
     <string name="settings_signal_frame_rate">Cuadros</string>

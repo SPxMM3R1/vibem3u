@@ -78,7 +78,10 @@ El foco nunca es un fondo de color, un velo ni un recuadro.
 - **Filas de ajuste**: título + descripción; la acción o el valor a la derecha como texto
   («Elegir otra ›», «100 % ›», «Vincular ›»). Los botones también son texto.
 - **Interruptor**: pastilla pequeña (≈40×22 dp), cian encendida y gris al 22 % apagada; es el
-  único elemento «sólido» permitido.
+  único elemento «sólido» permitido. Excepción aprobada (0.6.13, Opciones › Canales): los
+  interruptores de las listas llevan «Encendida»/«Apagada» a su izquierda y con foco se marcan
+  solo con **negrita** y la bolita blanca, **sin línea** debajo; su borde derecho se alinea con
+  el de la última pestaña («Sistema»).
 - **Barra de avance**: línea de 2 dp, fondo blanco al 18 % y avance cian.
 - **Guía**: programas como texto separados solo por una línea vertical tenue (blanco al 12 %)
   al inicio de cada uno; el que está en emisión, más claro que los futuros; línea de «ahora»

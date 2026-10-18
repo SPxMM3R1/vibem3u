@@ -13,6 +13,7 @@ import android.os.Looper;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.ViewTreeObserver;
@@ -23,6 +24,8 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
+
+import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -43,6 +46,8 @@ public final class SettingsActivity extends Activity {
     public static final int TAB_UPDATES = 5;
     /** Source model that derives each M3U list from its address instead of a switch. */
     private static final int SOURCE_MODEL_URLS = 2;
+    /** Lista 2 con dirección precargada e interruptor (0.6.13). */
+    private static final int SOURCE_MODEL_SWITCH = 3;
     public static final String PREFS = "streambox_settings";
     /** Public Lista 1 used on a new installation. */
     public static final String DEFAULT_PLAYLIST_URL =
@@ -110,6 +115,11 @@ public final class SettingsActivity extends Activity {
 
     private EditText urlInput;
     private EditText urlInput2;
+    /** Interruptores de las listas (0.6.13); null en el estilo clásico. */
+    @Nullable private Switch playlistOneSwitch;
+    @Nullable private Switch playlistTwoSwitch;
+    @Nullable private TextView playlistOneLabel;
+    @Nullable private TextView playlistTwoLabel;
     private EditText highflyManifestUrlInput;
     private TextView errorText;
     private View mediaFlowSettingsButton;
@@ -188,9 +198,10 @@ public final class SettingsActivity extends Activity {
         }
         if (!hasPlaylistPreferences) {
             if (editor == null) editor = prefs.edit();
+            // Lista 2 viene escrita y apagada (0.6.13): se enciende con su interruptor.
             editor.putString(KEY_PLAYLIST_URL, DEFAULT_PLAYLIST_URL)
                     .putBoolean(KEY_PLAYLIST_ENABLED, true)
-                    .putString(KEY_PLAYLIST_URL_2, "")
+                    .putString(KEY_PLAYLIST_URL_2, DEFAULT_PLAYLIST_URL_2)
                     .putBoolean(KEY_PLAYLIST_ENABLED_2, false);
         }
         if (editor != null) editor.apply();
@@ -198,18 +209,22 @@ public final class SettingsActivity extends Activity {
     }
 
     /**
-     * Older releases exposed a switch per M3U list. The source tab now derives
-     * each list from its address, so an installation that kept Lista 2 switched
-     * off must keep that choice instead of loading it on the next start.
+     * Modelos de la Lista 2: 1 = interruptor por lista; 2 (0.5.15) = activa si tiene dirección,
+     * y la dirección pública se borraba si estaba apagada; 3 (0.6.13) = dirección precargada más
+     * interruptor. Al pasar al 3, una Lista 2 vacía recupera la dirección pública apagada; una
+     * dirección propia queda como estaba.
      */
     private static void migrateSourceModel(SharedPreferences prefs) {
-        if (prefs.getInt(KEY_SOURCE_MODEL, 1) >= SOURCE_MODEL_URLS) return;
-        SharedPreferences.Editor editor = prefs.edit().putInt(KEY_SOURCE_MODEL, SOURCE_MODEL_URLS);
-        if (!prefs.getBoolean(KEY_PLAYLIST_ENABLED_2, false)) {
-            String storedUrl2 = prefs.getString(KEY_PLAYLIST_URL_2, "");
-            if (!AppStrings.isBlank(storedUrl2) && storedUrl2.trim().equals(DEFAULT_PLAYLIST_URL_2)) {
-                editor.putString(KEY_PLAYLIST_URL_2, "");
-            }
+        int model = prefs.getInt(KEY_SOURCE_MODEL, 1);
+        if (model >= SOURCE_MODEL_SWITCH) return;
+        SharedPreferences.Editor editor = prefs.edit().putInt(KEY_SOURCE_MODEL, SOURCE_MODEL_SWITCH);
+        String storedUrl2 = prefs.getString(KEY_PLAYLIST_URL_2, "");
+        if (AppStrings.isBlank(storedUrl2)) {
+            editor.putString(KEY_PLAYLIST_URL_2, DEFAULT_PLAYLIST_URL_2)
+                    .putBoolean(KEY_PLAYLIST_ENABLED_2, false);
+        } else if (model >= SOURCE_MODEL_URLS) {
+            // En el modelo 2 una dirección escrita estaba en uso.
+            editor.putBoolean(KEY_PLAYLIST_ENABLED_2, true);
         }
         editor.apply();
     }
@@ -259,6 +274,10 @@ public final class SettingsActivity extends Activity {
 
         urlInput = findViewById(R.id.playlist_url);
         urlInput2 = findViewById(R.id.playlist_url_2);
+        playlistOneSwitch = findViewById(R.id.playlist_enabled_1);
+        playlistTwoSwitch = findViewById(R.id.playlist_enabled_2);
+        playlistOneLabel = findViewById(R.id.playlist_1_label);
+        playlistTwoLabel = findViewById(R.id.playlist_2_label);
         highflyManifestUrlInput = findViewById(R.id.highfly_manifest_url);
         errorText = findViewById(R.id.url_error);
         mediaFlowSettingsButton = findViewById(R.id.mediaflow_settings_button);
@@ -307,6 +326,14 @@ public final class SettingsActivity extends Activity {
         urlInput.setText(existingUrl);
         urlInput.setSelection(urlInput.length());
         urlInput2.setText(existingUrl2 == null ? "" : existingUrl2);
+        // Cursor al final: con ▶ el foco pasa al interruptor sin recorrer la dirección.
+        urlInput2.setSelection(urlInput2.length());
+        for (Switch listSwitch : new Switch[] {playlistOneSwitch, playlistTwoSwitch}) {
+            if (listSwitch == null) continue;
+            listSwitch.setOnCheckedChangeListener((button, checked) -> updatePlaylistStates());
+        }
+        loadPlaylistSwitches(prefs);
+        alignPlaylistRowsWithLastTab();
         String initialHighflyManifest = prefs.getString(
                 KEY_HIGHFLY_MANIFEST_URL,
                 DEFAULT_HIGHFLY_MANIFEST_URL
@@ -393,6 +420,76 @@ public final class SettingsActivity extends Activity {
         tabs[selectedTabIndex].requestFocus();
     }
 
+    private void loadPlaylistSwitches(SharedPreferences prefs) {
+        if (playlistOneSwitch != null) {
+            String url1 = prefs.getString(KEY_PLAYLIST_URL, "");
+            playlistOneSwitch.setChecked(prefs.contains(KEY_PLAYLIST_ENABLED)
+                    ? prefs.getBoolean(KEY_PLAYLIST_ENABLED, true)
+                    : !AppStrings.isBlank(url1));
+        }
+        if (playlistTwoSwitch != null) {
+            playlistTwoSwitch.setChecked(prefs.getBoolean(KEY_PLAYLIST_ENABLED_2, false));
+        }
+        updatePlaylistStates();
+    }
+
+    /**
+     * Listas (0.6.13): cada interruptor dice «Encendida»/«Apagada», el título suma el estado y,
+     * apagada, la dirección queda tenue (se conserva para volver a encenderla).
+     */
+    private void updatePlaylistStates() {
+        updatePlaylistState(playlistOneSwitch, playlistOneLabel, urlInput,
+                R.string.settings_primary_list_title, R.string.settings_primary_list_on);
+        updatePlaylistState(playlistTwoSwitch, playlistTwoLabel, urlInput2,
+                R.string.settings_secondary_list_title, R.string.settings_secondary_list_on);
+    }
+
+    private void updatePlaylistState(@Nullable Switch listSwitch, @Nullable TextView label,
+                                     EditText input, int title, int onDetail) {
+        if (listSwitch == null) return;
+        boolean on = listSwitch.isChecked();
+        listSwitch.setText(on ? R.string.settings_list_switch_on : R.string.settings_list_switch_off);
+        // El texto nuevo pierde la negrita del foco: se vuelve a marcar.
+        if (listSwitch.hasFocus()) styleMinimalFocus(listSwitch, true);
+        if (label != null) {
+            label.setText(twoLine(getString(title),
+                    getString(on ? onDetail : R.string.settings_list_off)));
+        }
+        input.setAlpha(on ? 1f : 0.4f);
+    }
+
+    /** Ancho de la columna en la pestaña Canales (0 = el normal de 390 dp). */
+    private int listsColumnWidth;
+
+    /**
+     * En la pestaña Canales la columna llega hasta donde termina la última pestaña («Sistema»):
+     * así las direcciones caben completas y los interruptores quedan alineados con ella (pedido
+     * del usuario, 0.6.13). Las demás pestañas conservan los 390 dp.
+     */
+    private void alignPlaylistRowsWithLastTab() {
+        if (classicUi || settingsContent == null || tabs.length == 0) return;
+        TextView lastTab = tabs[tabs.length - 1];
+        settingsContent.post(() -> {
+            int[] tab = new int[2];
+            int[] column = new int[2];
+            lastTab.getLocationOnScreen(tab);
+            settingsContent.getLocationOnScreen(column);
+            int width = tab[0] + lastTab.getWidth() - lastTab.getPaddingEnd() - column[0];
+            listsColumnWidth = width > settingsContent.getWidth() ? width : 0;
+            applyContentWidth();
+        });
+    }
+
+    private void applyContentWidth() {
+        if (classicUi || settingsContent == null || tabPages == null) return;
+        boolean lists = tabPages[selectedTabIndex].getId() == R.id.tab_page_source;
+        int width = lists && listsColumnWidth > 0 ? listsColumnWidth : dp(390);
+        ViewGroup.LayoutParams params = settingsContent.getLayoutParams();
+        if (params.width == width) return;
+        params.width = width;
+        settingsContent.setLayoutParams(params);
+    }
+
     /** Título en blanco y, debajo, la descripción más chica y tenue (filas del estilo moderno). */
     private CharSequence twoLine(String title, String description) {
         android.text.SpannableStringBuilder text = new android.text.SpannableStringBuilder(title)
@@ -437,6 +534,7 @@ public final class SettingsActivity extends Activity {
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         urlInput.setText(prefs.getString(KEY_PLAYLIST_URL, ""));
         urlInput2.setText(prefs.getString(KEY_PLAYLIST_URL_2, ""));
+        loadPlaylistSwitches(prefs);
         String manifest = prefs.getString(KEY_HIGHFLY_MANIFEST_URL, DEFAULT_HIGHFLY_MANIFEST_URL);
         highflyManifestUrlInput.setText(AppStrings.isBlank(manifest)
                 ? DEFAULT_HIGHFLY_MANIFEST_URL : manifest);
@@ -875,6 +973,7 @@ public final class SettingsActivity extends Activity {
             View first = firstFocusForTab(index);
             if (first != null) tabs[index].setNextFocusDownId(first.getId());
         }
+        applyContentWidth();
         if (requestFocus) tabs[safeIndex].requestFocus();
     }
 
@@ -1246,7 +1345,8 @@ public final class SettingsActivity extends Activity {
     }
 
     /**
-     * Las filas (y los interruptores) ponen su título en negrita con una línea fina debajo;
+     * Las filas (y los interruptores, salvo los de las listas) ponen su título en negrita con una
+     * línea fina debajo;
      * las opciones y acciones de texto solo en negrita (su línea la dibuja el fondo). Los
      * spans propios se quitan al perder el foco, sin tocar el resto del texto.
      */
@@ -1259,7 +1359,9 @@ public final class SettingsActivity extends Activity {
         boolean line;
         if (view instanceof Switch) {
             target = (TextView) view;
-            line = true;
+            // Interruptores de las listas (0.6.13, pedido del usuario): solo negrita, sin línea;
+            // su bolita también se aclara con el foco.
+            line = view != playlistOneSwitch && view != playlistTwoSwitch;
         } else if (view instanceof TextView) {
             target = (TextView) view;
             line = false;
@@ -1424,14 +1526,29 @@ public final class SettingsActivity extends Activity {
         });
     }
 
+    /**
+     * Lista 2 en uso: el interruptor manda (moderno). El clásico no tiene interruptor: conserva el
+     * estado guardado y enciende una dirección distinta de la pública que se escriba a mano.
+     */
+    private boolean playlistTwoEnabled(String value2) {
+        if (playlistTwoSwitch != null) return playlistTwoSwitch.isChecked();
+        return getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_PLAYLIST_ENABLED_2, false)
+                || !value2.equals(DEFAULT_PLAYLIST_URL_2);
+    }
+
+    /** Lista 1 en uso: su interruptor en el moderno; en el clásico, basta con la dirección. */
+    private boolean playlistOneEnabled() {
+        return playlistOneSwitch == null || playlistOneSwitch.isChecked();
+    }
+
     private void save() {
         String value = urlInput.getText().toString().trim();
         String value2 = urlInput2.getText().toString().trim();
         String highflyManifest = highflyManifestUrlInput.getText().toString().trim();
-        // Each M3U list is active while it has an address; the web editor owns
-        // which channels are published, so the app only needs the resolvers.
-        boolean enabled1 = !AppStrings.isBlank(value);
-        boolean enabled2 = !AppStrings.isBlank(value2);
+        // Cada lista M3U se usa con dirección e interruptor encendido (0.6.13); apagada conserva
+        // la dirección. El editor web decide qué canales se publican.
+        boolean enabled1 = !AppStrings.isBlank(value) && playlistOneEnabled();
+        boolean enabled2 = !AppStrings.isBlank(value2) && playlistTwoEnabled(value2);
         boolean hasPublishedProviderChannels = getIntent().getBooleanExtra(
                 EXTRA_HAS_PUBLISHED_PROVIDER_CHANNELS,
                 false

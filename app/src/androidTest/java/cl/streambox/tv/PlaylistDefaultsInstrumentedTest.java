@@ -16,7 +16,7 @@ import static org.junit.Assert.assertTrue;
 @RunWith(AndroidJUnit4.class)
 public final class PlaylistDefaultsInstrumentedTest {
     @Test
-    public void unconfiguredPreferencesSeedOnlyThePrimaryList() {
+    public void unconfiguredPreferencesSeedBothListsWithTheSecondaryOff() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         SharedPreferences preferences = context.getSharedPreferences(
                 SettingsActivity.PREFS,
@@ -39,8 +39,11 @@ public final class PlaylistDefaultsInstrumentedTest {
                     preferences.getString(SettingsActivity.KEY_PLAYLIST_URL, "")
             );
             assertTrue(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED, false));
-            assertFalse(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, false));
-            assertEquals("", preferences.getString(SettingsActivity.KEY_PLAYLIST_URL_2, ""));
+            assertFalse(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, true));
+            assertEquals(
+                    SettingsActivity.DEFAULT_PLAYLIST_URL_2,
+                    preferences.getString(SettingsActivity.KEY_PLAYLIST_URL_2, "")
+            );
         } finally {
             snapshot.restore(preferences);
         }
@@ -67,20 +70,20 @@ public final class PlaylistDefaultsInstrumentedTest {
 
             assertEquals("", preferences.getString(SettingsActivity.KEY_PLAYLIST_URL, ""));
             assertFalse(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED, true));
-            assertEquals("", preferences.getString(SettingsActivity.KEY_PLAYLIST_URL_2, ""));
-            // An absent secondary-list flag means the list stays off.
-            assertFalse(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, false));
+            // Lista 2 recupera su dirección pública, pero apagada.
+            assertEquals(
+                    SettingsActivity.DEFAULT_PLAYLIST_URL_2,
+                    preferences.getString(SettingsActivity.KEY_PLAYLIST_URL_2, "")
+            );
+            assertFalse(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, true));
         } finally {
             snapshot.restore(preferences);
         }
     }
 
-    /**
-     * The source tab no longer ships a switch per M3U list, so an installation
-     * that kept Lista 2 switched off must not start loading it after the update.
-     */
+    /** Una Lista 2 apagada (modelo 1) conserva su dirección y sigue apagada. */
     @Test
-    public void disabledSecondaryListStaysEmptyAfterTheSourceModelMigration() {
+    public void disabledSecondaryListStaysOffAfterTheSourceModelMigration() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         SharedPreferences preferences = context.getSharedPreferences(
                 SettingsActivity.PREFS,
@@ -98,8 +101,69 @@ public final class PlaylistDefaultsInstrumentedTest {
 
             SettingsActivity.ensureDefaultPlaylistConfigured(context);
 
-            assertEquals("", preferences.getString(SettingsActivity.KEY_PLAYLIST_URL_2, ""));
-            assertFalse(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, false));
+            assertEquals(
+                    SettingsActivity.DEFAULT_PLAYLIST_URL_2,
+                    preferences.getString(SettingsActivity.KEY_PLAYLIST_URL_2, "")
+            );
+            assertFalse(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, true));
+        } finally {
+            snapshot.restore(preferences);
+        }
+    }
+
+    /** 0.5.15–0.6.12 borraban la Lista 2 apagada: vuelve con su dirección pública, apagada. */
+    @Test
+    public void emptySecondaryListFromTheAddressModelComesBackPrefilledAndOff() {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        SharedPreferences preferences = context.getSharedPreferences(
+                SettingsActivity.PREFS,
+                Context.MODE_PRIVATE
+        );
+        SourcePreferenceSnapshot snapshot = SourcePreferenceSnapshot.capture(preferences);
+        try {
+            preferences.edit()
+                    .putString(SettingsActivity.KEY_PLAYLIST_URL, SettingsActivity.DEFAULT_PLAYLIST_URL)
+                    .putBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED, true)
+                    .putString(SettingsActivity.KEY_PLAYLIST_URL_2, "")
+                    .putBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, false)
+                    .putInt(SettingsActivity.KEY_SOURCE_MODEL, 2)
+                    .commit();
+
+            SettingsActivity.ensureDefaultPlaylistConfigured(context);
+
+            assertEquals(
+                    SettingsActivity.DEFAULT_PLAYLIST_URL_2,
+                    preferences.getString(SettingsActivity.KEY_PLAYLIST_URL_2, "")
+            );
+            assertFalse(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, true));
+        } finally {
+            snapshot.restore(preferences);
+        }
+    }
+
+    /** En el modelo 2 una dirección propia estaba en uso: sigue encendida. */
+    @Test
+    public void customSecondaryListFromTheAddressModelStaysOn() {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        SharedPreferences preferences = context.getSharedPreferences(
+                SettingsActivity.PREFS,
+                Context.MODE_PRIVATE
+        );
+        SourcePreferenceSnapshot snapshot = SourcePreferenceSnapshot.capture(preferences);
+        try {
+            String custom = "https://example.com/mi-lista.m3u";
+            preferences.edit()
+                    .putString(SettingsActivity.KEY_PLAYLIST_URL, SettingsActivity.DEFAULT_PLAYLIST_URL)
+                    .putBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED, true)
+                    .putString(SettingsActivity.KEY_PLAYLIST_URL_2, custom)
+                    .putBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, true)
+                    .putInt(SettingsActivity.KEY_SOURCE_MODEL, 2)
+                    .commit();
+
+            SettingsActivity.ensureDefaultPlaylistConfigured(context);
+
+            assertEquals(custom, preferences.getString(SettingsActivity.KEY_PLAYLIST_URL_2, ""));
+            assertTrue(preferences.getBoolean(SettingsActivity.KEY_PLAYLIST_ENABLED_2, false));
         } finally {
             snapshot.restore(preferences);
         }

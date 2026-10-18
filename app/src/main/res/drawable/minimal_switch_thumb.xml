@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bolita del interruptor sobre texto flotante (0.6.13): blanca encendido, gris clara apagado; con foco, blanca también apagado (el foco es texto en negrita, sin línea). -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true">
+        <layer-list>
+            <item android:bottom="2dp" android:left="2dp" android:right="2dp" android:top="2dp">
+                <shape android:shape="oval">
+                    <solid android:color="@color/white" />
+                    <size android:width="11dp" android:height="11dp" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+    <item android:state_focused="true">
+        <layer-list>
+            <item android:bottom="2dp" android:left="2dp" android:right="2dp" android:top="2dp">
+                <shape android:shape="oval">
+                    <solid android:color="@color/white" />
+                    <size android:width="11dp" android:height="11dp" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+    <item>
+        <layer-list>
+            <item android:bottom="2dp" android:left="2dp" android:right="2dp" android:top="2dp">
+                <shape android:shape="oval">
+                    <solid android:color="#BFFFFFFF" />
+                    <size android:width="11dp" android:height="11dp" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+</selector>

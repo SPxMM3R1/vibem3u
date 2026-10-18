@@ -19,19 +19,20 @@
         android:textAllCaps="true"
         android:textColor="#6BFFFFFF"
         android:textSize="7sp" />
+    <!-- Lista principal (0.6.13): dirección completa e interruptor; el ancho de la fila se alinea en código
+         con el borde derecho de la pestaña «Sistema». Apagada conserva la dirección. -->
     <LinearLayout
+        android:id="@+id/playlist_row_1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="4dp"
-        android:background="@drawable/settings_section_card"
         android:gravity="center_vertical"
         android:minHeight="40dp"
         android:orientation="horizontal"
-        android:paddingStart="0dp"
         android:paddingTop="6dp"
-        android:paddingEnd="0dp"
         android:paddingBottom="6dp">
         <TextView
+            android:id="@+id/playlist_1_label"
             android:layout_width="108dp"
             android:layout_height="wrap_content"
             android:text="@string/settings_primary_list_title"
@@ -51,20 +52,38 @@
             android:textColor="@color/white"
             android:textColorHint="#78909C"
             android:textSize="8.5sp" />
+        <Switch
+            android:id="@+id/playlist_enabled_1"
+            android:layout_width="88dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="14dp"
+            android:background="@null"
+            android:focusable="true"
+            android:minHeight="0dp"
+            android:nextFocusDown="@+id/playlist_enabled_2"
+            android:showText="false"
+            android:switchMinWidth="26dp"
+            android:switchPadding="8dp"
+            android:text="@string/settings_list_switch_on"
+            android:textColor="@color/minimal_button_text"
+            android:textSize="10sp"
+            android:thumb="@drawable/minimal_switch_thumb"
+            android:track="@drawable/minimal_switch_track" />
     </LinearLayout>
+    <!-- Lista secundaria (0.6.13): dirección completa e interruptor; el ancho de la fila se alinea en código
+         con el borde derecho de la pestaña «Sistema». Apagada conserva la dirección. -->
     <LinearLayout
+        android:id="@+id/playlist_row_2"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="4dp"
-        android:background="@drawable/settings_section_card"
         android:gravity="center_vertical"
         android:minHeight="40dp"
         android:orientation="horizontal"
-        android:paddingStart="0dp"
         android:paddingTop="6dp"
-        android:paddingEnd="0dp"
         android:paddingBottom="6dp">
         <TextView
+            android:id="@+id/playlist_2_label"
             android:layout_width="108dp"
             android:layout_height="wrap_content"
             android:text="@string/settings_secondary_list_title"
@@ -84,6 +103,23 @@
             android:textColor="@color/white"
             android:textColorHint="#78909C"
             android:textSize="8.5sp" />
+        <Switch
+            android:id="@+id/playlist_enabled_2"
+            android:layout_width="88dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="14dp"
+            android:background="@null"
+            android:focusable="true"
+            android:minHeight="0dp"
+            android:nextFocusDown="@+id/save_button"
+            android:showText="false"
+            android:switchMinWidth="26dp"
+            android:switchPadding="8dp"
+            android:text="@string/settings_list_switch_on"
+            android:textColor="@color/minimal_button_text"
+            android:textSize="10sp"
+            android:thumb="@drawable/minimal_switch_thumb"
+            android:track="@drawable/minimal_switch_track" />
     </LinearLayout>
     <LinearLayout
         android:layout_width="wrap_content"

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Riel del interruptor sobre texto flotante (0.6.13): cian encendido, gris apagado; sin estado de foco. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/cyan" />
+            <corners android:radius="999dp" />
+            <size android:width="26dp" android:height="15dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#2EFFFFFF" />
+            <corners android:radius="999dp" />
+            <size android:width="26dp" android:height="15dp" />
+        </shape>
+    </item>
+</selector>
