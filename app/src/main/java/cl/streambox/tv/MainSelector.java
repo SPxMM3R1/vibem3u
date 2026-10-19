@@ -183,10 +183,11 @@ abstract class MainSelector extends MainGuide {
     }
 
     // Escala tipográfica del selector (0.6.18, mockup aprobado «Aplica»): solo cuatro tamaños.
-    static final float TYPE_TITLE_SP = 15f;
-    static final float TYPE_OPTION_SP = 9.5f;
-    static final float TYPE_DETAIL_SP = 6.5f;
-    static final float TYPE_LABEL_SP = 6f;
+    // 0.6.20 (mockup aprobado «Aplica»): la 0.6.18 quedó demasiado pequeña; ~1,3× más grande.
+    static final float TYPE_TITLE_SP = 20f;
+    static final float TYPE_OPTION_SP = 12.5f;
+    static final float TYPE_DETAIL_SP = 9f;
+    static final float TYPE_LABEL_SP = 7.5f;
     /** Opciones en cuadrícula de 4 columnas iguales; la 2.ª fila queda alineada bajo la 1.ª. */
     static final int MINIMAL_GRID_COLUMNS = 4;
     static final int MINIMAL_GRID_GAP_DP = 8;
@@ -550,7 +551,7 @@ abstract class MainSelector extends MainGuide {
             android.graphics.drawable.GradientDrawable dot = new android.graphics.drawable.GradientDrawable();
             dot.setShape(android.graphics.drawable.GradientDrawable.OVAL);
             dot.setColor(0xFF5BE9A0);
-            dot.setSize(dp(3.5f), dp(3.5f));
+            dot.setSize(dp(4.5f), dp(4.5f));
             sourceSelectorStatus.setCompoundDrawablesRelativeWithIntrinsicBounds(dot, null, null, null);
             sourceSelectorStatus.setCompoundDrawablePadding(dp(4));
         } else {
