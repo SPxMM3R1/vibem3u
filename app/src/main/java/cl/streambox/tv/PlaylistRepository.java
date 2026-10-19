@@ -25,6 +25,13 @@ public final class PlaylistRepository {
         );
     }
 
+    /**
+     * Hash del contenido ya revisado por {@link M3uCacheSanitizer} en esta sesión (0.6.17): la
+     * lectura de disco y el refresco de red leían y saneaban la misma lista dos veces al abrir.
+     */
+    private final java.util.Map<String, Integer> verifiedCacheHashes =
+            java.util.Collections.synchronizedMap(new java.util.HashMap<>());
+
     public Playlist loadCached(String url) throws IOException {
         URI playlistUri = parseUri(url);
         HttpResourceCache.CachedResource resource = readSanitizedCached(url);
@@ -55,14 +62,22 @@ public final class PlaylistRepository {
             playlist = parseAndValidate(fetched.getResource().getBytes(), playlistUri);
         }
 
-        String content = new String(
-                fetched.getResource().getBytes(),
-                StandardCharsets.UTF_8
-        );
-        byte[] diskContent = M3uCacheSanitizer
-                .forDisk(content)
-                .getBytes(StandardCharsets.UTF_8);
+        byte[] diskContent;
+        if (!fetched.isChanged() && cached != null
+                && Arrays.equals(cached.getBytes(), fetched.getResource().getBytes())) {
+            // 304: lo guardado ya está saneado (readSanitizedCached); no se rehace.
+            diskContent = cached.getBytes();
+        } else {
+            String content = new String(
+                    fetched.getResource().getBytes(),
+                    StandardCharsets.UTF_8
+            );
+            diskContent = M3uCacheSanitizer
+                    .forDisk(content)
+                    .getBytes(StandardCharsets.UTF_8);
+        }
         cache.commit(url, fetched, diskContent);
+        verifiedCacheHashes.put(url, Arrays.hashCode(diskContent));
         boolean changed = cached == null || !Arrays.equals(cached.getBytes(), diskContent);
         return new LoadResult(playlist, changed);
     }
@@ -77,9 +92,15 @@ public final class PlaylistRepository {
         HttpResourceCache.CachedResource cached = cache.readCached(url, MAX_PLAYLIST_BYTES);
         if (cached == null) return null;
 
+        int hash = Arrays.hashCode(cached.getBytes());
+        Integer verified = verifiedCacheHashes.get(url);
+        if (verified != null && verified == hash) return cached;
         String content = new String(cached.getBytes(), StandardCharsets.UTF_8);
         String sanitized = M3uCacheSanitizer.forDisk(content);
-        if (content.equals(sanitized)) return cached;
+        if (content.equals(sanitized)) {
+            verifiedCacheHashes.put(url, hash);
+            return cached;
+        }
 
         byte[] sanitizedBytes = sanitized.getBytes(StandardCharsets.UTF_8);
         try {

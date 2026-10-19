@@ -420,8 +420,15 @@ public final class MainActivity extends MainSelector {
         if (!refresh.completedNetworkPositions.add(position)) return;
         refresh.pendingNetwork = Math.max(0, refresh.pendingNetwork - 1);
         if (result.playlist != null) {
+            // Igual a la que ya se mostró desde el disco (0.6.17): no se rehace la lista de
+            // canales en el hilo principal (con ~4.400 canales era trabajo visible al abrir).
+            boolean alreadyShown = !result.changed && refresh.latest.containsKey(position);
             refresh.latest.put(position, result.playlist);
-            publishPlaylistRefresh(refresh, result.changed);
+            if (alreadyShown) {
+                finishPlaylistRefreshIfReady(refresh);
+            } else {
+                publishPlaylistRefresh(refresh, result.changed);
+            }
         } else {
             if (refresh.firstError == null) refresh.firstError = result.error;
             finishPlaylistRefreshIfReady(refresh);
@@ -820,6 +827,9 @@ public final class MainActivity extends MainSelector {
         catalogExecutor.execute(() -> {
             PublishedPlaybackCatalog refreshed = null;
             String document = null;
+            // Lo leído del disco (0.6.17): si la red trae el mismo documento no se vuelve a leer.
+            String knownLayout = null;
+            PublishedPlaybackCatalog knownCatalog = null;
             try {
                 if (firstLoad) {
                     // Arranque instantáneo (0.5.85): lo último conocido mientras llega la red.
@@ -834,7 +844,13 @@ public final class MainActivity extends MainSelector {
                     String cachedLayout = repository.cached(PublishedPlaybackCatalogRepository.LAYOUT_FILE);
                     if (cachedLayout != null) {
                         try {
+                            long started = SystemClock.elapsedRealtime();
                             PublishedPlaybackCatalog cached = PublishedPlaybackCatalog.parse(cachedLayout);
+                            Log.i(PlaybackStartupAnalytics.LOG_TAG, "catalogo en disco leido en "
+                                    + (SystemClock.elapsedRealtime() - started) + " ms ("
+                                    + cached.getRows().size() + " filas)");
+                            knownLayout = cachedLayout;
+                            knownCatalog = cached;
                             if (!cached.isEmpty()) {
                                 mainHandler.post(() -> applyPublishedCatalog(cached, cachedLayout, false));
                             }
@@ -867,7 +883,14 @@ public final class MainActivity extends MainSelector {
                 });
                 try {
                     document = repository.fetchLayoutDocument();
-                    refreshed = PublishedPlaybackCatalog.parse(document);
+                    if (knownCatalog != null && document.equals(knownLayout)) {
+                        refreshed = knownCatalog;
+                    } else {
+                        long started = SystemClock.elapsedRealtime();
+                        refreshed = PublishedPlaybackCatalog.parse(document);
+                        Log.i(PlaybackStartupAnalytics.LOG_TAG, "catalogo de red leido en "
+                                + (SystemClock.elapsedRealtime() - started) + " ms");
+                    }
                 } catch (Exception error) {
                     Log.w(RESOURCE_HEALTH_TAG, "Layout publicado no se pudo descargar", error);
                     refreshed = null;

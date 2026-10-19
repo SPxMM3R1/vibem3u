@@ -19,6 +19,18 @@ import java.util.Set;
 /** Read-only projection of Lista M3U's published playback configuration. */
 final class PublishedPlaybackCatalog {
     static final int MAX_BYTES = 2 * 1024 * 1024;
+    // Patrones precompilados (0.6.17): con ~5.000 filas, String.matches recompilaba la misma
+    // expresión decenas de miles de veces y la lectura del catálogo tardaba ~7 s al abrir.
+    // find() sin «.*» en los extremos equivale a matches() con «.*…​.*».
+    static final java.util.regex.Pattern UNSAFE_TEXT = java.util.regex.Pattern.compile(
+            "(?i)https?://|\\.m3u8?(?:\\b|\\?)|(?:access_token|token|signature|hdnts)=");
+    private static final java.util.regex.Pattern UNSAFE_EXCLUDED_ID = java.util.regex.Pattern.compile(
+            "(?i)\\.m3u8?(?:\\b|\\?)|\\.mpd$|[\\r\\n]");
+    private static final java.util.regex.Pattern LINE_BREAK = java.util.regex.Pattern.compile("[\\r\\n]");
+    private static final java.util.regex.Pattern NAUTA_ID = java.util.regex.Pattern.compile(
+            "(?i)Nauta\\.[0-9a-f]{24}@Nauta");
+    private static final java.util.regex.Pattern HIGHFLY_LEAF = java.util.regex.Pattern.compile(
+            "leaf:[A-Za-z0-9_-]{2,128}");
     private static final String LOGO_BASE =
             "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/";
 
@@ -138,7 +150,7 @@ final class PublishedPlaybackCatalog {
                     String stableId = ((String) rawId).trim();
                     if (stableId.isEmpty() || stableId.length() > 512
                             || stableId.contains("://")
-                            || stableId.matches("(?is).*\\.m3u8?(?:\\b|\\?).*|.*\\.mpd$|.*[\\r\\n].*")) {
+                            || UNSAFE_EXCLUDED_ID.matcher(stableId).find()) {
                         throw new IOException("tvg-id no válido en excludedM3u.");
                     }
                     if (!excludedIds.add(stableId)) {
@@ -312,12 +324,34 @@ final class PublishedPlaybackCatalog {
         return "";
     }
 
+    /**
+     * Igual que {@link #UNSAFE_TEXT} (URL http(s), «.m3u»/«.m3u8» como extensión o parámetros de
+     * token), pero sin crear un Matcher por texto: se llama ~30.000 veces al leer el catálogo.
+     */
+    static boolean isUnsafeText(String text) {
+        String lower = text.toLowerCase(java.util.Locale.ROOT);
+        if (lower.contains("http://") || lower.contains("https://")) return true;
+        if (lower.contains("token=") || lower.contains("signature=") || lower.contains("hdnts=")) {
+            return true; // «access_token=» también contiene «token=»
+        }
+        for (int at = lower.indexOf(".m3u"); at >= 0; at = lower.indexOf(".m3u", at + 1)) {
+            int next = at + 4;
+            if (next < lower.length() && lower.charAt(next) == '8') next++;
+            if (next >= lower.length() || !isWordChar(lower.charAt(next))) return true;
+        }
+        return false;
+    }
+
+    /** Mismo criterio que {@code \b} de java.util.regex: letra o dígito (Unicode) o «_». */
+    private static boolean isWordChar(char value) {
+        return value == '_' || Character.isLetterOrDigit(value);
+    }
+
     private static String safeText(JSONObject value, String field, boolean required)
             throws IOException {
         String text = value.optString(field, "").trim();
         if (required && text.isEmpty()) throw new IOException("Falta " + field + " en el diseño web.");
-        if (text.length() > 256 || text.matches("(?is).*https?://.*|.*\\.m3u8?(?:\\b|\\?).*"
-                + "|.*(?:access_token|token|signature|hdnts)=.*")) {
+        if (text.length() > 256 || isUnsafeText(text)) {
             throw new IOException("Metadato web no permitido: " + field);
         }
         return text;
@@ -331,8 +365,7 @@ final class PublishedPlaybackCatalog {
         for (int index = 0; index < items.length(); index++) {
             String item = items.optString(index, "").trim();
             if (item.isEmpty() || item.length() > 256
-                    || item.matches("(?is).*https?://.*|.*\\.m3u8?(?:\\b|\\?).*"
-                    + "|.*(?:access_token|token|signature|hdnts)=.*")) {
+                    || isUnsafeText(item)) {
                 throw new IOException("Alias no permitido en " + field);
             }
             if (!result.contains(item)) result.add(item);
@@ -456,7 +489,7 @@ final class PublishedPlaybackCatalog {
                     for (int index = 0; index < backups.length() && ids.size() < 8; index++) {
                         String id = backups.optString(index, "").trim();
                         boolean nauta = id.regionMatches(true, 0, "Nauta.", 0, 6);
-                        boolean validNauta = nauta && id.matches("(?i)^Nauta\\.[0-9a-f]{24}@Nauta$");
+                        boolean validNauta = nauta && NAUTA_ID.matcher(id).matches();
                         boolean validDirect = !nauta && !id.isEmpty() && !id.contains("://")
                                 && id.length() <= 512;
                         // Stable Nauta identities may be linked explicitly: the M3U row still
@@ -481,7 +514,7 @@ final class PublishedPlaybackCatalog {
                 if (provider.equals("highfly")) {
                     resolverSlug = safeText(value, "resolverSlug", true);
                     if (stableId.startsWith("leaf:") || stableId.contains("://")
-                            || !resourceId.matches("leaf:[A-Za-z0-9_-]{2,128}")
+                            || !HIGHFLY_LEAF.matcher(resourceId).matches()
                             || !resourceId.substring(5).equals(resolverSlug)) {
                         throw new IOException("Identidad y referencia Highfly no coinciden.");
                     }
@@ -509,7 +542,7 @@ final class PublishedPlaybackCatalog {
             }
             String name = safeText(value, "name", true);
             String displayName = safeText(value, "displayName", false);
-            if (displayName.length() > 160 || displayName.matches("(?s).*[\\r\\n].*")) {
+            if (displayName.length() > 160 || LINE_BREAK.matcher(displayName).find()) {
                 throw new IOException("Nombre visible web no permitido.");
             }
             String group = safeText(value, "group", kind.equals("provider"));
