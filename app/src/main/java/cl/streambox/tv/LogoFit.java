@@ -6,6 +6,7 @@ import java.net.URI;
 import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -52,6 +53,15 @@ final class LogoFit {
     private static final Map<Bitmap, String> LOGO_KEYS =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<String, Float> USER_SCALES = new ConcurrentHashMap<>();
+    /**
+     * Familias exactas (0.6.19): «espn.svg», «espn-2.png»… comparten lienzo y marca y solo
+     * cambia el número. Se recortan al lienzo completo (las esquinas llevan un punto casi
+     * transparente) y la tinta se mide solo en la marca común (la parte izquierda), así
+     * todas quedan del mismo tamaño y en el mismo lugar al cambiar de canal.
+     */
+    static final Set<String> EXACT_FAMILIES = Set.of("espn", "tnt-sports", "eurosport");
+    /** Fracción izquierda del lienzo que es igual en toda la familia (la marca, sin número). */
+    static final float FAMILY_BRAND_FRACTION = 0.75f;
 
     private LogoFit() {}
 
@@ -88,6 +98,10 @@ final class LogoFit {
 
     /** Recorte {izquierda, arriba, derecha, abajo} (exclusivo) sin bordes transparentes, o null. */
     static int[] opaqueBounds(int[] argb, int width, int height) {
+        return opaqueBounds(argb, width, height, ALPHA_THRESHOLD);
+    }
+
+    static int[] opaqueBounds(int[] argb, int width, int height, int alphaThreshold) {
         if (argb == null || width <= 0 || height <= 0 || argb.length < width * height) return null;
         int left = width;
         int top = height;
@@ -96,7 +110,7 @@ final class LogoFit {
         for (int y = 0; y < height; y++) {
             int row = y * width;
             for (int x = 0; x < width; x++) {
-                if ((argb[row + x] >>> 24) > ALPHA_THRESHOLD) {
+                if ((argb[row + x] >>> 24) > alphaThreshold) {
                     if (x < left) left = x;
                     if (x > right) right = x;
                     if (y < top) top = y;
@@ -146,13 +160,18 @@ final class LogoFit {
 
     /** Fracción pintada (alfa promedio) de un logo ya recortado; muestrea a lo más ~40 000 px. */
     static float inkCoverage(int[] argb, int width, int height) {
+        return inkCoverage(argb, width, height, width);
+    }
+
+    /** Como {@link #inkCoverage(int[], int, int)}, pero solo en las primeras {@code columns}. */
+    static float inkCoverage(int[] argb, int width, int height, int columns) {
         if (argb == null || width <= 0 || height <= 0 || argb.length < width * height) return -1f;
         int step = Math.max(1, (int) Math.sqrt((width * (long) height) / 40_000.0));
         double ink = 0;
         long samples = 0;
         for (int y = 0; y < height; y += step) {
             int row = y * width;
-            for (int x = 0; x < width; x += step) {
+            for (int x = 0; x < Math.min(columns, width); x += step) {
                 ink += (argb[row + x] >>> 24) / 255.0;
                 samples++;
             }
@@ -190,6 +209,17 @@ final class LogoFit {
         return logoUri == null ? null : logoUri.toString();
     }
 
+    /** Familia exacta del logo («espn-7.png» → «espn»), o null si no es de una familia exacta. */
+    static String exactFamily(URI logoUri) {
+        String path = logoUri == null || logoUri.getPath() == null
+                ? "" : logoUri.getPath().toLowerCase(Locale.ROOT);
+        int slash = path.lastIndexOf('/');
+        String name = slash >= 0 ? path.substring(slash + 1) : path;
+        int dot = name.lastIndexOf('.');
+        String base = (dot > 0 ? name.substring(0, dot) : name).replaceFirst("-[0-9]+$", "");
+        return EXACT_FAMILIES.contains(base) ? base : null;
+    }
+
     /** Factor de ancho de familia según el archivo: «…-uhd.png» → {@link #UHD_WIDTH_FACTOR}. */
     static float familyWidthFactor(URI logoUri) {
         String path = logoUri == null || logoUri.getPath() == null
@@ -203,7 +233,8 @@ final class LogoFit {
 
     /** Recorta y recuerda el factor de familia del logo (por su nombre de archivo). */
     static Bitmap trim(Bitmap bitmap, URI logoUri) {
-        Bitmap trimmed = trim(bitmap);
+        boolean family = exactFamily(logoUri) != null;
+        Bitmap trimmed = family ? trim(bitmap, 0) : trim(bitmap);
         // El logo se muestra 2–3 veces más chico que el bitmap: con mipmaps la TV lo achica
         // con buen filtro y no salta píxeles (líneas finas dentadas).
         if (trimmed != null) trimmed.setHasMipMap(true);
@@ -218,7 +249,10 @@ final class LogoFit {
                 int height = trimmed.getHeight();
                 int[] pixels = new int[width * height];
                 trimmed.getPixels(pixels, 0, width, 0, 0, width, height);
-                coverage = inkCoverage(pixels, width, height);
+                coverage = family
+                        ? inkCoverage(pixels, width, height,
+                                Math.max(1, Math.round(width * FAMILY_BRAND_FRACTION)))
+                        : inkCoverage(pixels, width, height);
             }
             if (coverage >= 0f) COVERAGE.put(trimmed, coverage);
         }
@@ -227,12 +261,16 @@ final class LogoFit {
 
     /** Devuelve el logo sin borde transparente (el mismo bitmap si no hay nada que recortar). */
     static Bitmap trim(Bitmap bitmap) {
+        return trim(bitmap, ALPHA_THRESHOLD);
+    }
+
+    private static Bitmap trim(Bitmap bitmap, int alphaThreshold) {
         if (bitmap == null || bitmap.isRecycled() || !bitmap.hasAlpha()) return bitmap;
         int width = bitmap.getWidth();
         int height = bitmap.getHeight();
         int[] pixels = new int[width * height];
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
-        int[] bounds = opaqueBounds(pixels, width, height);
+        int[] bounds = opaqueBounds(pixels, width, height, alphaThreshold);
         if (bounds == null
                 || (bounds[0] == 0 && bounds[1] == 0 && bounds[2] == width && bounds[3] == height)) {
             return bitmap;

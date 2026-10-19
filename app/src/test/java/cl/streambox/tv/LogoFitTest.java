@@ -50,6 +50,48 @@ public class LogoFitTest {
     }
 
     @Test
+    public void exactFamiliesAreRecognisedByFileName() {
+        String base = "https://raw.githubusercontent.com/x/lista-m3u/main/logos/";
+        assertEquals("espn", LogoFit.exactFamily(java.net.URI.create(base + "espn.svg")));
+        assertEquals("espn", LogoFit.exactFamily(java.net.URI.create(base + "espn-7.png")));
+        assertEquals("tnt-sports", LogoFit.exactFamily(java.net.URI.create(base + "tnt-sports-2.png")));
+        assertEquals("eurosport", LogoFit.exactFamily(java.net.URI.create(base + "eurosport-1.png")));
+        assertNull(LogoFit.exactFamily(java.net.URI.create(base + "catalogue/espn-6-lam.png")));
+        assertNull(LogoFit.exactFamily(java.net.URI.create(base + "sky-sports-f1.png")));
+        assertNull(LogoFit.exactFamily(null));
+    }
+
+    @Test
+    public void familyBoundsKeepTheFaintCanvasCorners() {
+        int width = 10;
+        int height = 4;
+        int[] pixels = new int[width * height];
+        pixels[0] = 0x0CFFFFFF;                       // esquina casi transparente
+        pixels[width * height - 1] = 0x0CFFFFFF;
+        pixels[width + 2] = 0xFFFFFFFF;               // marca
+        assertArrayEquals(new int[] {2, 1, 3, 2}, LogoFit.opaqueBounds(pixels, width, height));
+        assertArrayEquals(new int[] {0, 0, width, height},
+                LogoFit.opaqueBounds(pixels, width, height, 0));
+    }
+
+    @Test
+    public void familyInkIsMeasuredOnTheSharedBrandOnly() {
+        int width = 8;
+        int height = 1;
+        int[] brandOnly = new int[width];
+        int[] brandAndNumber = new int[width];
+        for (int x = 0; x < 6; x++) {
+            brandOnly[x] = 0xFF000000;
+            brandAndNumber[x] = 0xFF000000;
+        }
+        brandAndNumber[7] = 0xFF000000;               // el número solo cambia la parte derecha
+        assertEquals(LogoFit.inkCoverage(brandOnly, width, height, 6),
+                LogoFit.inkCoverage(brandAndNumber, width, height, 6), 0f);
+        assertTrue(LogoFit.inkCoverage(brandAndNumber, width, height)
+                > LogoFit.inkCoverage(brandOnly, width, height));
+    }
+
+    @Test
     public void invalidSizesDrawNothing() {
         assertArrayEquals(new float[] {0f, 0f}, LogoFit.opticalSize(0, 10, AREA, 105f, 32f), 0f);
         assertArrayEquals(new float[] {0f, 0f}, LogoFit.opticalSize(10, 10, 0f, 105f, 32f), 0f);
