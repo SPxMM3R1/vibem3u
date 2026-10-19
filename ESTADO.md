@@ -11,6 +11,7 @@
 
 ## Hoy, en una mirada
 
+- **0.6.21 — panel de calidad, opción A (2026-10-19)**: tras «Sigue pequeña» con la 0.6.20, el usuario eligió la opción A del mockup: título 25 sp, opciones 16, detalle 11,5, etiquetas 9,5, estado 11,5 sp; panel 380 dp; puntos de 5–5,5 dp. Verificado en emulador.
 - **0.6.20 — panel de calidad más grande (2026-10-19)**: el usuario dijo «Quedó demasiado pequeño calidad»; mockup aprobado («Aplica»). Título 20 sp, opciones 12,5, detalle 9, etiquetas 7,5, línea de estado 9 sp y punto 4,5 dp; panel 320 dp (antes 15/9,5/6,5/6 y 270 dp). Misma estructura y orden. Verificado en emulador.
 - **0.6.19 — logos de familia exactos (2026-10-19)**: el usuario notó que al cambiar entre ESPN los logos no calzaban. Causa: `LogoFit.trim` recorta cada logo (también los SVG) y la corrección por tinta depende del número, así que cada ESPN/TNT/Eurosport quedaba a otra escala. Ahora esas familias se recortan al lienzo (marcas de esquina en la lista) y miden tinta solo en la marca. Emulador: ESPN, 2, 3, 4, 5 y 7 con la palabra en x 65–234 / y 711–752 y el número en x 244; TNT Sports 1–4 iguales.
 - **0.6.18/227 (selector «Fuentes y calidades» rediseñado)**: tras varias rondas de mockups (giratorio, más chico, etc.) el usuario pidió «las opciones siempre desplegadas, más similar a lo de hoy pero con letras más pequeñas, más minimalista y ordenado … con ajuste de letra para que no se vea todo de diferentes tamaños» y aprobó el mockup («Aplica»). Panel de 270 dp a 48 dp del borde, cuatro tamaños de letra (15/9,5/6,5/6 sp), versiones y calidades en cuadrícula de 4 columnas alineadas (nombres largos ocupan varias columnas), línea fina antes de las acciones, oscurecimiento corrido a la derecha. Verificado en el emulador: BBC News con 9 calidades en 3 filas alineadas, ▲▼◀▶ recorren la cuadrícula y bajan a las acciones; Sky Sports Tennis (TvVoo) con «SKY SPORTS TENNIS» en dos columnas y el interruptor de cambio automático (`docs/diseno/selector-*-app.jpg`). El clásico conserva su tamaño. Unitarias en verde. **Publicada y verificada**: commit/tag `9061039` / `v0.6.18`; Android CI y Publicar APK (`39269785792`, `39269799009`) success; release no draft/prerelease `VibeM3U-v0.6.18.apk` 2.844.895 bytes, SHA-256 `6e7ac8f7685260ee9b1449458532580cd5fbef15be6145882b8aa45cc3981db5`; instalada sobre la anterior en el emulador, abre el selector sin FATAL/ANR.
@@ -171,6 +172,7 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-19 — 0.6.21**: panel «Calidad» en tamaños de la opción A.
 - **2026-10-19 — 0.6.20**: panel «Calidad» ~1,3× más grande.
 - **2026-10-19 — 0.6.19**: familias de logos exactas (ESPN, TNT Sports, Eurosport) en el OSD y la guía.
 - **2026-10-19** (UTC): 0.6.18 (`versionCode` 227). Selector «Fuentes y calidades» con cuadrícula y escala tipográfica (ver «Hoy»).

@@ -183,11 +183,11 @@ abstract class MainSelector extends MainGuide {
     }
 
     // Escala tipográfica del selector (0.6.18, mockup aprobado «Aplica»): solo cuatro tamaños.
-    // 0.6.20 (mockup aprobado «Aplica»): la 0.6.18 quedó demasiado pequeña; ~1,3× más grande.
-    static final float TYPE_TITLE_SP = 20f;
-    static final float TYPE_OPTION_SP = 12.5f;
-    static final float TYPE_DETAIL_SP = 9f;
-    static final float TYPE_LABEL_SP = 7.5f;
+    // 0.6.21 (opción «A» aprobada): la 0.6.20 seguía pequeña; ~1,25× más grande.
+    static final float TYPE_TITLE_SP = 25f;
+    static final float TYPE_OPTION_SP = 16f;
+    static final float TYPE_DETAIL_SP = 11.5f;
+    static final float TYPE_LABEL_SP = 9.5f;
     /** Opciones en cuadrícula de 4 columnas iguales; la 2.ª fila queda alineada bajo la 1.ª. */
     static final int MINIMAL_GRID_COLUMNS = 4;
     static final int MINIMAL_GRID_GAP_DP = 8;
@@ -239,8 +239,8 @@ abstract class MainSelector extends MainGuide {
             circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
             circle.setColor(0xFF5BE9A0);
             dot.setBackground(circle);
-            LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(3.5f), dp(3.5f));
-            dotParams.setMarginStart(dp(3));
+            LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(5f), dp(5f));
+            dotParams.setMarginStart(dp(4));
             titleLine.addView(dot, dotParams);
         }
         // WRAP_CONTENT: con el valor por defecto (MATCH_PARENT) la opción tomaba el ancho del
@@ -551,7 +551,7 @@ abstract class MainSelector extends MainGuide {
             android.graphics.drawable.GradientDrawable dot = new android.graphics.drawable.GradientDrawable();
             dot.setShape(android.graphics.drawable.GradientDrawable.OVAL);
             dot.setColor(0xFF5BE9A0);
-            dot.setSize(dp(4.5f), dp(4.5f));
+            dot.setSize(dp(5.5f), dp(5.5f));
             sourceSelectorStatus.setCompoundDrawablesRelativeWithIntrinsicBounds(dot, null, null, null);
             sourceSelectorStatus.setCompoundDrawablePadding(dp(4));
         } else {

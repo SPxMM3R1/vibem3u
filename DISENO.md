@@ -72,10 +72,10 @@ El foco nunca es un fondo de color, un velo ni un recuadro.
 - **Pestañas / filtros**: fila de texto arriba a la izquierda, precedida por el nombre de la
   pantalla en eyebrow («GUÍA», «OPCIONES»); la activa en negrita con línea debajo. Reloj a la
   derecha como texto («Miércoles 14 · **00:20**»), sin caja.
-- **Selector «Fuentes y calidades» (0.6.18; tamaños de 0.6.20, mockups aprobados «Aplica»)**: panel
-  de 320 dp a 48 dp del borde derecho, centrado en alto. Solo cuatro tamaños de letra: título 20 sp,
-  opciones 12,5 sp, detalles (Mbps, estado, acciones) 9 sp, etiquetas y línea técnica 7,5 sp
-  (la 0.6.18 usaba 15/9,5/6,5/6 sp y 270 dp y quedó demasiado pequeña). Versiones y
+- **Selector «Fuentes y calidades» (0.6.18; tamaños de 0.6.21, opción «A» aprobada)**: panel
+  de 380 dp a 48 dp del borde derecho, centrado en alto. Solo cuatro tamaños de letra: título 25 sp,
+  opciones 16 sp, detalles (Mbps, estado, acciones) 11,5 sp, etiquetas y línea técnica 9,5 sp
+  (0.6.18 con 15/9,5/6,5/6 sp y 270 dp y 0.6.20 con 20/12,5/9/7,5 sp y 320 dp quedaron pequeñas). Versiones y
   calidades siempre a la vista en una **cuadrícula de 4 columnas iguales** (8 dp entre columnas
   y filas); un nombre que no cabe ocupa varias columnas y, si ni así, termina en «…». Una
   línea fina (blanco al 10 %) separa las opciones de las acciones. Números tabulares en Mbps.
