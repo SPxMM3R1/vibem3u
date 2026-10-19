@@ -19,6 +19,18 @@ public final class HighflyChannelMerge {
             List<Channel> playlistChannels,
             List<Channel> publishedChannels
     ) {
+        return merge(playlistChannels, publishedChannels, true);
+    }
+
+    /**
+     * {@code appendMissing} falso (0.6.16): el catálogo web solo completa los canales que ya
+     * vienen en una lista; no agrega canales que ninguna lista encendida trae.
+     */
+    public static List<Channel> merge(
+            List<Channel> playlistChannels,
+            List<Channel> publishedChannels,
+            boolean appendMissing
+    ) {
         if (publishedChannels == null || publishedChannels.isEmpty()) {
             return copy(playlistChannels);
         }
@@ -51,6 +63,7 @@ public final class HighflyChannelMerge {
             }
         }
 
+        if (!appendMissing) return Collections.unmodifiableList(result);
         Set<String> appended = new HashSet<>();
         for (Channel published : publishedChannels) {
             if (!isHighfly(published)) continue;

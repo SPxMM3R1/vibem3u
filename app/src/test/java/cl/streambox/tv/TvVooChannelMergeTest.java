@@ -41,6 +41,29 @@ public final class TvVooChannelMergeTest {
     }
 
     @Test
+    public void withoutAppendTheCatalogOnlyCompletesChannelsThatComeInALoadedList() {
+        // 0.6.16: solo Lista 1 y Lista 2; un canal del catálogo que ninguna lista trae no aparece.
+        Channel inList = channel("Lista", "in-list", "vavoo_NEWS%201|group:uk", "uk", null);
+        Channel matching = channel("Catálogo", "other", "vavoo_NEWS 1|group:uk", "uk",
+                URI.create("https://logos.example/news.png"));
+        Channel onlyInCatalog = channel("Solo catálogo", "virtual", "vavoo_NEWS%202|group:uk", "uk", null);
+
+        List<Channel> merged = TvVooChannelMerge.merge(
+                Collections.singletonList(inList),
+                Arrays.asList(matching, onlyInCatalog),
+                false
+        );
+
+        assertEquals(1, merged.size());
+        assertEquals("in-list", merged.get(0).getTvgId());
+        assertEquals("https://logos.example/news.png", merged.get(0).getLogoUri().toString());
+        assertEquals(0, TvVooChannelMerge.merge(
+                Collections.<Channel>emptyList(), Collections.singletonList(onlyInCatalog), false).size());
+        assertEquals(0, HighflyChannelMerge.merge(
+                Collections.<Channel>emptyList(), Collections.singletonList(onlyInCatalog), false).size());
+    }
+
+    @Test
     public void sameDisplayNameDifferentAliasIsKeptAndPublishedRowIsAppended() {
         Channel first = channel(
                 "News", "first", "vavoo_NEWS%201|group:uk", "uk", null

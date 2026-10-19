@@ -761,14 +761,19 @@ public final class MainActivity extends MainSelector {
             Playlist playlist = entry.getValue();
             if (playlist != null) result.addAll(playlist.getChannels());
         }
+        // Solo Lista 1 y Lista 2 (0.6.16, pedido del usuario): los canales TvVoo/Highfly vienen
+        // escritos en su lista; el catálogo web ya no agrega canales «virtuales» fuera de ellas,
+        // solo completa el logo de los que trae una lista encendida.
         List<Channel> publishedProviderChannels = publishedPlaybackCatalog.activeProviderChannels();
         result = new ArrayList<>(TvVooChannelMerge.merge(
                 result,
-                publishedProviderChannels
+                publishedProviderChannels,
+                false
         ));
         result = new ArrayList<>(HighflyChannelMerge.merge(
                 result,
-                publishedProviderChannels
+                publishedProviderChannels,
+                false
         ));
         return publishedPlaybackCatalog.applyToPlayback(result);
     }
@@ -792,9 +797,12 @@ public final class MainActivity extends MainSelector {
         if (!channels.isEmpty()) hidePlaylistLoadingIfPlaybackPending();
     }
 
+    /**
+     * Desde la 0.6.16 los canales de proveedor viven dentro de las listas: sin ninguna lista
+     * encendida no hay canales, así que ya no cuentan como fuente aparte.
+     */
     boolean hasPublishedProviderChannels() {
-        return publishedPlaybackCatalog != null
-                && publishedPlaybackCatalog.hasActiveProviderChannels();
+        return false;
     }
 
 
