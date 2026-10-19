@@ -12,7 +12,7 @@ Referencias aprobadas en `docs/diseno/`:
 
 | Pantalla | Archivo | Estado |
 | --- | --- | --- |
-| Selector «Fuentes y calidades» | `selector-respaldos.jpg` | implementado (0.5.95) |
+| Selector «Fuentes y calidades» | `selector-respaldos.jpg` · cuadrícula: `selector-calidad-app.jpg`, `selector-versiones-app.jpg` | implementado (0.5.95); cuadrícula y escala tipográfica en la 0.6.18 |
 | Guía | `guia-ahora.jpg`, `guia-futuro.jpg` (mockup) · `guia-app.jpg` (app) · bloques: `guia-bloques-app.jpg` | implementado (0.5.96); bloques B1 en la 0.6.14 |
 | Opciones | `opciones-*.jpg` (mockup) · `opciones-*-app.jpg` (app); pestaña Proveedores: `opciones-canales-app.jpg`, `opciones-proveedores-app.jpg` | implementado (0.5.96); Proveedores en la 0.6.02 |
 | OSD | `osd.jpg` (app) | implementado (0.5.96) |
@@ -72,6 +72,12 @@ El foco nunca es un fondo de color, un velo ni un recuadro.
 - **Pestañas / filtros**: fila de texto arriba a la izquierda, precedida por el nombre de la
   pantalla en eyebrow («GUÍA», «OPCIONES»); la activa en negrita con línea debajo. Reloj a la
   derecha como texto («Miércoles 14 · **00:20**»), sin caja.
+- **Selector «Fuentes y calidades» (0.6.18, mockup aprobado «Aplica»)**: panel de 270 dp a 48 dp
+  del borde derecho, centrado en alto. Solo cuatro tamaños de letra: título 15 sp, opciones
+  9,5 sp, detalles (Mbps, estado, acciones) 6,5 sp, etiquetas y línea técnica 6 sp. Versiones y
+  calidades siempre a la vista en una **cuadrícula de 4 columnas iguales** (8 dp entre columnas
+  y filas); un nombre que no cabe ocupa varias columnas y, si ni así, termina en «…». Una
+  línea fina (blanco al 10 %) separa las opciones de las acciones. Números tabulares en Mbps.
 - **Opciones elegibles** (calidades, versiones, Moderno|Clásico, Estándar|Invertidos): texto en
   línea con su detalle debajo; pasan a otra línea si no caben (`minimalRow`). ◀ ▶ recorre la
   fila; ▲ ▼ salta a la opción más cercana de la línea vecina.

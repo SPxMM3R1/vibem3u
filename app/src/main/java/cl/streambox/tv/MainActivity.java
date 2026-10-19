@@ -1701,8 +1701,8 @@ public final class MainActivity extends MainSelector {
         android.graphics.drawable.GradientDrawable gradient = new android.graphics.drawable.GradientDrawable();
         gradient.setOrientation(android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT);
         gradient.setColors(
-                new int[]{0x00000000, 0x00000000, 0x73000000, 0xCC000000, 0xDB000000},
-                new float[]{0f, 0.28f, 0.44f, 0.63f, 1f});
+                new int[]{0x00000000, 0x00000000, 0x9E000000, 0xCC000000},
+                new float[]{0f, 0.5f, 0.74f, 1f});
         shade.setBackground(gradient);
     }
 
@@ -1741,6 +1741,15 @@ public final class MainActivity extends MainSelector {
         sourceSelectorChannel.setAllCaps(false);
         sourceSelectorChannel.setLetterSpacing(0f);
         sourceSelectorChannel.setTextColor(getColor(R.color.white));
+        // El layout lleva la escala del moderno (0.6.18); el clásico conserva la suya.
+        sourceSelectorChannel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
+        sourceSelectorStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+        sourceSelectorStatus.setTextColor(0xA6FFFFFF);
+        sourceSelectorStatus.setLineSpacing(0f, 1.3f);
+        ((LinearLayout.LayoutParams) sourceSelectorStatus.getLayoutParams()).topMargin = dpToPx(9);
+        ((LinearLayout.LayoutParams) sourceSelectorTitle.getLayoutParams()).topMargin = dpToPx(9);
+        View classicScrollFrame = (View) findViewById(R.id.source_selector_scroll).getParent();
+        ((LinearLayout.LayoutParams) classicScrollFrame.getLayoutParams()).topMargin = dpToPx(14);
         sourceSelectorTitle.setTextSize(TypedValue.COMPLEX_UNIT_PX,
                 getResources().getDimension(R.dimen.settings_heading_text_size));
         sourceSelectorTitle.setTextColor(getColor(R.color.cyan));

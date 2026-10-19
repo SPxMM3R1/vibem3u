@@ -182,18 +182,27 @@ abstract class MainSelector extends MainGuide {
         sourceSelectorCloseFocused = false;
     }
 
+    // Escala tipográfica del selector (0.6.18, mockup aprobado «Aplica»): solo cuatro tamaños.
+    static final float TYPE_TITLE_SP = 15f;
+    static final float TYPE_OPTION_SP = 9.5f;
+    static final float TYPE_DETAIL_SP = 6.5f;
+    static final float TYPE_LABEL_SP = 6f;
+    /** Opciones en cuadrícula de 4 columnas iguales; la 2.ª fila queda alineada bajo la 1.ª. */
+    static final int MINIMAL_GRID_COLUMNS = 4;
+    static final int MINIMAL_GRID_GAP_DP = 8;
+
     TextView minimalSectionLabel(String text, boolean first) {
         TextView label = new TextView(this);
         label.setText(text.toUpperCase(java.util.Locale.ROOT));
-        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, TYPE_LABEL_SP);
         label.setLetterSpacing(0.2f);
         label.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
         label.setTextColor(0x6BFFFFFF);
         label.setIncludeFontPadding(false);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        params.topMargin = dp(first ? 2 : 22);
-        params.bottomMargin = dp(9);
+        params.topMargin = dp(15);
+        params.bottomMargin = dp(6);
         label.setLayoutParams(params);
         sourceSelectorOptions.addView(label);
         return label;
@@ -201,17 +210,22 @@ abstract class MainSelector extends MainGuide {
 
     /** Una opción de texto: título, subtítulo opcional, punto verde si está en uso. */
     View minimalOption(String title, String subtitle, boolean inUse, boolean off, boolean danger) {
+        return minimalOption(title, subtitle, inUse, off, danger, TYPE_OPTION_SP);
+    }
+
+    View minimalOption(String title, String subtitle, boolean inUse, boolean off, boolean danger,
+            float titleSp) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setFocusable(true);
         box.setFocusableInTouchMode(true);
-        box.setPadding(0, 0, 0, dp(6));
+        box.setPadding(0, 0, 0, 0);
         LinearLayout titleLine = new LinearLayout(this);
         titleLine.setOrientation(LinearLayout.HORIZONTAL);
         titleLine.setGravity(Gravity.CENTER_VERTICAL);
         TextView titleView = new TextView(this);
         titleView.setText(title);
-        titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
+        titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, titleSp);
         titleView.setIncludeFontPadding(false);
         titleView.setSingleLine(true);
         int restColor = danger ? 0xFFFF9A9A : 0xB8FFFFFF;
@@ -224,8 +238,8 @@ abstract class MainSelector extends MainGuide {
             circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
             circle.setColor(0xFF5BE9A0);
             dot.setBackground(circle);
-            LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(5), dp(5));
-            dotParams.setMarginStart(dp(6));
+            LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(3.5f), dp(3.5f));
+            dotParams.setMarginStart(dp(3));
             titleLine.addView(dot, dotParams);
         }
         // WRAP_CONTENT: con el valor por defecto (MATCH_PARENT) la opción tomaba el ancho del
@@ -236,21 +250,22 @@ abstract class MainSelector extends MainGuide {
         if (!AppStrings.isBlank(subtitle)) {
             subtitleView = new TextView(this);
             subtitleView.setText(subtitle);
-            subtitleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
+            subtitleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, TYPE_DETAIL_SP);
+            subtitleView.setFontFeatureSettings("tnum");
             subtitleView.setIncludeFontPadding(false);
             subtitleView.setSingleLine(true);
             subtitleView.setTextColor(0x73FFFFFF);
             LinearLayout.LayoutParams subParams = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            subParams.topMargin = dp(3);
+            subParams.topMargin = dp(1.5f);
             box.addView(subtitleView, subParams);
         }
         View underline = new View(this);
         underline.setBackgroundColor(0xFFFFFFFF);
         underline.setVisibility(View.INVISIBLE);
         LinearLayout.LayoutParams lineParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(1.5f));
-        lineParams.topMargin = dp(5);
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
+        lineParams.topMargin = dp(3.5f);
         box.addView(underline, lineParams);
         if (off) box.setAlpha(0.4f);
         final TextView subtitleRef = subtitleView;
@@ -275,8 +290,12 @@ abstract class MainSelector extends MainGuide {
      * registra cada una en sourceCandidateViews con su grupo y su línea.
      */
     void minimalRow(List<View> items, int group, List<Runnable> clicks) {
+        if (group == MINIMAL_GROUP_OPTIONS) {
+            minimalGrid(items, group, clicks);
+            return;
+        }
         int available = sourceSelectorPanelWidth();
-        int gap = dp(24);
+        int gap = dp(13);
         LinearLayout line = null;
         int used = 0;
         for (int index = 0; index < items.size(); index++) {
@@ -316,6 +335,89 @@ abstract class MainSelector extends MainGuide {
         }
     }
 
+    /**
+     * Opciones en cuadrícula de {@link #MINIMAL_GRID_COLUMNS} columnas iguales (0.6.18): con
+     * muchas calidades la 2.ª fila queda alineada bajo la 1.ª en vez de desordenada.
+     */
+    void minimalGrid(List<View> items, int group, List<Runnable> clicks) {
+        int available = sourceSelectorPanelWidth();
+        int gap = dp(MINIMAL_GRID_GAP_DP);
+        int column = Math.max(1, (available - gap * (MINIMAL_GRID_COLUMNS - 1)) / MINIMAL_GRID_COLUMNS);
+        LinearLayout line = null;
+        int used = MINIMAL_GRID_COLUMNS;
+        for (int index = 0; index < items.size(); index++) {
+            View item = items.get(index);
+            // Un nombre largo («SKY SPORTS TENNIS») ocupa varias columnas en vez de cortarse;
+            // lo que no cabe ni en la fila entera termina en «…».
+            item.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            int span = Math.min(MINIMAL_GRID_COLUMNS,
+                    Math.max(1, (item.getMeasuredWidth() + gap + column + gap - 1) / (column + gap)));
+            if (used + span > MINIMAL_GRID_COLUMNS) {
+                line = new LinearLayout(this);
+                line.setOrientation(LinearLayout.HORIZONTAL);
+                LinearLayout.LayoutParams lineParams = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                if (index > 0) lineParams.topMargin = gap;
+                sourceSelectorOptions.addView(line, lineParams);
+                minimalLineCount++;
+                used = 0;
+            }
+            int cellWidth = column * span + gap * (span - 1);
+            limitOptionWidth(item, cellWidth);
+            LinearLayout cell = new LinearLayout(this);
+            cell.setOrientation(LinearLayout.VERTICAL);
+            LinearLayout.LayoutParams cellParams = new LinearLayout.LayoutParams(
+                    cellWidth, LinearLayout.LayoutParams.WRAP_CONTENT);
+            if (used > 0) cellParams.setMarginStart(gap);
+            cell.addView(item, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            line.addView(cell, cellParams);
+            used += span;
+            registerMinimalItem(item, group, clicks.get(index));
+        }
+    }
+
+    /** Título y detalle de una opción terminan en «…» si pasan del ancho de su celda. */
+    void limitOptionWidth(View item, int width) {
+        if (!(item instanceof LinearLayout)) return;
+        LinearLayout box = (LinearLayout) item;
+        for (int child = 0; child < box.getChildCount(); child++) {
+            View node = box.getChildAt(child);
+            if (node instanceof LinearLayout) {
+                LinearLayout titleLine = (LinearLayout) node;
+                for (int part = 0; part < titleLine.getChildCount(); part++) {
+                    View text = titleLine.getChildAt(part);
+                    if (text instanceof TextView) {
+                        ((TextView) text).setMaxWidth(Math.max(1, width - dp(7)));
+                        ((TextView) text).setEllipsize(android.text.TextUtils.TruncateAt.END);
+                    }
+                }
+            } else if (node instanceof TextView) {
+                ((TextView) node).setMaxWidth(width);
+                ((TextView) node).setEllipsize(android.text.TextUtils.TruncateAt.END);
+            }
+        }
+    }
+
+    /** Foco, clic y posición lógica de una opción del selector. */
+    void registerMinimalItem(View item, int group, Runnable click) {
+        final int viewIndex = sourceCandidateViews.size();
+        final View.OnFocusChangeListener visual =
+                (View.OnFocusChangeListener) item.getTag(R.id.source_selector_options);
+        item.setOnFocusChangeListener((view, focused) -> {
+            if (visual != null) visual.onFocusChange(view, focused);
+            if (focused) {
+                sourceCandidateFocusIndex = viewIndex;
+                sourceSelectorCloseFocused = false;
+            }
+        });
+        item.setOnClickListener(view -> click.run());
+        sourceCandidateViews.add(item);
+        minimalItemGroup.add(group);
+        minimalItemLine.add(minimalLineCount - 1);
+    }
+
     int sourceSelectorPanelWidth() {
         View panel = findViewById(R.id.source_selector_panel);
         int width = panel == null ? 0 : panel.getWidth();
@@ -340,23 +442,31 @@ abstract class MainSelector extends MainGuide {
             clicks.add(toggle);
             sourceActionRunnables.add(toggle);
         }
-        items.add(minimalOption(getString(R.string.channel_hide_title), "", false, false, false));
+        items.add(minimalOption(getString(R.string.channel_hide_title), "", false, false, false,
+                TYPE_DETAIL_SP));
         Runnable hide = () -> hideChannelOnThisTv(channel);
         clicks.add(hide);
         sourceActionRunnables.add(hide);
-        items.add(minimalOption(getString(R.string.source_selector_trash_short), "", false, false, true));
+        items.add(minimalOption(getString(R.string.source_selector_trash_short), "", false, false, true,
+                TYPE_DETAIL_SP));
         Runnable trash = () -> confirmTrashChannel(channel);
         clicks.add(trash);
         sourceActionRunnables.add(trash);
-        View spacer = new View(this);
-        sourceSelectorOptions.addView(spacer, new LinearLayout.LayoutParams(1, dp(optionsFirst ? 22 : 4)));
+        // Línea fina entre las opciones y las acciones (0.6.18).
+        View separator = new View(this);
+        separator.setBackgroundColor(0x1AFFFFFF);
+        LinearLayout.LayoutParams separatorParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.max(1, dp(0.5f)));
+        separatorParams.topMargin = dp(optionsFirst ? 13 : 4);
+        separatorParams.bottomMargin = dp(11);
+        sourceSelectorOptions.addView(separator, separatorParams);
         minimalRow(items, MINIMAL_GROUP_ACTIONS, clicks);
     }
 
     View minimalAutoToggleView;
 
     View minimalToggle(String label, boolean on) {
-        View option = minimalOption(label, "", false, false, false);
+        View option = minimalOption(label, "", false, false, false, TYPE_DETAIL_SP);
         LinearLayout titleLine = (LinearLayout) ((LinearLayout) option).getChildAt(0);
         FrameLayout track = new FrameLayout(this);
         View knob = new View(this);
@@ -364,13 +474,13 @@ abstract class MainSelector extends MainGuide {
         knobShape.setShape(android.graphics.drawable.GradientDrawable.OVAL);
         knobShape.setColor(0xFFFFFFFF);
         knob.setBackground(knobShape);
-        FrameLayout.LayoutParams knobParams = new FrameLayout.LayoutParams(dp(8), dp(8));
+        FrameLayout.LayoutParams knobParams = new FrameLayout.LayoutParams(dp(5.5f), dp(5.5f));
         knobParams.gravity = Gravity.CENTER_VERTICAL | (on ? Gravity.END : Gravity.START);
         knobParams.setMargins(dp(1.5f), 0, dp(1.5f), 0);
         track.addView(knob, knobParams);
         track.setBackground(minimalTrack(on));
-        LinearLayout.LayoutParams trackParams = new LinearLayout.LayoutParams(dp(19), dp(11));
-        trackParams.setMarginEnd(dp(7));
+        LinearLayout.LayoutParams trackParams = new LinearLayout.LayoutParams(dp(13), dp(7.5f));
+        trackParams.setMarginEnd(dp(4));
         titleLine.addView(track, 0, trackParams);
         option.setTag(R.id.source_selector_scroll, track);
         minimalAutoToggleView = option;
@@ -411,12 +521,13 @@ abstract class MainSelector extends MainGuide {
         if (parts.isEmpty()) return;
         TextView meta = new TextView(this);
         meta.setText(TextUtils.join(" · ", parts));
-        meta.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
-        meta.setTextColor(0x80FFFFFF);
+        meta.setTextSize(TypedValue.COMPLEX_UNIT_SP, TYPE_LABEL_SP);
+        meta.setTextColor(0x5CFFFFFF);
+        meta.setFontFeatureSettings("tnum");
         meta.setIncludeFontPadding(false);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        params.topMargin = dp(12);
+        params.topMargin = dp(7);
         sourceSelectorOptions.addView(meta, params);
     }
 
@@ -439,9 +550,9 @@ abstract class MainSelector extends MainGuide {
             android.graphics.drawable.GradientDrawable dot = new android.graphics.drawable.GradientDrawable();
             dot.setShape(android.graphics.drawable.GradientDrawable.OVAL);
             dot.setColor(0xFF5BE9A0);
-            dot.setSize(dp(6), dp(6));
+            dot.setSize(dp(3.5f), dp(3.5f));
             sourceSelectorStatus.setCompoundDrawablesRelativeWithIntrinsicBounds(dot, null, null, null);
-            sourceSelectorStatus.setCompoundDrawablePadding(dp(7));
+            sourceSelectorStatus.setCompoundDrawablePadding(dp(4));
         } else {
             sourceSelectorStatus.setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, null, null);
         }
@@ -588,7 +699,10 @@ abstract class MainSelector extends MainGuide {
     /** Sección = bloque bajo un mismo rótulo; dos opciones son de la misma si las une un parent común. */
     int minimalSection(int index) {
         View view = sourceCandidateViews.get(index);
-        View line = (View) view.getParent();
+        View line = view;
+        while (line.getParent() instanceof View && line.getParent() != sourceSelectorOptions) {
+            line = (View) line.getParent();
+        }
         int section = 0;
         for (int child = 0; child < sourceSelectorOptions.getChildCount(); child++) {
             View node = sourceSelectorOptions.getChildAt(child);
