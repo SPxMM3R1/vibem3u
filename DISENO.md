@@ -12,7 +12,7 @@ Referencias aprobadas en `docs/diseno/`:
 
 | Pantalla | Archivo | Estado |
 | --- | --- | --- |
-| Selector «Fuentes y calidades» | `selector-respaldos.jpg` · cuadrícula: `selector-calidad-app.jpg`, `selector-versiones-app.jpg` | implementado (0.5.95); cuadrícula y escala tipográfica en la 0.6.18 |
+| Selector «Fuentes y calidades» | escenario: `selector-escenario.jpg` (mockup «F2») · `selector-escenario-app.jpg` (app) · anteriores: `selector-respaldos.jpg`, `selector-calidad-app.jpg`, `selector-versiones-app.jpg` | implementado (0.5.95); escenario abajo desde la 0.6.22 |
 | Guía | `guia-ahora.jpg`, `guia-futuro.jpg` (mockup) · `guia-app.jpg` (app) · bloques: `guia-bloques-app.jpg` | implementado (0.5.96); bloques B1 en la 0.6.14 |
 | Opciones | `opciones-*.jpg` (mockup) · `opciones-*-app.jpg` (app); pestaña Proveedores: `opciones-canales-app.jpg`, `opciones-proveedores-app.jpg` | implementado (0.5.96); Proveedores en la 0.6.02 |
 | OSD | `osd.jpg` (app) | implementado (0.5.96) |
@@ -72,13 +72,14 @@ El foco nunca es un fondo de color, un velo ni un recuadro.
 - **Pestañas / filtros**: fila de texto arriba a la izquierda, precedida por el nombre de la
   pantalla en eyebrow («GUÍA», «OPCIONES»); la activa en negrita con línea debajo. Reloj a la
   derecha como texto («Miércoles 14 · **00:20**»), sin caja.
-- **Selector «Fuentes y calidades» (0.6.18; tamaños de 0.6.21, opción «A» aprobada)**: panel
-  de 380 dp a 48 dp del borde derecho, centrado en alto. Solo cuatro tamaños de letra: título 25 sp,
-  opciones 16 sp, detalles (Mbps, estado, acciones) 11,5 sp, etiquetas y línea técnica 9,5 sp
-  (0.6.18 con 15/9,5/6,5/6 sp y 270 dp y 0.6.20 con 20/12,5/9/7,5 sp y 320 dp quedaron pequeñas). Versiones y
-  calidades siempre a la vista en una **cuadrícula de 4 columnas iguales** (8 dp entre columnas
-  y filas); un nombre que no cabe ocupa varias columnas y, si ni así, termina en «…». Una
-  línea fina (blanco al 10 %) separa las opciones de las acciones. Números tabulares en Mbps.
+- **Selector «Fuentes y calidades» — escenario (0.6.22, mockup «F2» aprobado)**: el selector
+  moderno ya no es una columna a la derecha sino una franja abajo con el lenguaje del OSD, sobre
+  un difuminado que sube desde el borde inferior. Etiqueta con punto verde («FUENTES Y CALIDADES ·
+  036 · ESPN 2», 9,5 sp), la calidad en uso grande (30 sp, negrita) con «Mbps · fps» al lado
+  (14 sp, liviana), una escala de tramos de 112 dp (raya arriba, cian = en uso; nombre 12 sp y
+  Mbps 8,5 sp debajo), la señal o versión en una línea (11 sp, detalle tenue al lado) y, a la
+  derecha, las acciones (12 sp) con la línea técnica (10 sp) debajo. Si no hay calidades, las
+  señales o versiones van en la escala. Historia: columna con cuadrícula (0.6.18–0.6.21).
 - **Opciones elegibles** (calidades, versiones, Moderno|Clásico, Estándar|Invertidos): texto en
   línea con su detalle debajo; pasan a otra línea si no caben (`minimalRow`). ◀ ▶ recorre la
   fila; ▲ ▼ salta a la opción más cercana de la línea vecina.

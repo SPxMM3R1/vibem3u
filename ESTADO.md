@@ -11,6 +11,7 @@
 
 ## Hoy, en una mirada
 
+- **0.6.22 — selector «escenario» (2026-10-19)**: tras varias rondas de tamaño («Se ve horrible. Propón un diseño tuyo desde 0»), el usuario eligió la propuesta F2: el panel de calidad pasa a una franja inferior con el lenguaje del OSD (calidad en uso grande, escala de tramos con el tramo en uso en cian, señal en línea, acciones y datos técnicos a la derecha). Verificado en emulador con TvVoo (9 versiones) y directo con 8 respaldos; foco y navegación ▲▼◀▶ comprobados.
 - **0.6.21 — panel de calidad, opción A (2026-10-19)**: tras «Sigue pequeña» con la 0.6.20, el usuario eligió la opción A del mockup: título 25 sp, opciones 16, detalle 11,5, etiquetas 9,5, estado 11,5 sp; panel 380 dp; puntos de 5–5,5 dp. Verificado en emulador.
 - **0.6.20 — panel de calidad más grande (2026-10-19)**: el usuario dijo «Quedó demasiado pequeño calidad»; mockup aprobado («Aplica»). Título 20 sp, opciones 12,5, detalle 9, etiquetas 7,5, línea de estado 9 sp y punto 4,5 dp; panel 320 dp (antes 15/9,5/6,5/6 y 270 dp). Misma estructura y orden. Verificado en emulador.
 - **0.6.19 — logos de familia exactos (2026-10-19)**: el usuario notó que al cambiar entre ESPN los logos no calzaban. Causa: `LogoFit.trim` recorta cada logo (también los SVG) y la corrección por tinta depende del número, así que cada ESPN/TNT/Eurosport quedaba a otra escala. Ahora esas familias se recortan al lienzo (marcas de esquina en la lista) y miden tinta solo en la marca. Emulador: ESPN, 2, 3, 4, 5 y 7 con la palabra en x 65–234 / y 711–752 y el número en x 244; TNT Sports 1–4 iguales.
@@ -172,6 +173,7 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-19 — 0.6.22**: selector de calidad rediseñado como escenario inferior (F2).
 - **2026-10-19 — 0.6.21**: panel «Calidad» en tamaños de la opción A.
 - **2026-10-19 — 0.6.20**: panel «Calidad» ~1,3× más grande.
 - **2026-10-19 — 0.6.19**: familias de logos exactas (ESPN, TNT Sports, Eurosport) en el OSD y la guía.

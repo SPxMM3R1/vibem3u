@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Fuentes y calidades. Moderno (0.5.95, minimalista): texto flotante a la derecha sobre un
-     difuminado horizontal (source_selector_shade, se pinta en applyMinimalSelectorShade), sin
-     paneles ni bordes. Los degradados antiguos quedan ocultos. El clásico reacomoda este mismo
+<!-- Fuentes y calidades. Moderno (0.5.95, minimalista; escenario abajo desde la 0.6.22, mockup
+     «F2»): texto flotante en una franja inferior, como el OSD, sobre un difuminado que sube desde
+     abajo (source_selector_shade, se pinta en applyMinimalSelectorShade), sin paneles ni bordes. Los degradados antiguos quedan ocultos. El clásico reacomoda este mismo
      layout en un panel centrado (applyClassicChrome), con los mismos IDs. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/source_selector_overlay"
@@ -39,10 +39,12 @@
 
     <LinearLayout
         android:id="@+id/source_selector_panel"
-        android:layout_width="380dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="end|center_vertical"
-        android:layout_marginEnd="48dp"
+        android:layout_gravity="bottom"
+        android:layout_marginStart="32dp"
+        android:layout_marginEnd="32dp"
+        android:layout_marginBottom="35dp"
         android:orientation="vertical">
 
         <TextView
@@ -54,34 +56,51 @@
             android:letterSpacing="0.2"
             android:maxLines="1"
             android:textAllCaps="true"
-            android:textColor="#99FFFFFF"
+            android:fontFamily="sans-serif-medium"
+            android:textColor="#9EFFFFFF"
             android:textSize="9.5sp" />
 
-        <TextView
-            android:id="@+id/source_selector_title"
+        <!-- La calidad en uso, grande, y a su lado «2.2 Mbps · 60 fps» (el clásico las apila). -->
+        <LinearLayout
+            android:id="@+id/source_selector_hero"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="5dp"
-            android:includeFontPadding="false"
-            android:letterSpacing="-0.01"
-            android:text="@string/source_selector_title"
-            android:textColor="@color/white"
-            android:textSize="25sp"
-            android:textStyle="bold" />
+            android:layout_marginTop="7dp"
+            android:baselineAligned="true"
+            android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/source_selector_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:layout_marginTop="5dp"
-            android:textColor="#B8FFFFFF"
-            android:textSize="11.5sp" />
+            <TextView
+                android:id="@+id/source_selector_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:letterSpacing="-0.015"
+                android:maxLines="1"
+                android:shadowColor="#73000000"
+                android:shadowRadius="6"
+                android:text="@string/source_selector_title"
+                android:textColor="@color/white"
+                android:textSize="30sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/source_selector_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="13dp"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-light"
+                android:maxLines="1"
+                android:shadowColor="#73000000"
+                android:shadowRadius="6"
+                android:textColor="#BFFFFFFF"
+                android:textSize="14sp" />
+        </LinearLayout>
 
         <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="wrap_content"
+            android:layout_marginTop="13dp">
 
             <ScrollView
                 android:id="@+id/source_selector_scroll"

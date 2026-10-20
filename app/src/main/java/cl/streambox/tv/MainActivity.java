@@ -1694,15 +1694,15 @@ public final class MainActivity extends MainSelector {
 
 
     /** Estilo clásico (0.5.40): reloj en pastilla, carga en texto y selector en panel. */
-    /** Difuminado desde el borde derecho (moderno, 0.5.95): sin bordes ni panel. */
+    /** Difuminado que sube desde abajo (moderno, escenario 0.6.22): sin bordes ni panel. */
     void applyMinimalSelectorShade() {
         View shade = findViewById(R.id.source_selector_shade);
         if (shade == null) return;
         android.graphics.drawable.GradientDrawable gradient = new android.graphics.drawable.GradientDrawable();
-        gradient.setOrientation(android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT);
+        gradient.setOrientation(android.graphics.drawable.GradientDrawable.Orientation.BOTTOM_TOP);
         gradient.setColors(
-                new int[]{0x00000000, 0x00000000, 0x9E000000, 0xCC000000},
-                new float[]{0f, 0.5f, 0.74f, 1f});
+                new int[]{0xF2000000, 0xE0000000, 0x8C000000, 0x00000000},
+                new float[]{0f, 0.3f, 0.48f, 0.7f});
         shade.setBackground(gradient);
     }
 
@@ -1738,6 +1738,11 @@ public final class MainActivity extends MainSelector {
             View scrim = findViewById(id);
             if (scrim != null) scrim.setVisibility(View.GONE);
         }
+        LinearLayout hero = findViewById(R.id.source_selector_hero);
+        if (hero != null) hero.setOrientation(LinearLayout.VERTICAL);
+        ((LinearLayout.LayoutParams) sourceSelectorStatus.getLayoutParams()).setMarginStart(0);
+        sourceSelectorStatus.setTypeface(android.graphics.Typeface.DEFAULT);
+        sourceSelectorChannel.setTypeface(android.graphics.Typeface.DEFAULT);
         sourceSelectorChannel.setAllCaps(false);
         sourceSelectorChannel.setLetterSpacing(0f);
         sourceSelectorChannel.setTextColor(getColor(R.color.white));
