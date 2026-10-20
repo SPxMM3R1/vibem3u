@@ -7,9 +7,11 @@
 > actualiza este archivo en el mismo commit**: la sección «Hoy» si cambió el estado y una
 > línea nueva en «Bitácora».
 
-Última actualización: **2026-10-18** (America/Santiago).
+Última actualización: **2026-10-19** (America/Santiago).
 
 ## Hoy, en una mirada
+
+- **0.6.23/232 (16 respaldos directos)**: a pedido del usuario se subió `PublishedPlaybackCatalog.MAX_DIRECT_BACKUPS` de 8 a **16**; antes el parser cortaba `backupm3u` en 8. La contraparte Lista M3U publica 45 respaldos no-1080 (14/11/8/5/7) para #35/#36/#37/#39/#40; la app ahora usa hasta 16 por canal. Prueba nueva `backupm3uKeepsUpToSixteenDirectBackupsInOrder` (18 IDs, conserva 16 en orden). Sin cambio visual. **Pendiente en esta entrada**: release y verificación del APK.
 
 - **0.6.22 — selector «escenario» (2026-10-19)**: tras varias rondas de tamaño («Se ve horrible. Propón un diseño tuyo desde 0»), el usuario eligió la propuesta F2: el panel de calidad pasa a una franja inferior con el lenguaje del OSD (calidad en uso grande, escala de tramos con el tramo en uso en cian, señal en línea, acciones y datos técnicos a la derecha). Verificado en emulador con TvVoo (9 versiones) y directo con 8 respaldos; foco y navegación ▲▼◀▶ comprobados.
 - **0.6.21 — panel de calidad, opción A (2026-10-19)**: tras «Sigue pequeña» con la 0.6.20, el usuario eligió la opción A del mockup: título 25 sp, opciones 16, detalle 11,5, etiquetas 9,5, estado 11,5 sp; panel 380 dp; puntos de 5–5,5 dp. Verificado en emulador.
@@ -173,6 +175,7 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-19 — 0.6.23**: `backupm3u` hasta 16 en `PublishedPlaybackCatalog`; prueba con 18 IDs conserva 16 en orden. Release pendiente.
 - **2026-10-19 — 0.6.22**: selector de calidad rediseñado como escenario inferior (F2).
 - **2026-10-19 — 0.6.21**: panel «Calidad» en tamaños de la opción A.
 - **2026-10-19 — 0.6.20**: panel «Calidad» ~1,3× más grande.

@@ -7,6 +7,7 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -348,6 +349,41 @@ public final class PublishedPlaybackCatalogTest {
         assertEquals(tvn.getStreamUri(), TvVooBackup.resolutionChannel(played).getStreamUri());
         assertTrue(TvVooBackup.directResolutionChannel(played, 1).getAttributes()
                 .get(TvVooBackup.DIRECT_ATTRIBUTE) == null);
+    }
+
+    @Test
+    public void backupm3uKeepsUpToSixteenDirectBackupsInOrder() throws Exception {
+        List<String> ids = new ArrayList<>();
+        StringBuilder extraRows = new StringBuilder();
+        StringBuilder jsonIds = new StringBuilder("[");
+        for (int index = 0; index < 18; index++) {
+            String id = "TVN.backup" + index;
+            ids.add(id);
+            extraRows.append(m3uRow(id, 20 + index, 80 + index)).append(",");
+            if (index > 0) jsonIds.append(",");
+            jsonIds.append("\"").append(id).append("\"");
+        }
+        jsonIds.append("]");
+        String edited = document()
+                .replace("\"name\":\"TVN\",", "\"name\":\"TVN\",\"backupm3u\":" + jsonIds + ",")
+                .replace("{\"kind\":\"provider\",\"provider\":\"highfly\"",
+                        extraRows + "{\"kind\":\"provider\",\"provider\":\"highfly\"");
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(edited);
+        List<Channel> channels = new ArrayList<>();
+        channels.add(direct("TVN", "https://example.org/tvn.m3u8", "0104"));
+        for (int index = 0; index < ids.size(); index++) {
+            channels.add(direct("TVN backup " + index, "http://example.org/b" + index + ".m3u8",
+                    ids.get(index)));
+        }
+
+        Channel played = catalog.applyToPlayback(channels).get(0);
+        List<URI> backups = TvVooBackup.directBackupsOf(played);
+
+        assertEquals(PublishedPlaybackCatalog.MAX_DIRECT_BACKUPS, backups.size());
+        assertEquals(16, backups.size());
+        for (int index = 0; index < PublishedPlaybackCatalog.MAX_DIRECT_BACKUPS; index++) {
+            assertEquals(channels.get(index + 1).getStreamUri(), backups.get(index));
+        }
     }
 
     @Test

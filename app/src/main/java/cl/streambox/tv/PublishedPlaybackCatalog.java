@@ -19,6 +19,7 @@ import java.util.Set;
 /** Read-only projection of Lista M3U's published playback configuration. */
 final class PublishedPlaybackCatalog {
     static final int MAX_BYTES = 2 * 1024 * 1024;
+    static final int MAX_DIRECT_BACKUPS = 16;
     // Patrones precompilados (0.6.17): con ~5.000 filas, String.matches recompilaba la misma
     // expresión decenas de miles de veces y la lectura del catálogo tardaba ~7 s al abrir.
     // find() sin «.*» en los extremos equivale a matches() con «.*…​.*».
@@ -486,7 +487,7 @@ final class PublishedPlaybackCatalog {
                 JSONArray backups = value.optJSONArray("backupm3u");
                 if (backups != null) {
                     List<String> ids = new ArrayList<>();
-                    for (int index = 0; index < backups.length() && ids.size() < 8; index++) {
+                    for (int index = 0; index < backups.length() && ids.size() < MAX_DIRECT_BACKUPS; index++) {
                         String id = backups.optString(index, "").trim();
                         boolean nauta = id.regionMatches(true, 0, "Nauta.", 0, 6);
                         boolean validNauta = nauta && NAUTA_ID.matcher(id).matches();
