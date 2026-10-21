@@ -7,7 +7,10 @@ import java.io.IOException;
 import java.net.URI;
 
 public final class EpgRepository {
-    private static final int MAX_EPG_BYTES = 32 * 1024 * 1024;
+    // Lista M3U publicó el 2026-10-21 una EPG de ~51 MB al sumar Lista 2.
+    // El límite anterior (32 MB) descartaba el archivo completo y dejaba canales
+    // como el 1005 sin guía. 64 MB cubre el archivo y la caché conserva 3 versiones.
+    private static final int MAX_EPG_BYTES = 64 * 1024 * 1024;
     private static final long REVALIDATION_INTERVAL_MS = 5L * 60L * 1000L;
     private static final String USER_AGENT = AppUserAgent.VALUE;
     private static final String ACCEPT = "application/xml, text/xml, text/plain, */*";
@@ -20,7 +23,7 @@ public final class EpgRepository {
                 context,
                 "epg_cache",
                 3,
-                48L * 1024L * 1024L
+                160L * 1024L * 1024L
         );
         snapshotCache = new EpgSnapshotCache(
                 new java.io.File(context.getFilesDir(), "epg_snapshots_v1")
