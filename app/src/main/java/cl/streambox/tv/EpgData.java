@@ -11,11 +11,21 @@ public final class EpgData {
     private static final EpgData EMPTY = new EpgData(Collections.emptyList());
 
     private final Map<String, List<EpgProgramme>> programmesByChannel;
+    /**
+     * Canales que comparten la guía de otro (0.6.27): en epg-2.xml muchos canales de Lista 2
+     * tienen exactamente la misma programación; el XMLTV la trae una vez y los demás llevan
+     * {@code <channel id="X" data-guide-of="Y">}. Canal → canal con los programas.
+     */
+    private final Map<String, String> guideAliases;
     private final List<EpgProgramme> programmes;
     private final int programmeCount;
     private final long snapshotSignature;
 
     public EpgData(List<EpgProgramme> programmes) {
+        this(programmes, null);
+    }
+
+    public EpgData(List<EpgProgramme> programmes, Map<String, String> aliases) {
         List<EpgProgramme> sorted = new ArrayList<>();
         if (programmes != null) {
             for (EpgProgramme programme : programmes) {
@@ -51,8 +61,22 @@ public final class EpgData {
             immutable.put(entry.getKey(), Collections.unmodifiableList(entry.getValue()));
         }
         programmesByChannel = Collections.unmodifiableMap(immutable);
+        Map<String, String> aliasCopy = new LinkedHashMap<>();
+        if (aliases != null) {
+            for (Map.Entry<String, String> entry : aliases.entrySet()) {
+                String alias = entry.getKey();
+                String source = entry.getValue();
+                // Solo alias útiles: el canal no tiene programas propios y su fuente sí.
+                if (alias != null && source != null && !alias.equals(source)
+                        && !programmesByChannel.containsKey(alias)
+                        && programmesByChannel.containsKey(source)) {
+                    aliasCopy.put(alias, source);
+                }
+            }
+        }
+        guideAliases = Collections.unmodifiableMap(aliasCopy);
         programmeCount = this.programmes.size();
-        snapshotSignature = signatureFor(this.programmes);
+        snapshotSignature = 31L * signatureFor(this.programmes) + guideAliases.hashCode();
     }
 
     public static EpgData empty() { return EMPTY; }
@@ -65,6 +89,7 @@ public final class EpgData {
     public static EpgData merge(List<EpgData> dataSets) {
         if (dataSets == null || dataSets.isEmpty()) return EMPTY;
         List<EpgProgramme> merged = new ArrayList<>();
+        Map<String, String> aliases = new LinkedHashMap<>();
         EpgData only = null;
         int nonNullDataSets = 0;
         for (EpgData data : dataSets) {
@@ -72,11 +97,12 @@ public final class EpgData {
                 nonNullDataSets++;
                 only = data;
                 merged.addAll(data.programmes);
+                aliases.putAll(data.guideAliases);
             }
         }
         if (merged.isEmpty()) return EMPTY;
         if (nonNullDataSets == 1 && only != null) return only;
-        return new EpgData(merged);
+        return new EpgData(merged, aliases);
     }
 
     /**
@@ -103,7 +129,7 @@ public final class EpgData {
 
     public EpgProgramme findCurrent(String channelId, long nowMillis) {
         if (channelId == null || AppStrings.isBlank(channelId)) return null;
-        List<EpgProgramme> programmes = programmesByChannel.get(channelId);
+        List<EpgProgramme> programmes = programmesFor(channelId);
         if (programmes == null) return null;
         for (EpgProgramme programme : programmes) {
             if (programme.getStartMillis() > nowMillis) break;
@@ -120,7 +146,7 @@ public final class EpgData {
      */
     public EpgProgramme findNext(String channelId, long nowMillis) {
         if (channelId == null || AppStrings.isBlank(channelId)) return null;
-        List<EpgProgramme> programmes = programmesByChannel.get(channelId);
+        List<EpgProgramme> programmes = programmesFor(channelId);
         if (programmes == null) return null;
 
         boolean currentFound = false;
@@ -148,7 +174,7 @@ public final class EpgData {
         if (channelId == null || AppStrings.isBlank(channelId) || limit <= 0) {
             return Collections.emptyList();
         }
-        List<EpgProgramme> programmes = programmesByChannel.get(channelId);
+        List<EpgProgramme> programmes = programmesFor(channelId);
         if (programmes == null || programmes.isEmpty()) return Collections.emptyList();
         List<EpgProgramme> upcoming = new ArrayList<>(Math.min(limit, 4));
         for (EpgProgramme programme : programmes) {
@@ -167,7 +193,7 @@ public final class EpgData {
         if (channelId == null || AppStrings.isBlank(channelId) || toMillis <= fromMillis) {
             return Collections.emptyList();
         }
-        List<EpgProgramme> programmes = programmesByChannel.get(channelId);
+        List<EpgProgramme> programmes = programmesFor(channelId);
         if (programmes == null || programmes.isEmpty()) return Collections.emptyList();
         List<EpgProgramme> result = new ArrayList<>();
         for (EpgProgramme programme : programmes) {
@@ -179,11 +205,20 @@ public final class EpgData {
     }
 
     public boolean hasChannel(String channelId) {
-        List<EpgProgramme> programmes = channelId == null ? null : programmesByChannel.get(channelId);
+        List<EpgProgramme> programmes = channelId == null ? null : programmesFor(channelId);
         return programmes != null && !programmes.isEmpty();
     }
 
     public int getProgrammeCount() { return programmeCount; }
+
+    private List<EpgProgramme> programmesFor(String channelId) {
+        List<EpgProgramme> own = programmesByChannel.get(channelId);
+        if (own != null) return own;
+        String source = guideAliases.get(channelId);
+        return source == null ? null : programmesByChannel.get(source);
+    }
+
+    Map<String, String> getGuideAliases() { return guideAliases; }
 
     List<EpgProgramme> getProgrammes() { return programmes; }
 

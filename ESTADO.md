@@ -11,6 +11,7 @@
 
 ## Hoy, en una mirada
 
+- **0.6.27 — guías compartidas (2026-10-21)**: la app entiende canales que usan la guía de otro (`data-guide-of`) y XML con gzip. Prepara la `epg-2.xml` sin copias (44 → 6 MB). Probada en emulador con la guía actual.
 - **0.6.26 — memoria de la guía (2026-10-21)**: pedido de «optimización agresiva de memoria». La guía de Lista 2 (47 MB) se descarga y lee desde el disco (sin cargarla entera), se valida por huella sin releerla, no se reprocesa si no cambió, fechas con lector rápido y textos repetidos compartidos. Emulador con Lista 2 activa: pico de Java heap de ~170 MB a ~60 MB, PSS total de ~217 MB a ~100 MB; la guía de Lista 2 se ve (1237 Warner Channel).
 - **0.6.25 — Lista 1 primero (2026-10-21)**: la app recuerda solo canales de Lista 1; si lo último fue de Lista 2, arranca en el primer canal de Lista 1. La guía de Lista 1 (`epg.xml`) se carga primero y la de Lista 2 (`epg-2.xml`) recién después. Emulador: tras quedar en el 1248 (Lista 2) arrancó en 001 TVN; desde La Red (#5) volvió a La Red; el registro muestra `epg-2.xml` en espera hasta terminar `epg.xml`.
 - **0.6.24/233 (EPG de Lista 2 completa)**: la app descargaba la EPG con un límite de 32 MB y una caché de 48 MB; el `epg.xml` con Lista 2 pesa ~51 MB, por lo que la guía completa se descartaba y canales como el 1005 no mostraban programación. Se subieron `MAX_EPG_BYTES` a **64 MB** y la caché `epg_cache` a **160 MB** (3 versiones). Sin cambio visual. **Publicado y verificado**: funcional `53a060b`, versión/tag `v0.6.24`; Android CI `39673098447` y Publicar APK `39673648320` success; release público no draft/prerelease `VibeM3U-v0.6.24.apk`, 2.846.439 bytes, SHA-256 `beece82a5e4afd0e42f6284c9c1ed7ceee519123c3a9ed294b2a24aaa6ecdef8`; pendiente prueba en TV física.
@@ -179,6 +180,7 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-21 — 0.6.27**: guías compartidas (data-guide-of) y gzip.
 - **2026-10-21 — 0.6.26**: memoria de la guía: pico ~170 → ~60 MB.
 - **2026-10-21 — 0.6.25**: recordar solo Lista 1 y guía de Lista 1 primero.
 - **2026-10-19 — 0.6.23**: `backupm3u` hasta 16 en `PublishedPlaybackCatalog`; prueba con 18 IDs conserva 16 en orden. Publicado y verificado: `v0.6.23`, Android CI `39355569525`, Publicar APK `39355575294`; APK 2.846.435 bytes, SHA-256 `ec91fda30639a93538ae51d4471e516dedd6f3497c5044ba5d4c7ac98d5d0613`.

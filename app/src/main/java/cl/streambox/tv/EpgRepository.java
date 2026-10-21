@@ -89,6 +89,17 @@ public final class EpgRepository {
     private static EpgData parseFile(java.io.File file) throws IOException {
         try (java.io.InputStream input = new java.io.BufferedInputStream(
                 new java.io.FileInputStream(file), 64 * 1024)) {
+            // 0.6.27: acepta la guía comprimida con gzip (se reconoce por sus dos primeros bytes).
+            input.mark(2);
+            int first = input.read();
+            int second = input.read();
+            input.reset();
+            if (first == 0x1f && second == 0x8b) {
+                try (java.io.InputStream unzipped = new java.io.BufferedInputStream(
+                        new java.util.zip.GZIPInputStream(input, 64 * 1024), 64 * 1024)) {
+                    return EpgParser.parse(unzipped);
+                }
+            }
             return EpgParser.parse(input);
         }
     }

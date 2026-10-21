@@ -20,8 +20,9 @@ import java.util.Locale;
 /** Fast, persistent representation of an already parsed XMLTV document. */
 final class EpgSnapshotCache {
     private static final int MAGIC = 0x56455047; // VEPG
-    // v2 añade la sinopsis (<desc>); las instantáneas v1 se descartan y se regeneran.
-    private static final int FORMAT_VERSION = 2;
+    // v2 añade la sinopsis (<desc>); v3 (0.6.27) los canales que comparten guía
+    // (data-guide-of). Las versiones anteriores se descartan y se regeneran.
+    private static final int FORMAT_VERSION = 3;
     private static final int MAX_SNAPSHOTS = 4;
     private static final int MAX_PROGRAMMES = 250_000;
     private static final int MAX_STRING_BYTES = 256 * 1024;
@@ -93,8 +94,18 @@ final class EpgSnapshotCache {
                 programmes.add(new EpgProgramme(
                         channelId, title, startMillis, stopMillis, description));
             }
+            int aliasCount = input.readInt();
+            if (aliasCount < 0 || aliasCount > MAX_PROGRAMMES) {
+                remove(file);
+                return null;
+            }
+            java.util.Map<String, String> aliases = new java.util.LinkedHashMap<>();
+            for (int index = 0; index < aliasCount; index++) {
+                String alias = pooled(pool, readString(input));
+                aliases.put(alias, pooled(pool, readString(input)));
+            }
             file.setLastModified(System.currentTimeMillis());
-            return new EpgData(programmes);
+            return new EpgData(programmes, aliases);
         } catch (IOException | RuntimeException error) {
             remove(file);
             return null;
@@ -125,6 +136,12 @@ final class EpgSnapshotCache {
                 output.writeLong(programme.getStartMillis());
                 output.writeLong(programme.getStopMillis());
                 writeString(output, programme.getDescription());
+            }
+            java.util.Map<String, String> aliases = data.getGuideAliases();
+            output.writeInt(aliases.size());
+            for (java.util.Map.Entry<String, String> entry : aliases.entrySet()) {
+                writeString(output, entry.getKey());
+                writeString(output, entry.getValue());
             }
             output.flush();
             fileOutput.getFD().sync();

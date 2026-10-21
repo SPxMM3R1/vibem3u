@@ -41,7 +41,7 @@ public final class EpgParser {
             reader.setEntityResolver((publicId, systemId) -> new InputSource(new StringReader("")));
             reader.setContentHandler(handler);
             reader.parse(new InputSource(input));
-            return new EpgData(handler.programmes);
+            return new EpgData(handler.programmes, handler.aliases);
         } catch (ParserConfigurationException | SAXException ex) {
             throw new IOException("La programación XMLTV no es válida.", ex);
         }
@@ -130,6 +130,8 @@ public final class EpgParser {
         private final List<EpgProgramme> programmes = new ArrayList<>();
         /** 0.6.26: una sola copia de cada canal, título y sinopsis repetidos. */
         private final java.util.HashMap<String, String> pool = new java.util.HashMap<>();
+        /** {@code <channel id="X" data-guide-of="Y">}: X usa la guía de Y (0.6.27). */
+        private final java.util.LinkedHashMap<String, String> aliases = new java.util.LinkedHashMap<>();
         private String channelId;
         private long startMillis;
         private long stopMillis;
@@ -141,7 +143,13 @@ public final class EpgParser {
 
         @Override
         public void startElement(String uri, String localName, String qName, Attributes attributes) {
-            if ("programme".equalsIgnoreCase(qName)) {
+            if ("channel".equalsIgnoreCase(qName)) {
+                String id = attributes.getValue("id");
+                String source = attributes.getValue("data-guide-of");
+                if (!AppStrings.isBlank(id) && !AppStrings.isBlank(source)) {
+                    aliases.put(EpgSnapshotCache.pooled(pool, id), EpgSnapshotCache.pooled(pool, source));
+                }
+            } else if ("programme".equalsIgnoreCase(qName)) {
                 channelId = attributes.getValue("channel");
                 startMillis = parseXmlTvTime(attributes.getValue("start"));
                 stopMillis = parseXmlTvTime(attributes.getValue("stop"));
