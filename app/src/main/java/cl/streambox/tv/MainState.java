@@ -210,6 +210,19 @@ abstract class MainState extends Activity {
     final Map<String, EpgData> epgDataByUrl = new LinkedHashMap<>();
     final Set<String> activeEpgUrls = new LinkedHashSet<>();
     final Set<String> epgRequests = new HashSet<>();
+    /** Fuente de Lista 1 (la que se recuerda y cuya guía carga primero), 0.6.23. */
+    static final int LIST_ONE_SOURCE = 1;
+    /** Identidades (PlaybackPreferences.channelIdentity) de los canales de Lista 1. */
+    final Set<String> listOneIdentities = new HashSet<>();
+    /**
+     * Guía por etapas (0.6.23): primero la de Lista 1 (caché y descarga); la de las otras
+     * listas espera en {@link #deferredEpgUris} hasta que la de Lista 1 termine.
+     */
+    boolean listOneEpgReady;
+    int listOneEpgInFlight;
+    final List<URI> deferredEpgUris = new ArrayList<>();
+    /** El canal preferido del arranque viene del último visto (no de un recordatorio). */
+    boolean startupPreferredFromLastChannel;
 
     PlayerView playerView;
     PlaybackDiagnosticsWorker playbackBitrateMeter;

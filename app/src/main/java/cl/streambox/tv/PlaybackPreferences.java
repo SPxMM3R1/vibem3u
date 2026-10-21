@@ -17,6 +17,12 @@ final class PlaybackPreferences {
      * la lista armada. Sin respaldos ni tokens: los mismos datos que publica la lista.
      */
     private static final String KEY_LAST_SNAPSHOT = "last_channel_snapshot";
+    /**
+     * 0.6.23: lista del último canal guardado. Solo se guarda Lista 1 (1); un valor viejo
+     * sin esta marca puede ser de Lista 2 y su copia no se usa para precalentar.
+     */
+    private static final String KEY_LAST_LIST = "last_channel_list";
+    static final int REMEMBERED_LIST = 1;
     private static final String QUALITY_PREFIX = "quality_";
     private static final String AUTOMATIC_QUALITY_VALUE = "auto";
     private static final String SUBTITLES_PREFIX = "subtitles_";
@@ -72,11 +78,13 @@ final class PlaybackPreferences {
                 .putString(KEY_LAST_CHANNEL, channelIdentity(channel))
                 .putInt(KEY_LAST_INDEX, index)
                 .putString(KEY_LAST_SNAPSHOT, snapshotJson(channel))
+                .putInt(KEY_LAST_LIST, REMEMBERED_LIST)
                 .apply();
     }
 
     /** El último canal visto, reconstruido de su copia; null si no hay o está dañada. */
     Channel lastChannelSnapshot() {
+        if (preferences.getInt(KEY_LAST_LIST, 0) != REMEMBERED_LIST) return null;
         return parseSnapshot(preferences.getString(KEY_LAST_SNAPSHOT, ""));
     }
 

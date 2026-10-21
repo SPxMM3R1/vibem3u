@@ -290,6 +290,7 @@ public final class MainActivity extends MainSelector {
         boolean resetPlayback = sourceChanged || channels.isEmpty();
         int generation = ++playlistGeneration;
         epgRequests.clear();
+        resetEpgStaging();
         if (!preserveCurrentPlayback) {
             playbackGeneration++;
             cancelPlaybackResolution();
@@ -331,7 +332,8 @@ public final class MainActivity extends MainSelector {
         final Map<Integer, Playlist> visiblePlaylists = new LinkedHashMap<>(playlistsBySource);
         if (!existingPlaylist) {
             startupSelectionPending = true;
-            startupPreferredChannelIdentity = AppStrings.isBlank(pendingReminderChannelIdentity)
+            startupPreferredFromLastChannel = AppStrings.isBlank(pendingReminderChannelIdentity);
+            startupPreferredChannelIdentity = startupPreferredFromLastChannel
                     ? readLastChannelIdentity()
                     : pendingReminderChannelIdentity;
         }
@@ -440,14 +442,36 @@ public final class MainActivity extends MainSelector {
             finishPlaylistRefreshIfReady(refresh);
             return;
         }
+        if (waitsForListOne(refresh)) {
+            // 0.6.23: al arrancar, Lista 2 no se muestra (ni reproduce) antes que Lista 1.
+            finishPlaylistRefreshIfReady(refresh);
+            return;
+        }
         Map<Integer, Playlist> snapshot = new LinkedHashMap<>(refresh.latest);
         applyPlaylists(snapshot, refresh.sourceSignature, refresh.generation, contentChanged);
         loadEpgForPlaylists(snapshot, refresh.generation);
         finishPlaylistRefreshIfReady(refresh);
     }
 
+    /** Arranque sin canales, Lista 1 configurada y todavía sin llegar (y la recarga sigue). */
+    boolean waitsForListOne(PlaylistRefreshState refresh) {
+        if (!channels.isEmpty() || refresh.isComplete()
+                || refresh.latest.containsKey(LIST_ONE_SOURCE)) return false;
+        for (PlaylistSource source : getPlaylistSources()) {
+            if (source.getPosition() == LIST_ONE_SOURCE) return true;
+        }
+        return false;
+    }
+
     void finishPlaylistRefreshIfReady(PlaylistRefreshState refresh) {
         if (!isCurrentPlaylistRefresh(refresh) || !refresh.isComplete()) return;
+        if (channels.isEmpty() && !refresh.latest.isEmpty() && !isWaitingForPublishedCatalog()
+                && !refresh.latest.containsKey(LIST_ONE_SOURCE)) {
+            // Lista 1 falló: se muestra lo que llegó (p. ej. solo Lista 2) en vez de nada.
+            Map<Integer, Playlist> snapshot = new LinkedHashMap<>(refresh.latest);
+            applyPlaylists(snapshot, refresh.sourceSignature, refresh.generation, true);
+            loadEpgForPlaylists(snapshot, refresh.generation);
+        }
         // La lista ya llegó, pero espera al catálogo: la carga sigue en pantalla.
         if (isWaitingForPublishedCatalog() && !refresh.latest.isEmpty()) return;
         if (!refresh.latest.isEmpty()) {
@@ -467,46 +491,112 @@ public final class MainActivity extends MainSelector {
 
 
 
+    /**
+     * Guía por etapas (0.6.23, pedido del usuario): primero la de Lista 1 (caché y descarga);
+     * la de Lista 2 recién cuando la de Lista 1 terminó. Si Lista 2 está apagada, su lista no
+     * se carga y su guía (epg-2.xml) nunca se pide.
+     */
     void loadEpgForPlaylists(Map<Integer, Playlist> playlists, int generation) {
+        boolean listOneConfigured = false;
+        for (PlaylistSource source : getPlaylistSources()) {
+            if (source.getPosition() == LIST_ONE_SOURCE) listOneConfigured = true;
+        }
         for (Map.Entry<Integer, Playlist> entry : orderedPlaylistEntries(playlists)) {
             Playlist playlist = entry.getValue();
             if (playlist == null) continue;
+            boolean listOne = entry.getKey() == LIST_ONE_SOURCE;
             for (URI epgUri : playlist.getEpgUris()) {
                 String url = epgUri.toString();
                 if (!epgRequests.add(url)) continue;
-                epgExecutor.submit(() -> {
-                    EpgData local = null;
-                    try {
-                        local = epgRepository.loadCached(epgUri);
-                        if (local != null) {
-                            EpgData cachedData = local;
-                            mainHandler.post(() -> applyEpgData(cachedData, epgUri, generation));
-                        }
-                    } catch (Exception error) {
-                        Log.w(RESOURCE_HEALTH_TAG, "EPG en caché ilegible", error);
-                        // La reproducción continúa usando el grupo del canal como respaldo.
-                    }
-                    if (!isNetworkAvailable()) return;
-
-                    EpgData baseline = local;
-                    epgExecutor.submit(() -> {
-                        try {
-                            EpgRepository.LoadResult result = epgRepository.downloadIfChanged(epgUri);
-                            if (result.isChanged() || baseline == null) {
-                                mainHandler.post(() -> applyEpgData(
-                                        result.getData(),
-                                        epgUri,
-                                        generation
-                                ));
-                            }
-                        } catch (Exception error) {
-                            Log.w(RESOURCE_HEALTH_TAG, "EPG no se pudo actualizar", error);
-                            // La programación cacheada permanece visible.
-                        }
-                    });
-                });
+                if (listOne) {
+                    listOneEpgInFlight++;
+                    submitEpgLoad(epgUri, generation, true);
+                } else if (listOneEpgReady || !listOneConfigured) {
+                    submitEpgLoad(epgUri, generation, false);
+                } else {
+                    deferredEpgUris.add(epgUri);
+                    Log.i(PlaybackStartupAnalytics.LOG_TAG, "EPG en espera de Lista 1: " + url);
+                }
             }
         }
+        // Lista 1 ya pidió su guía antes (o no tiene): si no queda nada en curso, sigue Lista 2.
+        if (playlists.containsKey(LIST_ONE_SOURCE) && listOneEpgInFlight == 0) {
+            releaseDeferredEpg(generation);
+        }
+    }
+
+    void submitEpgLoad(URI epgUri, int generation, boolean listOne) {
+        Log.i(PlaybackStartupAnalytics.LOG_TAG, "EPG pedida (" + (listOne ? "Lista 1" : "otra lista")
+                + "): " + epgUri);
+        epgExecutor.submit(() -> {
+            EpgData local = null;
+            try {
+                local = epgRepository.loadCached(epgUri);
+                if (local != null) {
+                    EpgData cachedData = local;
+                    mainHandler.post(() -> applyEpgData(cachedData, epgUri, generation));
+                }
+            } catch (Exception error) {
+                Log.w(RESOURCE_HEALTH_TAG, "EPG en caché ilegible", error);
+                // La reproducción continúa usando el grupo del canal como respaldo.
+            }
+            if (!isNetworkAvailable()) {
+                if (listOne) mainHandler.post(() -> finishListOneEpg(generation));
+                return;
+            }
+
+            EpgData baseline = local;
+            epgExecutor.submit(() -> {
+                try {
+                    EpgRepository.LoadResult result = epgRepository.downloadIfChanged(epgUri);
+                    if (result.isChanged() || baseline == null) {
+                        mainHandler.post(() -> applyEpgData(
+                                result.getData(),
+                                epgUri,
+                                generation
+                        ));
+                    }
+                } catch (Exception error) {
+                    Log.w(RESOURCE_HEALTH_TAG, "EPG no se pudo actualizar", error);
+                    // La programación cacheada permanece visible.
+                } finally {
+                    // Después de aplicar su guía (el post anterior va primero en la cola).
+                    if (listOne) mainHandler.post(() -> finishListOneEpg(generation));
+                }
+            });
+        });
+    }
+
+    void finishListOneEpg(int generation) {
+        if (generation != playlistGeneration) return;
+        listOneEpgInFlight = Math.max(0, listOneEpgInFlight - 1);
+        if (listOneEpgInFlight == 0) releaseDeferredEpg(generation);
+    }
+
+    void releaseDeferredEpg(int generation) {
+        if (listOneEpgReady && deferredEpgUris.isEmpty()) return;
+        listOneEpgReady = true;
+        Log.i(PlaybackStartupAnalytics.LOG_TAG, "EPG de Lista 1 lista; siguen " + deferredEpgUris.size()
+                + " guías en espera");
+        List<URI> pending = new ArrayList<>(deferredEpgUris);
+        deferredEpgUris.clear();
+        for (URI uri : pending) submitEpgLoad(uri, generation, false);
+    }
+
+    void resetEpgStaging() {
+        listOneEpgReady = false;
+        listOneEpgInFlight = 0;
+        deferredEpgUris.clear();
+    }
+
+    /** Primer canal de Lista 1 en el orden visible; 0 si Lista 1 no está cargada. */
+    int firstListOneChannelIndex() {
+        for (int index = 0; index < channels.size(); index++) {
+            if (listOneIdentities.contains(PlaybackPreferences.channelIdentity(channels.get(index)))) {
+                return index;
+            }
+        }
+        return 0;
     }
 
     static List<Map.Entry<Integer, Playlist>> orderedPlaylistEntries(
@@ -609,6 +699,13 @@ public final class MainActivity extends MainSelector {
 
         channels.clear();
         channels.addAll(enabledChannels);
+        listOneIdentities.clear();
+        Playlist listOne = playlistsBySource.get(LIST_ONE_SOURCE);
+        if (listOne != null) {
+            for (Channel candidate : listOne.getChannels()) {
+                listOneIdentities.add(PlaybackPreferences.channelIdentity(candidate));
+            }
+        }
         if (channels.isEmpty()) {
             showPlaylistError(getString(R.string.empty_playlist));
             return;
@@ -620,10 +717,21 @@ public final class MainActivity extends MainSelector {
                         previousIdentity,
                         channelIndex
                 )
-                : playbackPreferences.findInitialChannelIndex(channels);
+                : firstListOneChannelIndex();
         if (startupSelectionPending) {
             if (AppStrings.isBlank(startupPreferredChannelIdentity)) {
                 startupSelectionPending = false;
+            } else if (startupPreferredFromLastChannel && listOne != null
+                    && !listOneIdentities.contains(startupPreferredChannelIdentity)) {
+                // 0.6.23: el último canal guardado no es de Lista 1 (p. ej. uno de Lista 2
+                // guardado por una versión anterior): se parte en el primero de Lista 1.
+                if (!hadChannels || !hasEstablishedPlayback()) {
+                    nextChannelIndex = firstListOneChannelIndex();
+                }
+                startupSelectionPending = false;
+            } else if (startupPreferredFromLastChannel && listOne == null) {
+                // Lista 1 aún no llega: no se elige un canal de Lista 2 mientras tanto.
+                if (!hadChannels) nextChannelIndex = 0;
             } else {
                 int preferredIndex = findChannelIndexByIdentity(
                         channels,
@@ -1283,6 +1391,7 @@ public final class MainActivity extends MainSelector {
         epgDataByUrl.clear();
         activeEpgUrls.clear();
         epgRequests.clear();
+        resetEpgStaging();
         epgData = EpgData.empty();
         loadedPlaylistSignature = "";
         resolverChannelCounts = Collections.emptyMap();
@@ -1605,6 +1714,7 @@ public final class MainActivity extends MainSelector {
                     activeEpgUrls.clear();
                     epgDataByUrl.clear();
                     epgRequests.clear();
+        resetEpgStaging();
                     epgData = EpgData.empty();
                 }
                 // Salir de Opciones sin cambiar listas ni proveedores no recarga nada.

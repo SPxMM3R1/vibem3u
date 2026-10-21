@@ -419,7 +419,10 @@ abstract class MainPlayback extends MainState {
             player.stop();
             player.clearMediaItems();
         }
-        playbackPreferences.rememberChannel(channel, channelIndex);
+        // 0.6.23: solo se recuerda Lista 1; con Lista 2 se conserva el último de Lista 1.
+        if (listOneIdentities.contains(PlaybackPreferences.channelIdentity(channel))) {
+            playbackPreferences.rememberChannel(channel, channelIndex);
+        }
 
         int displayNumber = publishedPlaybackCatalog.numberFor(channel, channelIndex + 1);
         bindOsdChannel(displayNumber, channel);

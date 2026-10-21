@@ -11,6 +11,7 @@
 
 ## Hoy, en una mirada
 
+- **0.6.25 — Lista 1 primero (2026-10-21)**: la app recuerda solo canales de Lista 1; si lo último fue de Lista 2, arranca en el primer canal de Lista 1. La guía de Lista 1 (`epg.xml`) se carga primero y la de Lista 2 (`epg-2.xml`) recién después. Emulador: tras quedar en el 1248 (Lista 2) arrancó en 001 TVN; desde La Red (#5) volvió a La Red; el registro muestra `epg-2.xml` en espera hasta terminar `epg.xml`.
 - **0.6.24/233 (EPG de Lista 2 completa)**: la app descargaba la EPG con un límite de 32 MB y una caché de 48 MB; el `epg.xml` con Lista 2 pesa ~51 MB, por lo que la guía completa se descartaba y canales como el 1005 no mostraban programación. Se subieron `MAX_EPG_BYTES` a **64 MB** y la caché `epg_cache` a **160 MB** (3 versiones). Sin cambio visual. **Publicado y verificado**: funcional `53a060b`, versión/tag `v0.6.24`; Android CI `39673098447` y Publicar APK `39673648320` success; release público no draft/prerelease `VibeM3U-v0.6.24.apk`, 2.846.439 bytes, SHA-256 `beece82a5e4afd0e42f6284c9c1ed7ceee519123c3a9ed294b2a24aaa6ecdef8`; pendiente prueba en TV física.
 
 - **0.6.23/232 (16 respaldos directos)**: a pedido del usuario se subió `PublishedPlaybackCatalog.MAX_DIRECT_BACKUPS` de 8 a **16**; antes el parser cortaba `backupm3u` en 8. La contraparte Lista M3U publica 45 respaldos no-1080 (14/11/8/5/7) para #35/#36/#37/#39/#40; la app ahora usa hasta 16 por canal. Prueba nueva `backupm3uKeepsUpToSixteenDirectBackupsInOrder` (18 IDs, conserva 16 en orden). Sin cambio visual. **Publicado y verificado**: funcional `f227f98`, versión/tag `7be2e2e` / `v0.6.23`; Android CI `39355569525` y Publicar APK `39355575294` success; release público no draft/prerelease `VibeM3U-v0.6.23.apk`, 2.846.435 bytes, SHA-256 `ec91fda30639a93538ae51d4471e516dedd6f3497c5044ba5d4c7ac98d5d0613`; sin prueba en TV física.
@@ -177,6 +178,7 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-10-21 — 0.6.25**: recordar solo Lista 1 y guía de Lista 1 primero.
 - **2026-10-19 — 0.6.23**: `backupm3u` hasta 16 en `PublishedPlaybackCatalog`; prueba con 18 IDs conserva 16 en orden. Publicado y verificado: `v0.6.23`, Android CI `39355569525`, Publicar APK `39355575294`; APK 2.846.435 bytes, SHA-256 `ec91fda30639a93538ae51d4471e516dedd6f3497c5044ba5d4c7ac98d5d0613`.
 - **2026-10-19 — 0.6.22**: selector de calidad rediseñado como escenario inferior (F2).
 - **2026-10-19 — 0.6.21**: panel «Calidad» en tamaños de la opción A.
