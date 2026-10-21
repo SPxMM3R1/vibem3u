@@ -2,7 +2,6 @@ package cl.streambox.tv;
 
 import android.content.Context;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URI;
 
@@ -30,70 +29,68 @@ public final class EpgRepository {
         );
     }
 
+    /**
+     * Guía guardada (0.6.26): la instantánea ya procesada se valida con la huella guardada
+     * en la caché, sin volver a leer el XML; solo si falta se lee el XML desde el disco.
+     */
     public EpgData loadCached(URI epgUri) throws IOException {
         String url = validUrl(epgUri);
         if (url == null) return null;
-        HttpResourceCache.CachedResource resource = cache.readCached(url, MAX_EPG_BYTES);
-        if (resource == null) return null;
+        HttpResourceCache.EntryInfo entry = cache.entryInfo(url, MAX_EPG_BYTES);
+        if (entry == null) return null;
+        EpgData snapshot = snapshotCache.loadDigest(url, entry.sha256);
+        if (snapshot != null) return snapshot;
         try {
-            return parseCached(url, resource.getBytes());
+            EpgData parsed = parseFile(entry.body);
+            snapshotCache.storeDigest(url, entry.sha256, parsed);
+            return parsed;
         } catch (IOException error) {
             cache.remove(url);
             return null;
         }
     }
 
-    public LoadResult downloadIfChanged(URI epgUri) throws IOException {
+    /**
+     * Revisa la guía en la red. Si no cambió (revisión reciente, 304 o misma huella) no la
+     * vuelve a procesar: devuelve sin cambios y, solo si {@code needData}, la guardada.
+     */
+    public LoadResult downloadIfChanged(URI epgUri, boolean needData) throws IOException {
         String url = validUrl(epgUri);
         if (url == null) return new LoadResult(EpgData.empty(), false);
-
-        HttpResourceCache.CachedResource cached = cache.readCached(url, MAX_EPG_BYTES);
-        if (cached != null && cached.isFresh(
-                System.currentTimeMillis(),
-                REVALIDATION_INTERVAL_MS
-        )) {
-            try {
-                return new LoadResult(parseCached(url, cached.getBytes()), false);
-            } catch (IOException error) {
-                cache.remove(url);
-            }
+        HttpResourceCache.EntryInfo entry = cache.entryInfo(url, MAX_EPG_BYTES);
+        if (entry != null && entry.isFresh(System.currentTimeMillis(), REVALIDATION_INTERVAL_MS)) {
+            return new LoadResult(needData ? loadCached(epgUri) : null, false);
         }
-
-        HttpResourceCache.FetchResult fetched = cache.fetch(
-                url,
-                MAX_EPG_BYTES,
-                USER_AGENT,
-                ACCEPT
-        );
+        HttpResourceCache.StreamFetch fetched = cache.fetchToFile(url, MAX_EPG_BYTES, USER_AGENT, ACCEPT);
+        if (!fetched.isChanged()) {
+            return new LoadResult(needData ? loadCached(epgUri) : null, false);
+        }
         EpgData data;
         try {
-            data = parseCached(url, fetched.getResource().getBytes());
+            data = parseFile(fetched.temporary);
         } catch (IOException error) {
-            if (fetched.isChanged()) throw error;
-            cache.remove(url);
-            fetched = cache.fetch(url, MAX_EPG_BYTES, USER_AGENT, ACCEPT);
-            data = parseCached(url, fetched.getResource().getBytes());
+            HttpResourceCache.discard(fetched);
+            throw error;
         }
+        cache.commitFile(url, fetched);
+        snapshotCache.storeDigest(url, fetched.sha256, data);
+        return new LoadResult(data, true);
+    }
 
-        cache.commit(url, fetched, fetched.getResource().getBytes());
-        return new LoadResult(data, fetched.isChanged());
+    public LoadResult downloadIfChanged(URI epgUri) throws IOException {
+        return downloadIfChanged(epgUri, true);
     }
 
     /** Compatibility entry point for callers that do not need change metadata. */
     public EpgData download(URI epgUri) throws IOException {
-        return downloadIfChanged(epgUri).getData();
+        return downloadIfChanged(epgUri, true).getData();
     }
 
-    private static EpgData parse(byte[] bytes) throws IOException {
-        return EpgParser.parse(new ByteArrayInputStream(bytes));
-    }
-
-    private EpgData parseCached(String url, byte[] bytes) throws IOException {
-        EpgData snapshot = snapshotCache.load(url, bytes);
-        if (snapshot != null) return snapshot;
-        EpgData parsed = parse(bytes);
-        snapshotCache.store(url, bytes, parsed);
-        return parsed;
+    private static EpgData parseFile(java.io.File file) throws IOException {
+        try (java.io.InputStream input = new java.io.BufferedInputStream(
+                new java.io.FileInputStream(file), 64 * 1024)) {
+            return EpgParser.parse(input);
+        }
     }
 
     private static String validUrl(URI epgUri) throws IOException {

@@ -37,9 +37,23 @@ final class EpgSnapshotCache {
     }
 
     synchronized EpgData load(String url, byte[] xmlBytes) {
+        return loadFingerprint(url, fingerprint(xmlBytes));
+    }
+
+    /** 0.6.26: valida con la huella SHA-256 (hex) guardada en la caché, sin leer el XML. */
+    synchronized EpgData loadDigest(String url, String sha256Hex) {
+        byte[] fingerprint = unhex(sha256Hex);
+        return fingerprint == null ? null : loadFingerprint(url, fingerprint);
+    }
+
+    synchronized void storeDigest(String url, String sha256Hex, EpgData data) {
+        byte[] fingerprint = unhex(sha256Hex);
+        if (fingerprint != null) storeFingerprint(url, fingerprint, data);
+    }
+
+    private EpgData loadFingerprint(String url, byte[] expectedFingerprint) {
         File file = snapshotFile(url);
         if (!file.isFile() || file.length() <= 0) return null;
-        byte[] expectedFingerprint = fingerprint(xmlBytes);
         try (DataInputStream input = new DataInputStream(new BufferedInputStream(
                 new FileInputStream(file)
         ))) {
@@ -65,12 +79,14 @@ final class EpgSnapshotCache {
                 return null;
             }
             List<EpgProgramme> programmes = new ArrayList<>(count);
+            // 0.6.26: canal, título y sinopsis se repiten miles de veces; una sola copia.
+            java.util.HashMap<String, String> pool = new java.util.HashMap<>();
             for (int index = 0; index < count; index++) {
-                String channelId = readString(input);
-                String title = readString(input);
+                String channelId = pooled(pool, readString(input));
+                String title = pooled(pool, readString(input));
                 long startMillis = input.readLong();
                 long stopMillis = input.readLong();
-                String description = readString(input);
+                String description = pooled(pool, readString(input));
                 if (AppStrings.isBlank(channelId) || AppStrings.isBlank(title) || stopMillis <= startMillis) {
                     throw new IOException("La instantánea EPG no es válida.");
                 }
@@ -86,6 +102,10 @@ final class EpgSnapshotCache {
     }
 
     synchronized void store(String url, byte[] xmlBytes, EpgData data) {
+        storeFingerprint(url, fingerprint(xmlBytes), data);
+    }
+
+    private void storeFingerprint(String url, byte[] sourceFingerprint, EpgData data) {
         if (data == null || data.getProgrammeCount() <= 0) return;
         List<EpgProgramme> programmes = data.getProgrammes();
         if (programmes.size() > MAX_PROGRAMMES) return;
@@ -96,7 +116,6 @@ final class EpgSnapshotCache {
              DataOutputStream output = new DataOutputStream(new BufferedOutputStream(fileOutput))) {
             output.writeInt(MAGIC);
             output.writeInt(FORMAT_VERSION);
-            byte[] sourceFingerprint = fingerprint(xmlBytes);
             output.writeInt(sourceFingerprint.length);
             output.write(sourceFingerprint);
             output.writeInt(programmes.size());
@@ -161,6 +180,24 @@ final class EpgSnapshotCache {
         }
         output.writeInt(bytes.length);
         output.write(bytes);
+    }
+
+    static String pooled(java.util.Map<String, String> pool, String value) {
+        if (value == null || value.isEmpty()) return value;
+        String existing = pool.putIfAbsent(value, value);
+        return existing == null ? value : existing;
+    }
+
+    private static byte[] unhex(String value) {
+        if (value == null || value.length() != 64) return null;
+        byte[] result = new byte[32];
+        for (int index = 0; index < 32; index++) {
+            int high = Character.digit(value.charAt(index * 2), 16);
+            int low = Character.digit(value.charAt(index * 2 + 1), 16);
+            if (high < 0 || low < 0) return null;
+            result[index] = (byte) ((high << 4) | low);
+        }
+        return result;
     }
 
     private static byte[] fingerprint(byte[] bytes) {

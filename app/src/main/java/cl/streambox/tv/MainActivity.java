@@ -548,8 +548,10 @@ public final class MainActivity extends MainSelector {
             EpgData baseline = local;
             epgExecutor.submit(() -> {
                 try {
-                    EpgRepository.LoadResult result = epgRepository.downloadIfChanged(epgUri);
-                    if (result.isChanged() || baseline == null) {
+                    // 0.6.26: sin cambios y ya mostrada, la guía no se vuelve a procesar.
+                    EpgRepository.LoadResult result =
+                            epgRepository.downloadIfChanged(epgUri, baseline == null);
+                    if ((result.isChanged() || baseline == null) && result.getData() != null) {
                         mainHandler.post(() -> applyEpgData(
                                 result.getData(),
                                 epgUri,

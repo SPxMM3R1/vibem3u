@@ -448,6 +448,233 @@ final class HttpResourceCache {
         );
     }
 
+    // ---- Recursos grandes en archivo (EPG, 0.6.26) -----------------------------------
+    // La guía de Lista 2 pesa ~47 MB: leerla entera a un byte[] (y copiarla al crecer el
+    // búfer) dejaba picos de 150+ MB. Estas rutas la descargan al disco calculando su
+    // huella SHA-256 en el camino, sin tener nunca el cuerpo en memoria.
+
+    static final class EntryInfo {
+        final File body;
+        final String etag;
+        final String lastModified;
+        final long checkedAtMillis;
+        final String sha256;
+
+        EntryInfo(File body, String etag, String lastModified, long checkedAtMillis, String sha256) {
+            this.body = body;
+            this.etag = etag == null ? "" : etag;
+            this.lastModified = lastModified == null ? "" : lastModified;
+            this.checkedAtMillis = checkedAtMillis;
+            this.sha256 = sha256 == null ? "" : sha256;
+        }
+
+        boolean isFresh(long nowMillis, long maxAgeMillis) {
+            if (checkedAtMillis <= 0L || maxAgeMillis <= 0L) return false;
+            if (AppStrings.isBlank(etag) && AppStrings.isBlank(lastModified)) return false;
+            return nowMillis >= checkedAtMillis && nowMillis - checkedAtMillis < maxAgeMillis;
+        }
+    }
+
+    static final class StreamFetch {
+        /** Cuerpo nuevo aún sin publicar; null si no cambió. */
+        final File temporary;
+        final String etag;
+        final String lastModified;
+        final String sha256;
+
+        StreamFetch(File temporary, String etag, String lastModified, String sha256) {
+            this.temporary = temporary;
+            this.etag = etag;
+            this.lastModified = lastModified;
+            this.sha256 = sha256;
+        }
+
+        boolean isChanged() {
+            return temporary != null;
+        }
+    }
+
+    private static final StreamFetch UNCHANGED = new StreamFetch(null, "", "", "");
+
+    /** Datos de la entrada guardada sin leer su cuerpo; calcula la huella una vez si falta. */
+    EntryInfo entryInfo(String url, long maxResourceBytes) {
+        synchronized (lockFor(url)) {
+            File body = bodyFile(directory, url);
+            if (!body.isFile()) return null;
+            if (body.length() <= 0 || body.length() > maxResourceBytes) {
+                removeLocked(url);
+                return null;
+            }
+            Properties metadata;
+            try {
+                metadata = readMetadata(metadataFile(directory, url));
+            } catch (IOException error) {
+                metadata = new Properties();
+            }
+            String sha = metadata.getProperty("sha256", "");
+            if (sha.isEmpty()) {
+                try {
+                    sha = digestFile(body);
+                    metadata.setProperty("sha256", sha);
+                    writeMetadata(url, metadata);
+                } catch (IOException error) {
+                    return null;
+                }
+            }
+            return new EntryInfo(
+                    body,
+                    metadata.getProperty("etag", ""),
+                    metadata.getProperty("last_modified", ""),
+                    parseLong(metadata.getProperty("checked_at", "0")),
+                    sha
+            );
+        }
+    }
+
+    /**
+     * Pide el recurso con los validadores guardados y deja la respuesta en un archivo
+     * temporal. Si el servidor responde 304, o el cuerpo tiene la misma huella, no hay
+     * nada nuevo que procesar. Sin red, con copia guardada, también cuenta como sin cambio.
+     */
+    StreamFetch fetchToFile(String url, long maxResourceBytes, String userAgent, String accept)
+            throws IOException {
+        EntryInfo cached = entryInfo(url, maxResourceBytes);
+        HttpURLConnection connection = null;
+        File temporary = null;
+        try {
+            connection = (HttpURLConnection) new URL(url).openConnection();
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(READ_TIMEOUT_MS);
+            connection.setUseCaches(false);
+            connection.setInstanceFollowRedirects(true);
+            connection.setRequestProperty("Accept", accept);
+            connection.setRequestProperty("Cache-Control", "no-cache");
+            connection.setRequestProperty("Pragma", "no-cache");
+            connection.setRequestProperty("User-Agent", userAgent);
+            if (cached != null) {
+                if (!AppStrings.isBlank(cached.etag)) connection.setRequestProperty("If-None-Match", cached.etag);
+                if (!AppStrings.isBlank(cached.lastModified)) {
+                    connection.setRequestProperty("If-Modified-Since", cached.lastModified);
+                }
+            }
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_NOT_MODIFIED && cached != null) {
+                touchChecked(url, cached.etag, cached.lastModified, cached.sha256);
+                return UNCHANGED;
+            }
+            if (responseCode < 200 || responseCode >= 300) {
+                throw new IOException("El servidor respondió HTTP " + responseCode + ".");
+            }
+            ensureDirectory();
+            temporary = temporaryFile(bodyFile(directory, url));
+            MessageDigest digest = sha256();
+            long total = 0;
+            try (InputStream input = connection.getInputStream();
+                 FileOutputStream output = new FileOutputStream(temporary)) {
+                byte[] buffer = new byte[64 * 1024];
+                int count;
+                while ((count = input.read(buffer)) != -1) {
+                    total += count;
+                    if (total > maxResourceBytes) {
+                        throw new IOException("El recurso supera el límite de caché.");
+                    }
+                    digest.update(buffer, 0, count);
+                    output.write(buffer, 0, count);
+                }
+                output.getFD().sync();
+            }
+            String sha = hex(digest.digest());
+            String etag = valueOrEmpty(connection.getHeaderField("ETag"));
+            String lastModified = valueOrEmpty(connection.getHeaderField("Last-Modified"));
+            if (cached != null && sha.equals(cached.sha256)) {
+                //noinspection ResultOfMethodCallIgnored
+                temporary.delete();
+                temporary = null;
+                touchChecked(url, etag, lastModified, sha);
+                return UNCHANGED;
+            }
+            File fresh = temporary;
+            temporary = null;
+            return new StreamFetch(fresh, etag, lastModified, sha);
+        } catch (IOException error) {
+            if (cached != null) return UNCHANGED;
+            throw error;
+        } finally {
+            if (temporary != null) {
+                //noinspection ResultOfMethodCallIgnored
+                temporary.delete();
+            }
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    /** Publica el cuerpo descargado por {@link #fetchToFile} con sus validadores y huella. */
+    void commitFile(String url, StreamFetch fetch) throws IOException {
+        if (fetch == null || fetch.temporary == null) return;
+        synchronized (lockFor(url)) {
+            File target = bodyFile(directory, url);
+            replaceFile(fetch.temporary, target);
+            target.setLastModified(System.currentTimeMillis());
+            Properties metadata = new Properties();
+            if (!AppStrings.isBlank(fetch.etag)) metadata.setProperty("etag", fetch.etag);
+            if (!AppStrings.isBlank(fetch.lastModified)) metadata.setProperty("last_modified", fetch.lastModified);
+            metadata.setProperty("checked_at", Long.toString(System.currentTimeMillis()));
+            metadata.setProperty("sha256", fetch.sha256);
+            writeMetadata(url, metadata);
+        }
+        trim();
+    }
+
+    static void discard(StreamFetch fetch) {
+        if (fetch != null && fetch.temporary != null) {
+            //noinspection ResultOfMethodCallIgnored
+            fetch.temporary.delete();
+        }
+    }
+
+    private void touchChecked(String url, String etag, String lastModified, String sha) {
+        synchronized (lockFor(url)) {
+            Properties metadata = new Properties();
+            if (!AppStrings.isBlank(etag)) metadata.setProperty("etag", etag);
+            if (!AppStrings.isBlank(lastModified)) metadata.setProperty("last_modified", lastModified);
+            metadata.setProperty("checked_at", Long.toString(System.currentTimeMillis()));
+            if (!AppStrings.isBlank(sha)) metadata.setProperty("sha256", sha);
+            try {
+                writeMetadata(url, metadata);
+            } catch (IOException ignored) {
+                // El cuerpo sigue siendo válido aunque no se pudo marcar la revisión.
+            }
+        }
+    }
+
+    private static String digestFile(File file) throws IOException {
+        MessageDigest digest = sha256();
+        try (InputStream input = new FileInputStream(file)) {
+            byte[] buffer = new byte[64 * 1024];
+            int count;
+            while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
+        }
+        return hex(digest.digest());
+    }
+
+    private static MessageDigest sha256() throws IOException {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException error) {
+            throw new IOException("SHA-256 no está disponible.", error);
+        }
+    }
+
+    static String hex(byte[] bytes) {
+        char[] digits = "0123456789abcdef".toCharArray();
+        char[] result = new char[bytes.length * 2];
+        for (int index = 0; index < bytes.length; index++) {
+            result[index * 2] = digits[(bytes[index] >> 4) & 0x0f];
+            result[index * 2 + 1] = digits[bytes[index] & 0x0f];
+        }
+        return new String(result);
+    }
+
     private static Properties metadataFor(CachedResource resource) {
         Properties metadata = new Properties();
         if (!AppStrings.isBlank(resource.getEtag())) metadata.setProperty("etag", resource.getEtag());
