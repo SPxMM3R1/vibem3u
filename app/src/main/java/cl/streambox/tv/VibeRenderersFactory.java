@@ -19,11 +19,14 @@ import java.util.ArrayList;
 @UnstableApi
 final class VibeRenderersFactory extends DefaultRenderersFactory {
     private final boolean normalizeVolume;
+    /** Sistema › Audio MP2 por software (0.6.29); activado por omisión. */
+    private final boolean softwareMp2;
     private MediaCodecVideoRenderer videoRenderer;
 
-    VibeRenderersFactory(Context context, boolean normalizeVolume) {
+    VibeRenderersFactory(Context context, boolean normalizeVolume, boolean softwareMp2) {
         super(context);
         this.normalizeVolume = normalizeVolume;
+        this.softwareMp2 = softwareMp2;
     }
 
     @Override
@@ -80,7 +83,7 @@ final class VibeRenderersFactory extends DefaultRenderersFactory {
                 out
         );
         // Al final: solo toma el MP2 cuando el equipo no tiene decodificador propio (0.6.06).
-        out.add(new Mp2AudioRenderer(eventHandler, eventListener, audioSink));
+        if (softwareMp2) out.add(new Mp2AudioRenderer(eventHandler, eventListener, audioSink));
     }
 
     MediaCodecVideoRenderer getVideoRenderer() {
@@ -102,6 +105,25 @@ final class VibeRenderersFactory extends DefaultRenderersFactory {
                     new VolumeNormalizationAudioProcessor()
             });
         }
-        return builder.build();
+        // Sincronía del audio por canal (0.6.29): la usan todos los renderers de audio.
+        return new AudioSyncOffset.Sink(builder.build());
+    }
+
+    /** El equipo trae decodificador MP2 propio (entonces el de software no se usa). */
+    static boolean hasPlatformMp2Decoder() {
+        try {
+            for (android.media.MediaCodecInfo info : new android.media.MediaCodecList(
+                    android.media.MediaCodecList.REGULAR_CODECS).getCodecInfos()) {
+                if (info.isEncoder()) continue;
+                for (String type : info.getSupportedTypes()) {
+                    if (androidx.media3.common.MimeTypes.AUDIO_MPEG_L2.equalsIgnoreCase(type)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // Sin lista de códecs: se informa como «sin decodificador propio».
+        }
+        return false;
     }
 }

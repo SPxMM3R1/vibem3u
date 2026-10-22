@@ -28,6 +28,8 @@ final class PlaybackPreferences {
     private static final String SUBTITLES_PREFIX = "subtitles_";
     /** Pista de audio elegida en Opciones (0.6.11), por canal: clave de AudioTrackOptions. */
     private static final String AUDIO_PREFIX = "audio_";
+    /** Sincronía del audio por canal en ms (0.6.29); sin clave = 0. */
+    private static final String AUDIO_SYNC_PREFIX = "avsync_";
     /** Señal elegida a mano en «Fuentes y calidades» (0.5.75). */
     private static final String SOURCE_PREFIX = "source_";
     static final String SOURCE_PRINCIPAL = "principal";
@@ -226,6 +228,21 @@ final class PlaybackPreferences {
             preferences.edit().remove(preferenceKey).apply();
         } else {
             preferences.edit().putString(preferenceKey, key).apply();
+        }
+    }
+
+    int getAudioSyncMs(Channel channel) {
+        return AudioSyncOffset.clampMs(preferences.getInt(
+                AUDIO_SYNC_PREFIX + sha256(channelIdentity(channel)), 0));
+    }
+
+    void rememberAudioSyncMs(Channel channel, int valueMs) {
+        String preferenceKey = AUDIO_SYNC_PREFIX + sha256(channelIdentity(channel));
+        int value = AudioSyncOffset.clampMs(valueMs);
+        if (value == 0) {
+            preferences.edit().remove(preferenceKey).apply();
+        } else {
+            preferences.edit().putInt(preferenceKey, value).apply();
         }
     }
 

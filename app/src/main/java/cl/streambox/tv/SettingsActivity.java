@@ -66,6 +66,8 @@ public final class SettingsActivity extends Activity {
     public static final String KEY_SOURCE_MODEL = "source_model";
     public static final String KEY_INVERT_CHANNEL_KEYS = "invert_channel_keys";
     public static final String KEY_NORMALIZE_VOLUME = "normalize_volume";
+    /** Sistema › Audio MP2 por software (0.6.29). */
+    public static final String KEY_SOFTWARE_MP2 = "software_mp2";
     public static final String KEY_AUTO_RECONNECT = "auto_reconnect";
     public static final String EXTRA_INITIAL_TAB = "initial_tab";
     public static final String EXTRA_HAS_PUBLISHED_PROVIDER_CHANNELS =
@@ -93,6 +95,8 @@ public final class SettingsActivity extends Activity {
     public static final String EXTRA_AUDIO_SELECTED_INDEX = "audio_selected_index";
     /** Resultado: clave de la pista elegida. */
     public static final String EXTRA_AUDIO_KEY = "audio_key";
+    /** Sincronía del audio del canal en ms (0.6.29): entra la guardada, sale la elegida. */
+    public static final String EXTRA_AUDIO_SYNC_MS = "audio_sync_ms";
     /** Idioma de la pista que suena, para «Información de la señal». */
     public static final String EXTRA_SIGNAL_AUDIO_LANGUAGE = "signal_audio_language";
     public static final String EXTRA_RESOLVER_IDS = "resolver_ids";
@@ -171,6 +175,9 @@ public final class SettingsActivity extends Activity {
     private int selectedAudioIndex = -1;
     private int initialAudioIndex = -1;
     private final List<Button> audioOptionButtons = new ArrayList<>();
+    private Button audioSyncValue;
+    private int audioSyncMs;
+    private boolean audioSyncShown;
     private boolean automaticQuality;
     private int selectedQualityIndex = -1;
     private ArrayList<String> qualityLabels = new ArrayList<>();
@@ -247,6 +254,7 @@ public final class SettingsActivity extends Activity {
         styleClassic.setOnClickListener(view -> setUiStyle(true));
         bindPremiumSection();
         bindSystemLinks();
+        bindSoftwareMp2();
         enterImmersiveMode();
 
         settingsRoot = findViewById(R.id.settings_root);
@@ -735,6 +743,7 @@ public final class SettingsActivity extends Activity {
                     updateSubtitleSwitchLabel());
         }
         bindAudioOptions(intent);
+        bindAudioSync(intent);
         updatePlaybackFirstFocus();
     }
 
@@ -768,6 +777,60 @@ public final class SettingsActivity extends Activity {
             chip.setSelected(index == selectedAudioIndex);
             addWrappedOption(container, chip);
             audioOptionButtons.add(chip);
+        }
+    }
+
+    /** Fila «Sincronía del audio» (0.6.29, mockup aprobado): ◀ ▶ la mueve en vivo. */
+    private void bindAudioSync(Intent intent) {
+        View row = findViewById(R.id.settings_audio_sync_row);
+        audioSyncValue = findViewById(R.id.settings_audio_sync_value);
+        audioSyncShown = !classicUi && row != null && audioSyncValue != null && hasCurrentChannel;
+        if (row != null) row.setVisibility(audioSyncShown ? View.VISIBLE : View.GONE);
+        if (!audioSyncShown) return;
+        audioSyncMs = AudioSyncOffset.clampMs(intent.getIntExtra(EXTRA_AUDIO_SYNC_MS, 0));
+        audioSyncValue.setOnClickListener(view -> setAudioSync(0));
+        View left = findViewById(R.id.settings_audio_sync_less);
+        View right = findViewById(R.id.settings_audio_sync_more);
+        if (left != null) left.setOnClickListener(view -> stepAudioSync(-1));
+        if (right != null) right.setOnClickListener(view -> stepAudioSync(1));
+        setAudioSync(audioSyncMs);
+    }
+
+    private void stepAudioSync(int direction) {
+        setAudioSync(audioSyncMs + direction * AudioSyncOffset.STEP_MS);
+    }
+
+    private void setAudioSync(int valueMs) {
+        audioSyncMs = AudioSyncOffset.clampMs(valueMs);
+        audioSyncValue.setText(AudioSyncOffset.label(audioSyncMs));
+        AudioSyncOffset.setMs(audioSyncMs); // en vivo sobre el canal que suena
+    }
+
+    /** Sistema › Audio MP2 por software (0.6.29, mockup aprobado). */
+    private void bindSoftwareMp2() {
+        Button on = findViewById(R.id.software_mp2_on);
+        Button off = findViewById(R.id.software_mp2_off);
+        TextView status = findViewById(R.id.software_mp2_status);
+        if (on == null || off == null || classicUi) return;
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        Runnable render = () -> {
+            boolean enabled = prefs.getBoolean(KEY_SOFTWARE_MP2, true);
+            on.setSelected(enabled);
+            off.setSelected(!enabled);
+        };
+        on.setOnClickListener(view -> {
+            prefs.edit().putBoolean(KEY_SOFTWARE_MP2, true).apply();
+            render.run();
+        });
+        off.setOnClickListener(view -> {
+            prefs.edit().putBoolean(KEY_SOFTWARE_MP2, false).apply();
+            render.run();
+        });
+        render.run();
+        if (status != null) {
+            status.setText(VibeRenderersFactory.hasPlatformMp2Decoder()
+                    ? R.string.software_mp2_device_has
+                    : R.string.software_mp2_device_lacks);
         }
     }
 
@@ -1640,6 +1703,7 @@ public final class SettingsActivity extends Activity {
             if (subtitlesAvailable) {
                 result.putExtra(EXTRA_SUBTITLES_ENABLED, subtitlesSwitch.isChecked());
             }
+            if (audioSyncShown) result.putExtra(EXTRA_AUDIO_SYNC_MS, audioSyncMs);
             if (selectedAudioIndex >= 0 && selectedAudioIndex != initialAudioIndex
                     && selectedAudioIndex < audioKeys.size()) {
                 result.putExtra(EXTRA_AUDIO_KEY, audioKeys.get(selectedAudioIndex));
@@ -1674,6 +1738,11 @@ public final class SettingsActivity extends Activity {
         if (event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
             boolean horizontalKey = event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_LEFT
                     || event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_RIGHT;
+            if (horizontalKey && audioSyncShown && getCurrentFocus() == audioSyncValue) {
+                // Sincronía del audio: ◀ ▶ cambian el valor en vez de mover el foco.
+                stepAudioSync(event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_LEFT ? -1 : 1);
+                return true;
+            }
             if (horizontalKey) {
                 // Left/right changes tabs only while the tab bar itself has focus.
                 // Content controls must receive the key and must never escape

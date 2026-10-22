@@ -93,9 +93,11 @@ abstract class MainPlayback extends MainState {
         playbackBufferManager = new PlaybackBufferManager(Runtime.getRuntime().maxMemory(),
                 activityManager != null && activityManager.isLowRamDevice());
         playerUsesVolumeNormalization = isVolumeNormalizationEnabled();
+        playerUsesSoftwareMp2 = isSoftwareMp2Enabled();
         VibeRenderersFactory renderersFactory = new VibeRenderersFactory(
                 this,
-                playerUsesVolumeNormalization
+                playerUsesVolumeNormalization,
+                playerUsesSoftwareMp2
         );
         OkHttpDataSource.Factory httpDataSourceFactory =
                 new OkHttpDataSource.Factory(SharedHttpClient.get()).setUserAgent(PLAYER_USER_AGENT)
@@ -1580,6 +1582,9 @@ abstract class MainPlayback extends MainState {
         TsAudioSession tsAudio = new TsAudioSession(TsAudioSession.languageOfPreference(
                 playbackPreferences == null ? "" : playbackPreferences.getAudio(channel)));
         currentTsAudioSession = tsAudio;
+        // Sincronía del audio guardada para este canal (0.6.29).
+        AudioSyncOffset.setMs(playbackPreferences == null ? 0
+                : playbackPreferences.getAudioSyncMs(channel));
         playbackDataSourceFactory = new TsAudioFilterDataSource.Factory(
                 playbackDataSourceFactory, tsAudio);
         if (playbackManifestCache != null) {
@@ -1599,16 +1604,18 @@ abstract class MainPlayback extends MainState {
         MediaItem.Builder itemBuilder = mediaItemFor(channel, source.getPlaybackUri()).buildUpon();
         if (source.hasMimeType()) itemBuilder.setMimeType(source.getMimeType());
         boolean slowRelay = isSlowRelay(source);
+        // Velocidad fija en 1x en todos los canales en vivo (0.6.29, pedido del usuario): al
+        // acelerar o frenar para seguir el vivo, el audio pasa por un estirador de tiempo que
+        // puede correrlo respecto del video. Si se atrasa, alcanza el vivo saltando.
+        MediaItem.LiveConfiguration.Builder live = new MediaItem.LiveConfiguration.Builder()
+                .setMinPlaybackSpeed(1f)
+                .setMaxPlaybackSpeed(1f);
         if (slowRelay) {
             // Lista de 60 s con segmentos de 5 s que el servidor entrega a saltos: 30 s detrás
-            // del vivo hay segmentos ya publicados para adelantar, y la velocidad queda fija
-            // (sin acelerar para alcanzar el vivo).
-            itemBuilder.setLiveConfiguration(new MediaItem.LiveConfiguration.Builder()
-                    .setTargetOffsetMs(SLOW_RELAY_LIVE_OFFSET_MS)
-                    .setMinPlaybackSpeed(1f)
-                    .setMaxPlaybackSpeed(1f)
-                    .build());
+            // del vivo hay segmentos ya publicados para adelantar.
+            live.setTargetOffsetMs(SLOW_RELAY_LIVE_OFFSET_MS);
         }
+        itemBuilder.setLiveConfiguration(live.build());
         if (playbackBufferManager != null) {
             playbackBufferManager.setMinimumStartBufferMs(slowRelay ? SLOW_RELAY_START_BUFFER_MS : 0L);
         }

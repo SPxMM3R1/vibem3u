@@ -11,6 +11,7 @@
 
 ## Hoy, en una mirada
 
+- **0.6.29 — sincronía del audio (2026-10-22, mockups aprobados «Si aplica»)**: el usuario notó un leve retraso del audio. Análisis: la separación de idiomas no toca tiempos; candidatos: velocidad variable en vivo (estirador de tiempo), desfase de origen del doblaje, latencia HDMI. Cambios: velocidad fija 1x en vivo; fila «Sincronía del audio» en En reproducción (◀ ▶ de a 20 ms, ±500, por canal, en vivo; OK vuelve a 0 — el mockup decía «Atrás», pero Atrás guarda y sale); Sistema › Reproducción › «Audio MP2 por software» (Activado/Desactivado) con aviso de si el equipo tiene decodificador propio. Probado en emulador: fila visible, +60 ms se guarda y reabre, OK restablece, apagar/encender MP2 recrea el reproductor sin errores.
 - **0.6.28 — guía de Lista 1 sin esperar a la red (2026-10-21)**: la combinación de guías va en su propio hilo; antes esperaba la descarga/revalidación y la guía en caché tardaba en verse. Emulador con red lenta (EDGE/GPRS): 0.6.27 ~16 s, 0.6.28 ~2,4 s en pantalla (0,7 s desde el pedido).
 - **0.6.27 — guías compartidas (2026-10-21)**: la app entiende canales que usan la guía de otro (`data-guide-of`) y XML con gzip. Prepara la `epg-2.xml` sin copias (44 → 6 MB). Probada en emulador con la guía actual.
 - **0.6.26 — memoria de la guía (2026-10-21)**: pedido de «optimización agresiva de memoria». La guía de Lista 2 (47 MB) se descarga y lee desde el disco (sin cargarla entera), se valida por huella sin releerla, no se reprocesa si no cambió, fechas con lector rápido y textos repetidos compartidos. Emulador con Lista 2 activa: pico de Java heap de ~170 MB a ~60 MB, PSS total de ~217 MB a ~100 MB; la guía de Lista 2 se ve (1237 Warner Channel).
@@ -183,6 +184,7 @@
 
 - **2026-10-21 — 0.6.27**: guías compartidas (data-guide-of) y gzip.
 - **2026-10-21 — 0.6.28**: combinación de guías en hilo propio (EPG de Lista 1 visible antes).
+- **2026-10-22 — 0.6.29**: velocidad 1x en vivo, sincronía del audio por canal, opción de MP2 por software.
 - **2026-10-21 — 0.6.26**: memoria de la guía: pico ~170 → ~60 MB.
 - **2026-10-21 — 0.6.25**: recordar solo Lista 1 y guía de Lista 1 primero.
 - **2026-10-19 — 0.6.23**: `backupm3u` hasta 16 en `PublishedPlaybackCatalog`; prueba con 18 IDs conserva 16 en orden. Publicado y verificado: `v0.6.23`, Android CI `39355569525`, Publicar APK `39355575294`; APK 2.846.435 bytes, SHA-256 `ec91fda30639a93538ae51d4471e516dedd6f3497c5044ba5d4c7ac98d5d0613`.

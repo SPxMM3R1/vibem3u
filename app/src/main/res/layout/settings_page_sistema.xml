@@ -89,6 +89,89 @@
         android:textColor="@color/minimal_muted"
         android:textSize="8.5sp"
         android:visibility="gone" />
+    <!-- Reproducción (0.6.29, mockup aprobado): audio MP2 por software. -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="4dp"
+        android:fontFamily="sans-serif-medium"
+        android:letterSpacing="0.2"
+        android:singleLine="true"
+        android:text="@string/settings_section_system_playback"
+        android:textAllCaps="true"
+        android:textColor="#6BFFFFFF"
+        android:textSize="7sp" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:orientation="vertical"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp">
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:includeFontPadding="false"
+            android:text="@string/software_mp2_title"
+            android:textColor="@color/settings_row_title"
+            android:textSize="11.5sp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/software_mp2_detail"
+            android:textColor="@color/settings_row_detail"
+            android:textSize="8.5sp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/software_mp2_on"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:layout_marginEnd="20dp"
+                android:background="@drawable/segment_option"
+                android:focusable="true"
+                android:gravity="center_vertical|start"
+                android:includeFontPadding="false"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="10dp"
+                android:stateListAnimator="@null"
+                android:text="@string/software_mp2_on"
+                android:textAllCaps="false"
+                android:textColor="@color/segment_option_text"
+                android:textSize="11sp" />
+            <Button
+                android:id="@+id/software_mp2_off"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:background="@drawable/segment_option"
+                android:focusable="true"
+                android:gravity="center_vertical|start"
+                android:includeFontPadding="false"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="10dp"
+                android:stateListAnimator="@null"
+                android:text="@string/software_mp2_off"
+                android:textAllCaps="false"
+                android:textColor="@color/segment_option_text"
+                android:textSize="11sp" />
+        </LinearLayout>
+        <TextView
+            android:id="@+id/software_mp2_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="@color/minimal_muted"
+            android:textSize="8.5sp" />
+    </LinearLayout>
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

@@ -1570,6 +1570,7 @@ public final class MainActivity extends MainSelector {
                     .putStringArrayListExtra(SettingsActivity.EXTRA_AUDIO_KEYS, audioKeys)
                     .putExtra(SettingsActivity.EXTRA_AUDIO_SELECTED_INDEX, audioSelected);
         }
+        intent.putExtra(SettingsActivity.EXTRA_AUDIO_SYNC_MS, playbackPreferences.getAudioSyncMs(channel));
         String audioLanguage = playingAudio == null ? ""
                 : AudioTrackOptions.languageName(AudioTrackOptions.normalizeLanguage(playingAudio.language));
         if (!audioLanguage.isEmpty()) {
@@ -1654,6 +1655,11 @@ public final class MainActivity extends MainSelector {
             if (player != null) applySavedSubtitlePreference(player.getCurrentTracks());
         }
 
+        if (data.hasExtra(SettingsActivity.EXTRA_AUDIO_SYNC_MS)) {
+            playbackPreferences.rememberAudioSyncMs(
+                    channel, data.getIntExtra(SettingsActivity.EXTRA_AUDIO_SYNC_MS, 0));
+        }
+
         if (data.hasExtra(SettingsActivity.EXTRA_AUDIO_KEY)) {
             String key = data.getStringExtra(SettingsActivity.EXTRA_AUDIO_KEY);
             if (key != null && key.startsWith(TS_AUDIO_KEY_PREFIX)) {
@@ -1680,6 +1686,8 @@ public final class MainActivity extends MainSelector {
                 loadingPanel.setAlpha(blackScreenDimmed ? BLACK_SCREEN_ALPHA : 1f);
             }
             if (playbackErrorDeferred) mainHandler.post(showDeferredPlaybackError);
+            // Opciones movió la sincronía en vivo: vale lo guardado (o lo de antes, si no se guardó).
+            restoreAudioSyncForCurrentChannel();
             // Opciones › Canales puede volver a mostrar canales ocultos (0.5.90).
             String previousVisibility = channelVisibility.signature();
             channelVisibility = new ChannelVisibility(this);
@@ -1704,7 +1712,8 @@ public final class MainActivity extends MainSelector {
                     resolverCoordinator.clear();
                 }
                 boolean normalizationChanged =
-                        playerUsesVolumeNormalization != isVolumeNormalizationEnabled();
+                        playerUsesVolumeNormalization != isVolumeNormalizationEnabled()
+                                || playerUsesSoftwareMp2 != isSoftwareMp2Enabled();
                 if (normalizationChanged) {
                     if (playbackBitrateMeter != null) {
                         playbackBitrateMeter.close();
@@ -1793,6 +1802,19 @@ public final class MainActivity extends MainSelector {
     boolean isVolumeNormalizationEnabled() {
         return getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE)
                 .getBoolean(SettingsActivity.KEY_NORMALIZE_VOLUME, false);
+    }
+
+    boolean isSoftwareMp2Enabled() {
+        return getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE)
+                .getBoolean(SettingsActivity.KEY_SOFTWARE_MP2, true);
+    }
+
+    void restoreAudioSyncForCurrentChannel() {
+        if (playbackPreferences == null || channelIndex < 0 || channelIndex >= channels.size()) {
+            AudioSyncOffset.setMs(0);
+            return;
+        }
+        AudioSyncOffset.setMs(playbackPreferences.getAudioSyncMs(channels.get(channelIndex)));
     }
 
     boolean isAutoReconnectEnabled() {

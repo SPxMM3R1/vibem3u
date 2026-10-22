@@ -163,6 +163,79 @@
             android:layout_marginTop="10dp"
             android:orientation="vertical" />
     </LinearLayout>
+    <!-- Sincronía del audio (0.6.29, mockup aprobado): ◀ valor ▶, se recuerda por canal. -->
+    <LinearLayout
+        android:id="@+id/settings_audio_sync_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:orientation="vertical"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:visibility="gone">
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:includeFontPadding="false"
+            android:text="@string/settings_audio_sync_title"
+            android:textColor="@color/settings_row_title"
+            android:textSize="11.5sp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/settings_audio_sync_detail"
+            android:textColor="@color/settings_row_detail"
+            android:textSize="8.5sp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <TextView
+                android:id="@+id/settings_audio_sync_less"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:focusable="false"
+                android:text="\u25C0"
+                android:textColor="@color/minimal_muted"
+                android:textSize="8sp" />
+            <Button
+                android:id="@+id/settings_audio_sync_value"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:background="@drawable/segment_option"
+                android:focusable="true"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:minHeight="0dp"
+                android:minWidth="48dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:stateListAnimator="@null"
+                android:textAllCaps="false"
+                android:textColor="@color/segment_option_text"
+                android:textSize="11sp" />
+            <TextView
+                android:id="@+id/settings_audio_sync_more"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:focusable="false"
+                android:text="\u25B6"
+                android:textColor="@color/minimal_muted"
+                android:textSize="8sp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="18dp"
+                android:text="@string/settings_audio_sync_hint"
+                android:textColor="@color/minimal_muted"
+                android:textSize="8.5sp" />
+        </LinearLayout>
+    </LinearLayout>
     <LinearLayout
         android:id="@+id/open_source_selector"
         android:layout_width="match_parent"

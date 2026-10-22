@@ -89,6 +89,16 @@
     <string name="settings_subtitles_title">Subtítulos</string>
     <string name="settings_audio_title">Audio</string>
     <string name="settings_audio_detail">Idioma y pista de sonido. Se recuerda para este canal.</string>
+    <string name="settings_audio_sync_title">Sincronía del audio</string>
+    <string name="settings_audio_sync_detail">Se recuerda para este canal. Si la voz llega después que los labios, bájalo; si llega antes, súbelo. ◀ ▶ cambia de a 20 ms.</string>
+    <string name="settings_audio_sync_hint">0 ms = original · OK restablece</string>
+    <string name="settings_section_system_playback">Reproducción</string>
+    <string name="software_mp2_title">Audio MP2 por software</string>
+    <string name="software_mp2_detail">Para equipos sin decodificador MP2 propio (ESPN, AMC y otros directos). Si lo desactivas en esos equipos, esos canales quedan sin sonido.</string>
+    <string name="software_mp2_on">Activado</string>
+    <string name="software_mp2_off">Desactivado</string>
+    <string name="software_mp2_device_has">Este equipo tiene decodificador MP2 propio: usa el suyo y este ajuste no cambia nada aquí.</string>
+    <string name="software_mp2_device_lacks">Este equipo no tiene decodificador MP2 propio: usa el de software para esos canales.</string>
     <string name="settings_provider_selection_web">Los canales de Highfly y TvVoo se eligen, ordenan y ocultan en el editor web.</string>
     <string name="resolver_groups_title">Proveedores de señal</string>
     <string name="resolver_groups_description">Apaga un proveedor para ocultar todos sus canales. Las fuentes directas de las listas no cambian.</string>
