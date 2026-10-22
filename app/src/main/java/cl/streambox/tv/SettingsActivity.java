@@ -95,8 +95,10 @@ public final class SettingsActivity extends Activity {
     public static final String EXTRA_AUDIO_SELECTED_INDEX = "audio_selected_index";
     /** Resultado: clave de la pista elegida. */
     public static final String EXTRA_AUDIO_KEY = "audio_key";
-    /** Sincronía del audio del canal en ms (0.6.29): entra la guardada, sale la elegida. */
+    /** Sincronía del audio guardada para el canal, en ms (0.6.29): se muestra en la fila. */
     public static final String EXTRA_AUDIO_SYNC_MS = "audio_sync_ms";
+    /** Al volver, abrir el ajuste de sincronía sobre el video (0.6.31). */
+    public static final String EXTRA_ADJUST_AUDIO_SYNC = "adjust_audio_sync";
     /** Idioma de la pista que suena, para «Información de la señal». */
     public static final String EXTRA_SIGNAL_AUDIO_LANGUAGE = "signal_audio_language";
     public static final String EXTRA_RESOLVER_IDS = "resolver_ids";
@@ -175,9 +177,7 @@ public final class SettingsActivity extends Activity {
     private int selectedAudioIndex = -1;
     private int initialAudioIndex = -1;
     private final List<Button> audioOptionButtons = new ArrayList<>();
-    private Button audioSyncValue;
-    private int audioSyncMs;
-    private boolean audioSyncShown;
+    private boolean adjustAudioSyncOnSave;
     private boolean automaticQuality;
     private int selectedQualityIndex = -1;
     private ArrayList<String> qualityLabels = new ArrayList<>();
@@ -780,30 +780,25 @@ public final class SettingsActivity extends Activity {
         }
     }
 
-    /** Fila «Sincronía del audio» (0.6.29, mockup aprobado): ◀ ▶ la mueve en vivo. */
+    /**
+     * Fila «Sincronía del audio» (0.6.31, mockup aprobado): como «Tamaño del logo», OK vuelve
+     * al video y el ajuste queda solo sobre él.
+     */
     private void bindAudioSync(Intent intent) {
         View row = findViewById(R.id.settings_audio_sync_row);
-        audioSyncValue = findViewById(R.id.settings_audio_sync_value);
-        audioSyncShown = !classicUi && row != null && audioSyncValue != null && hasCurrentChannel;
-        if (row != null) row.setVisibility(audioSyncShown ? View.VISIBLE : View.GONE);
-        if (!audioSyncShown) return;
-        audioSyncMs = AudioSyncOffset.clampMs(intent.getIntExtra(EXTRA_AUDIO_SYNC_MS, 0));
-        audioSyncValue.setOnClickListener(view -> setAudioSync(0));
-        View left = findViewById(R.id.settings_audio_sync_less);
-        View right = findViewById(R.id.settings_audio_sync_more);
-        if (left != null) left.setOnClickListener(view -> stepAudioSync(-1));
-        if (right != null) right.setOnClickListener(view -> stepAudioSync(1));
-        setAudioSync(audioSyncMs);
-    }
-
-    private void stepAudioSync(int direction) {
-        setAudioSync(audioSyncMs + direction * AudioSyncOffset.STEP_MS);
-    }
-
-    private void setAudioSync(int valueMs) {
-        audioSyncMs = AudioSyncOffset.clampMs(valueMs);
-        audioSyncValue.setText(AudioSyncOffset.label(audioSyncMs));
-        AudioSyncOffset.setMs(audioSyncMs); // en vivo sobre el canal que suena
+        TextView action = findViewById(R.id.settings_audio_sync_action);
+        if (row == null || action == null) return;
+        if (classicUi || !hasCurrentChannel) {
+            row.setVisibility(View.GONE);
+            return;
+        }
+        action.setText(getString(R.string.settings_audio_sync_action,
+                AudioSyncOffset.label(intent.getIntExtra(EXTRA_AUDIO_SYNC_MS, 0))));
+        row.setVisibility(View.VISIBLE);
+        row.setOnClickListener(view -> {
+            adjustAudioSyncOnSave = true;
+            save();
+        });
     }
 
     /** Sistema › Audio MP2 por software (0.6.29, mockup aprobado). */
@@ -1687,7 +1682,9 @@ public final class SettingsActivity extends Activity {
                 .putExtra(KEY_PLAYLIST_ENABLED, enabled1)
                 .putExtra(KEY_PLAYLIST_ENABLED_2, enabled2)
                 .putExtra(EXTRA_OPEN_SOURCE_SELECTOR, openSourceSelectorOnSave)
-                .putExtra(EXTRA_ADJUST_LOGO_SIZE, adjustLogoSizeOnSave);
+                .putExtra(EXTRA_ADJUST_LOGO_SIZE, adjustLogoSizeOnSave)
+                .putExtra(EXTRA_ADJUST_AUDIO_SYNC, adjustAudioSyncOnSave);
+        adjustAudioSyncOnSave = false;
         openSourceSelectorOnSave = false;
         adjustLogoSizeOnSave = false;
         if (hasCurrentChannel) {
@@ -1721,7 +1718,6 @@ public final class SettingsActivity extends Activity {
             if (subtitlesAvailable) {
                 result.putExtra(EXTRA_SUBTITLES_ENABLED, subtitlesSwitch.isChecked());
             }
-            if (audioSyncShown) result.putExtra(EXTRA_AUDIO_SYNC_MS, audioSyncMs);
             if (selectedAudioIndex >= 0 && selectedAudioIndex != initialAudioIndex
                     && selectedAudioIndex < audioKeys.size()) {
                 result.putExtra(EXTRA_AUDIO_KEY, audioKeys.get(selectedAudioIndex));
@@ -1756,11 +1752,6 @@ public final class SettingsActivity extends Activity {
         if (event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
             boolean horizontalKey = event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_LEFT
                     || event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_RIGHT;
-            if (horizontalKey && audioSyncShown && getCurrentFocus() == audioSyncValue) {
-                // Sincronía del audio: ◀ ▶ cambian el valor en vez de mover el foco.
-                stepAudioSync(event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_LEFT ? -1 : 1);
-                return true;
-            }
             if (horizontalKey) {
                 // Left/right changes tabs only while the tab bar itself has focus.
                 // Content controls must receive the key and must never escape

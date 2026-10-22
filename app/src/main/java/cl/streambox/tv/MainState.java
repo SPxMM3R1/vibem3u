@@ -345,6 +345,13 @@ abstract class MainState extends Activity {
     /** La señal recordada falló y ya se volvió una vez a la principal. */
     boolean backupReturnedToPrincipal;
     boolean adjustLogoSizeAfterSettings;
+    /** Sincronía del audio sobre el video (0.6.31). */
+    boolean adjustAudioSyncAfterSettings;
+    boolean audioSyncAdjusting;
+    int audioSyncOriginalMs;
+    int audioSyncAdjustMs;
+    View audioSyncOverlay;
+    TextView audioSyncValueView;
     String logoSizeKey;
     float logoSizeOriginal = 1f;
     float logoSizeScale = 1f;

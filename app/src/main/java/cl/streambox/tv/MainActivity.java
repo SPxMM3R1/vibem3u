@@ -235,6 +235,8 @@ public final class MainActivity extends MainSelector {
         channelLogoFallback = findViewById(R.id.channel_logo_fallback);
         channelLogoFrame = findViewById(R.id.channel_logo_frame);
         logoSizeAdjust = findViewById(R.id.logo_size_adjust);
+        audioSyncOverlay = findViewById(R.id.audio_sync_overlay);
+        audioSyncValueView = findViewById(R.id.audio_sync_value);
         logoSizeValue = findViewById(R.id.logo_size_value);
         if (channelLogoFrame != null && logoSizeAdjust != null) {
             View.OnLayoutChangeListener reposition = (view, l, t, r, b, ol, ot, or, ob) -> {
@@ -1091,6 +1093,7 @@ public final class MainActivity extends MainSelector {
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
         if (logoSizeAdjusting && handleLogoSizeKey(event)) return true;
+        if (audioSyncAdjusting && handleAudioSyncKey(event)) return true;
         if (isGuideVisible() && handleGuideKey(event)) return true;
         if (isQualityUpgradeVisible() && handleQualityUpgradeKey(event)) return true;
         if (isPlaybackErrorVisible() && handlePlaybackErrorKey(event)) return true;
@@ -1260,6 +1263,13 @@ public final class MainActivity extends MainSelector {
         // El sistema invoca esto al soltar BACK: si al bajar ya cerró la Guía o el selector,
         // no se sigue con el OSD ni con «¿Salir de la app?».
         if (takeBackConsumedByPanel()) return;
+        if (audioSyncAdjusting) {
+            // Atrás cancela el ajuste de sincronía (0.6.31) y queda el video. Se llega aquí al
+            // bajar la tecla; el callback de atrás al soltarla no debe abrir «¿Salir de la app?».
+            finishAudioSyncAdjust(false);
+            markBackConsumedByPanel();
+            return;
+        }
         if (isPlaybackErrorVisible()) {
             // La pantalla de error se cierra y queda el video (o el negro) sin más.
             hidePlaybackErrorScreen();
@@ -1655,11 +1665,6 @@ public final class MainActivity extends MainSelector {
             if (player != null) applySavedSubtitlePreference(player.getCurrentTracks());
         }
 
-        if (data.hasExtra(SettingsActivity.EXTRA_AUDIO_SYNC_MS)) {
-            playbackPreferences.rememberAudioSyncMs(
-                    channel, data.getIntExtra(SettingsActivity.EXTRA_AUDIO_SYNC_MS, 0));
-        }
-
         if (data.hasExtra(SettingsActivity.EXTRA_AUDIO_KEY)) {
             String key = data.getStringExtra(SettingsActivity.EXTRA_AUDIO_KEY);
             if (key != null && key.startsWith(TS_AUDIO_KEY_PREFIX)) {
@@ -1740,6 +1745,8 @@ public final class MainActivity extends MainSelector {
                         SettingsActivity.EXTRA_OPEN_SOURCE_SELECTOR, false);
                 adjustLogoSizeAfterSettings = data != null && data.getBooleanExtra(
                         SettingsActivity.EXTRA_ADJUST_LOGO_SIZE, false);
+                adjustAudioSyncAfterSettings = data != null && data.getBooleanExtra(
+                        SettingsActivity.EXTRA_ADJUST_AUDIO_SYNC, false);
             } else if (sources.isEmpty() && !hasPublishedProviderChannels()) {
                 openSettings();
             }
@@ -1985,6 +1992,10 @@ public final class MainActivity extends MainSelector {
         if (hasFocus && adjustLogoSizeAfterSettings && !settingsOpen) {
             adjustLogoSizeAfterSettings = false;
             mainHandler.post(this::startLogoSizeAdjust);
+        }
+        if (hasFocus && adjustAudioSyncAfterSettings && !settingsOpen) {
+            adjustAudioSyncAfterSettings = false;
+            mainHandler.post(this::startAudioSyncAdjust);
         }
         updateDiagnosticsVisibility();
         if (hasFocus && !resourcesReleased) {

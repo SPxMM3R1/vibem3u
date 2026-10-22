@@ -705,6 +705,7 @@ abstract class MainOverlays extends MainPlayback {
         channelLogoFallback.setText(fallback);
         if (!expectedIdentity.equals(displayedLogoIdentity)) {
             finishLogoSizeAdjust(false);
+            finishAudioSyncAdjust(false);
             displayedLogoBitmap = null;
             displayedLogoKey = null;
             channelLogo.setImageDrawable(null);
@@ -933,6 +934,89 @@ abstract class MainOverlays extends MainPlayback {
         if (guideView != null) guideView.invalidate();
         mainHandler.removeCallbacks(hideOverlay);
         mainHandler.postDelayed(hideOverlay, OVERLAY_TIMEOUT_MS);
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Sincronía del audio sobre el video (0.6.31): Opciones › En reproducción › Sincronía
+    // ---------------------------------------------------------------------------------
+
+    void startAudioSyncAdjust() {
+        if (classicUi || audioSyncOverlay == null || audioSyncAdjusting
+                || channelIndex < 0 || channelIndex >= channels.size()) return;
+        audioSyncAdjusting = true;
+        audioSyncOriginalMs = playbackPreferences.getAudioSyncMs(channels.get(channelIndex));
+        audioSyncAdjustMs = audioSyncOriginalMs;
+        // Solo el ajuste sobre el video: sin OSD.
+        mainHandler.removeCallbacks(hideOverlay);
+        hideOverlay.run();
+        audioSyncOverlay.setVisibility(View.VISIBLE);
+        applyAudioSyncAdjust();
+    }
+
+    void applyAudioSyncAdjust() {
+        AudioSyncOffset.setMs(audioSyncAdjustMs); // se escucha al instante
+        String value = getString(R.string.audio_sync_value, AudioSyncOffset.label(audioSyncAdjustMs));
+        android.text.SpannableString styled = new android.text.SpannableString(value);
+        for (int index = 0; index < value.length(); index++) {
+            char c = value.charAt(index);
+            if (c == '◀' || c == '▶') {
+                styled.setSpan(new android.text.style.RelativeSizeSpan(0.5f), index, index + 1, 0);
+                styled.setSpan(new android.text.style.ForegroundColorSpan(0x8CFFFFFF), index, index + 1, 0);
+            }
+        }
+        audioSyncValueView.setText(styled);
+    }
+
+    /** ◀ ▶ de a 20 ms, ▼ vuelve al original (0 ms), OK guarda. Otra tecla cancela. */
+    boolean handleAudioSyncKey(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        boolean ours = keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER;
+        if (!ours) {
+            // Atrás lo cancela en el callback de atrás (handleBackAction), sin «¿Salir de la
+            // app?»; otra tecla deshace el ajuste y sigue su curso.
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0
+                    && !isBackKey(keyCode)) {
+                finishAudioSyncAdjust(false);
+            }
+            return false;
+        }
+        if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                audioSyncAdjustMs = AudioSyncOffset.clampMs(audioSyncAdjustMs
+                        + (keyCode == KeyEvent.KEYCODE_DPAD_LEFT ? -1 : 1) * AudioSyncOffset.STEP_MS);
+                applyAudioSyncAdjust();
+                return true;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                audioSyncAdjustMs = 0;
+                applyAudioSyncAdjust();
+                return true;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+                if (event.getRepeatCount() == 0) finishAudioSyncAdjust(true);
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    private static boolean isBackKey(int keyCode) {
+        return keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE;
+    }
+
+    void finishAudioSyncAdjust(boolean save) {
+        if (!audioSyncAdjusting) return;
+        audioSyncAdjusting = false;
+        if (save && channelIndex >= 0 && channelIndex < channels.size()) {
+            playbackPreferences.rememberAudioSyncMs(channels.get(channelIndex), audioSyncAdjustMs);
+            AudioSyncOffset.setMs(audioSyncAdjustMs);
+        } else {
+            AudioSyncOffset.setMs(audioSyncOriginalMs);
+        }
+        audioSyncOverlay.setVisibility(View.GONE);
     }
 
     boolean isCurrentLogo(int expectedIndex, String expectedIdentity) {

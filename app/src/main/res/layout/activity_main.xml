@@ -133,4 +133,6 @@
 
     <include layout="@layout/notice_overlay" />
 
+    <include layout="@layout/audio_sync_overlay" />
+
 </FrameLayout>
