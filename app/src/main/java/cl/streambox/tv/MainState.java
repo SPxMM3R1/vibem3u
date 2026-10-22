@@ -123,6 +123,14 @@ abstract class MainState extends Activity {
      * no compiten con el arranque del video ni ocupan el hilo de red de la lista (0.5.85).
      */
     final ExecutorService epgExecutor = backgroundExecutor("vibem3u-epg");
+    /**
+     * 0.6.28: la combinación de guías va en su propio carril. En la cola de descargas
+     * quedaba detrás de la revisión de red (y de procesar la guía nueva), así que la guía
+     * de Lista 1 ya leída del disco tardaba en verse.
+     */
+    final ExecutorService epgMergeExecutor = backgroundExecutor("vibem3u-epg-merge");
+    /** Momento del primer pedido de guía de esta carga (para medir cuándo se ve). */
+    long epgRequestedAtMillis;
     final ExecutorService prefetchExecutor = backgroundExecutor("vibem3u-prefetch");
     static final long NEIGHBOR_PREFETCH_DELAY_MS = 5_000L;
     static final long NEIGHBOR_REWARM_MS = 4L * 60L * 1000L;

@@ -526,6 +526,7 @@ public final class MainActivity extends MainSelector {
     }
 
     void submitEpgLoad(URI epgUri, int generation, boolean listOne) {
+        if (listOne) epgRequestedAtMillis = android.os.SystemClock.elapsedRealtime();
         Log.i(PlaybackStartupAnalytics.LOG_TAG, "EPG pedida (" + (listOne ? "Lista 1" : "otra lista")
                 + "): " + epgUri);
         epgExecutor.submit(() -> {
@@ -635,12 +636,15 @@ public final class MainActivity extends MainSelector {
         List<EpgData> snapshot = Collections.unmodifiableList(
                 new ArrayList<>(epgDataByUrl.values())
         );
-        epgExecutor.submit(() -> {
+        epgMergeExecutor.submit(() -> {
             EpgData merged = EpgData.merge(snapshot);
             mainHandler.post(() -> {
                 if (generation != playlistGeneration
                         || mergeGeneration != epgMergeGeneration
                         || isFinishing()) return;
+                Log.i(PlaybackStartupAnalytics.LOG_TAG, "EPG visible: " + merged.getProgrammeCount()
+                        + " programas, " + (android.os.SystemClock.elapsedRealtime() - epgRequestedAtMillis)
+                        + " ms desde el pedido");
                 epgData = merged;
                 epgUpdatedAtMillis = System.currentTimeMillis();
                 mainHandler.removeCallbacks(updateProgramme);
@@ -1379,6 +1383,7 @@ public final class MainActivity extends MainSelector {
         resourceCacheExecutor.shutdownNow();
         catalogExecutor.shutdownNow();
         epgExecutor.shutdownNow();
+        epgMergeExecutor.shutdownNow();
         prefetchExecutor.shutdownNow();
 
         if (playbackBitrateMeter != null) {
