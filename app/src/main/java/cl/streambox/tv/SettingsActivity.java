@@ -828,10 +828,28 @@ public final class SettingsActivity extends Activity {
         });
         render.run();
         if (status != null) {
-            status.setText(VibeRenderersFactory.hasPlatformMp2Decoder()
+            status.setText(hasPlatformMp2Decoder()
                     ? R.string.software_mp2_device_has
                     : R.string.software_mp2_device_lacks);
         }
+    }
+
+    /** El equipo trae decodificador MP2 propio (entonces el de software no se usa). */
+    private static boolean hasPlatformMp2Decoder() {
+        try {
+            for (android.media.MediaCodecInfo info : new android.media.MediaCodecList(
+                    android.media.MediaCodecList.REGULAR_CODECS).getCodecInfos()) {
+                if (info.isEncoder()) continue;
+                for (String type : info.getSupportedTypes()) {
+                    if (androidx.media3.common.MimeTypes.AUDIO_MPEG_L2.equalsIgnoreCase(type)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // Sin lista de códecs: se informa como «sin decodificador propio».
+        }
+        return false;
     }
 
     private void renderQualityOptions() {

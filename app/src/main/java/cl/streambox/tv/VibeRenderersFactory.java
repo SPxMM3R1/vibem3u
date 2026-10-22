@@ -108,22 +108,4 @@ final class VibeRenderersFactory extends DefaultRenderersFactory {
         // Sincronía del audio por canal (0.6.29): la usan todos los renderers de audio.
         return new AudioSyncOffset.Sink(builder.build());
     }
-
-    /** El equipo trae decodificador MP2 propio (entonces el de software no se usa). */
-    static boolean hasPlatformMp2Decoder() {
-        try {
-            for (android.media.MediaCodecInfo info : new android.media.MediaCodecList(
-                    android.media.MediaCodecList.REGULAR_CODECS).getCodecInfos()) {
-                if (info.isEncoder()) continue;
-                for (String type : info.getSupportedTypes()) {
-                    if (androidx.media3.common.MimeTypes.AUDIO_MPEG_L2.equalsIgnoreCase(type)) {
-                        return true;
-                    }
-                }
-            }
-        } catch (RuntimeException ignored) {
-            // Sin lista de códecs: se informa como «sin decodificador propio».
-        }
-        return false;
-    }
 }

@@ -13,7 +13,6 @@ import androidx.media3.exoplayer.audio.ForwardingAudioSink;
  * <p>El valor vive aquí (estático) para que Opciones lo cambie en vivo mientras el canal suena;
  * lo guardado por canal está en {@link PlaybackPreferences}.
  */
-@UnstableApi
 final class AudioSyncOffset {
     static final int STEP_MS = 20;
     static final int LIMIT_MS = 500;
@@ -41,6 +40,7 @@ final class AudioSyncOffset {
     }
 
     /** Envuelve el sink de audio del reproductor y desplaza la posición que informa. */
+    @UnstableApi
     static final class Sink extends ForwardingAudioSink {
         Sink(AudioSink sink) {
             super(sink);

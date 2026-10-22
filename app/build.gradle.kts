@@ -30,8 +30,8 @@ android {
         minSdk = 29
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 238
-        versionName = "0.6.29"
+        versionCode = 239
+        versionName = "0.6.30"
         buildConfigField("boolean", "ENABLE_APP_UPDATES", "true")
         // Client ID público de la app OAuth de VibeM3U para el Device Flow de GitHub (papelera
         // desde la TV, 0.5.90). No es un secreto; CI puede reemplazarlo con la variable del repo.
