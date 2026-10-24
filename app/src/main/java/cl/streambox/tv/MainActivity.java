@@ -1511,6 +1511,9 @@ public final class MainActivity extends MainSelector {
                 || channelIndex >= channels.size()) return intent;
 
         Channel channel = channels.get(channelIndex);
+        intent.putExtra(SettingsActivity.EXTRA_SIGNAL_FORMAT, signalFormatLabel())
+                .putExtra(SettingsActivity.EXTRA_SIGNAL_RESOLVER, signalResolverLabel(channel))
+                .putExtra(SettingsActivity.EXTRA_SIGNAL_BACKUP, signalBackupLabel(channel));
         intent.putExtra(SettingsActivity.EXTRA_CHANNEL_INDEX, channelIndex)
                 .putExtra(SettingsActivity.EXTRA_CHANNEL_TVG_ID, channel.getTvgId())
                 .putExtra(SettingsActivity.EXTRA_CHANNEL_NAME, channel.getName());
@@ -1823,6 +1826,71 @@ public final class MainActivity extends MainSelector {
     boolean isVolumeNormalizationEnabled() {
         return getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE)
                 .getBoolean(SettingsActivity.KEY_NORMALIZE_VOLUME, false);
+    }
+
+    /**
+     * Opciones › Información de la señal (0.6.34): formato del stream. Primero lo que el
+     * reproductor cargó (manifiesto HLS/DASH); si no, el tipo o la extensión de la fuente.
+     */
+    String signalFormatLabel() {
+        Object manifest = player == null ? null : player.getCurrentManifest();
+        if (manifest instanceof androidx.media3.exoplayer.hls.HlsManifest) return "HLS";
+        if (manifest instanceof androidx.media3.exoplayer.dash.manifest.DashManifest) return "DASH";
+        ResolvedPlaybackSource source = currentPlaybackSource;
+        if (source == null) return "";
+        String mime = source.getMimeType().toLowerCase(Locale.ROOT);
+        if (mime.contains("mpegurl")) return "HLS";
+        if (mime.contains("dash")) return "DASH";
+        if (mime.contains("mp2t")) return "MPEG-TS";
+        if (mime.contains("mp4")) return "MP4";
+        URI uri = source.getPlaybackUri();
+        String path = uri == null || uri.getPath() == null ? "" : uri.getPath().toLowerCase(Locale.ROOT);
+        if (path.endsWith(".m3u8") || path.endsWith(".m3u")) return "HLS";
+        if (path.endsWith(".mpd")) return "DASH";
+        if (path.endsWith(".ts")) return "MPEG-TS";
+        if (path.endsWith(".mp4")) return "MP4";
+        return "";
+    }
+
+    /** Resolutor que abrió el canal; «Directo» sin resolutor; marca si suena el respaldo. */
+    String signalResolverLabel(Channel channel) {
+        ResolvedPlaybackSource source = currentPlaybackSource;
+        String id = source != null && source.hasResolver() ? source.getResolverId() : "";
+        if (AppStrings.isBlank(id) && channel != null) {
+            String attribute = channel.getAttributes().get("x-resolver");
+            id = attribute == null ? "" : attribute;
+        }
+        String name = resolverDisplayName(id);
+        if (tvvooBackupActive && channel != null) {
+            String backupName = TvVooBackup.hasTvVoo(channel)
+                    ? "TvVoo" : getString(R.string.signal_resolver_direct);
+            return getString(R.string.signal_resolver_on_backup, backupName);
+        }
+        return name;
+    }
+
+    String resolverDisplayName(String id) {
+        String key = id == null ? "" : id.trim().toLowerCase(Locale.ROOT);
+        switch (key) {
+            case "": return getString(R.string.signal_resolver_direct);
+            case "highfly": return "Highfly";
+            case "tvvoo": return "TvVoo";
+            case "nauta": return "Nauta";
+            case "m6foot": return "M6Foot";
+            case "tvn": return "TVN";
+            case "meganoticias": return "Meganoticias";
+            case "mediaflow": return "MediaFlow";
+            default: return Character.toUpperCase(key.charAt(0)) + key.substring(1);
+        }
+    }
+
+    /** Respaldo del canal; vacío si no tiene. */
+    String signalBackupLabel(Channel channel) {
+        if (channel == null) return "";
+        if (TvVooBackup.hasTvVoo(channel)) return "TvVoo";
+        int direct = TvVooBackup.directBackupsOf(channel).size();
+        if (direct == 1) return getString(R.string.signal_resolver_direct);
+        return direct > 1 ? getString(R.string.signal_backup_direct_count, direct) : "";
     }
 
     boolean isSoftwareMp2Enabled() {

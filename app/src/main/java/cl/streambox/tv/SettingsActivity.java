@@ -105,6 +105,10 @@ public final class SettingsActivity extends Activity {
     public static final String EXTRA_RESOLVER_COUNTS = "resolver_counts";
     public static final String EXTRA_SIGNAL_VIDEO = "signal_video";
     public static final String EXTRA_SIGNAL_CODECS = "signal_codecs";
+    /** Formato del stream, resolutor en uso y respaldo del canal (0.6.34). */
+    public static final String EXTRA_SIGNAL_FORMAT = "signal_format";
+    public static final String EXTRA_SIGNAL_RESOLVER = "signal_resolver";
+    public static final String EXTRA_SIGNAL_BACKUP = "signal_backup";
     public static final String EXTRA_STATUS_CHANNELS = "status_channels";
     public static final String EXTRA_STATUS_CATALOG_AT = "status_catalog_at";
     public static final String EXTRA_STATUS_EPG_AT = "status_epg_at";
@@ -573,6 +577,15 @@ public final class SettingsActivity extends Activity {
                 audioCell.setText(codec[1].trim() + " · " + audioLanguage);
             }
             setSignalCell(R.id.signal_bitrate, codec, 2);
+            setSignalText(R.id.signal_format, intent.getStringExtra(EXTRA_SIGNAL_FORMAT));
+            setSignalText(R.id.signal_resolver, intent.getStringExtra(EXTRA_SIGNAL_RESOLVER));
+            String backup = safeString(intent.getStringExtra(EXTRA_SIGNAL_BACKUP));
+            View backupCell = findViewById(R.id.signal_backup_cell);
+            if (backupCell != null) {
+                // Sin respaldo no se muestra; INVISIBLE conserva la columna del resolutor.
+                backupCell.setVisibility(backup.isEmpty() ? View.INVISIBLE : View.VISIBLE);
+                setSignalText(R.id.signal_backup, backup);
+            }
             // Sin ningún dato: una sola línea (mockup aprobado 0.6.02).
             boolean noData = isUnavailable(picture, 0) && isUnavailable(picture, 1)
                     && isUnavailable(codec, 0) && isUnavailable(codec, 1) && isUnavailable(codec, 2);
@@ -611,6 +624,13 @@ public final class SettingsActivity extends Activity {
     private static boolean isUnavailable(String[] parts, int index) {
         String value = index < parts.length ? parts[index].trim() : "";
         return AppStrings.isBlank(value) || value.startsWith("—");
+    }
+
+    private void setSignalText(int viewId, String value) {
+        TextView cell = findViewById(viewId);
+        if (cell == null) return;
+        cell.setText(AppStrings.isBlank(value)
+                ? getString(R.string.settings_signal_unavailable) : value.trim());
     }
 
     private void setSignalCell(int viewId, String[] parts, int index) {
