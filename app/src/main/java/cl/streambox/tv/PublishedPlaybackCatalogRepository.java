@@ -25,9 +25,13 @@ final class PublishedPlaybackCatalogRepository {
             "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/data/highfly-live.json";
     static final String TVVOO_VARIANTS_URL =
             "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/data/tvvoo-variantes.json";
+    /** Copias de Lista 2 que respaldan a canales de Lista 1 (backups.json, en la raiz). */
+    static final String BACKUPS_URL =
+            "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/backups.json";
     static final String LAYOUT_FILE = "layout.json";
     static final String HIGHFLY_LINKS_FILE = "highfly-live.json";
     static final String TVVOO_VARIANTS_FILE = "tvvoo-variantes.json";
+    static final String BACKUPS_FILE = "backups.json";
     private static final String CACHE_DIR = "published_catalog";
     private static final Set<String> ALLOWED_HOSTS = Collections.unmodifiableSet(
             new HashSet<>(Collections.singletonList("raw.githubusercontent.com"))
@@ -87,6 +91,13 @@ final class PublishedPlaybackCatalogRepository {
     String fetchTvVooVariants() throws IOException {
         String document = download(TVVOO_VARIANTS_URL, PublishedTvVooVariants.MAX_BYTES);
         store(TVVOO_VARIANTS_FILE, document);
+        return document;
+    }
+
+    /** Copias de respaldo de Lista 2: un fallo solo deja los canales sin respaldo directo. */
+    String fetchDirectBackups() throws IOException {
+        String document = download(BACKUPS_URL, PublishedDirectBackups.MAX_BYTES);
+        store(BACKUPS_FILE, document);
         return document;
     }
 

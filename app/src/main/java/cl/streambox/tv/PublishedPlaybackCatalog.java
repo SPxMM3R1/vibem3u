@@ -241,6 +241,7 @@ final class PublishedPlaybackCatalog {
                         }
                         named = TvVooBackup.withDirectBackups(named, backups);
                     }
+                    named = TvVooBackup.withDirectBackups(named, PublishedDirectBackups.backupsFor(row.stableId));
                     result.add(row.backupTvVoo.isEmpty()
                             ? named : TvVooBackup.withBackup(named, row.backupTvVoo));
                 }

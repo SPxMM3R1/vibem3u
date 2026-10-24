@@ -954,6 +954,8 @@ public final class MainActivity extends MainSelector {
                     if (links != null) PublishedHighflyLinks.update(links, now);
                     String variants = repository.cached(PublishedPlaybackCatalogRepository.TVVOO_VARIANTS_FILE);
                     if (variants != null) PublishedTvVooVariants.update(variants, now);
+                    String directBackups = repository.cached(PublishedPlaybackCatalogRepository.BACKUPS_FILE);
+                    if (directBackups != null) PublishedDirectBackups.update(directBackups);
                     // Recién ahora: con las hermanas TvVoo y los enlaces Highfly cargados, la
                     // resolución temprana ve las mismas versiones (y la elegida) que la apertura.
                     mainHandler.post(this::warmLastChannel);
@@ -995,6 +997,15 @@ public final class MainActivity extends MainSelector {
                     } catch (Exception error) {
                         Log.w(RESOURCE_HEALTH_TAG, "Variantes TvVoo publicadas no disponibles", error);
                         // Sin variantes, cada canal TvVoo usa solo su versión elegida.
+                    }
+                });
+                executeUnlessClosing(catalogExecutor, () -> {
+                    try {
+                        // Copias de Lista 2 que respaldan a canales de Lista 1 (backups.json).
+                        PublishedDirectBackups.update(repository.fetchDirectBackups());
+                    } catch (Exception error) {
+                        Log.w(RESOURCE_HEALTH_TAG, "Respaldos publicados no disponibles", error);
+                        // Sin respaldos, los canales de Lista 1 quedan como antes.
                     }
                 });
                 try {
