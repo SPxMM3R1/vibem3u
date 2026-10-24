@@ -12,22 +12,28 @@
 ## Hoy, en una mirada
 
 - **0.6.31 — sincronía sobre el video (2026-10-22, mockup aprobado «Aplicalo»)**: pedido «que el selector de retraso se vea solo con el video, que al pulsarlo se active y quede solo, como lo del logo». La fila de Opciones queda como «Tamaño del logo» («−60 ms ›»); al pulsarla Opciones se cierra y abajo a la izquierda queda solo «◀ −60 ms ▶ · SINCRONÍA DEL AUDIO · SOLO ESTE CANAL · OK guarda ▼ original Atrás cancela», sin OSD. Probado en emulador: abre, ◀ ▶ cambian en vivo, OK guarda, Atrás cancela sin «¿Salir?», ▼ vuelve a 0. Pendiente: el usuario pidió «menú principal con 2 filas»; se preguntó cuál pantalla es.
-- **0.6.32/241 — evitar reautorización diaria y atajo de mando (2026-10-23)**: el Device Flow
-  ignoraba `refresh_token`/`expires_in`; la papelera agrupaba HTTP 401/403/404 como autorización
-  vencida y borraba el token, aunque 403/404 no demuestran expiración; y tocar «Vinculado» abría
-  otro QR. Ahora guarda ambos tokens cifrados, rota/persiste el par antes del reintento tras 401,
-  y conserva credenciales para 403/404. El relink manual pregunta primero. La renovación automática
-  ahora solicita `offline_access` en el Device Flow; la renovación requiere que GitHub devuelva
-  `refresh_token`/`expires_in` (la configuración de la OAuth App no es inspeccionable desde este
-  repo). Las sesiones antiguas con solo access token pueden requerir una última vinculación para
-  obtener el par renovable. Las actualizaciones instaladas encima con mismo paquete y firma no deben
-  pedir vínculo por sí solas; desinstalar/borrar datos o perder la
-  clave de Keystore sí. Además, tres OK separados por ≤700 ms saltan al primer canal visible; no
-  cuenta mantener OK y las otras teclas/paneles evitan activar el atajo. Matriz local completa
-  verde: 396 tests por variante (debug, experimental, release) + 45 del auxiliar, lint de las tres
-  variantes y assemble de las tres APK. En el emulador Android TV VibeTV, con el OSD en 002 MEGA,
-  tres DPAD_CENTER rápidos cambiaron al 001 TVN (capturas antes/después en `build/qa-vibem3u-0.6.32-*.png`);
-  no equivale a una prueba con mando físico. Pendientes CI instrumentado, firma y Release.
+- **0.6.32/241 — autorización GitHub y atajo de mando (2026-10-23; publicada 2026-10-23)**:
+  el Device Flow ignoraba `refresh_token`/`expires_in`; además, la papelera trataba HTTP 401/403/404
+  como autorización vencida y borraba la sesión ante 403/404, aunque esos códigos no demuestran
+  expiración. Tocar «Vinculado» también abría otro QR sin confirmar. Ahora conserva tokens en
+  Android Keystore cifrados, solicita `public_repo offline_access`, rota y guarda el par antes de
+  reintentar tras 401, y conserva la sesión ante 403/404; el relink manual se confirma primero.
+  Un token antiguo que no tenga refresh puede necesitar una última vinculación. Actualizar encima
+  con el mismo `applicationId` y certificado no borra preferencias; desinstalar/borrar datos, perder
+  la clave de Keystore, revocar el acceso o dejar vencer el refresh sí puede exigirla. La renovación
+  solo queda plenamente demostrada cuando GitHub devuelve `refresh_token` y `expires_in`; no se
+  inspeccionó la configuración externa de la OAuth App.
+  Además, tres OK separados por ≤700 ms llevan al primer canal visible; mantener OK no cuenta y
+  otras teclas/paneles no disparan el atajo. Matriz local verde: 396 tests por variante (debug,
+  experimental, release) + 45 del auxiliar, lint y assemble de las tres variantes. CI Android
+  `40042760955` (incluido Keystore instrumentado y verificación de firma) y workflow Release
+  `40043133713` pasaron. Tag `v0.6.32`; Release pública [VibeM3U 0.6.32](https://github.com/SPxMM3R1/vibem3u/releases/tag/v0.6.32),
+  APK `VibeM3U-v0.6.32.apk`, 2.869.615 bytes, SHA-256
+  `ec0e11a51bd4a0a764c9ce3e1b378e34b594d716841ab51c35a713ea8ca282a6`, certificado SHA-256
+  compatible `ae6457004fe9b72f077439ce882e3913b2429e96dc7285f9d38b435e0f4322b6`. La APK exacta
+  descargada de Release se instaló en el emulador VibeTV: de 002 MEGA, tres DPAD_CENTER rápidos
+  llevaron a 001 TVN y se decodificó imagen real; mando físico aún pendiente. Capturas locales
+  ignoradas en `build/qa-vibem3u-0.6.32-release-*.png`. No hay cambio relacionado en Lista M3U.
 - **0.6.30 — 0.6.29 publicable (2026-10-22)**: la 0.6.29 (tag sin release) falló en lint del CI por usar API inestable de Media3 fuera de clases marcadas; `@UnstableApi` queda solo en `AudioSyncOffset.Sink` y la detección de MP2 propio pasa a `SettingsActivity`. Mismo comportamiento; probada en emulador.
 - **0.6.29 — sincronía del audio (2026-10-22, mockups aprobados «Si aplica»)**: el usuario notó un leve retraso del audio. Análisis: la separación de idiomas no toca tiempos; candidatos: velocidad variable en vivo (estirador de tiempo), desfase de origen del doblaje, latencia HDMI. Cambios: velocidad fija 1x en vivo; fila «Sincronía del audio» en En reproducción (◀ ▶ de a 20 ms, ±500, por canal, en vivo; OK vuelve a 0 — el mockup decía «Atrás», pero Atrás guarda y sale); Sistema › Reproducción › «Audio MP2 por software» (Activado/Desactivado) con aviso de si el equipo tiene decodificador propio. Probado en emulador: fila visible, +60 ms se guarda y reabre, OK restablece, apagar/encender MP2 recrea el reproductor sin errores.
 - **0.6.28 — guía de Lista 1 sin esperar a la red (2026-10-21)**: la combinación de guías va en su propio hilo; antes esperaba la descarga/revalidación y la guía en caché tardaba en verse. Emulador con red lenta (EDGE/GPRS): 0.6.27 ~16 s, 0.6.28 ~2,4 s en pantalla (0,7 s desde el pedido).
@@ -200,7 +206,7 @@
 
 ## Bitácora (más reciente arriba)
 
-- **2026-10-23 — 0.6.32/241 (publicación pendiente)**: separa expiración real de token (401) de permisos/límites (403) y recurso/ruta (404), conserva tokens válidos, admite renovación/rotación OAuth cifrada y exige confirmar el relink desde Ajustes. Android app updates conservan preferencias cuando son instalación encima con mismo `applicationId` y firma; reinstalar, borrar datos o perder Android Keystore sí puede borrar la autorización. El Device Flow solicita `offline_access` para obtener pareja renovable. Las sesiones antiguas con solo access token pueden requerir una última vinculación tras actualizar; no se convierten automáticamente. Un `incorrect_client_credentials` tampoco debe borrar credenciales. También se añade triple OK ≤700 ms para volver al primer canal visible. Cambios: `GitHubChannelTrash`, `GitHubCredentialStore`, `ChannelActionScenes`, `SettingsActivity`, `MainSelector`, `MainActivity`, `MainState`, `RapidOkSequence`, strings, pruebas unitarias/instrumentadas, versión, `AGENTS.md` y este estado. Matriz local verde: 396 tests por variante (debug/experimental/release) + 45 del auxiliar; lint y assemble completos. En emulador Android TV VibeTV, tres OK rápidos cambiaron del 002 MEGA al 001 TVN; no equivale a mando físico. CI instrumentado, firma/Release pendientes. No hay cambio relacionado en Lista M3U.
+- **2026-10-23 — 0.6.32/241 (publicada)**: separa expiración real (401) de permisos/límites (403) y recurso/ruta (404); cifra access/refresh token en Android Keystore, solicita `offline_access`, rota el par antes de repetir la operación y conserva la sesión ante 403/404. Los tokens antiguos sin refresh pueden necesitar una última vinculación. Actualizar encima con igual paquete y certificado no borra preferencias; revocación, desinstalar/borrar datos, pérdida de clave de Keystore o expiración del refresh sí pueden exigirla. Añade triple OK ≤700 ms para volver al primer canal visible. Cambios en GitHub auth, ajustes, MainActivity/State/Selector, `RapidOkSequence`, strings, pruebas y documentación (`AGENTS.md`). Tests locales: 396 por variante + 45 del auxiliar; lint y assemble verdes. Android CI `40042760955` y Release `40043133713` success. Commit funcional `f4b6154`, tag `v0.6.32`; APK pública `VibeM3U-v0.6.32.apk` (2.869.615 bytes, SHA-256 `ec0e11a51bd4a0a764c9ce3e1b378e34b594d716841ab51c35a713ea8ca282a6`), firma compatible `ae6457004fe9b72f077439ce882e3913b2429e96dc7285f9d38b435e0f4322b6`. APK exacta probada en el emulador: tres OK cambiaron de 002 MEGA a 001 TVN con imagen decodificada; falta prueba con mando físico. Sin cambios en Lista M3U.
 - **2026-10-21 — 0.6.27**: guías compartidas (data-guide-of) y gzip.
 - **2026-10-21 — 0.6.28**: combinación de guías en hilo propio (EPG de Lista 1 visible antes).
 - **2026-10-22 — 0.6.29**: velocidad 1x en vivo, sincronía del audio por canal, opción de MP2 por software (tag sin release: lint).
