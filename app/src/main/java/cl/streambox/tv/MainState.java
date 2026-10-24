@@ -170,6 +170,8 @@ abstract class MainState extends Activity {
     static final long ZAP_SETTLE_MS = 300L;
     long lastZapKeyAtMs;
     boolean zapPreviewPending;
+    /** Atajo 0.6.32: tres OK separados en menos de 700 ms vuelven al primer canal visible. */
+    final RapidOkSequence rapidOkSequence = new RapidOkSequence();
     final Runnable commitZap = () -> {
         if (!this.zapPreviewPending) return;
         this.zapPreviewPending = false;

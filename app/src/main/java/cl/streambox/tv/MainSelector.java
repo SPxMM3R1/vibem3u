@@ -1555,41 +1555,61 @@ abstract class MainSelector extends MainGuide {
         });
     }
 
-    /** Deja el pedido en GitHub; si el acceso ya no sirve, pide vincular otra vez (una vez). */
+    /** Deja el pedido en GitHub; solo reabre el Device Flow si GitHub confirma que no puede renovar. */
     void sendChannelToTrash(Channel channel, String key, boolean mayRelink) {
         String name = channel.getName();
         showNotice(NOTICE_PROGRESS, R.string.notice_list, getString(R.string.channel_trash_sending, name), false);
         GitHubCredentialStore store = new GitHubCredentialStore(this);
-        String token = store.token();
-        if (token == null) {
-            if (mayRelink) ChannelActionScenes.showGitHubLink(this, () -> sendChannelToTrash(channel, key, false));
-            return;
-        }
         networkExecutor.execute(() -> {
-            try {
-                new GitHubChannelTrash().requestTrash(token, key, name, BuildConfig.VERSION_NAME);
-                mainHandler.post(() -> {
-                    if (isFinishing()) return;
-                    channelVisibility.markTrashed(key, name, System.currentTimeMillis());
-                    showNotice(NOTICE_OK, R.string.notice_list, getString(R.string.channel_trash_done, name), true);
-                    reapplyChannelList();
-                });
-            } catch (GitHubChannelTrash.UnauthorizedException unauthorized) {
-                store.clear();
-                mainHandler.post(() -> {
-                    if (isFinishing()) return;
-                    if (mayRelink) {
-                        ChannelActionScenes.showGitHubLink(this, () -> sendChannelToTrash(channel, key, false));
-                    } else {
-                        showNotice(NOTICE_WARN, R.string.notice_trash, getString(R.string.channel_trash_failed,
-                                unauthorized.getMessage()), true);
-                    }
-                });
-            } catch (java.io.IOException error) {
-                mainHandler.post(() -> showNotice(NOTICE_WARN, R.string.notice_trash,
-                        getString(R.string.channel_trash_failed,
-                                AppStrings.isBlank(error.getMessage()) ? "sin conexión" : error.getMessage()),
-                        true));
+            // Varias solicitudes de papelera comparten la misma credencial. Serializarlas evita
+            // que dos respuestas 401 intenten consumir a la vez el mismo refresh token rotatorio.
+            synchronized (GitHubCredentialStore.AUTH_LOCK) {
+                GitHubCredentialStore.Credentials credentials = store.credentials();
+                if (credentials == null) {
+                    mainHandler.post(() -> {
+                        if (!isFinishing() && mayRelink) {
+                            ChannelActionScenes.showGitHubLink(this,
+                                    () -> sendChannelToTrash(channel, key, false));
+                        }
+                    });
+                    return;
+                }
+                try {
+                    new GitHubChannelTrash().requestTrash(credentials, key, name, BuildConfig.VERSION_NAME,
+                            rotated -> {
+                                try {
+                                    store.save(rotated);
+                                } catch (java.security.GeneralSecurityException saveError) {
+                                    throw new java.io.IOException(
+                                            "No se pudo guardar la renovación de GitHub.", saveError);
+                                }
+                            });
+                    mainHandler.post(() -> {
+                        if (isFinishing()) return;
+                        channelVisibility.markTrashed(key, name, System.currentTimeMillis());
+                        showNotice(NOTICE_OK, R.string.notice_list,
+                                getString(R.string.channel_trash_done, name), true);
+                        reapplyChannelList();
+                    });
+                } catch (GitHubChannelTrash.ReauthorizationRequiredException reauthorizationRequired) {
+                    store.clear();
+                    mainHandler.post(() -> {
+                        if (isFinishing()) return;
+                        if (mayRelink) {
+                            ChannelActionScenes.showGitHubLink(this,
+                                    () -> sendChannelToTrash(channel, key, false));
+                        } else {
+                            showNotice(NOTICE_WARN, R.string.notice_trash,
+                                    getString(R.string.channel_trash_failed,
+                                            reauthorizationRequired.getMessage()), true);
+                        }
+                        });
+                } catch (java.io.IOException error) {
+                    mainHandler.post(() -> showNotice(NOTICE_WARN, R.string.notice_trash,
+                            getString(R.string.channel_trash_failed,
+                                    AppStrings.isBlank(error.getMessage()) ? "sin conexión" : error.getMessage()),
+                            true));
+                }
             }
         });
     }

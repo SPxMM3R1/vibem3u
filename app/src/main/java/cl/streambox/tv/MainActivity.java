@@ -1092,6 +1092,11 @@ public final class MainActivity extends MainSelector {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
+        boolean okKey = keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                || keyCode == KeyEvent.KEYCODE_ENTER;
+        if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0 && !okKey) {
+            rapidOkSequence.reset();
+        }
         if (logoSizeAdjusting && handleLogoSizeKey(event)) return true;
         if (audioSyncAdjusting && handleAudioSyncKey(event)) return true;
         if (isGuideVisible() && handleGuideKey(event)) return true;
@@ -1180,6 +1185,15 @@ public final class MainActivity extends MainSelector {
                     && event.getRepeatCount() == 0) {
                 openPlaybackSourceSelector();
             }
+            return true;
+        }
+
+        if (okKey && event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0
+                && !loadFailed && !settingsOpen && !channels.isEmpty()
+                && rapidOkSequence.registerPress(SystemClock.uptimeMillis())) {
+            mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
+            hideProgrammeDetail.run();
+            playChannel(0);
             return true;
         }
 

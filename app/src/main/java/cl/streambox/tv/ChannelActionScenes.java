@@ -42,6 +42,27 @@ final class ChannelActionScenes {
         return dialog;
     }
 
+    /** Evita que abrir la fila de estado «Vinculado» inicie un QR sin confirmación explícita. */
+    static Dialog showGitHubRelinkConfirm(Activity activity, Runnable onConfirm) {
+        Dialog dialog = SceneDialog.create(activity, R.layout.dialog_scene);
+        ((TextView) dialog.findViewById(R.id.scene_kicker)).setText(R.string.github_link_kicker);
+        ((TextView) dialog.findViewById(R.id.scene_title)).setText(R.string.github_link_relink_title);
+        ((TextView) dialog.findViewById(R.id.scene_message)).setText(R.string.github_link_relink_message);
+        Button primary = dialog.findViewById(R.id.scene_primary);
+        Button secondary = dialog.findViewById(R.id.scene_secondary);
+        primary.setText(R.string.github_link_relink_action);
+        secondary.setText(R.string.cancel);
+        primary.setOnClickListener(view -> {
+            dialog.dismiss();
+            onConfirm.run();
+        });
+        secondary.setOnClickListener(view -> dialog.dismiss());
+        dialog.setOnShowListener(ignored -> secondary.requestFocus());
+        dialog.show();
+        SceneDialog.hideSystemBars(dialog);
+        return dialog;
+    }
+
     /**
      * Vinculación por código (GitHub Device Flow). Al autorizar, guarda el token cifrado y corre
      * {@code onLinked} en el hilo principal. Cancelar o Atrás detienen la espera.
@@ -82,9 +103,9 @@ final class ChannelActionScenes {
                     while (!cancelled.get() && System.currentTimeMillis() < device.expiresAtMillis) {
                         Thread.sleep(interval[0]);
                         if (cancelled.get()) return;
-                        String token = github.pollToken(device, interval);
-                        if (token == null) continue;
-                        new GitHubCredentialStore(activity).save(token);
+                        GitHubCredentialStore.Credentials credentials = github.pollCredentials(device, interval);
+                        if (credentials == null) continue;
+                        new GitHubCredentialStore(activity).save(credentials);
                         main.post(() -> {
                             if (dialog.isShowing()) dialog.dismiss();
                             onLinked.run();

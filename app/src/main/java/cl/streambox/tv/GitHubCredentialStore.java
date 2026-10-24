@@ -27,26 +27,61 @@ final class GitHubCredentialStore {
     private static final String KEY_ALIAS = "vibem3u_github_link";
     private static final String KEY_CIPHERTEXT = "github_token_ciphertext";
     private static final String KEY_IV = "github_token_iv";
+    private static final String KEY_REFRESH_CIPHERTEXT = "github_refresh_ciphertext";
+    private static final String KEY_REFRESH_IV = "github_refresh_iv";
+    private static final String KEY_ACCESS_EXPIRES_AT = "github_access_expires_at";
+    static final Object AUTH_LOCK = new Object();
     private static final int GCM_TAG_BITS = 128;
     private static final int IV_BYTES = 12;
 
     private final SharedPreferences preferences;
+
+    /** Credenciales de sesión OAuth. Los dos tokens sensibles permanecen cifrados. */
+    static final class Credentials {
+        final String accessToken;
+        final String refreshToken;
+        final long accessExpiresAtMillis;
+
+        Credentials(String accessToken, String refreshToken, long accessExpiresAtMillis) {
+            this.accessToken = accessToken;
+            this.refreshToken = refreshToken;
+            this.accessExpiresAtMillis = Math.max(0L, accessExpiresAtMillis);
+        }
+    }
 
     GitHubCredentialStore(Context context) {
         preferences = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
     boolean linked() {
-        return preferences.contains(KEY_CIPHERTEXT) && preferences.contains(KEY_IV);
+        synchronized (AUTH_LOCK) {
+            return preferences.contains(KEY_CIPHERTEXT) && preferences.contains(KEY_IV);
+        }
     }
 
     /** Token descifrado o null si no hay o el almacén ya no puede abrirlo. */
     String token() {
+        Credentials credentials = credentials();
+        return credentials == null ? null : credentials.accessToken;
+    }
+
+    /** Credenciales descifradas o null si el acceso ya no se puede recuperar. */
+    Credentials credentials() {
+        synchronized (AUTH_LOCK) {
+            return readCredentialsLocked();
+        }
+    }
+
+    private Credentials readCredentialsLocked() {
         String ciphertext = preferences.getString(KEY_CIPHERTEXT, null);
         String iv = preferences.getString(KEY_IV, null);
         if (ciphertext == null || iv == null) return null;
         try {
-            return decrypt(ciphertext, iv);
+            String accessToken = decrypt(ciphertext, iv);
+            if (!isPlausibleToken(accessToken)) throw new GeneralSecurityException("Credencial inválida.");
+            String refreshToken = readRefreshToken();
+            return new Credentials(accessToken, refreshToken,
+                    preferences.getLong(KEY_ACCESS_EXPIRES_AT, 0L));
         } catch (GeneralSecurityException | IllegalArgumentException unreadable) {
             clear();
             return null;
@@ -54,16 +89,68 @@ final class GitHubCredentialStore {
     }
 
     void save(String token) throws GeneralSecurityException {
-        if (!isPlausibleToken(token)) throw new GeneralSecurityException("Token de GitHub inválido.");
-        byte[][] sealed = encrypt(token);
-        preferences.edit()
-                .putString(KEY_CIPHERTEXT, Base64.encodeToString(sealed[0], Base64.NO_WRAP))
-                .putString(KEY_IV, Base64.encodeToString(sealed[1], Base64.NO_WRAP))
-                .apply();
+        save(new Credentials(token, null, 0L));
+    }
+
+    /** Persiste también la rotación del refresh token antes de usar el nuevo access token. */
+    void save(Credentials credentials) throws GeneralSecurityException {
+        synchronized (AUTH_LOCK) {
+            saveLocked(credentials);
+        }
+    }
+
+    private void saveLocked(Credentials credentials) throws GeneralSecurityException {
+        if (credentials == null || !isPlausibleToken(credentials.accessToken)) {
+            throw new GeneralSecurityException("Token de GitHub inválido.");
+        }
+        byte[][] access = encrypt(credentials.accessToken);
+        SharedPreferences.Editor editor = preferences.edit()
+                .putString(KEY_CIPHERTEXT, Base64.encodeToString(access[0], Base64.NO_WRAP))
+                .putString(KEY_IV, Base64.encodeToString(access[1], Base64.NO_WRAP))
+                .putLong(KEY_ACCESS_EXPIRES_AT, credentials.accessExpiresAtMillis);
+        if (!AppStrings.isBlank(credentials.refreshToken)) {
+            if (!isPlausibleToken(credentials.refreshToken)) {
+                throw new GeneralSecurityException("Refresh token de GitHub inválido.");
+            }
+            byte[][] refresh = encrypt(credentials.refreshToken);
+            editor.putString(KEY_REFRESH_CIPHERTEXT, Base64.encodeToString(refresh[0], Base64.NO_WRAP))
+                    .putString(KEY_REFRESH_IV, Base64.encodeToString(refresh[1], Base64.NO_WRAP));
+        } else {
+            editor.remove(KEY_REFRESH_CIPHERTEXT).remove(KEY_REFRESH_IV);
+        }
+        if (!editor.commit()) throw new GeneralSecurityException("No se pudo guardar el acceso de GitHub.");
     }
 
     void clear() {
-        preferences.edit().remove(KEY_CIPHERTEXT).remove(KEY_IV).apply();
+        synchronized (AUTH_LOCK) {
+            preferences.edit().remove(KEY_CIPHERTEXT).remove(KEY_IV)
+                    .remove(KEY_REFRESH_CIPHERTEXT).remove(KEY_REFRESH_IV)
+                    .remove(KEY_ACCESS_EXPIRES_AT).apply();
+        }
+    }
+
+    private String readRefreshToken() {
+        String ciphertext = preferences.getString(KEY_REFRESH_CIPHERTEXT, null);
+        String iv = preferences.getString(KEY_REFRESH_IV, null);
+        if (ciphertext == null && iv == null) return null;
+        if (ciphertext == null || iv == null) {
+            clearRefreshToken();
+            return null;
+        }
+        try {
+            String token = decrypt(ciphertext, iv);
+            if (!isPlausibleToken(token)) throw new GeneralSecurityException("Refresh token inválido.");
+            return token;
+        } catch (GeneralSecurityException | IllegalArgumentException unreadable) {
+            // Un refresh token dañado no debe borrar un access token que aún sea válido.
+            clearRefreshToken();
+            return null;
+        }
+    }
+
+    private void clearRefreshToken() {
+        preferences.edit().remove(KEY_REFRESH_CIPHERTEXT).remove(KEY_REFRESH_IV)
+                .remove(KEY_ACCESS_EXPIRES_AT).apply();
     }
 
     static boolean isPlausibleToken(String token) {

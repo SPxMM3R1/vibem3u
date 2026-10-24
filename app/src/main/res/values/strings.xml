@@ -420,7 +420,7 @@
     <string name="channel_trash_unavailable">Este canal no tiene una fila en el editor; solo se puede ocultar.</string>
     <string name="github_link_kicker">Lista M3U · GitHub</string>
     <string name="github_link_title">Vincular GitHub</string>
-    <string name="github_link_message">Solo la primera vez. Escanea el código con el teléfono, entra a GitHub y escribe este código. El acceso se guarda cifrado en esta TV.</string>
+    <string name="github_link_message">Escanea el código con el teléfono, entra a GitHub y escribe este código. El acceso se guarda cifrado en esta TV; si GitHub entrega tokens renovables, la app los renueva automáticamente.</string>
     <string name="github_link_waiting">Esperando la autorización en GitHub…</string>
     <string name="github_link_requesting">Pidiendo un código a GitHub…</string>
     <string name="github_link_unconfigured">Esta versión no tiene configurada la vinculación con GitHub.</string>
@@ -428,7 +428,11 @@
     <string name="system_links_title">Vinculaciones</string>
     <string name="github_link_row_title">Vincular GitHub</string>
     <string name="github_link_row_detail">Para enviar canales a la papelera de Lista M3U. Escanea un QR y escribe un código.</string>
+    <string name="github_link_row_detail_linked">Autorización guardada en esta TV. No necesitas volver a vincular mientras siga válida.</string>
     <string name="github_link_linked">Vinculado ›</string>
+    <string name="github_link_relink_title">GitHub ya está vinculado</string>
+    <string name="github_link_relink_message">La app conserva la autorización y renueva los tokens cuando GitHub lo permite. Solo vuelve a vincular si GitHub revoca el acceso o la renovación ya no es válida.</string>
+    <string name="github_link_relink_action">Volver a vincular</string>
     <string name="channel_logo_description">Logo del canal</string>
     <string name="classic_resolution_pending">Resolución pendiente</string>
     <string name="classic_analyzing_stream">Analizando stream…</string>

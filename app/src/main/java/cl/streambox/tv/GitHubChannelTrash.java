@@ -10,6 +10,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
+import java.util.Base64;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.FormBody;
@@ -34,7 +35,9 @@ import okhttp3.ResponseBody;
 final class GitHubChannelTrash {
     static final String REPOSITORY = "SPxMM3R1/lista-m3u";
     static final String VERIFICATION_URI = "https://github.com/login/device";
-    static final String SCOPE = "public_repo";
+    // offline_access opts into expiring tokens with a rotatable refresh token; without it a
+    // Device Flow response may contain only an access token that cannot be renewed by the app.
+    static final String SCOPE = "public_repo offline_access";
     private static final String DEVICE_CODE_URL = "https://github.com/login/device/code";
     private static final String ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
     private static final String CONTENTS_URL =
@@ -42,11 +45,42 @@ final class GitHubChannelTrash {
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final int MAX_RESPONSE_BYTES = 64 * 1024;
 
-    /** El token ya no sirve (revocado o sin permiso): hay que vincular de nuevo. */
-    static final class UnauthorizedException extends IOException {
-        UnauthorizedException() {
-            super("GitHub rechazó el acceso de esta TV.");
+    /** GitHub confirmó que el access token no es válido y no se pudo renovar. */
+    static final class ReauthorizationRequiredException extends IOException {
+        ReauthorizationRequiredException() {
+            super("La autorización de GitHub venció o fue revocada; vuelve a vincular esta TV.");
         }
+
+        ReauthorizationRequiredException(String message) {
+            super(message);
+        }
+    }
+
+    /** 401 antes de intentar la renovación: no implica que el refresh token también haya vencido. */
+    private static final class InvalidAccessTokenException extends IOException {
+        InvalidAccessTokenException() {
+            super("GitHub rechazó el access token.");
+        }
+    }
+
+    /** Un 403 suele ser alcance, permisos, política de la organización o límite; no borra credenciales. */
+    static final class PermissionDeniedException extends IOException {
+        PermissionDeniedException() {
+            super("GitHub no autorizó la escritura (permisos, política del repositorio o límite temporal). "
+                    + "Conservé la autorización guardada.");
+        }
+    }
+
+    /** El repo/ruta no existe o GitHub no permite verla; no es evidencia de token vencido. */
+    static final class ResourceUnavailableException extends IOException {
+        ResourceUnavailableException() {
+            super("GitHub no encontró el repositorio o la ruta de solicitudes. "
+                    + "Conservé la autorización guardada.");
+        }
+    }
+
+    interface CredentialPersister {
+        void save(GitHubCredentialStore.Credentials credentials) throws IOException;
     }
 
     static final class DeviceCode {
@@ -64,6 +98,9 @@ final class GitHubChannelTrash {
     }
 
     private final OkHttpClient client;
+    private final String deviceCodeUrl;
+    private final String accessTokenUrl;
+    private final String contentsUrl;
 
     GitHubChannelTrash() {
         this(SharedHttpClient.get().newBuilder()
@@ -73,7 +110,14 @@ final class GitHubChannelTrash {
     }
 
     GitHubChannelTrash(OkHttpClient client) {
+        this(client, DEVICE_CODE_URL, ACCESS_TOKEN_URL, CONTENTS_URL);
+    }
+
+    GitHubChannelTrash(OkHttpClient client, String deviceCodeUrl, String accessTokenUrl, String contentsUrl) {
         this.client = client;
+        this.deviceCodeUrl = deviceCodeUrl;
+        this.accessTokenUrl = accessTokenUrl;
+        this.contentsUrl = contentsUrl;
     }
 
     static String clientId() {
@@ -86,7 +130,7 @@ final class GitHubChannelTrash {
     }
 
     DeviceCode requestDeviceCode() throws IOException {
-        JSONObject response = postForm(DEVICE_CODE_URL, new FormBody.Builder()
+        JSONObject response = postForm(deviceCodeUrl, new FormBody.Builder()
                 .add("client_id", clientId())
                 .add("scope", SCOPE)
                 .build());
@@ -101,17 +145,17 @@ final class GitHubChannelTrash {
     }
 
     /**
-     * Una consulta de la autorización: devuelve el token, null si todavía no se autoriza, o
-     * lanza IOException si se canceló o venció. {@code slowDown} recibe el nuevo intervalo.
+     * Una consulta de la autorización: devuelve las credenciales, null si todavía no se autoriza,
+     * o lanza IOException si se canceló o venció. {@code slowDown} recibe el nuevo intervalo.
      */
-    String pollToken(DeviceCode code, long[] intervalMillis) throws IOException {
-        JSONObject response = postForm(ACCESS_TOKEN_URL, new FormBody.Builder()
+    GitHubCredentialStore.Credentials pollCredentials(DeviceCode code, long[] intervalMillis) throws IOException {
+        JSONObject response = postForm(accessTokenUrl, new FormBody.Builder()
                 .add("client_id", clientId())
                 .add("device_code", code.deviceCode)
                 .add("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
                 .build());
         String token = response.optString("access_token", "").trim();
-        if (!token.isEmpty()) return token;
+        if (!token.isEmpty()) return credentialsFromOAuthResponse(response, System.currentTimeMillis());
         String error = response.optString("error", "");
         if ("authorization_pending".equals(error)) return null;
         if ("slow_down".equals(error)) {
@@ -122,6 +166,80 @@ final class GitHubChannelTrash {
         if ("access_denied".equals(error)) throw new IOException("La vinculación se canceló en GitHub.");
         if ("expired_token".equals(error)) throw new IOException("El código de GitHub venció.");
         throw new IOException("GitHub rechazó la vinculación.");
+    }
+
+    /** Intercambia el refresh token de un access token vencido; GitHub rota ambos tokens. */
+    GitHubCredentialStore.Credentials refreshAccessToken(String refreshToken) throws IOException {
+        if (!GitHubCredentialStore.isPlausibleToken(refreshToken)) {
+            throw new ReauthorizationRequiredException("GitHub ya no acepta la renovación; vuelve a vincular esta TV.");
+        }
+        JSONObject response = postForm(accessTokenUrl, new FormBody.Builder()
+                .add("client_id", clientId())
+                .add("refresh_token", refreshToken)
+                .add("grant_type", "refresh_token")
+                .build());
+        String token = response.optString("access_token", "").trim();
+        if (token.isEmpty()) {
+            String error = response.optString("error", "");
+            if ("bad_refresh_token".equals(error)) {
+                throw new ReauthorizationRequiredException(
+                        "GitHub ya no acepta la renovación; vuelve a vincular esta TV.");
+            }
+            throw new IOException("GitHub no pudo renovar la autorización. Se conservó la sesión guardada.");
+        }
+        GitHubCredentialStore.Credentials credentials = credentialsFromOAuthResponse(response,
+                System.currentTimeMillis());
+        if (AppStrings.isBlank(credentials.refreshToken)) {
+            throw new IOException("GitHub renovó el acceso sin entregar el siguiente refresh token.");
+        }
+        return credentials;
+    }
+
+    /** Intenta el pedido; ante 401 renueva y persiste el par rotado antes del segundo intento. */
+    GitHubCredentialStore.Credentials requestTrash(GitHubCredentialStore.Credentials credentials,
+            String rowKey, String channelName, String appVersion, CredentialPersister persister)
+            throws IOException {
+        if (credentials == null || !GitHubCredentialStore.isPlausibleToken(credentials.accessToken)) {
+            throw new ReauthorizationRequiredException();
+        }
+        try {
+            requestTrash(credentials.accessToken, rowKey, channelName, appVersion);
+            return credentials;
+        } catch (InvalidAccessTokenException invalidAccessToken) {
+            if (AppStrings.isBlank(credentials.refreshToken)) throw new ReauthorizationRequiredException();
+            GitHubCredentialStore.Credentials refreshed = refreshAccessToken(credentials.refreshToken);
+            if (persister == null) throw new IOException("No se pudo guardar la renovación de GitHub.");
+            // GitHub invalida el refresh token anterior al rotarlo: guardar sincrónicamente antes
+            // del segundo pedido evita perder la nueva sesión si la app se interrumpe.
+            persister.save(refreshed);
+            try {
+                requestTrash(refreshed.accessToken, rowKey, channelName, appVersion);
+                return refreshed;
+            } catch (InvalidAccessTokenException secondRejection) {
+                throw new ReauthorizationRequiredException();
+            }
+        }
+    }
+
+    static GitHubCredentialStore.Credentials credentialsFromOAuthResponse(JSONObject response, long nowMillis)
+            throws IOException {
+        String accessToken = response.optString("access_token", "").trim();
+        if (!GitHubCredentialStore.isPlausibleToken(accessToken)) {
+            throw new IOException("GitHub entregó una autorización no válida.");
+        }
+        String refreshToken = response.optString("refresh_token", "").trim();
+        if (refreshToken.isEmpty()) refreshToken = null;
+        else if (!GitHubCredentialStore.isPlausibleToken(refreshToken)) {
+            throw new IOException("GitHub entregó una renovación no válida.");
+        }
+        long expiresInSeconds = response.optLong("expires_in", 0L);
+        long expiresAtMillis = 0L;
+        if (expiresInSeconds > 0L) {
+            long maxSeconds = (Long.MAX_VALUE - nowMillis) / 1000L;
+            expiresAtMillis = expiresInSeconds > maxSeconds
+                    ? Long.MAX_VALUE : nowMillis + expiresInSeconds * 1000L;
+        }
+        return new GitHubCredentialStore.Credentials(accessToken, refreshToken, expiresAtMillis);
     }
 
     /** Deja el pedido de papelera para la fila del editor {@code rowKey}. */
@@ -139,23 +257,22 @@ final class GitHubChannelTrash {
         try {
             body = new JSONObject()
                     .put("message", "Papelera desde la app: " + safeName(channelName))
-                    .put("content", android.util.Base64.encodeToString(
-                            payload.getBytes(StandardCharsets.UTF_8), android.util.Base64.NO_WRAP))
+                    .put("content", Base64.getEncoder().encodeToString(payload.getBytes(StandardCharsets.UTF_8)))
                     .put("branch", "main");
         } catch (JSONException error) {
             throw new IOException("No se pudo armar el pedido.", error);
         }
         Request request = new Request.Builder()
-                .url(CONTENTS_URL + fileName)
+                .url(contentsUrl + fileName)
                 .header("Accept", "application/vnd.github+json")
                 .header("Authorization", "Bearer " + token)
                 .header("X-GitHub-Api-Version", "2022-11-28")
                 .put(RequestBody.create(body.toString(), JSON))
                 .build();
         try (Response response = client.newCall(request).execute()) {
-            if (response.code() == 401 || response.code() == 403 || response.code() == 404) {
-                throw new UnauthorizedException();
-            }
+            if (response.code() == 401) throw new InvalidAccessTokenException();
+            if (response.code() == 403) throw new PermissionDeniedException();
+            if (response.code() == 404) throw new ResourceUnavailableException();
             if (response.code() != 201 && response.code() != 200) {
                 throw new IOException("GitHub respondió HTTP " + response.code() + ".");
             }

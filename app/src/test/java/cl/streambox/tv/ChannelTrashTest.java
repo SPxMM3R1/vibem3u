@@ -3,9 +3,14 @@ package cl.streambox.tv;
 import org.json.JSONObject;
 import org.junit.Test;
 
+import okhttp3.OkHttpClient;
+import okhttp3.mockwebserver.MockResponse;
+import okhttp3.mockwebserver.MockWebServer;
+
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -58,5 +63,157 @@ public final class ChannelTrashTest {
         assertTrue(GitHubCredentialStore.isPlausibleToken("gho_0123456789abcdefABCDEF0123456789abcd"));
         assertFalse(GitHubCredentialStore.isPlausibleToken("corto"));
         assertFalse(GitHubCredentialStore.isPlausibleToken("gho_0123456789 abcdefABCDEF0123456789"));
+    }
+
+    @Test
+    public void deviceFlowRequestsOfflineAccessForRefreshableTokens() throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setResponseCode(200).setBody("{"
+                    + "\"device_code\":\"device-code\",\"user_code\":\"ABCD-EFGH\","
+                    + "\"expires_in\":900,\"interval\":5}"));
+
+            github(server).requestDeviceCode();
+
+            String form = server.takeRequest().getBody().readUtf8();
+            assertTrue(form, form.matches("(?s).*scope=public_repo(?:\\+|%20)offline_access(?:&.*)?"));
+        }
+    }
+
+    @Test
+    public void deviceCodeExpiryIsNotMistakenForAccessTokenExpiry() throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setResponseCode(200).setBody("{"
+                    + "\"access_token\":\"gho_accessToken0123456789ABCDEFGHIJ\","
+                    + "\"refresh_token\":\"ghr_refreshToken0123456789ABCDEFGHIJ\","
+                    + "\"expires_in\":28800,\"refresh_token_expires_in\":15897600}"));
+            GitHubChannelTrash github = github(server);
+            long now = System.currentTimeMillis();
+            GitHubChannelTrash.DeviceCode device = new GitHubChannelTrash.DeviceCode(
+                    "device-code", "ABCD-EFGH", now + 15 * 60_000L, 5_000L);
+
+            GitHubCredentialStore.Credentials credentials = github.pollCredentials(device, new long[]{5_000L});
+
+            assertEquals("gho_accessToken0123456789ABCDEFGHIJ", credentials.accessToken);
+            assertEquals("ghr_refreshToken0123456789ABCDEFGHIJ", credentials.refreshToken);
+            assertTrue(credentials.accessExpiresAtMillis >= now + 28_000_000L);
+            assertTrue(credentials.accessExpiresAtMillis <= now + 29_000_000L);
+        }
+    }
+
+    @Test
+    public void forbiddenResponsePreservesCredentialsAndDoesNotStartDeviceFlow() throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setResponseCode(403).setBody("{\"message\":\"Forbidden\"}"));
+            AtomicReference<GitHubCredentialStore.Credentials> persisted = new AtomicReference<>();
+
+            try {
+                github(server).requestTrash(credentials("gho_accessToken0123456789ABCDEFGHIJ",
+                                "ghr_refreshToken0123456789ABCDEFGHIJ"),
+                        "row:1", "Canal", "0.6.32", persisted::set);
+                throw new AssertionError("Un 403 debe informarse como permisos/límite, no como login vencido.");
+            } catch (GitHubChannelTrash.PermissionDeniedException expected) {
+                assertTrue(expected.getMessage().contains("Conservé la autorización"));
+            }
+
+            assertEquals(1, server.getRequestCount());
+            assertEquals("Bearer gho_accessToken0123456789ABCDEFGHIJ",
+                    server.takeRequest().getHeader("Authorization"));
+            assertEquals(null, persisted.get());
+        }
+    }
+
+    @Test
+    public void notFoundResponseIsNotTreatedAsExpiredAuthorization() throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setResponseCode(404).setBody("{\"message\":\"Not Found\"}"));
+            try {
+                github(server).requestTrash(credentials("gho_accessToken0123456789ABCDEFGHIJ", null),
+                        "row:1", "Canal", "0.6.32", ignored -> {});
+                throw new AssertionError("Un 404 debe indicar recurso/ruta, no pedir autorización.");
+            } catch (GitHubChannelTrash.ResourceUnavailableException expected) {
+                assertTrue(expected.getMessage().contains("Conservé la autorización"));
+            }
+            assertEquals(1, server.getRequestCount());
+        }
+    }
+
+    @Test
+    public void expiredAccessTokenRefreshesAndPersistsRotatedPairBeforeRetry() throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setResponseCode(401).setBody("{\"message\":\"Bad credentials\"}"));
+            server.enqueue(new MockResponse().setResponseCode(200).setBody("{"
+                    + "\"access_token\":\"gho_newAccessToken0123456789ABCDEFGHI\","
+                    + "\"refresh_token\":\"ghr_newRefreshToken0123456789ABCDEFGHI\","
+                    + "\"expires_in\":28800,\"refresh_token_expires_in\":15897600}"));
+            server.enqueue(new MockResponse().setResponseCode(201).setBody("{}"));
+            AtomicReference<GitHubCredentialStore.Credentials> persisted = new AtomicReference<>();
+
+            GitHubCredentialStore.Credentials result = github(server).requestTrash(credentials(
+                    "gho_accessToken0123456789ABCDEFGHIJ", "ghr_refreshToken0123456789ABCDEFGHIJ"),
+                    "row:1", "Canal", "0.6.32", persisted::set);
+
+            assertEquals("gho_newAccessToken0123456789ABCDEFGHI", result.accessToken);
+            assertEquals("ghr_newRefreshToken0123456789ABCDEFGHI", result.refreshToken);
+            assertEquals(result.accessToken, persisted.get().accessToken);
+            assertEquals(result.refreshToken, persisted.get().refreshToken);
+            assertEquals(3, server.getRequestCount());
+            assertEquals("Bearer gho_accessToken0123456789ABCDEFGHIJ",
+                    server.takeRequest().getHeader("Authorization"));
+            String refreshBody = server.takeRequest().getBody().readUtf8();
+            assertTrue(refreshBody.contains("refresh_token=ghr_refreshToken0123456789ABCDEFGHIJ"));
+            assertTrue(refreshBody.contains("grant_type=refresh_token"));
+            assertEquals("Bearer gho_newAccessToken0123456789ABCDEFGHI",
+                    server.takeRequest().getHeader("Authorization"));
+        }
+    }
+
+    @Test
+    public void rejectedRefreshTokenRequiresRelinkOnlyAfterRefreshIsConfirmedInvalid() throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setResponseCode(401).setBody("{}"));
+            server.enqueue(new MockResponse().setResponseCode(200).setBody("{\"error\":\"bad_refresh_token\"}"));
+            AtomicReference<GitHubCredentialStore.Credentials> persisted = new AtomicReference<>();
+            try {
+                github(server).requestTrash(credentials("gho_accessToken0123456789ABCDEFGHIJ",
+                                "ghr_refreshToken0123456789ABCDEFGHIJ"),
+                        "row:1", "Canal", "0.6.32", persisted::set);
+                throw new AssertionError("Solo un refresh token rechazado debe exigir nueva vinculación.");
+            } catch (GitHubChannelTrash.ReauthorizationRequiredException expected) {
+                assertTrue(expected.getMessage().contains("vincular"));
+            }
+            assertEquals(2, server.getRequestCount());
+            assertEquals(null, persisted.get());
+        }
+    }
+
+    @Test
+    public void incorrectOAuthClientConfigurationPreservesSavedCredentials() throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setResponseCode(401).setBody("{}"));
+            server.enqueue(new MockResponse().setResponseCode(200)
+                    .setBody("{\"error\":\"incorrect_client_credentials\"}"));
+            AtomicReference<GitHubCredentialStore.Credentials> persisted = new AtomicReference<>();
+            try {
+                github(server).requestTrash(credentials("gho_accessToken0123456789ABCDEFGHIJ",
+                                "ghr_refreshToken0123456789ABCDEFGHIJ"),
+                        "row:1", "Canal", "0.6.31", persisted::set);
+                throw new AssertionError("Un Client ID incorrecto no significa que el usuario revocó su sesión.");
+            } catch (GitHubChannelTrash.ReauthorizationRequiredException unexpected) {
+                throw new AssertionError("No borrar credenciales por una configuración OAuth inválida.", unexpected);
+            } catch (java.io.IOException expected) {
+                assertTrue(expected.getMessage().contains("Se conservó la sesión"));
+            }
+            assertEquals(2, server.getRequestCount());
+            assertEquals(null, persisted.get());
+        }
+    }
+
+    private static GitHubChannelTrash github(MockWebServer server) {
+        String base = server.url("/").toString();
+        return new GitHubChannelTrash(new OkHttpClient(), base + "device", base + "oauth", base + "contents/");
+    }
+
+    private static GitHubCredentialStore.Credentials credentials(String accessToken, String refreshToken) {
+        return new GitHubCredentialStore.Credentials(accessToken, refreshToken, 0L);
     }
 }

@@ -94,6 +94,27 @@ agente debe poder retomar el trabajo solo con lo que está en el repositorio.
 - Contrato de filas de proveedor: `app/src/test/resources/contracts/layout-provider-rows.json` es copia idéntica de `Lista M3U/contracts/layout-provider-rows.json`. Lo validan `LayoutContractTest` (app) y `LocalCatalogContractTest` (auxiliar); no editar la copia aquí sin cambiar primero la de Lista M3U.
 - Commits en español con prefijo: `feat(osd)`, `fix(settings)`, `feat(highfly)`, `chore(release)`.
 
+## Reglas de autorización y mando
+
+- **GitHub Device Flow (0.6.32)**: guardar access/refresh tokens únicamente cifrados con AES-GCM y
+  Android Keystore (`GitHubCredentialStore`). Si llega un 401, intentar la renovación; persistir
+  sincrónicamente el nuevo par rotado antes de reintentar una sola vez. Solo limpiar y pedir otra
+  vinculación si GitHub confirma que el refresh token ya no sirve (o rechaza de nuevo el access
+  token); un 403 (permisos, políticas o límites) y un 404 no son expiración y nunca borran la sesión.
+  La fila «Vinculado» requiere confirmación antes de iniciar otro QR. El Device Flow solicita
+  `public_repo offline_access` para recibir access token con expiración y refresh token; comprobar
+  que GitHub devuelva ambos. Las sesiones antiguas con solo access token no se pueden convertir:
+  podrían requerir una última vinculación después de actualizar, para obtener el par renovable. Las preferencias
+  sobreviven una actualización instalada encima si se conserva `applicationId` y certificado; una
+  desinstalación, borrado de datos o pérdida de la clave de Keystore requiere vincular de nuevo.
+  Cubrir respuestas de API con `ChannelTrashTest` y cifrado/recarga real de preferencias con
+  `GitHubCredentialStoreInstrumentedTest`.
+- **Atajo OK (0.6.32)**: durante la reproducción, tres bajadas nuevas de OK (DPAD_CENTER o ENTER),
+  con hasta 700 ms entre cada una, abren el primer canal visible de la lista cargada (`playChannel(0)`).
+  No cuenta el autorepeat al mantener OK y cualquier otra tecla reinicia la secuencia. Guía,
+  selector, error y ajustes conservan su manejo propio antes de evaluar el atajo. Lógica temporal
+  pura cubierta por `RapidOkSequenceTest`.
+
 ## Reglas de reproducción y OSD
 
 - Arranque: la primera lista se muestra solo con el catálogo publicado ya aplicado (`isWaitingForPublishedCatalog`, máx. `PUBLISHED_CATALOG_WAIT_MS`); si no, los canales de proveedor llegan después y renumeran todo. No mostrar la M3U sola antes del catálogo.

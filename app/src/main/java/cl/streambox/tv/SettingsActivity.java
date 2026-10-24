@@ -1796,15 +1796,26 @@ public final class SettingsActivity extends Activity {
         LinearLayout container = findViewById(R.id.system_links_container);
         if (container == null || classicUi) return;
         container.removeAllViews();
+        GitHubCredentialStore githubStore = new GitHubCredentialStore(this);
+        boolean githubLinked = githubStore.linked();
         container.addView(settingsActionRow(
                 getString(R.string.github_link_row_title),
-                getString(R.string.github_link_row_detail),
-                getString(new GitHubCredentialStore(this).linked()
+                getString(githubLinked
+                        ? R.string.github_link_row_detail_linked : R.string.github_link_row_detail),
+                getString(githubLinked
                         ? R.string.github_link_linked : R.string.premium_link_action)),
                 linkRowParams());
         View githubRow = container.getChildAt(0);
-        githubRow.setOnClickListener(view -> SceneDialog.hideHostWhileShown(
-                ChannelActionScenes.showGitHubLink(this, this::refreshSystemLinks), settingsRoot));
+        githubRow.setOnClickListener(view -> {
+            Runnable startLink = () -> SceneDialog.hideHostWhileShown(
+                    ChannelActionScenes.showGitHubLink(this, this::refreshSystemLinks), settingsRoot);
+            if (new GitHubCredentialStore(this).linked()) {
+                SceneDialog.hideHostWhileShown(
+                        ChannelActionScenes.showGitHubRelinkConfirm(this, startLink), settingsRoot);
+            } else {
+                startLink.run();
+            }
+        });
     }
 
     private LinearLayout.LayoutParams linkRowParams() {
