@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Fondo de Opciones (0.5.96, «Flotante minimalista»): una sola capa que oscurece desde la
-     izquierda, donde va la columna, y apenas arriba; el video asoma a la derecha. -->
+     izquierda, donde va la columna, y apenas arriba; el video asoma a la derecha. 0.6.33: la
+     zona oscura llega un poco más a la derecha para la columna «Información de la señal». -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
             <gradient android:angle="0" android:startColor="#F5000000" android:centerColor="#E0000000"
-                android:centerX="0.5" android:endColor="#33000000" android:type="linear" />
+                android:centerX="0.62" android:endColor="#33000000" android:type="linear" />
         </shape>
     </item>
     <item>

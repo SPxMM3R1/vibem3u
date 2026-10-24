@@ -11,6 +11,7 @@
 
 ## Hoy, en una mirada
 
+- **0.6.33 — Información de la señal a la derecha (2026-10-24, mockup aprobado «Exacto así»)**: en Opciones › En reproducción, «Información de la señal» pasa a una segunda columna a la derecha (Resolución/Cuadros, Tasa de bits/Video, Audio) para que la página no tenga scroll; solo informativa, no toma foco, y solo se ve en esa pestaña. La sombra de Opciones (`menu_backdrop_center`) llega un poco más a la derecha. Probado en emulador.
 - **0.6.31 — sincronía sobre el video (2026-10-22, mockup aprobado «Aplicalo»)**: pedido «que el selector de retraso se vea solo con el video, que al pulsarlo se active y quede solo, como lo del logo». La fila de Opciones queda como «Tamaño del logo» («−60 ms ›»); al pulsarla Opciones se cierra y abajo a la izquierda queda solo «◀ −60 ms ▶ · SINCRONÍA DEL AUDIO · SOLO ESTE CANAL · OK guarda ▼ original Atrás cancela», sin OSD. Probado en emulador: abre, ◀ ▶ cambian en vivo, OK guarda, Atrás cancela sin «¿Salir?», ▼ vuelve a 0. Pendiente: el usuario pidió «menú principal con 2 filas»; se preguntó cuál pantalla es.
 - **0.6.32/241 — autorización GitHub y atajo de mando (2026-10-23; publicada 2026-10-23)**:
   el Device Flow ignoraba `refresh_token`/`expires_in`; además, la papelera trataba HTTP 401/403/404

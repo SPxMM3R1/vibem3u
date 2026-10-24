@@ -207,12 +207,18 @@
         </LinearLayout>
 
 
-        <ScrollView
-            android:id="@+id/settings_content"
-            android:layout_width="390dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_marginTop="24dp"
             android:layout_weight="1"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+        <ScrollView
+            android:id="@+id/settings_content"
+            android:layout_width="390dp"
+            android:layout_height="match_parent"
             android:clipToPadding="false"
             android:fadingEdge="none"
             android:overScrollMode="never">
@@ -238,5 +244,171 @@
                 <include layout="@layout/settings_page_sistema" />
             </FrameLayout>
         </ScrollView>
+
+            <!-- Información de la señal (0.6.33, mockup aprobado «Exacto así»): columna a la
+                 derecha de las opciones de En reproducción, para que la página no tenga scroll.
+                 Solo informativa: no recibe foco. -->
+            <LinearLayout
+                android:id="@+id/settings_side_column"
+                android:layout_width="235dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="55dp"
+                android:layout_marginTop="70dp"
+                android:focusable="false"
+                android:orientation="vertical"
+                android:visibility="gone">
+                <LinearLayout
+                    android:id="@+id/signal_info_card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="13dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:letterSpacing="0.2"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:text="@string/settings_section_signal_info"
+                        android:textAllCaps="true"
+                        android:textColor="#6BFFFFFF"
+                        android:textSize="7sp" />
+                    <TextView
+                        android:id="@+id/signal_info_empty"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_signal_none"
+                        android:textColor="@color/minimal_muted"
+                        android:textSize="9.5sp"
+                        android:visibility="gone" />
+                    <LinearLayout
+                        android:id="@+id/signal_info_grid"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:baselineAligned="false"
+                            android:orientation="horizontal">
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/settings_signal_resolution"
+                                    android:textColor="@color/minimal_muted"
+                                    android:textSize="8.5sp" />
+                                <TextView
+                                    android:id="@+id/signal_resolution"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="3dp"
+                                    android:textColor="@color/white"
+                                    android:textSize="11.5sp" />
+                            </LinearLayout>
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/settings_signal_frame_rate"
+                                    android:textColor="@color/minimal_muted"
+                                    android:textSize="8.5sp" />
+                                <TextView
+                                    android:id="@+id/signal_frame_rate"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="3dp"
+                                    android:textColor="@color/white"
+                                    android:textSize="11.5sp" />
+                            </LinearLayout>
+                        </LinearLayout>
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="13dp"
+                            android:baselineAligned="false"
+                            android:orientation="horizontal">
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/settings_signal_bitrate"
+                                    android:textColor="@color/minimal_muted"
+                                    android:textSize="8.5sp" />
+                                <TextView
+                                    android:id="@+id/signal_bitrate"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="3dp"
+                                    android:textColor="@color/white"
+                                    android:textSize="11.5sp" />
+                            </LinearLayout>
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/settings_signal_video_codec"
+                                    android:textColor="@color/minimal_muted"
+                                    android:textSize="8.5sp" />
+                                <TextView
+                                    android:id="@+id/signal_video"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="3dp"
+                                    android:textColor="@color/white"
+                                    android:textSize="11.5sp" />
+                            </LinearLayout>
+                        </LinearLayout>
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="13dp"
+                            android:baselineAligned="false"
+                            android:orientation="horizontal">
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/settings_signal_audio_codec"
+                                    android:textColor="@color/minimal_muted"
+                                    android:textSize="8.5sp" />
+                                <TextView
+                                    android:id="@+id/signal_codecs"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="3dp"
+                                    android:textColor="@color/white"
+                                    android:textSize="11.5sp" />
+                            </LinearLayout>
+                            <Space
+                                android:layout_width="0dp"
+                                android:layout_height="1dp"
+                                android:layout_weight="1" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
     </LinearLayout>
 </FrameLayout>

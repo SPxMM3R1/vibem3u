@@ -1046,6 +1046,14 @@ public final class SettingsActivity extends Activity {
                         : android.graphics.Typeface.NORMAL);
             }
             tabPages[index].setVisibility(selected ? View.VISIBLE : View.GONE);
+            if (selected) {
+                // Columna derecha con la información de la señal (0.6.33): solo en En reproducción.
+                View side = findViewById(R.id.settings_side_column);
+                if (side != null) {
+                    side.setVisibility(tabPages[index].getId() == R.id.tab_page_playback
+                            ? View.VISIBLE : View.GONE);
+                }
+            }
             View first = firstFocusForTab(index);
             if (first != null) tabs[index].setNextFocusDownId(first.getId());
         }
