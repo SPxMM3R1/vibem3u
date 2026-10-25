@@ -1073,6 +1073,12 @@ public final class SettingsActivity extends Activity {
                     side.setVisibility(tabPages[index].getId() == R.id.tab_page_playback
                             ? View.VISIBLE : View.GONE);
                 }
+                // Segunda columna de Proveedores (0.6.39): Highfly Premium y Avanzado.
+                View providersSide = findViewById(R.id.providers_side_column);
+                if (providersSide != null) {
+                    providersSide.setVisibility(tabPages[index].getId() == R.id.tab_page_providers
+                            ? View.VISIBLE : View.GONE);
+                }
             }
             View first = firstFocusForTab(index);
             if (first != null) tabs[index].setNextFocusDownId(first.getId());
@@ -1219,6 +1225,7 @@ public final class SettingsActivity extends Activity {
         try {
             resolverCatalog = resolverCatalogRepository.load();
             renderResolverOptions();
+            linkProviderColumns();
             renderHiddenChannels();
         } catch (Exception error) {
             // The catalogue is bundled with the APK. A parse failure simply
@@ -1344,6 +1351,33 @@ public final class SettingsActivity extends Activity {
             }
         });
         container.addView(row);
+    }
+
+    /**
+     * Proveedores en dos columnas (0.6.39): derecha desde un proveedor va a la columna de
+     * Highfly Premium y Avanzado; izquierda desde esa columna vuelve al primer proveedor.
+     */
+    private void linkProviderColumns() {
+        if (classicUi || resolverGroupsContainer == null) return;
+        View target = findViewById(R.id.premium_account_row);
+        if (target == null || target.getVisibility() != View.VISIBLE) {
+            target = findViewById(R.id.highfly_manifest_url);
+        }
+        View firstProvider = null;
+        for (int index = 0; index < resolverGroupsContainer.getChildCount(); index++) {
+            View child = resolverGroupsContainer.getChildAt(index);
+            if (!child.isFocusable()) continue;
+            if (child.getId() == View.NO_ID) child.setId(View.generateViewId());
+            if (firstProvider == null) firstProvider = child;
+            if (target != null) child.setNextFocusRightId(target.getId());
+        }
+        if (firstProvider == null) return;
+        int[] rightColumn = {R.id.premium_account_row, R.id.premium_region_row,
+                R.id.highfly_manifest_url, R.id.mediaflow_settings_button};
+        for (int id : rightColumn) {
+            View view = findViewById(id);
+            if (view != null) view.setNextFocusLeftId(firstProvider.getId());
+        }
     }
 
     private boolean hiddenChannelsExpanded;
@@ -1619,7 +1653,12 @@ public final class SettingsActivity extends Activity {
                 ? View.FOCUS_LEFT
                 : View.FOCUS_RIGHT;
         View target = focusedView.focusSearch(direction);
-        return target != null && isDescendantOf(target, tabPages[selectedTabIndex]);
+        if (target == null) return false;
+        if (isDescendantOf(target, tabPages[selectedTabIndex])) return true;
+        // Segunda columna de Proveedores (0.6.39): está fuera de la página pero es de esa pestaña.
+        View providersSide = findViewById(R.id.providers_side_column);
+        return providersSide != null && providersSide.getVisibility() == View.VISIBLE
+                && (isDescendantOf(target, providersSide) || isDescendantOf(focusedView, providersSide));
     }
 
     private boolean isFooterButtonFocused() {

@@ -245,6 +245,20 @@
             </FrameLayout>
         </ScrollView>
 
+            <!-- Proveedores, segunda columna (0.6.39, mockup aprobado «Si»): desde Highfly Premium
+                 hacia abajo, a la derecha de los proveedores de señal. Solo en esa pestaña. -->
+            <ScrollView
+                android:id="@+id/providers_side_column"
+                android:layout_width="300dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="55dp"
+                android:clipToPadding="false"
+                android:fadingEdge="none"
+                android:overScrollMode="never"
+                android:visibility="gone">
+                <include layout="@layout/settings_page_proveedores_extra" />
+            </ScrollView>
+
             <!-- Información de la señal (0.6.33, mockup aprobado «Exacto así»): columna a la
                  derecha de las opciones de En reproducción, para que la página no tenga scroll.
                  Solo informativa: no recibe foco. -->

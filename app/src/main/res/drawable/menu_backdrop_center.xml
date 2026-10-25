@@ -5,8 +5,9 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <gradient android:angle="0" android:startColor="#F5000000" android:centerColor="#E0000000"
-                android:centerX="0.62" android:endColor="#33000000" android:type="linear" />
+            <!-- 0.6.39 (mockup aprobado «Si»): velo parejo en toda la pantalla; con dos
+                 columnas (Información de la señal, Proveedores) la derecha ya no queda sobre el video. -->
+            <solid android:color="#E0000000" />
         </shape>
     </item>
     <item>
