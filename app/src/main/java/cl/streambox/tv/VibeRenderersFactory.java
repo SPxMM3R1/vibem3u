@@ -9,6 +9,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.Renderer;
 import androidx.media3.exoplayer.audio.AudioRendererEventListener;
 import androidx.media3.exoplayer.audio.AudioSink;
+import androidx.media3.exoplayer.audio.AudioCapabilities;
 import androidx.media3.exoplayer.audio.DefaultAudioSink;
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
 import androidx.media3.exoplayer.video.MediaCodecVideoRenderer;
@@ -96,7 +97,15 @@ final class VibeRenderersFactory extends DefaultRenderersFactory {
             boolean enableFloatOutput,
             boolean enableAudioOutputPlaybackParams
     ) {
-        DefaultAudioSink.Builder builder = new DefaultAudioSink.Builder(context)
+        // Nivelación con Dolby (0.6.38): el AC3/E-AC3 que va directo a la tele no pasa por la
+        // nivelación, y el decodificador de la tele lo baja según su «dialnorm» (canales Alcatel:
+        // −24 → unos 7 dB menos). Si el equipo puede decodificarlo dentro de la app, se decodifica
+        // aquí y se nivela como el resto. Sin decodificador, sigue como antes (con sonido).
+        boolean decodeDolby = normalizeVolume && DolbyDecoders.available();
+        DefaultAudioSink.Builder builder = (decodeDolby
+                ? new DefaultAudioSink.Builder()
+                        .setAudioCapabilities(AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
+                : new DefaultAudioSink.Builder(context))
                 // Media3 disables audio processing when float output is forced.
                 .setEnableFloatOutput(normalizeVolume ? false : enableFloatOutput)
                 .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams);
