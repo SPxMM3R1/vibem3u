@@ -40,6 +40,8 @@ final class AdultChannels {
     private static final String KEY_LOCKED_UNTIL = "locked_until";
 
     private static volatile Set<String> published = Collections.emptySet();
+    /** Bloqueados en la lista aplicada: los números de después se corren (sin huecos). */
+    private static volatile boolean hiding = true;
 
     private AdultChannels() {
     }
@@ -58,12 +60,29 @@ final class AdultChannels {
      */
     static boolean isAdult(Channel channel) {
         if (channel == null) return false;
-        String tvgId = channel.getTvgId() == null ? "" : channel.getTvgId().trim();
+        return isAdultRow(channel.getTvgId(), channel.getGroup(), channel.getName());
+    }
+
+    /** Lo mismo con los datos sueltos de una fila del catálogo. */
+    static boolean isAdultRow(String tvgId, String group, String name) {
         Set<String> current = published;
-        if (!current.isEmpty()) return current.contains(tvgId);
-        String group = channel.getGroup() == null ? "" : channel.getGroup().trim();
-        String name = channel.getName() == null ? "" : channel.getName().toLowerCase(Locale.ROOT);
-        return FALLBACK_GROUP.equalsIgnoreCase(group) && !name.contains("adult swim");
+        if (!current.isEmpty()) return current.contains(tvgId == null ? "" : tvgId.trim());
+        String lowerName = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        return FALLBACK_GROUP.equalsIgnoreCase(group == null ? "" : group.trim())
+                && !lowerName.contains("adult swim");
+    }
+
+    static boolean isHiding() {
+        return hiding;
+    }
+
+    static void setHiding(boolean value) {
+        hiding = value;
+    }
+
+    /** Cambia cada vez que llega otra lista publicada (para recalcular números). */
+    static Object version() {
+        return published;
     }
 
     static Set<String> parse(String json) {

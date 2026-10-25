@@ -41,6 +41,27 @@ public final class AdultChannelsTest {
         assertTrue(AdultChannels.parse("no es json").isEmpty());
     }
 
+    @Test
+    public void lockedAdultChannelsLeaveNoGapInNumbers() throws Exception {
+        AdultChannels.update("{\"schema\":1,\"channels\":[\"PublicDirect.adulto\"]}");
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse("{\"schemaVersion\":1,\"channels\":["
+                + row("0104", "TVN", 1) + "," + row("PublicDirect.adulto", "Playboy", 2) + ","
+                + row("0105", "Mega", 3) + "]}");
+        Channel mega = channel("0105", "Mega", "Nacionales");
+
+        AdultChannels.setHiding(true);
+        assertEquals(2, catalog.numberFor(mega, 99));
+        AdultChannels.setHiding(false);
+        assertEquals(3, catalog.numberFor(mega, 99));
+        AdultChannels.setHiding(true);
+    }
+
+    private static String row(String tvgId, String name, int number) {
+        return "{\"kind\":\"m3u\",\"tvgId\":\"" + tvgId + "\",\"name\":\"" + name + "\",\"group\":\"G\","
+                + "\"sourceList\":\"1.m3u\",\"displayName\":\"" + name + "\",\"order\":" + number
+                + ",\"number\":" + number + ",\"state\":\"active\"}";
+    }
+
     private static Channel channel(String tvgId, String name, String group) {
         Map<String, String> attributes = new HashMap<>();
         attributes.put("tvg-id", tvgId);

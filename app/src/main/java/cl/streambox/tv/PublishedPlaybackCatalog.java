@@ -265,9 +265,37 @@ final class PublishedPlaybackCatalog {
 
     int numberFor(Channel channel, int fallback) {
         Row row = rowsByKey().get(keyFor(channel));
-        return row != null && "active".equals(row.state) && row.number > 0
-                ? row.number
-                : fallback;
+        if (row == null || !"active".equals(row.state) || row.number <= 0) return fallback;
+        if (!AdultChannels.isHiding()) return row.number;
+        // Canales de adultos bloqueados (0.6.37): no dejan hueco en la numeración.
+        int before = 0;
+        for (int number : adultNumbers()) {
+            if (number >= row.number) break;
+            before++;
+        }
+        return row.number - before;
+    }
+
+    private Object adultNumbersVersion;
+    private int[] adultNumbers = new int[0];
+
+    /** Números de los canales de adultos activos, ordenados; se recalcula si cambia la lista. */
+    private synchronized int[] adultNumbers() {
+        Object version = AdultChannels.version();
+        if (version == adultNumbersVersion) return adultNumbers;
+        List<Integer> numbers = new ArrayList<>();
+        for (Row row : rows) {
+            if ("active".equals(row.state) && "m3u".equals(row.kind) && row.number > 0
+                    && AdultChannels.isAdultRow(row.stableId, row.group, row.displayName)) {
+                numbers.add(row.number);
+            }
+        }
+        Collections.sort(numbers);
+        int[] result = new int[numbers.size()];
+        for (int index = 0; index < result.length; index++) result[index] = numbers.get(index);
+        adultNumbers = result;
+        adultNumbersVersion = version;
+        return result;
     }
 
     private Map<String, Row> rowsByKey() {

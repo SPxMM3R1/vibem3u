@@ -105,6 +105,7 @@ public final class MainActivity extends MainSelector {
         playbackPreferences = new PlaybackPreferences(this);
         channelVisibility = new ChannelVisibility(this);
         adultChannelsUnlocked = AdultChannels.isUnlocked(this);
+        AdultChannels.setHiding(!adultChannelsUnlocked);
         resolverCatalogRepository = new ResolverCatalogRepository(this);
         resolverPreferences = new ResolverPreferences(this);
         PublishedPlaybackCatalogRepository.clearRetiredLocalSelections(this);
@@ -1747,6 +1748,7 @@ public final class MainActivity extends MainSelector {
             boolean adultUnlocked = AdultChannels.isUnlocked(this);
             if (adultUnlocked != adultChannelsUnlocked) {
                 adultChannelsUnlocked = adultUnlocked;
+                AdultChannels.setHiding(!adultUnlocked);
                 mainHandler.post(this::reapplyChannelList);
             }
             // Con la configuración abierta la precarga de vecinos se detiene: se retoma al volver.
