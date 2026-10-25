@@ -2054,6 +2054,7 @@ public final class MainActivity extends MainSelector {
     @Override
     protected void onStart() {
         super.onStart();
+        ensurePlayerAfterFocusLoss();
         // Al volver a la app (TV encendida de nuevo), catálogo y enlaces se renuevan si son viejos.
         if (!settingsOpen && catalogUpdatedAtMillis > 0L
                 && System.currentTimeMillis() - catalogUpdatedAtMillis > CATALOG_REFRESH_ON_START_MS) {
@@ -2083,6 +2084,7 @@ public final class MainActivity extends MainSelector {
             return;
         }
         enterImmersiveMode();
+        ensurePlayerAfterFocusLoss();
         if (appUpdater != null) appUpdater.onHostResume();
         if (refreshAfterSettings) {
             refreshAfterSettings = false;

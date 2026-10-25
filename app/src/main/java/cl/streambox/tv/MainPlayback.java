@@ -377,6 +377,11 @@ abstract class MainPlayback extends MainState {
         qualityRevertSource = null;
         tvvooNoSignalToken++;
         channelIndex = (requestedIndex % channels.size() + channels.size()) % channels.size();
+        if (player == null) {
+            // Sin foco el reproductor está liberado (0.6.40): el canal se abre al volver.
+            restartPlaybackAfterFocusLoss = true;
+            return;
+        }
         Channel channel = channels.get(channelIndex);
         boolean resumingRecovery = PlaybackPreferences.channelIdentity(channel)
                 .equals(pendingTvVooBackupIdentity);
@@ -1544,6 +1549,7 @@ abstract class MainPlayback extends MainState {
             );
             return;
         }
+        if (player == null) return;
         player.setMediaSource(mediaSource);
         showLoadingState(getString(R.string.loading_starting_playback));
         prepareAndPlay();
@@ -1689,12 +1695,20 @@ abstract class MainPlayback extends MainState {
         player.play();
     }
 
-    /** Stops playback when hidden but retains only unexpired in-session tokens. */
+    /**
+     * Stops playback when hidden but retains only unexpired in-session tokens.
+     * Al perder el foco (0.6.40) el reproductor se libera entero: el decodificador por
+     * hardware, sus búferes de video y la memoria de carga quedan libres para otras apps.
+     * Al volver se crea uno nuevo.
+     */
     void stopPlaybackForFocusLoss() {
         boolean hasPlaybackSession = playbackChannel != null
                 || currentPlaybackSource != null
                 || (player != null && player.getCurrentMediaItem() != null);
-        if (!hasPlaybackSession) return;
+        if (!hasPlaybackSession) {
+            releasePlayerForRecovery();
+            return;
+        }
         restartPlaybackAfterFocusLoss = true;
         cancelPlaybackResolution();
         resolverCoordinator.clearForPlaybackPause();
@@ -1706,10 +1720,12 @@ abstract class MainPlayback extends MainState {
         playbackRecoveryBudget.reset();
         discardCurrentPlaybackSource();
         playbackChannel = null;
-        if (player != null) {
-            player.stop();
-            player.clearMediaItems();
-        }
+        releasePlayerForRecovery();
+    }
+
+    /** Recrea el reproductor liberado al perder el foco. */
+    void ensurePlayerAfterFocusLoss() {
+        if (player == null && !resourcesReleased && !isFinishing()) createPlayer();
     }
 
     /** Reopens the previously selected channel with a fresh source/session. */
