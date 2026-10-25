@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tecla del teclado de la clave (0.6.36, mockup aprobado): tenue; con foco, tarjeta blanca. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape><solid android:color="@color/white" /><corners android:radius="3dp" /></shape>
+    </item>
+    <item>
+        <shape><solid android:color="@color/menu_row" /><corners android:radius="3dp" /></shape>
+    </item>
+</selector>

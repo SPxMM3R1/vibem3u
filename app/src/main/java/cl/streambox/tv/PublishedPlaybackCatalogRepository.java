@@ -32,6 +32,10 @@ final class PublishedPlaybackCatalogRepository {
     static final String HIGHFLY_LINKS_FILE = "highfly-live.json";
     static final String TVVOO_VARIANTS_FILE = "tvvoo-variantes.json";
     static final String BACKUPS_FILE = "backups.json";
+    /** Canales de adultos que se ocultan sin la clave (adultos.json, en la raiz). */
+    static final String ADULT_URL =
+            "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/adultos.json";
+    static final String ADULT_FILE = "adultos.json";
     private static final String CACHE_DIR = "published_catalog";
     private static final Set<String> ALLOWED_HOSTS = Collections.unmodifiableSet(
             new HashSet<>(Collections.singletonList("raw.githubusercontent.com"))
@@ -98,6 +102,13 @@ final class PublishedPlaybackCatalogRepository {
     String fetchDirectBackups() throws IOException {
         String document = download(BACKUPS_URL, PublishedDirectBackups.MAX_BYTES);
         store(BACKUPS_FILE, document);
+        return document;
+    }
+
+    /** Lista de canales de adultos; un fallo deja la última guardada. */
+    String fetchAdultChannels() throws IOException {
+        String document = download(ADULT_URL, AdultChannels.MAX_BYTES);
+        if (!AdultChannels.parse(document).isEmpty()) store(ADULT_FILE, document);
         return document;
     }
 

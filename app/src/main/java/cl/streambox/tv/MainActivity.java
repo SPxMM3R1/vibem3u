@@ -104,6 +104,7 @@ public final class MainActivity extends MainSelector {
         LogoScales.load(this);
         playbackPreferences = new PlaybackPreferences(this);
         channelVisibility = new ChannelVisibility(this);
+        adultChannelsUnlocked = AdultChannels.isUnlocked(this);
         resolverCatalogRepository = new ResolverCatalogRepository(this);
         resolverPreferences = new ResolverPreferences(this);
         PublishedPlaybackCatalogRepository.clearRetiredLocalSelections(this);
@@ -699,6 +700,8 @@ public final class MainActivity extends MainSelector {
             presentKeys.add(rowKey);
             // Ocultos en esta TV o enviados a la papelera desde la TV (0.5.90).
             if (channelVisibility.isHidden(rowKey, visibilityNow)) continue;
+            // Canales de adultos (0.6.36): bloqueados, no existen para la lista, la guía ni la búsqueda.
+            if (!adultChannelsUnlocked && AdultChannels.isAdult(candidate)) continue;
             if (streamResolverRegistry.isChannelEnabled(candidate)) {
                 enabledChannels.add(candidate);
             }
@@ -956,6 +959,8 @@ public final class MainActivity extends MainSelector {
                     if (variants != null) PublishedTvVooVariants.update(variants, now);
                     String directBackups = repository.cached(PublishedPlaybackCatalogRepository.BACKUPS_FILE);
                     if (directBackups != null) PublishedDirectBackups.update(directBackups);
+                    String adultList = repository.cached(PublishedPlaybackCatalogRepository.ADULT_FILE);
+                    if (adultList != null) AdultChannels.update(adultList);
                     // Recién ahora: con las hermanas TvVoo y los enlaces Highfly cargados, la
                     // resolución temprana ve las mismas versiones (y la elegida) que la apertura.
                     mainHandler.post(this::warmLastChannel);
@@ -1006,6 +1011,17 @@ public final class MainActivity extends MainSelector {
                     } catch (Exception error) {
                         Log.w(RESOURCE_HEALTH_TAG, "Respaldos publicados no disponibles", error);
                         // Sin respaldos, los canales de Lista 1 quedan como antes.
+                    }
+                });
+                executeUnlessClosing(catalogExecutor, () -> {
+                    try {
+                        // Lista de canales de adultos (adultos.json): bloqueados, salen de la lista.
+                        if (AdultChannels.update(repository.fetchAdultChannels()) && !adultChannelsUnlocked) {
+                            mainHandler.post(this::reapplyChannelList);
+                        }
+                    } catch (Exception error) {
+                        Log.w(RESOURCE_HEALTH_TAG, "Lista de canales de adultos no disponible", error);
+                        // Sin lista, se ocultan por el grupo «Adultos» o la última guardada.
                     }
                 });
                 try {
@@ -1725,6 +1741,12 @@ public final class MainActivity extends MainSelector {
             String previousVisibility = channelVisibility.signature();
             channelVisibility = new ChannelVisibility(this);
             if (!previousVisibility.equals(channelVisibility.signature())) {
+                mainHandler.post(this::reapplyChannelList);
+            }
+            // Opciones › Canales puede desbloquear o bloquear los canales de adultos (0.6.36).
+            boolean adultUnlocked = AdultChannels.isUnlocked(this);
+            if (adultUnlocked != adultChannelsUnlocked) {
+                adultChannelsUnlocked = adultUnlocked;
                 mainHandler.post(this::reapplyChannelList);
             }
             // Con la configuración abierta la precarga de vecinos se detiene: se retoma al volver.

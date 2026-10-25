@@ -1215,6 +1215,7 @@ public final class SettingsActivity extends Activity {
             }
         }
 
+        renderAdultChannels();
         try {
             resolverCatalog = resolverCatalogRepository.load();
             renderResolverOptions();
@@ -1310,6 +1311,39 @@ public final class SettingsActivity extends Activity {
         }
         groupSwitch.setChecked(resolverPreferences.isEnabled(definition));
         return groupSwitch;
+    }
+
+
+    /**
+     * Opciones › Canales › Canales de adultos (0.6.36): «Desbloquear» pide la clave del usuario;
+     * «Bloquear» pide confirmación y los oculta de inmediato. La lista se rehace al volver.
+     */
+    private void renderAdultChannels() {
+        LinearLayout container = findViewById(R.id.adult_channels_container);
+        if (container == null || classicUi) return;
+        container.removeAllViews();
+        boolean unlocked = AdultChannels.isUnlocked(this);
+        View row = settingsActionRow(
+                getString(R.string.adult_channels_section),
+                getString(unlocked ? R.string.adult_channels_unlocked_detail
+                        : R.string.adult_channels_locked_detail),
+                getString(unlocked ? R.string.adult_channels_lock : R.string.adult_channels_unlock));
+        Runnable refresh = () -> {
+            renderAdultChannels();
+            View first = container.getChildAt(0);
+            if (first != null) first.requestFocus();
+        };
+        row.setOnClickListener(view -> {
+            if (AdultChannels.isUnlocked(this)) {
+                SceneDialog.hideHostWhileShown(AdultChannelScenes.showLockConfirm(this, () -> {
+                    AdultChannels.lock(this);
+                    refresh.run();
+                }), settingsRoot);
+            } else {
+                SceneDialog.hideHostWhileShown(AdultChannelScenes.showUnlock(this, refresh), settingsRoot);
+            }
+        });
+        container.addView(row);
     }
 
     private boolean hiddenChannelsExpanded;

@@ -176,6 +176,25 @@
         android:textColor="@color/red"
         android:textSize="8.5sp"
         android:visibility="gone" />
+    <!-- Canales de adultos (0.6.36, mockup aprobado): fila Desbloquear/Bloquear; la llena SettingsActivity. -->
+    <TextView
+        android:id="@+id/adult_channels_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="4dp"
+        android:fontFamily="sans-serif-medium"
+        android:letterSpacing="0.2"
+        android:singleLine="true"
+        android:text="@string/adult_channels_section"
+        android:textAllCaps="true"
+        android:textColor="#6BFFFFFF"
+        android:textSize="7sp" />
+    <LinearLayout
+        android:id="@+id/adult_channels_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
     <!-- Ocultos en esta TV (0.5.90): solo aparece si hay alguno. -->
     <TextView
         android:id="@+id/hidden_channels_title"

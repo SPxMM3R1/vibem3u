@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Desbloquear canales de adultos (0.6.36, mockup aprobado «Aplicalo»). Escena como dialog_scene:
+     velo, degradado desde abajo y contenido abajo a la izquierda; el teclado va a la derecha y
+     AdultChannelScenes lo llena. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#33000000" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/scene_scrim_start" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="440dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/scene_scrim" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="48dp"
+        android:layout_marginBottom="48dp"
+        android:gravity="bottom"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="330dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.2"
+                android:text="@string/adult_channels_section"
+                android:textAllCaps="true"
+                android:textColor="#9EFFFFFF"
+                android:textSize="7.5sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="9dp"
+                android:includeFontPadding="false"
+                android:letterSpacing="-0.015"
+                android:text="@string/adult_channels_unlock"
+                android:textColor="@color/white"
+                android:textSize="30sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="9dp"
+                android:lineSpacingMultiplier="1.4"
+                android:text="@string/adult_unlock_message"
+                android:textColor="#BDFFFFFF"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/adult_pin_dots"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/settings_input"
+                android:gravity="center_vertical"
+                android:letterSpacing="0.1"
+                android:textColor="@color/white"
+                android:textSize="20sp" />
+
+            <TextView
+                android:id="@+id/adult_pin_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:minHeight="14dp"
+                android:textColor="@color/amber"
+                android:textSize="9.5sp" />
+
+            <Button
+                android:id="@+id/adult_cancel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/scene_button"
+                android:includeFontPadding="false"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="7dp"
+                android:stateListAnimator="@null"
+                android:text="@string/cancel"
+                android:textAllCaps="false"
+                android:textColor="@color/scene_button_text"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <GridLayout
+            android:id="@+id/adult_keypad"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="48dp"
+            android:columnCount="3" />
+    </LinearLayout>
+</FrameLayout>
