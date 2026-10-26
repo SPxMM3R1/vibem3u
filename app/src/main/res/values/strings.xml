@@ -197,7 +197,7 @@
     <string name="settings_reminders_test">Enviar aviso de prueba</string>
     <string name="settings_reminders_no_permission_screen">Esta tele no tiene ese menú. Actívalo una vez desde un PC con: %1$s</string>
     <!-- Canales de adultos (0.6.36). -->
-    <string name="adult_channels_section">Canales de adultos</string>
+    <string name="adult_channels_section">Contenido adicional</string>
     <string name="adult_channels_locked_detail">Bloqueados · no aparecen en ninguna parte</string>
     <string name="adult_channels_unlocked_detail">Desbloqueados · visibles en esta tele</string>
     <string name="adult_channels_unlock">Desbloquear</string>
@@ -209,7 +209,7 @@
     <string name="adult_unlock_wait">Demasiados intentos. Espera %1$d s</string>
     <string name="adult_key_delete">Borrar</string>
     <string name="adult_key_ok">OK</string>
-    <string name="adult_lock_title">¿Bloquear canales de adultos?</string>
+    <string name="adult_lock_title">¿Bloquear contenido adicional?</string>
     <string name="adult_lock_message">Se ocultan de inmediato. Para volver a verlos tendrás que escribir tu clave.</string>
     <string name="settings_tab_reminders">Recordatorios</string>
     <string name="settings_section_now">Ahora</string>
