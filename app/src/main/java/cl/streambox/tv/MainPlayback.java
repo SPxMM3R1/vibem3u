@@ -111,6 +111,8 @@ abstract class MainPlayback extends MainState {
         playerUsesVolumeNormalization = isVolumeNormalizationEnabled();
         playerUsesSoftwareMp2 = isSoftwareMp2Enabled();
         playerUsesTunneling = isVideoTunnelingEnabled();
+        tunneledRenderedFrames = 0;
+        tunneledFrameProgressNs = 0L;
         VibeRenderersFactory renderersFactory = new VibeRenderersFactory(
                 this,
                 playerUsesVolumeNormalization,
@@ -479,8 +481,14 @@ abstract class MainPlayback extends MainState {
     }
 
     boolean hasRenderedVideoFrame() {
-        return playbackBitrateMeter != null
-                && playbackBitrateMeter.snapshot().hasRenderedVideoFrame;
+        if (playbackBitrateMeter != null && playbackBitrateMeter.snapshot().hasRenderedVideoFrame) {
+            return true;
+        }
+        if (!playerUsesTunneling || player == null) return false;
+        androidx.media3.exoplayer.DecoderCounters counters = player.getVideoDecoderCounters();
+        if (counters == null) return false;
+        counters.ensureUpdated();
+        return counters.renderedOutputBufferCount > 0;
     }
 
     void maybeSchedulePlaybackSourceStability() {
@@ -599,12 +607,33 @@ abstract class MainPlayback extends MainState {
                 ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
         long lastFrameNs = measurements.lastRenderedVideoFrameRealtimeNs;
         long nowNs = System.nanoTime();
-        if (measurements.hasRenderedVideoFrame
+        boolean hasRenderedFrame = measurements.hasRenderedVideoFrame;
+        if (playerUsesTunneling) {
+            // En túnel Media3 no avisa cada cuadro (sin metadatos por cuadro): se usa el
+            // contador de cuadros del decodificador, que sí avanza (0.6.42).
+            lastFrameNs = tunneledFrameProgressNs(nowNs);
+            hasRenderedFrame = lastFrameNs != androidx.media3.common.C.TIME_UNSET;
+        }
+        if (hasRenderedFrame
                 && lastFrameNs != androidx.media3.common.C.TIME_UNSET
                 && PlaybackStallPolicy.isExpired(0L, Math.max(0L, (nowNs - lastFrameNs) / 1_000_000L),
                 PLAYBACK_FREEZE_TIMEOUT_MS)) {
             requestFullPlaybackRecovery(classifyPlaybackStall(measurements));
         }
+    }
+
+    /** Último momento en que avanzó el contador de cuadros mostrados; TIME_UNSET sin cuadros. */
+    long tunneledFrameProgressNs(long nowNs) {
+        androidx.media3.exoplayer.DecoderCounters counters = player.getVideoDecoderCounters();
+        if (counters == null) return androidx.media3.common.C.TIME_UNSET;
+        counters.ensureUpdated();
+        int rendered = counters.renderedOutputBufferCount;
+        if (rendered <= 0) return androidx.media3.common.C.TIME_UNSET;
+        if (rendered != tunneledRenderedFrames || tunneledFrameProgressNs == 0L) {
+            tunneledRenderedFrames = rendered;
+            tunneledFrameProgressNs = nowNs;
+        }
+        return tunneledFrameProgressNs;
     }
 
     String classifyPlaybackStall(PlaybackDiagnosticsWorker.Snapshot measurements) {

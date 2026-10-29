@@ -438,6 +438,8 @@ abstract class MainState extends Activity {
     boolean playerUsesVolumeNormalization;
     boolean playerUsesSoftwareMp2;
     boolean playerUsesTunneling;
+    int tunneledRenderedFrames;
+    long tunneledFrameProgressNs;
     long playbackGeneration;
     boolean playbackWatchdogScheduled;
     long playbackLoadingSinceElapsedRealtime = -1L;
