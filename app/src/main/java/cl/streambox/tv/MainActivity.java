@@ -1770,7 +1770,8 @@ public final class MainActivity extends MainSelector {
                 }
                 boolean normalizationChanged =
                         playerUsesVolumeNormalization != isVolumeNormalizationEnabled()
-                                || playerUsesSoftwareMp2 != isSoftwareMp2Enabled();
+                                || playerUsesSoftwareMp2 != isSoftwareMp2Enabled()
+                                || playerUsesTunneling != isVideoTunnelingEnabled();
                 if (normalizationChanged) {
                     if (playbackBitrateMeter != null) {
                         playbackBitrateMeter.close();
@@ -1926,6 +1927,11 @@ public final class MainActivity extends MainSelector {
         int direct = TvVooBackup.directBackupsOf(channel).size();
         if (direct == 1) return getString(R.string.signal_resolver_direct);
         return direct > 1 ? getString(R.string.signal_backup_direct_count, direct) : "";
+    }
+
+    boolean isVideoTunnelingEnabled() {
+        return getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE)
+                .getBoolean(SettingsActivity.KEY_VIDEO_TUNNELING, false);
     }
 
     boolean isSoftwareMp2Enabled() {

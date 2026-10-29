@@ -47,6 +47,8 @@ import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.TrackSelectionOverride;
+import androidx.media3.common.TrackSelectionParameters;
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.VideoSize;
 import androidx.media3.common.text.Cue;
@@ -87,6 +89,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @UnstableApi
 abstract class MainPlayback extends MainState {
+    /**
+     * Modo túnel (0.6.42): el video va directo al procesador de imagen de la tele, que en muchos
+     * equipos desentrelaza las señales 1080i. Media3 lo apaga solo si el decodificador o el audio
+     * del canal no lo admiten. Los cambios de pista posteriores parten de estos parámetros
+     * (buildUpon de DefaultTrackSelector.Parameters), así que el ajuste se conserva.
+     */
+    void applyVideoTunneling(boolean enabled) {
+        TrackSelectionParameters current = player.getTrackSelectionParameters();
+        if (!(current instanceof DefaultTrackSelector.Parameters)) return;
+        player.setTrackSelectionParameters(((DefaultTrackSelector.Parameters) current).buildUpon()
+                .setTunnelingEnabled(enabled)
+                .build());
+    }
+
     void createPlayer() {
         if (playbackBufferManager != null) playbackBufferManager.close();
         ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
@@ -94,6 +110,7 @@ abstract class MainPlayback extends MainState {
                 activityManager != null && activityManager.isLowRamDevice());
         playerUsesVolumeNormalization = isVolumeNormalizationEnabled();
         playerUsesSoftwareMp2 = isSoftwareMp2Enabled();
+        playerUsesTunneling = isVideoTunnelingEnabled();
         VibeRenderersFactory renderersFactory = new VibeRenderersFactory(
                 this,
                 playerUsesVolumeNormalization,
@@ -116,6 +133,7 @@ abstract class MainPlayback extends MainState {
                         true
                 )
                 .build();
+        applyVideoTunneling(playerUsesTunneling);
         playerView.setPlayer(player);
         playbackBufferManager.attach(player, startupMetrics);
         PlaybackDiagnosticsWorker newBitrateMeter = new PlaybackDiagnosticsWorker(

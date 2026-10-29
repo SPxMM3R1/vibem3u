@@ -172,6 +172,76 @@
             android:textColor="@color/minimal_muted"
             android:textSize="8.5sp" />
     </LinearLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:orientation="vertical"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp">
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:includeFontPadding="false"
+            android:text="@string/video_tunneling_title"
+            android:textColor="@color/settings_row_title"
+            android:textSize="11.5sp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/video_tunneling_detail"
+            android:textColor="@color/settings_row_detail"
+            android:textSize="8.5sp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/video_tunneling_on"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:layout_marginEnd="20dp"
+                android:background="@drawable/segment_option"
+                android:focusable="true"
+                android:gravity="center_vertical|start"
+                android:includeFontPadding="false"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="10dp"
+                android:stateListAnimator="@null"
+                android:text="@string/video_tunneling_on"
+                android:textAllCaps="false"
+                android:textColor="@color/segment_option_text"
+                android:textSize="11sp" />
+            <Button
+                android:id="@+id/video_tunneling_off"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:background="@drawable/segment_option"
+                android:focusable="true"
+                android:gravity="center_vertical|start"
+                android:includeFontPadding="false"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="10dp"
+                android:stateListAnimator="@null"
+                android:text="@string/video_tunneling_off"
+                android:textAllCaps="false"
+                android:textColor="@color/segment_option_text"
+                android:textSize="11sp" />
+        </LinearLayout>
+        <TextView
+            android:id="@+id/video_tunneling_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="@color/minimal_muted"
+            android:textSize="8.5sp" />
+    </LinearLayout>
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

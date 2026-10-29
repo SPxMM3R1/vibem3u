@@ -101,6 +101,12 @@
     <string name="software_mp2_on">Activado</string>
     <string name="software_mp2_off">Desactivado</string>
     <string name="software_mp2_device_has">Este equipo tiene decodificador MP2 propio: usa el suyo y este ajuste no cambia nada aquí.</string>
+    <string name="video_tunneling_title">Modo túnel de video</string>
+    <string name="video_tunneling_detail">El video va directo al procesador de imagen de la tele. En muchos equipos así se desentrelazan los canales 1080i (rayas en movimientos rápidos). Si el audio se desfasa o un canal no abre, desactívalo.</string>
+    <string name="video_tunneling_on">Activado</string>
+    <string name="video_tunneling_off">Desactivado</string>
+    <string name="video_tunneling_device_has">Este equipo admite el modo túnel para H.264.</string>
+    <string name="video_tunneling_device_lacks">Este equipo no informa modo túnel para H.264: activarlo no cambiará nada.</string>
     <string name="software_mp2_device_lacks">Este equipo no tiene decodificador MP2 propio: usa el de software para esos canales.</string>
     <string name="settings_provider_selection_web">Los canales de Highfly y TvVoo se eligen, ordenan y ocultan en el editor web.</string>
     <string name="resolver_groups_title">Proveedores de señal</string>

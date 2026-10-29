@@ -68,6 +68,8 @@ public final class SettingsActivity extends Activity {
     public static final String KEY_NORMALIZE_VOLUME = "normalize_volume";
     /** Sistema › Audio MP2 por software (0.6.29). */
     public static final String KEY_SOFTWARE_MP2 = "software_mp2";
+    /** Sistema › Modo túnel de video (0.6.42); apagado por omisión. */
+    public static final String KEY_VIDEO_TUNNELING = "video_tunneling";
     public static final String KEY_AUTO_RECONNECT = "auto_reconnect";
     public static final String EXTRA_INITIAL_TAB = "initial_tab";
     public static final String EXTRA_HAS_PUBLISHED_PROVIDER_CHANNELS =
@@ -259,6 +261,7 @@ public final class SettingsActivity extends Activity {
         bindPremiumSection();
         bindSystemLinks();
         bindSoftwareMp2();
+        bindVideoTunneling();
         enterImmersiveMode();
 
         settingsRoot = findViewById(R.id.settings_root);
@@ -847,6 +850,54 @@ public final class SettingsActivity extends Activity {
                     ? R.string.software_mp2_device_has
                     : R.string.software_mp2_device_lacks);
         }
+    }
+
+    /** Sistema › Modo túnel de video (0.6.42): misma fila que el audio MP2. */
+    private void bindVideoTunneling() {
+        Button on = findViewById(R.id.video_tunneling_on);
+        Button off = findViewById(R.id.video_tunneling_off);
+        TextView status = findViewById(R.id.video_tunneling_status);
+        if (on == null || off == null || classicUi) return;
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        Runnable render = () -> {
+            boolean enabled = prefs.getBoolean(KEY_VIDEO_TUNNELING, false);
+            on.setSelected(enabled);
+            off.setSelected(!enabled);
+        };
+        on.setOnClickListener(view -> {
+            prefs.edit().putBoolean(KEY_VIDEO_TUNNELING, true).apply();
+            render.run();
+        });
+        off.setOnClickListener(view -> {
+            prefs.edit().putBoolean(KEY_VIDEO_TUNNELING, false).apply();
+            render.run();
+        });
+        render.run();
+        if (status != null) {
+            status.setText(hasTunneledAvcDecoder()
+                    ? R.string.video_tunneling_device_has
+                    : R.string.video_tunneling_device_lacks);
+        }
+    }
+
+    /** Algún decodificador H.264 del equipo admite el modo túnel. */
+    private static boolean hasTunneledAvcDecoder() {
+        try {
+            for (android.media.MediaCodecInfo info : new android.media.MediaCodecList(
+                    android.media.MediaCodecList.REGULAR_CODECS).getCodecInfos()) {
+                if (info.isEncoder()) continue;
+                for (String type : info.getSupportedTypes()) {
+                    if (!androidx.media3.common.MimeTypes.VIDEO_H264.equalsIgnoreCase(type)) continue;
+                    if (info.getCapabilitiesForType(type).isFeatureSupported(
+                            android.media.MediaCodecInfo.CodecCapabilities.FEATURE_TunneledPlayback)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // Sin lista de códecs: se informa como no disponible.
+        }
+        return false;
     }
 
     /** El equipo trae decodificador MP2 propio (entonces el de software no se usa). */

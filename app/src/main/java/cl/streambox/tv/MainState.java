@@ -437,6 +437,7 @@ abstract class MainState extends Activity {
     final Set<String> logoRevalidatedThisSession = new HashSet<>();
     boolean playerUsesVolumeNormalization;
     boolean playerUsesSoftwareMp2;
+    boolean playerUsesTunneling;
     long playbackGeneration;
     boolean playbackWatchdogScheduled;
     long playbackLoadingSinceElapsedRealtime = -1L;
@@ -767,6 +768,7 @@ abstract class MainState extends Activity {
     abstract boolean isVolumeNormalizationEnabled();
 
     abstract boolean isSoftwareMp2Enabled();
+    abstract boolean isVideoTunnelingEnabled();
     abstract void showLoadingState(String message);
     abstract void markPublishedHighflyLinkFailed();
     abstract void setStatus(String text, int colorResource);
