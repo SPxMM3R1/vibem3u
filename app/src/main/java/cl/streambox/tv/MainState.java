@@ -440,6 +440,9 @@ abstract class MainState extends Activity {
     boolean playerUsesTunneling;
     int tunneledRenderedFrames;
     long tunneledFrameProgressNs;
+    int tunnelFpsCount;
+    long tunnelFpsSinceMs;
+    float tunneledFps;
     long playbackGeneration;
     boolean playbackWatchdogScheduled;
     long playbackLoadingSinceElapsedRealtime = -1L;

@@ -113,6 +113,9 @@ abstract class MainPlayback extends MainState {
         playerUsesTunneling = isVideoTunnelingEnabled();
         tunneledRenderedFrames = 0;
         tunneledFrameProgressNs = 0L;
+        tunnelFpsCount = 0;
+        tunnelFpsSinceMs = 0L;
+        tunneledFps = 0f;
         VibeRenderersFactory renderersFactory = new VibeRenderersFactory(
                 this,
                 playerUsesVolumeNormalization,
@@ -634,6 +637,36 @@ abstract class MainPlayback extends MainState {
             tunneledFrameProgressNs = nowNs;
         }
         return tunneledFrameProgressNs;
+    }
+
+    /**
+     * Cuadros por segundo a mostrar (0.6.43): lo medido por cuadro; en túnel, que no avisa cada
+     * cuadro, el ritmo del contador del decodificador cada 2 s, y mientras tanto lo que declara
+     * el formato.
+     */
+    float shownFrameRate(PlaybackDiagnosticsWorker.Snapshot measurements) {
+        if (measurements.displayFrameRate > 0 || !playerUsesTunneling || player == null) {
+            return measurements.displayFrameRate;
+        }
+        androidx.media3.exoplayer.DecoderCounters counters = player.getVideoDecoderCounters();
+        if (counters != null) {
+            counters.ensureUpdated();
+            int count = counters.renderedOutputBufferCount;
+            long nowMs = SystemClock.elapsedRealtime();
+            if (tunnelFpsSinceMs == 0L || count < tunnelFpsCount) {
+                tunnelFpsSinceMs = nowMs;
+                tunnelFpsCount = count;
+            } else if (nowMs - tunnelFpsSinceMs >= 2_000L) {
+                float raw = (count - tunnelFpsCount) * 1000f / (nowMs - tunnelFpsSinceMs);
+                tunneledFps = raw > 0f ? PlaybackBitrateMeter.normalizeFrameRate(raw) : 0f;
+                tunnelFpsSinceMs = nowMs;
+                tunnelFpsCount = count;
+            }
+        }
+        if (tunneledFps > 0f) return tunneledFps;
+        Format video = player.getVideoFormat();
+        return video != null && video.frameRate > 0f
+                ? PlaybackBitrateMeter.normalizeFrameRate(video.frameRate) : 0f;
     }
 
     String classifyPlaybackStall(PlaybackDiagnosticsWorker.Snapshot measurements) {
@@ -1817,8 +1850,8 @@ abstract class MainPlayback extends MainState {
         if (playbackDiagnosticsActive || player == null || playbackBitrateMeter == null) {
             return;
         }
-        if (player.getPlaybackState() == Player.STATE_READY
-                && playbackBitrateMeter.snapshot().hasRenderedVideoFrame) {
+        // En túnel no hay aviso por cuadro: hasRenderedVideoFrame usa el contador (0.6.43).
+        if (player.getPlaybackState() == Player.STATE_READY && hasRenderedVideoFrame()) {
             playbackDiagnosticsActive = true;
         }
     }
@@ -1858,7 +1891,7 @@ abstract class MainPlayback extends MainState {
         String resolution = video != null && video.width > 0 && video.height > 0
                 ? video.width + " × " + video.height
                 : "—";
-        float frameRate = measurements.displayFrameRate;
+        float frameRate = shownFrameRate(measurements);
         String fps = frameRate > 0 ? trimDecimal(frameRate) + " FPS" : "— FPS";
         setTextIfChanged(videoInfo, resolution + " · " + fps);
 

@@ -534,7 +534,8 @@ abstract class MainSelector extends MainGuide {
                 ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
         List<String> parts = new ArrayList<>();
         if (video != null && video.width > 0 && video.height > 0) parts.add(video.width + " × " + video.height);
-        if (measurements.displayFrameRate > 0) parts.add(trimDecimal(measurements.displayFrameRate) + " FPS");
+        float frameRate = shownFrameRate(measurements);
+        if (frameRate > 0) parts.add(trimDecimal(frameRate) + " FPS");
         if (video != null && video.sampleMimeType != null) parts.add(codecName(video.sampleMimeType));
         long bitrate = measurements.muxedStream ? measurements.streamBitrate : measurements.videoBitrate;
         if (bitrate > 0) parts.add(formatBitrate(bitrate));
@@ -563,7 +564,8 @@ abstract class MainSelector extends MainGuide {
                 ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
         long bitrate = measurements.muxedStream ? measurements.streamBitrate : measurements.videoBitrate;
         if (bitrate > 0) parts.add(formatBitrate(bitrate));
-        if (measurements.displayFrameRate > 0) parts.add(trimDecimal(measurements.displayFrameRate) + " fps");
+        float frameRate = shownFrameRate(measurements);
+        if (frameRate > 0) parts.add(trimDecimal(frameRate) + " fps");
         return TextUtils.join(" · ", parts);
     }
 
