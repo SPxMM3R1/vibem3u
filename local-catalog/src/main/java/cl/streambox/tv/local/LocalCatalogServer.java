@@ -14,7 +14,6 @@ import cl.streambox.tv.TvVooCatalogChannel;
 import cl.streambox.tv.TvVooStreamResolver;
 import cl.streambox.tv.HighflyStreamResolver;
 import cl.streambox.tv.MeganoticiasStreamResolver;
-import cl.streambox.tv.NautaStreamResolver;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.json.JSONArray;
@@ -47,7 +46,6 @@ public final class LocalCatalogServer {
     private final Path webRoot;
     private final Path listaRoot;
     private final ResolverCatalog resolverCatalog;
-    private final NautaCatalogSource nautaCatalogSource = new NautaCatalogSource();
     private final GitHubPublisher publisher = new GitHubPublisher();
     private final HlsProxy hlsProxy = new HlsProxy();
     private HttpServer server;
@@ -151,18 +149,6 @@ public final class LocalCatalogServer {
                     .put("local", true)
                     .put("githubAuthenticated", publisher.isAuthenticated())
                     .put("resolverCatalogVersion", resolverCatalog.getVersion()));
-            return true;
-        }
-        if ("GET".equals(method) && "/api/nauta/categories".equals(path)) {
-            sendJson(exchange, 200, nautaCatalogSource.categories());
-            return true;
-        }
-        if ("GET".equals(method) && "/api/nauta/catalog".equals(path)) {
-            String query = exchange.getRequestURI().getRawQuery();
-            if (query == null || !query.matches("category=(?:cat_[0-9]+|nautatv_catalog)")) {
-                throw new IllegalArgumentException("Selecciona una categoría Nauta válida.");
-            }
-            sendJson(exchange, 200, nautaCatalogSource.catalog(query.substring("category=".length())));
             return true;
         }
         if ("POST".equals(method) && "/api/auth/start".equals(path)) {
@@ -322,7 +308,6 @@ public final class LocalCatalogServer {
         if (definition == null) return null;
         return switch (definition.getEngine()) {
             case "tvn" -> new TvnStreamResolver(definition);
-            case "nauta" -> new NautaStreamResolver();
             case "meganoticias" -> new MeganoticiasStreamResolver(definition);
             case "highfly" -> new HighflyStreamResolver(definition);
             case "tvvoo" -> new TvVooStreamResolver(definition);

@@ -45,7 +45,7 @@ public final class PublishedDirectBackupsTest {
         PublishedDirectBackups.update("{\"schema\":1,\"channels\":{\"0104\":{\"backups\":["
                 + "{\"display_name\":\"Sin id\",\"url\":\"https://example.test/a.m3u8\"},"
                 + "{\"tvg_id\":\"PublicDirect.ccc\",\"display_name\":\"Resolutor\","
-                + "\"url\":\"vibem3u://resolver/m6foot/90\"},"
+                + "\"url\":\"vibem3u://resolver/tvvoo/90\"},"
                 + "{\"tvg_id\":\"PublicDirect.ddd\",\"display_name\":\"Buena\","
                 + "\"url\":\"https://example.test/d.m3u8\"}"
                 + "]}}}");

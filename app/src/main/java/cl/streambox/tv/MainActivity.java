@@ -1911,8 +1911,6 @@ public final class MainActivity extends MainSelector {
             case "": return getString(R.string.signal_resolver_direct);
             case "highfly": return "Highfly";
             case "tvvoo": return "TvVoo";
-            case "nauta": return "Nauta";
-            case "m6foot": return "M6Foot";
             case "tvn": return "TVN";
             case "meganoticias": return "Meganoticias";
             case "mediaflow": return "MediaFlow";

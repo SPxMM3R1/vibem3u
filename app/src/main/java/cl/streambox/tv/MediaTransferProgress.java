@@ -10,8 +10,8 @@ import java.util.Locale;
 
 /**
  * Hora del último byte de video recibido (0.5.89). El vigilante de cortes lo usa para no
- * reiniciar un canal cuyo servidor es lento pero sigue entregando el segmento: Nauta tarda
- * a veces más de 5 s en un segmento de 5 s y el reinicio volvía a dejarlo sin búfer.
+ * reiniciar un canal cuyo servidor es lento pero sigue entregando el segmento: algunos tardan
+ * más de 5 s en un segmento de 5 s y el reinicio volvía a dejarlo sin búfer.
  * Las listas HLS no cuentan: se recargan cada pocos segundos aunque el video esté cortado.
  */
 @UnstableApi

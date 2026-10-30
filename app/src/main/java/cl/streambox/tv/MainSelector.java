@@ -1644,8 +1644,6 @@ abstract class MainSelector extends MainGuide {
                 || player == null) return;
         ResolvedPlaybackCandidate candidate = sourceCandidates.get(index);
         // Directo y respaldos directos salen del catálogo, sin sesión del resolutor: no caducan.
-        // Antes, con el selector abierto un rato, elegir un respaldo Nauta consultaba al
-        // resolutor del canal y la fila quedaba solo con «Fuente actual» (0.5.95).
         boolean catalogSource = candidate.getSource() != null && !candidate.getSource().hasResolver();
         if (!catalogSource && (candidate.isStale()
                 || candidate.getSource() == null
@@ -1677,22 +1675,6 @@ abstract class MainSelector extends MainGuide {
             rememberSourceChoice(channel, backupIndex >= 0
                     ? PlaybackPreferences.directBackupChoice(source.getPlaybackUri())
                     : PlaybackPreferences.SOURCE_PRINCIPAL);
-            URI selectedReference = source.getPlaybackUri();
-            if (backupIndex >= 0
-                    && DynamicSourceReference.isAppOnly(selectedReference)
-                    && "nauta".equals(DynamicSourceReference.provider(selectedReference))) {
-                // Nauta backups are tokenless locators, not playable HTTP URLs. Resolve the
-                // selected row with its own identity through the normal resolver registry.
-                playbackHasStarted = false;
-                playbackLoadingSinceElapsedRealtime = SystemClock.elapsedRealtime();
-                playbackAutoRecoveryInFlight = false;
-                playbackRecoveryFailed = false;
-                resetPlaybackBitrateMeter();
-                setStatus("CARGANDO", R.color.amber);
-                showLoadingState(getString(R.string.source_selector_switching));
-                resolveAndPlay(channel, playbackGeneration, true);
-                return;
-            }
             if (backupIndex < 0 && streamResolverRegistry != null
                     && streamResolverRegistry.find(channel) != null) {
                 // «Directo» de un canal con resolutor (TVN): se pide de nuevo la señal oficial;

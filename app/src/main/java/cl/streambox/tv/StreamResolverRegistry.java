@@ -19,8 +19,6 @@ public final class StreamResolverRegistry {
         configured.add(new MeganoticiasStreamResolver());
         configured.add(new TvVooStreamResolver(ResolverDefinition.fallbackTvVoo()));
         configured.add(new HighflyStreamResolver(ResolverDefinition.fallbackHighfly()));
-        configured.add(new NautaStreamResolver());
-        configured.add(new M6FootStreamResolver());
         resolvers = Collections.unmodifiableList(configured);
         catalog = null;
         preferences = null;
@@ -102,8 +100,6 @@ public final class StreamResolverRegistry {
             ResolverPreferences preferences
     ) {
         return switch (definition.getEngine()) {
-            case "nauta" -> new NautaStreamResolver();
-            case "m6foot" -> new M6FootStreamResolver(definition);
             case "tvn" -> new TvnStreamResolver(definition);
             case "meganoticias" -> new MeganoticiasStreamResolver(definition);
             case "tvvoo" -> preferences != null && preferences.isMediaFlowEnabled()

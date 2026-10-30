@@ -42,12 +42,12 @@ public final class GitHubPublisherTest {
         FakeGitHub api = new FakeGitHub();
         GitHubPublisher publisher = new GitHubPublisher(api::execute);
         GitHubPublisher.PublishResult result = publisher.publishEpgManual(new JSONObject()
-                .put("path", "epg/manual/Nauta.52bb@Nauta.xml")
+                .put("path", "epg/manual/PublicDirect.52bb.xml")
                 .put("channel", "ESPN 7")
                 .put("content", "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<tv data-manual-of=\"x\"></tv>"));
         assertEquals("editor-commit-2", result.commitSha);
         assertEquals("Guía manual desde el editor local: ESPN 7", api.lastMessage);
-        assertEquals(List.of("epg/manual/Nauta.52bb@Nauta.xml"), api.lastPaths);
+        assertEquals(List.of("epg/manual/PublicDirect.52bb.xml"), api.lastPaths);
     }
 
     @Test

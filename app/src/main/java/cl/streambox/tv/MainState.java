@@ -94,9 +94,6 @@ abstract class MainState extends Activity {
     /** Con bytes de video llegando, un corte se espera hasta 30 s antes de reiniciar (0.5.89). */
     static final long PLAYBACK_RECEIVING_WINDOW_MS = 4_000L;
     static final long PLAYBACK_MAX_WAIT_WHILE_RECEIVING_MS = 30_000L;
-    /** Nauta: servidor lento y a saltos; 30 s detrás del vivo y 8 s de búfer para arrancar. */
-    static final long SLOW_RELAY_LIVE_OFFSET_MS = 30_000L;
-    static final long SLOW_RELAY_START_BUFFER_MS = 8_000L;
     final MediaTransferProgress mediaTransferProgress = new MediaTransferProgress();
     static final long PLAYBACK_DIAGNOSTIC_STALL_TIMEOUT_NS =
             PLAYBACK_FREEZE_TIMEOUT_MS * 1_000_000L;

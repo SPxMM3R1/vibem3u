@@ -90,8 +90,7 @@ final class M3uCacheSanitizer {
                         )
                 );
                 result.append(appOnlyReference == null
-                        ? ("nauta".equalsIgnoreCase(pendingResolver)
-                            ? "vibem3u://resolver/nauta/invalid" : stripSensitiveCredentials(rawLine))
+                        ? stripSensitiveCredentials(rawLine)
                         : appOnlyReference.toString());
                 pendingTvgId = "";
                 pendingResolver = "";

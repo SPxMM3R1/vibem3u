@@ -1689,32 +1689,18 @@ abstract class MainPlayback extends MainState {
         }
         MediaItem.Builder itemBuilder = mediaItemFor(channel, source.getPlaybackUri()).buildUpon();
         if (source.hasMimeType()) itemBuilder.setMimeType(source.getMimeType());
-        boolean slowRelay = isSlowRelay(source);
         // Velocidad fija en 1x en todos los canales en vivo (0.6.29, pedido del usuario): al
         // acelerar o frenar para seguir el vivo, el audio pasa por un estirador de tiempo que
         // puede correrlo respecto del video. Si se atrasa, alcanza el vivo saltando.
         MediaItem.LiveConfiguration.Builder live = new MediaItem.LiveConfiguration.Builder()
                 .setMinPlaybackSpeed(1f)
                 .setMaxPlaybackSpeed(1f);
-        if (slowRelay) {
-            // Lista de 60 s con segmentos de 5 s que el servidor entrega a saltos: 30 s detrás
-            // del vivo hay segmentos ya publicados para adelantar.
-            live.setTargetOffsetMs(SLOW_RELAY_LIVE_OFFSET_MS);
-        }
         itemBuilder.setLiveConfiguration(live.build());
-        if (playbackBufferManager != null) {
-            playbackBufferManager.setMinimumStartBufferMs(slowRelay ? SLOW_RELAY_START_BUFFER_MS : 0L);
-        }
         mediaTransferProgress.reset();
         return new DefaultMediaSourceFactory(playbackDataSourceFactory)
                 .setLoadErrorHandlingPolicy(new PlaybackLoadErrorPolicy(source.isDynamicallyResolved()))
                 .createMediaSource(itemBuilder
                         .setTag(Long.valueOf(startupMetrics.currentId())).build());
-    }
-
-    /** Fuentes de servidor lento y a saltos (Nauta): más margen al vivo y al arrancar. */
-    static boolean isSlowRelay(ResolvedPlaybackSource source) {
-        return source != null && NautaStreamResolver.ID.equalsIgnoreCase(source.getResolverId());
     }
 
     void beginStartupMeasurement(Channel channel, PlaybackStartupMetrics.Reason reason) {

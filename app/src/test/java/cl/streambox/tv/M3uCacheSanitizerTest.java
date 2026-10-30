@@ -71,19 +71,6 @@ public final class M3uCacheSanitizerTest {
     }
 
     @Test
-    public void keepsTokenlessM6FootReferenceUntouched() {
-        String playlist = "#EXTM3U\n"
-                + "#EXTINF:-1 tvg-id=\"M6Foot.90@M6Foot\" x-resolver=\"m6foot\",ESPN 4\n"
-                + "vibem3u://resolver/m6foot/90\n";
-
-        String sanitized = M3uCacheSanitizer.forDisk(playlist);
-
-        assertTrue(sanitized.contains("vibem3u://resolver/m6foot/90"));
-        assertFalse(sanitized.contains("m3u8"));
-        assertEquals(sanitized, M3uCacheSanitizer.forDisk(sanitized));
-    }
-
-    @Test
     public void keepsDirectChannelsUntouched() {
         String playlist = "#EXTM3U\n"
                 + "#EXTINF:-1 tvg-id=\"direct\",Directo\n"

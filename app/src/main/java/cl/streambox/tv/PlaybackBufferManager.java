@@ -69,17 +69,10 @@ final class PlaybackBufferManager implements AutoCloseable {
         targetBytes = PlaybackBufferBudget.targetBytes(maxHeapBytes, lowRamDevice);
     }
 
-    private StartThresholdLoadControl loadControl;
-
-    /** Búfer mínimo antes de mostrar imagen en el próximo canal (0 = normal). */
-    void setMinimumStartBufferMs(long milliseconds) {
-        if (loadControl != null) loadControl.setMinimumStartBufferMs(milliseconds);
-    }
-
-    StartThresholdLoadControl loadControl() {
+    DefaultLoadControl loadControl() {
         // Startup 1s / resume 3s. The 50s loading window and byte target are unchanged;
-        // neither caps total decoder memory. Slow sources raise the startup minimum.
-        loadControl = new StartThresholdLoadControl(new DefaultLoadControl.Builder().setAllocator(allocator)
+        // neither caps total decoder memory.
+        return new DefaultLoadControl.Builder().setAllocator(allocator)
                 .setBufferDurationsMs(
                         MIN_BUFFER_MS,
                         MAX_BUFFER_MS,
@@ -88,8 +81,7 @@ final class PlaybackBufferManager implements AutoCloseable {
                 )
                 .setTargetBufferBytes(targetBytes)
                 .setPrioritizeTimeOverSizeThresholds(false)
-                .setBackBuffer(0, false).build());
-        return loadControl;
+                .setBackBuffer(0, false).build();
     }
 
     void attach(ExoPlayer player, PlaybackStartupMetrics metrics) {

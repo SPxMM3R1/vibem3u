@@ -33,11 +33,14 @@ public final class ResolverCatalog {
     private static final int MAX_ALIAS_LENGTH = 240;
     private static final Pattern SAFE_ID = Pattern.compile("[a-z0-9][a-z0-9_-]{0,31}");
     private static final Set<String> ENGINES = setOf(
-            "tvn", "meganoticias", "24horas", "tvvoo", "highfly", "nauta", "m6foot"
+            "tvn", "meganoticias", "tvvoo", "highfly"
     );
-    /** Retired provider entries are ignored if an old persisted catalogue is encountered. */
-    private static final Set<String> RETIRED_ENGINES = setOf("24horas");
-    private static final Set<String> RETIRED_PROVIDER_IDS = setOf("24horas");
+    /**
+     * Resolutores retirados (24 Horas; Nauta y M6Foot el 2026-10-29): un catálogo guardado de
+     * antes puede traerlos. Se ignoran sin invalidar el resto.
+     */
+    private static final Set<String> RETIRED_ENGINES = setOf("24horas", "nauta", "m6foot");
+    private static final Set<String> RETIRED_PROVIDER_IDS = setOf("24horas", "nauta", "m6foot");
     private static final Set<String> SAFE_RECIPE_IDS = setOf("bounded-payload-v1");
     private static final Set<String> SAFE_VALIDATION_MODES = setOf("media-signature-v1");
     private static final Map<String, Set<String>> ALLOWED_CONFIG_HOSTS = allowedHosts();
@@ -117,16 +120,15 @@ public final class ResolverCatalog {
             List<ResolverDefinition> definitions = new ArrayList<>();
             Set<String> ids = new HashSet<>();
             for (int index = 0; index < array.length(); index++) {
-                ResolverDefinition definition = parseDefinition(array.getJSONObject(index));
+                JSONObject object = array.getJSONObject(index);
+                // Antes de validar: el motor de un resolutor retirado ya no es conocido.
+                if (RETIRED_PROVIDER_IDS.contains(object.optString("id", "").trim().toLowerCase(Locale.ROOT))
+                        || RETIRED_ENGINES.contains(object.optString("engine", "").trim().toLowerCase(Locale.ROOT))) {
+                    continue;
+                }
+                ResolverDefinition definition = parseDefinition(object);
                 if (!ids.add(definition.getId())) {
                     throw new IOException("Resolutor duplicado.");
-                }
-                if (RETIRED_PROVIDER_IDS.contains(definition.getId())
-                        || RETIRED_ENGINES.contains(definition.getEngine())) {
-                    // A previously installed catalogue may still contain the
-                    // retired 24 Horas entry. Ignore it while keeping the
-                    // remaining providers available for updates.
-                    continue;
                 }
                 definitions.add(definition);
             }
@@ -379,15 +381,12 @@ public final class ResolverCatalog {
         result.put("meganoticias", setOf(
                 "www.meganoticias.cl", "meganoticias.cl", "api.mega.cl", "mdstrm.com"
         ));
-        result.put("24horas", setOf("www.24horas.cl", "24horas.cl", "mdstrm.com"));
         result.put("tvvoo", setOf(
                 "tvvoo.hayd.uk", "www.vavoo.tv", "www.vypn.net", "vavoo.to", "kool.to"
         ));
         result.put("highfly", setOf(
                 "sports.highfly.to", "papacito.cfd", "raw.githubusercontent.com"
         ));
-        result.put("nauta", setOf("stremio-addon-wheat.vercel.app"));
-        result.put("m6foot", setOf("m6foot.click", "navytitle.net"));
         return Collections.unmodifiableMap(result);
     }
 

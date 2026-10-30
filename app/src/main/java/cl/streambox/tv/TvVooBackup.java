@@ -46,9 +46,8 @@ final class TvVooBackup {
     }
 
     /**
-     * Direcciones de respaldo en el orden en que se prueban. Acepta HTTP(S) y, para las filas
-     * Nauta vinculadas explícitamente por el catálogo, solo su referencia interna tokenless con
-     * {@code tvg-id} estable. Nunca admite URLs del proveedor ni referencias de otro resolutor.
+     * Direcciones de respaldo en el orden en que se prueban. Solo HTTP(S); nunca referencias de
+     * un resolutor.
      */
     static List<URI> directBackupsOf(Channel channel) {
         if (channel == null) return Collections.emptyList();
@@ -58,8 +57,6 @@ final class TvVooBackup {
         for (String line : value.split("\n")) {
             URI uri = playbackReference(line.trim());
             if (uri == null || result.contains(uri)) continue;
-            if (isNautaReference(uri)
-                    && !isStableNautaId(channel.getAttributes().get(SOURCE_ID_PREFIX + result.size()))) continue;
             result.add(uri);
         }
         return Collections.unmodifiableList(result);
@@ -71,26 +68,10 @@ final class TvVooBackup {
             URI uri = URI.create(value);
             String scheme = uri.getScheme();
             if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) return uri;
-            if (isNautaReference(uri)) return uri;
             return null;
         } catch (IllegalArgumentException error) {
             return null;
         }
-    }
-
-    private static boolean isNautaReference(URI uri) {
-        if (!DynamicSourceReference.isAppOnly(uri)
-                || !"nauta".equals(DynamicSourceReference.provider(uri))) return false;
-        try {
-            NautaStreamResolver.parseLocator(DynamicSourceReference.stableId(uri));
-            return true;
-        } catch (java.io.IOException | RuntimeException invalid) {
-            return false;
-        }
-    }
-
-    private static boolean isStableNautaId(String value) {
-        return value != null && value.matches("(?i)^Nauta\\.[0-9a-f]{24}@Nauta$");
     }
 
     /**
@@ -119,7 +100,6 @@ final class TvVooBackup {
                     || lines.contains(uri.toString())) continue;
             // Identidad propia del respaldo: así no lo reclama el resolutor del canal dueño.
             String id = backup.getTvgId();
-            if (isNautaReference(uri) && !isStableNautaId(id)) continue;
             if (!AppStrings.isBlank(id)) attributes.put(SOURCE_ID_PREFIX + lines.size(), id);
             lines.add(uri.toString());
         }

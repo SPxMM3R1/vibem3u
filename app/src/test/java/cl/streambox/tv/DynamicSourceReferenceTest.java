@@ -26,17 +26,6 @@ public final class DynamicSourceReferenceTest {
     }
 
     @Test
-    public void acceptsOnlyNumericM6FootReferences() {
-        URI reference = URI.create("vibem3u://resolver/m6foot/90");
-        assertTrue(DynamicSourceReference.isAppOnly(reference));
-        assertEquals("m6foot", DynamicSourceReference.provider(reference));
-        assertEquals("90", DynamicSourceReference.stableId(reference));
-        assertFalse(DynamicSourceReference.isAppOnly(
-                URI.create("vibem3u://resolver/m6foot/not-a-player")
-        ));
-    }
-
-    @Test
     public void rejectsUnknownProviderAndPathTraversal() {
         assertFalse(DynamicSourceReference.isAppOnly(
                 URI.create("vibem3u://resolver/unknown/source")

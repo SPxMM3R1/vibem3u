@@ -28,8 +28,6 @@ final class PublishedPlaybackCatalog {
     private static final java.util.regex.Pattern UNSAFE_EXCLUDED_ID = java.util.regex.Pattern.compile(
             "(?i)\\.m3u8?(?:\\b|\\?)|\\.mpd$|[\\r\\n]");
     private static final java.util.regex.Pattern LINE_BREAK = java.util.regex.Pattern.compile("[\\r\\n]");
-    private static final java.util.regex.Pattern NAUTA_ID = java.util.regex.Pattern.compile(
-            "(?i)Nauta\\.[0-9a-f]{24}@Nauta");
     private static final java.util.regex.Pattern HIGHFLY_LEAF = java.util.regex.Pattern.compile(
             "leaf:[A-Za-z0-9_-]{2,128}");
     private static final String LOGO_BASE =
@@ -518,14 +516,9 @@ final class PublishedPlaybackCatalog {
                     List<String> ids = new ArrayList<>();
                     for (int index = 0; index < backups.length() && ids.size() < MAX_DIRECT_BACKUPS; index++) {
                         String id = backups.optString(index, "").trim();
-                        boolean nauta = id.regionMatches(true, 0, "Nauta.", 0, 6);
-                        boolean validNauta = nauta && NAUTA_ID.matcher(id).matches();
-                        boolean validDirect = !nauta && !id.isEmpty() && !id.contains("://")
+                        boolean validDirect = !id.isEmpty() && !id.contains("://")
                                 && id.length() <= 512;
-                        // Stable Nauta identities may be linked explicitly: the M3U row still
-                        // carries only its tokenless vibem3u://resolver/nauta locator. Never allow
-                        // malformed/stale Nauta IDs to hide an independent channel.
-                        if ((validNauta || validDirect) && !id.equals(stableId) && !id.equals(preferredM3u)
+                        if (validDirect && !id.equals(stableId) && !id.equals(preferredM3u)
                                 && !ids.contains(id)) ids.add(id);
                     }
                     backupm3u = Collections.unmodifiableList(ids);

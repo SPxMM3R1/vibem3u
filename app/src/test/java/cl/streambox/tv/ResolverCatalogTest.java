@@ -27,7 +27,19 @@ public final class ResolverCatalogTest {
         for (ResolverDefinition definition : ResolverCatalog.parse(json).getProviders()) {
             ids.add(definition.getId());
         }
-        assertTrue(ids.containsAll(java.util.Arrays.asList("tvn", "meganoticias", "tvvoo", "highfly", "nauta", "m6foot")));
+        assertTrue(ids.containsAll(java.util.Arrays.asList("tvn", "meganoticias", "tvvoo", "highfly")));
+    }
+
+    /** Nauta y M6Foot se retiraron el 2026-10-29: un catálogo guardado de antes los trae y se ignoran. */
+    @Test
+    public void retiredNautaAndM6FootEntriesAreIgnored() throws Exception {
+        String json = "{\"schemaVersion\":1,\"catalogVersion\":\"viejo\",\"providers\":["
+                + "{\"id\":\"nauta\",\"name\":\"Nauta\",\"engine\":\"nauta\",\"match\":{\"tvgIdSuffixes\":[\"@Nauta\"]}},"
+                + "{\"id\":\"m6foot\",\"name\":\"M6Foot\",\"engine\":\"m6foot\",\"match\":{\"tvgIdSuffixes\":[\"@M6Foot\"]}},"
+                + "{\"id\":\"tvn\",\"name\":\"TVN\",\"engine\":\"tvn\",\"match\":{\"tvgIds\":[\"0104\"]}}]}";
+        java.util.List<ResolverDefinition> providers = ResolverCatalog.parse(json).getProviders();
+        assertEquals(1, providers.size());
+        assertEquals("tvn", providers.get(0).getId());
     }
 
     @Test

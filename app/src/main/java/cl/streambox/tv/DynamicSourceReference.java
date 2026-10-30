@@ -172,19 +172,10 @@ final class DynamicSourceReference {
         return "tvn".equalsIgnoreCase(value)
                 || "meganoticias".equalsIgnoreCase(value)
                 || "tvvoo".equalsIgnoreCase(value)
-                || "highfly".equalsIgnoreCase(value)
-                || "nauta".equalsIgnoreCase(value)
-                || "m6foot".equalsIgnoreCase(value);
+                || "highfly".equalsIgnoreCase(value);
     }
 
     private static boolean isSafeIdentity(String provider, String value) {
-        if ("nauta".equals(provider)) {
-            try { NautaStreamResolver.parseLocator(value); return true; }
-            catch (java.io.IOException | RuntimeException invalid) { return false; }
-        }
-        if ("m6foot".equals(provider)) {
-            return value != null && value.matches("[0-9]{1,6}");
-        }
         // The literal [Not 24/7] annotation belongs to an exact Chile metadata name,
         // not a path separator. The outer URI still encodes the complete reference.
         if (AppStrings.isBlank(value) || value.length() > 256) return false;

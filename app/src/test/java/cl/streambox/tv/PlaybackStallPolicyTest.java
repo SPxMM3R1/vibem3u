@@ -31,7 +31,7 @@ public final class PlaybackStallPolicyTest {
 
     @Test
     public void slowButReceivingSegmentsAreNotRestartedUntilTheCap() {
-        // Corte desde 10 s; bytes de video hace 1 s: se espera (Nauta tarda >5 s por segmento).
+        // Corte desde 10 s; bytes de video hace 1 s: se espera (hay servidores que tardan >5 s por segmento).
         assertTrue(PlaybackStallPolicy.keepWaitingWhileReceiving(10_000L, 17_000L, 16_000L, 4_000L, 30_000L));
         // Sin bytes en los últimos 4 s: se reinicia como antes.
         assertFalse(PlaybackStallPolicy.keepWaitingWhileReceiving(10_000L, 17_000L, 12_000L, 4_000L, 30_000L));
@@ -39,16 +39,5 @@ public final class PlaybackStallPolicyTest {
         assertFalse(PlaybackStallPolicy.keepWaitingWhileReceiving(10_000L, 40_000L, 39_500L, 4_000L, 30_000L));
         // Sin datos de transferencia no se cambia el comportamiento.
         assertFalse(PlaybackStallPolicy.keepWaitingWhileReceiving(10_000L, 17_000L, -1L, 4_000L, 30_000L));
-    }
-
-    @Test
-    public void slowRelaysWaitForTheirStartBufferButNeverForever() {
-        long eightSeconds = 8_000_000L;
-        assertTrue(StartThresholdLoadControl.meetsStartThreshold(1_000_000L, 0L, false, 0L));
-        assertFalse(StartThresholdLoadControl.meetsStartThreshold(3_000_000L, eightSeconds, false, 2_000L));
-        assertTrue(StartThresholdLoadControl.meetsStartThreshold(8_000_000L, eightSeconds, false, 2_000L));
-        assertTrue(StartThresholdLoadControl.meetsStartThreshold(3_000_000L, eightSeconds, true, 2_000L));
-        assertTrue(StartThresholdLoadControl.meetsStartThreshold(3_000_000L, eightSeconds, false,
-                StartThresholdLoadControl.START_WAIT_CAP_MS));
     }
 }
