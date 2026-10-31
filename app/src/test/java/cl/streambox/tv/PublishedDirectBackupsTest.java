@@ -34,6 +34,24 @@ public final class PublishedDirectBackupsTest {
     }
 
     @Test
+    public void keepsUpToTwentyFourCopiesInFileOrder() {
+        StringBuilder document = new StringBuilder("{\"schema\":1,\"channels\":{\"0104\":{\"backups\":[");
+        for (int index = 0; index < 30; index++) {
+            if (index > 0) document.append(',');
+            document.append("{\"tvg_id\":\"PublicDirect.c").append(index)
+                    .append("\",\"display_name\":\"TVN\",\"url\":\"https://example.test/")
+                    .append(index).append(".m3u8\"}");
+        }
+        PublishedDirectBackups.update(document.append("]}}}").toString());
+
+        List<Channel> copies = PublishedDirectBackups.backupsFor("0104");
+        assertEquals(24, copies.size());
+        assertEquals("PublicDirect.c0", copies.get(0).getTvgId());
+        assertEquals("PublicDirect.c23", copies.get(23).getTvgId());
+        PublishedDirectBackups.update(null);
+    }
+
+    @Test
     public void invalidDocumentLeavesNoBackups() {
         PublishedDirectBackups.update(DOCUMENT.replace("\"schema\":1", "\"schema\":2"));
 

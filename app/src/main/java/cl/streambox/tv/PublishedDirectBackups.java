@@ -20,7 +20,7 @@ import java.util.Map;
  */
 final class PublishedDirectBackups {
     static final int MAX_BYTES = 512 * 1024;
-    static final int MAX_PER_CHANNEL = 8;
+    static final int MAX_PER_CHANNEL = 24;
     private static final int MAX_CHANNELS = 1024;
 
     private static volatile Map<String, List<Channel>> byChannel = Collections.emptyMap();
