@@ -27,9 +27,13 @@ import java.util.concurrent.FutureTask;
 
 public final class ChannelLogoCache {
     private static final int MAX_LOGO_BYTES = 2 * 1024 * 1024;
-    private static final int MAX_DISK_FILES = 96;
-    private static final long MAX_DISK_BYTES = 24L * 1024L * 1024L;
-    private static final long MAX_RENDER_DISK_BYTES = 32L * 1024L * 1024L;
+    // 0.6.45: con 96 archivos el caché no alcanzaba para los ~166 logos de las listas
+    // (y cada logo se guarda dibujado en dos tamaños, guía y OSD): se borraban y se volvían
+    // a descargar al recorrer la guía. 1.024 cubre Lista 1 + Lista 2 con margen; los logos
+    // publicados pesan ~2 MB en total desde la optimización de Lista M3U (2026-10-31).
+    private static final int MAX_DISK_FILES = 1024;
+    private static final long MAX_DISK_BYTES = 48L * 1024L * 1024L;
+    private static final long MAX_RENDER_DISK_BYTES = 64L * 1024L * 1024L;
     private static final int MAX_RENDERED_LOGO_BYTES = 4 * 1024 * 1024;
     private static final int DECODE_OVERSAMPLE = 4;
     private static final int MAX_RENDER_EDGE_PX = 4096;
