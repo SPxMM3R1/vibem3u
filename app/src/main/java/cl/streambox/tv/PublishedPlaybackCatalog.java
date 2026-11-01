@@ -18,7 +18,8 @@ import java.util.Set;
 
 /** Read-only projection of Lista M3U's published playback configuration. */
 final class PublishedPlaybackCatalog {
-    static final int MAX_BYTES = 2 * 1024 * 1024;
+    static final int MAX_BYTES = 8 * 1024 * 1024;
+    static final int MAX_ROWS = 25000;
     static final int MAX_DIRECT_BACKUPS = 16;
     // Patrones precompilados (0.6.17): con ~5.000 filas, String.matches recompilaba la misma
     // expresión decenas de miles de veces y la lectura del catálogo tardaba ~7 s al abrir.
@@ -34,6 +35,7 @@ final class PublishedPlaybackCatalog {
             "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/";
 
     private final List<Row> rows;
+    private final Map<String, Row> rowsByKey;
     private final List<String> excludedM3u;
     private final Set<String> skippedProviderRows = new LinkedHashSet<>();
 
@@ -41,6 +43,9 @@ final class PublishedPlaybackCatalog {
         List<Row> ordered = new ArrayList<>(rows);
         ordered.sort(Comparator.comparingInt(row -> row.order));
         this.rows = Collections.unmodifiableList(ordered);
+        Map<String, Row> index = new LinkedHashMap<>();
+        for (Row row : ordered) index.put(row.appKey(), row);
+        this.rowsByKey = Collections.unmodifiableMap(index);
         this.excludedM3u = Collections.unmodifiableList(new ArrayList<>(excludedM3u));
     }
 
@@ -131,7 +136,7 @@ final class PublishedPlaybackCatalog {
                 throw new IOException("Versión de la configuración web incompatible.");
             }
             JSONArray values = root.optJSONArray("channels");
-            if (values == null || values.length() > 10000) {
+            if (values == null || values.length() > MAX_ROWS) {
                 throw new IOException("La configuración web no contiene channels[] válido.");
             }
             JSONArray excludedValues = root.optJSONArray("excludedM3u");
@@ -190,8 +195,6 @@ final class PublishedPlaybackCatalog {
     /** Orders playback from the web publication and filters its hidden/trash rows. */
     List<Channel> applyToPlayback(List<Channel> input) {
         if (input == null || input.isEmpty()) return Collections.emptyList();
-        Map<String, Row> rowsByKey = new LinkedHashMap<>();
-        for (Row row : rows) rowsByKey.put(row.appKey(), row);
         Set<String> excluded = new HashSet<>(excludedM3u);
         // Señales preferidas y respaldos de otro canal: no se muestran solos, viajan dentro
         // de ese canal.
@@ -262,7 +265,7 @@ final class PublishedPlaybackCatalog {
     }
 
     int numberFor(Channel channel, int fallback) {
-        Row row = rowsByKey().get(keyFor(channel));
+        Row row = rowsByKey.get(keyFor(channel));
         if (row == null || !"active".equals(row.state) || row.number <= 0) return fallback;
         if (!AdultChannels.isHiding()) return row.number;
         // Canales de adultos bloqueados (0.6.37): no dejan hueco en la numeración.
@@ -293,12 +296,6 @@ final class PublishedPlaybackCatalog {
         for (int index = 0; index < result.length; index++) result[index] = numbers.get(index);
         adultNumbers = result;
         adultNumbersVersion = version;
-        return result;
-    }
-
-    private Map<String, Row> rowsByKey() {
-        Map<String, Row> result = new LinkedHashMap<>();
-        for (Row row : rows) result.put(row.appKey(), row);
         return result;
     }
 

@@ -16,6 +16,43 @@ import org.junit.Test;
 
 public final class PublishedPlaybackCatalogTest {
     @Test
+    public void acceptsPreparedRealCatalogWhenProvided() throws Exception {
+        String path = System.getenv("VIBEM3U_TEST_LAYOUT_PATH");
+        org.junit.Assume.assumeTrue(path != null && !path.isEmpty());
+        String json = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(path)),
+                java.nio.charset.StandardCharsets.UTF_8);
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(json);
+        assertTrue(catalog.getRows().size() > 10000);
+    }
+
+    @Test
+    public void acceptsLargeCatalogAndKeepsItsNumbers() throws Exception {
+        StringBuilder json = new StringBuilder("{\"schemaVersion\":1,\"channels\":[");
+        for (int i = 1; i <= 16033; i++) {
+            if (i > 1) json.append(',');
+            json.append(m3uRow("large-" + i, i, i));
+        }
+        json.append("]}");
+        PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(json.toString());
+        assertEquals(16033, catalog.getRows().size());
+        assertEquals(Integer.valueOf(16033), catalog.activeNumbers().get("m3u:tvg:large-16033"));
+    }
+
+    @Test
+    public void stillRejectsCatalogsBeyondByteAndRowLimits() throws Exception {
+        char[] oversized = new char[PublishedPlaybackCatalog.MAX_BYTES + 1];
+        Arrays.fill(oversized, 'x');
+        assertInvalid(new String(oversized));
+        StringBuilder json = new StringBuilder("{\"schemaVersion\":1,\"channels\":[");
+        for (int i = 1; i <= PublishedPlaybackCatalog.MAX_ROWS + 1; i++) {
+            if (i > 1) json.append(',');
+            json.append(m3uRow("row-" + i, i, i));
+        }
+        json.append("]}");
+        assertInvalid(json.toString());
+    }
+
+    @Test
     public void parsesOneStableMixedOrderAndProviderIdentityContract() throws Exception {
         PublishedPlaybackCatalog catalog = PublishedPlaybackCatalog.parse(document());
 
