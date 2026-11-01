@@ -70,6 +70,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -303,6 +304,143 @@ abstract class MainSelector extends MainGuide {
             underline.setVisibility(focused ? View.VISIBLE : View.INVISIBLE);
         });
         return box;
+    }
+
+    // Pulso (0.6.48, mockup «V2 · Pulso» aprobado): con respaldos directos, la señal es una fila
+    // de barras, una por señal, con alto = bitrate medido (backups.json). Blanca la marcada,
+    // verde la que suena, un guion abajo si no abrió en la última medición. A la derecha, el
+    // detalle de la marcada. Tamaños: los del mockup de 1920×1080 a la mitad.
+    static final float PULSE_MAX_DP = 46f;
+    static final float PULSE_BAR_DP = 6f;
+    static final float PULSE_PRINCIPAL_BAR_DP = 11f;
+
+    /** Calidad medida de cada señal directa, por su variantId («direct-principal», «direct-backup-N»). */
+    final Map<String, PublishedDirectBackups.Quality> pulseQuality = new HashMap<>();
+    TextView pulseEyebrow;
+    TextView pulseQualityLine;
+    TextView pulseStatus;
+
+    static boolean isDirectSignal(ResolvedPlaybackCandidate candidate) {
+        return candidate != null && candidate.getVariantId().startsWith("direct-");
+    }
+
+    /** «P» para la principal y «09» para el respaldo 9. */
+    static String pulseNumber(int position) {
+        return position == 0 ? "P" : String.format(java.util.Locale.ROOT, "%02d", position);
+    }
+
+    /** Una barra: su número arriba (solo con foco) y la barra, alineadas abajo. */
+    View pulseBar(int position, PublishedDirectBackups.Quality quality, int maxKbps,
+            boolean inUse, Runnable onFocus) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
+        box.setFocusable(true);
+        box.setFocusableInTouchMode(true);
+        TextView tag = new TextView(this);
+        tag.setText(pulseNumber(position));
+        tag.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
+        tag.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
+        tag.setTextColor(0xFFFFFFFF);
+        tag.setFontFeatureSettings("tnum");
+        tag.setIncludeFontPadding(false);
+        tag.setSingleLine(true);
+        tag.setShadowLayer(dp(3), 0, dp(1), 0x73000000);
+        tag.setVisibility(View.INVISIBLE);
+        LinearLayout.LayoutParams tagParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        tagParams.bottomMargin = dp(4);
+        box.addView(tag, tagParams);
+        View bar = new View(this);
+        boolean measured = quality != null;
+        boolean failed = measured && !quality.ok;
+        int height = !measured ? dp(10)
+                : failed ? dp(2)
+                : Math.max(dp(4), Math.round(dp(PULSE_MAX_DP) * quality.kbps / (float) Math.max(1, maxKbps)));
+        int restColor = inUse ? 0xFF5BE9A0 : failed ? 0x24FFFFFF : !measured ? 0x40FFFFFF : 0x57FFFFFF;
+        android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable();
+        shape.setCornerRadius(dp(1));
+        shape.setColor(restColor);
+        bar.setBackground(shape);
+        box.addView(bar, new LinearLayout.LayoutParams(
+                dp(position == 0 ? PULSE_PRINCIPAL_BAR_DP : PULSE_BAR_DP), height));
+        box.setTag(R.id.source_selector_options, (View.OnFocusChangeListener) (view, focused) -> {
+            shape.setColor(focused ? 0xFFFFFFFF : restColor);
+            tag.setVisibility(focused ? View.VISIBLE : View.INVISIBLE);
+            if (focused) onFocus.run();
+        });
+        return box;
+    }
+
+    /** El detalle a la derecha de las barras: «RESPALDO 09 DE 21», calidad y estado. */
+    LinearLayout pulseSide() {
+        LinearLayout side = new LinearLayout(this);
+        side.setOrientation(LinearLayout.VERTICAL);
+        pulseEyebrow = new TextView(this);
+        pulseEyebrow.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
+        pulseEyebrow.setLetterSpacing(0.24f);
+        pulseEyebrow.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
+        pulseEyebrow.setTextColor(0x73FFFFFF);
+        pulseEyebrow.setIncludeFontPadding(false);
+        pulseQualityLine = new TextView(this);
+        pulseQualityLine.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
+        pulseQualityLine.setTextColor(0xFFFFFFFF);
+        pulseQualityLine.setFontFeatureSettings("tnum");
+        pulseQualityLine.setIncludeFontPadding(false);
+        pulseQualityLine.setSingleLine(true);
+        pulseQualityLine.setShadowLayer(dp(3), 0, dp(1), 0x73000000);
+        pulseStatus = new TextView(this);
+        pulseStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
+        pulseStatus.setTextColor(0x80FFFFFF);
+        pulseStatus.setIncludeFontPadding(false);
+        pulseStatus.setSingleLine(true);
+        side.addView(pulseEyebrow);
+        LinearLayout.LayoutParams lineParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lineParams.topMargin = dp(5);
+        side.addView(pulseQualityLine, lineParams);
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        statusParams.topMargin = dp(5);
+        side.addView(pulseStatus, statusParams);
+        return side;
+    }
+
+    /** Llena el detalle con la señal {@code position} de {@code total} respaldos. */
+    void showPulseDetail(int position, int total, PublishedDirectBackups.Quality quality, int inUsePosition) {
+        if (pulseEyebrow == null) return;
+        pulseEyebrow.setText(position == 0 ? getString(R.string.source_selector_pulse_principal)
+                : getString(R.string.source_selector_pulse_backup, pulseNumber(position), total));
+        android.text.SpannableStringBuilder line = new android.text.SpannableStringBuilder();
+        if (quality != null && quality.ok) {
+            line.append(quality.height + "p");
+            line.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, line.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            List<String> parts = new ArrayList<>();
+            if (quality.kbps > 0) parts.add(formatBitrate(quality.kbps * 1000L));
+            if (quality.fps > 0) parts.add(trimDecimal(quality.fps) + " fps");
+            if (!parts.isEmpty()) {
+                int start = line.length();
+                line.append("  ").append(TextUtils.join(" · ", parts));
+                line.setSpan(new ForegroundColorSpan(0xB3FFFFFF), start, line.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                line.setSpan(new android.text.style.RelativeSizeSpan(0.87f), start, line.length(),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+        } else {
+            line.append(getString(quality == null ? R.string.source_selector_pulse_unmeasured
+                    : R.string.source_selector_pulse_no_signal));
+        }
+        pulseQualityLine.setText(line);
+        android.text.SpannableStringBuilder status = new android.text.SpannableStringBuilder();
+        if (quality != null && quality.ok) {
+            status.append("● ");
+            status.setSpan(new ForegroundColorSpan(0xFF5BE9A0), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            status.append(getString(R.string.source_selector_pulse_responds)).append("  ·  ");
+        }
+        status.append(inUsePosition < 0 ? getString(R.string.source_selector_pulse_hint)
+                : getString(R.string.source_selector_pulse_in_use, inUsePosition == 0
+                        ? getString(R.string.source_selector_pulse_principal_short) : pulseNumber(inUsePosition)));
+        pulseStatus.setText(status);
     }
 
     /** «Respaldo 1  1080p»: el detalle va en la misma línea, más chico y tenue. */
@@ -647,9 +785,31 @@ abstract class MainSelector extends MainGuide {
         boolean versions = sourceSelectorFixedHint;
         String sourceLabel = getString(versions ? R.string.source_selector_section_versions
                 : R.string.source_selector_section_signal);
-        boolean sourcesInLadder = !hasQualities;
+        // Pulso: solo señales directas (principal + respaldos), no versiones de un proveedor.
+        boolean pulse = !versions && sourceNames.size() >= 2;
+        int pulseInUse = -1;
+        int pulseMaxKbps = 1;
+        int sourceIndex = 0;
+        for (PlaybackOption option : playbackOptions) {
+            if (option.sourceCandidate == null) continue;
+            pulse &= isDirectSignal(option.sourceCandidate);
+            if (option.selected) pulseInUse = sourceIndex;
+            PublishedDirectBackups.Quality quality = pulseQuality.get(option.sourceCandidate.getVariantId());
+            if (quality != null && quality.ok) pulseMaxKbps = Math.max(pulseMaxKbps, quality.kbps);
+            sourceIndex++;
+        }
+        boolean sourcesInLadder = !hasQualities && !pulse;
         List<String> shortNames = versions ? shortVersionNames(sourceNames) : sourceNames;
         minimalStage(hasSources && !sourcesInLadder ? sourceLabel : "");
+        LinearLayout pulseBars = null;
+        if (pulse) {
+            stageInline.setGravity(Gravity.BOTTOM);
+            pulseBars = new LinearLayout(this);
+            pulseBars.setOrientation(LinearLayout.HORIZONTAL);
+            pulseBars.setGravity(Gravity.BOTTOM);
+            stageInline.addView(pulseBars, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        }
         int segment = stageSegmentWidth(sourcesInLadder ? sourceNames.size() : qualityCount);
         int actionsLine = hasSources && hasQualities ? 2 : 1;
         String inUseSource = "";
@@ -659,6 +819,24 @@ abstract class MainSelector extends MainGuide {
             PlaybackOption option = playbackOptions.get(index);
             View view;
             boolean ladder;
+            if (option.sourceCandidate != null && pulse) {
+                final int position = sourcePosition;
+                if (option.selected) inUseSource = shortNames.get(sourcePosition);
+                sourcePosition++;
+                final PublishedDirectBackups.Quality quality =
+                        pulseQuality.get(option.sourceCandidate.getVariantId());
+                final int total = sourceNames.size() - 1;
+                final int inUse = pulseInUse;
+                view = pulseBar(position, quality, pulseMaxKbps, option.selected,
+                        () -> showPulseDetail(position, total, quality, inUse));
+                LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(
+                        dp(position == 0 ? 15 : 10), LinearLayout.LayoutParams.WRAP_CONTENT);
+                if (position > 0) barParams.setMarginStart(dp(3));
+                pulseBars.addView(view, barParams);
+                registerMinimalItem(view, MINIMAL_GROUP_OPTIONS, () -> selectPlaybackOption(optionIndex),
+                        hasQualities ? 1 : 0);
+                continue;
+            }
             if (option.sourceCandidate != null) {
                 String shortName = shortNames.get(sourcePosition++);
                 ResolvedPlaybackCandidate candidate = option.sourceCandidate;
@@ -677,6 +855,17 @@ abstract class MainSelector extends MainGuide {
             }
             stageAdd(view, ladder, segment);
             registerMinimalItem(view, MINIMAL_GROUP_OPTIONS, () -> selectPlaybackOption(optionIndex), ladder ? 0 : 1);
+        }
+        if (pulse) {
+            LinearLayout.LayoutParams sideParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            sideParams.setMarginStart(dp(22));
+            stageInline.addView(pulseSide(), sideParams);
+            int shown = Math.max(0, pulseInUse);
+            String variant = shown == 0 ? "direct-principal" : "direct-backup-" + (shown - 1);
+            showPulseDetail(shown, sourceNames.size() - 1, pulseQuality.get(variant), pulseInUse);
+        } else {
+            pulseEyebrow = null;
         }
         String section = hasSources && hasQualities ? getString(R.string.source_selector_title)
                 : hasQualities ? getString(R.string.source_selector_quality_title) : sourceLabel;
@@ -1201,6 +1390,7 @@ abstract class MainSelector extends MainGuide {
     void renderDirectQualitySelector(Channel channel) {
         sourceCandidates.clear();
         playbackOptions.clear();
+        pulseQuality.clear();
         // Canal con señal preferida o respaldos directos (0.5.66, varios desde la 0.5.72):
         // todas sus señales arriba y, debajo, sus calidades.
         int backupCount = TvVooBackup.directBackupsOf(channel).size();
@@ -1210,9 +1400,14 @@ abstract class MainSelector extends MainGuide {
                     getString(R.string.source_selector_direct_label),
                     getString(R.string.source_selector_direct_detail),
                     principal, "direct-principal", "", true, true, 0));
+            PublishedDirectBackups.Quality principalQuality = PublishedDirectBackups.qualityFor(channel.getTvgId());
+            if (principalQuality != null) pulseQuality.put("direct-principal", principalQuality);
             for (int index = 0; index < backupCount; index++) {
                 Channel backupChannel = TvVooBackup.directResolutionChannel(channel, index);
                 if (backupChannel == null) continue;
+                PublishedDirectBackups.Quality backupQuality =
+                        PublishedDirectBackups.qualityFor(backupChannel.getTvgId());
+                if (backupQuality != null) pulseQuality.put("direct-backup-" + index, backupQuality);
                 String label = backupCount == 1 ? getString(R.string.source_selector_backup_label)
                         : getString(R.string.source_selector_backup_numbered_label, index + 1);
                 sourceCandidates.add(ResolvedPlaybackCandidate.version(

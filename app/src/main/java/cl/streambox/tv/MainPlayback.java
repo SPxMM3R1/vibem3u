@@ -103,6 +103,28 @@ abstract class MainPlayback extends MainState {
                 .build());
     }
 
+    /** Decodificadores en uso, para «Información de la señal» (0.6.48). */
+    DecoderInfo decoderInfo;
+
+    /** «Hardware · MediaTek» y, tras un salto de línea, el nombre técnico; vacío si no hay. */
+    String signalVideoDecoderLabel() {
+        String name = decoderInfo == null ? "" : decoderInfo.videoDecoder();
+        return DecoderInfo.label(name, DecoderInfo.isHardware(name),
+                getString(R.string.signal_decoder_hardware), getString(R.string.signal_decoder_software));
+    }
+
+    /** Igual para el audio; el Dolby que va tal cual a la tele: «Directo a la TV». */
+    String signalAudioDecoderLabel() {
+        String name = decoderInfo == null ? "" : decoderInfo.audioDecoder();
+        Format audio = player == null ? null : player.getAudioFormat();
+        if (AppStrings.isBlank(name) && audio != null && DecoderInfo.isPassthroughMime(audio.sampleMimeType)) {
+            return getString(R.string.signal_decoder_passthrough) + "\n"
+                    + getString(R.string.signal_decoder_passthrough_detail, codecName(audio.sampleMimeType));
+        }
+        return DecoderInfo.label(name, DecoderInfo.isHardware(name),
+                getString(R.string.signal_decoder_hardware), getString(R.string.signal_decoder_software));
+    }
+
     void createPlayer() {
         if (playbackBufferManager != null) playbackBufferManager.close();
         ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
@@ -147,6 +169,8 @@ abstract class MainPlayback extends MainState {
         updateDiagnosticsVisibility();
         player.addAnalyticsListener(newBitrateMeter);
         player.addAnalyticsListener(new PlaybackStartupAnalytics(startupMetrics));
+        decoderInfo = new DecoderInfo();
+        player.addAnalyticsListener(decoderInfo);
         MediaCodecVideoRenderer videoRenderer = renderersFactory.getVideoRenderer();
         if (videoRenderer != null) {
             player.createMessage(videoRenderer)

@@ -12,7 +12,7 @@ Referencias aprobadas en `docs/diseno/`:
 
 | Pantalla | Archivo | Estado |
 | --- | --- | --- |
-| Selector «Fuentes y calidades» | escenario: `selector-escenario.jpg` (mockup «F2») · `selector-escenario-app.jpg` (app) · anteriores: `selector-respaldos.jpg`, `selector-calidad-app.jpg`, `selector-versiones-app.jpg` | implementado (0.5.95); escenario abajo desde la 0.6.22 |
+| Selector «Fuentes y calidades» | escenario: `selector-escenario.jpg` (mockup «F2») · `selector-escenario-app.jpg` (app) · anteriores: `selector-respaldos.jpg`, `selector-calidad-app.jpg`, `selector-versiones-app.jpg` | implementado (0.5.95); escenario abajo desde la 0.6.22; señales directas como barras «Pulso» desde la 0.6.48 (`selector-pulso.jpg` mockup · `selector-pulso-app.jpg` app) |
 | Guía | `guia-ahora.jpg`, `guia-futuro.jpg` (mockup) · `guia-app.jpg` (app) · bloques: `guia-bloques-app.jpg` | implementado (0.5.96); bloques B1 en la 0.6.14 |
 | Opciones | `opciones-*.jpg` (mockup) · `opciones-*-app.jpg` (app); pestaña Proveedores: `opciones-canales-app.jpg`, `opciones-proveedores-app.jpg` | implementado (0.5.96); Proveedores en la 0.6.02 |
 | OSD | `osd.jpg` (app) | implementado (0.5.96) |
@@ -80,6 +80,7 @@ El foco nunca es un fondo de color, un velo ni un recuadro.
   Mbps 8,5 sp debajo), la señal o versión en una línea (11 sp, detalle tenue al lado) y, a la
   derecha, las acciones (12 sp) con la línea técnica (10 sp) debajo. Si no hay calidades, las
   señales o versiones van en la escala. Historia: columna con cuadrícula (0.6.18–0.6.21).
+- **Selector — «Pulso» (0.6.48, mockup «V2 · Pulso» aprobado)**: con respaldos directos (principal + copias de backups.json) la señal es una fila de barras, una por señal, con alto = bitrate medido (máx. 46 dp; ancho 6 dp, la principal 11 dp; 3 dp entre cajas de 10 dp). Blanca la del foco con su número encima («P», «09»), verde la que suena, gris al 34 % el resto, un guion de 2 dp si no abrió en la última medición y 10 dp tenue si no hay medición. A la derecha, el detalle de la marcada: «RESPALDO 09 DE 21» (8 sp), «1080p  2.6 Mbps · 30 fps» (15 sp, el detalle al 87 %) y «● responde · en uso: 07» (9 sp). Las versiones de TvVoo siguen en texto.
 - **Opciones elegibles** (calidades, versiones, Moderno|Clásico, Estándar|Invertidos): texto en
   línea con su detalle debajo; pasan a otra línea si no caben (`minimalRow`). ◀ ▶ recorre la
   fila; ▲ ▼ salta a la opción más cercana de la línea vecina.

@@ -482,6 +482,53 @@
                                     android:textSize="11.5sp" />
                             </LinearLayout>
                         </LinearLayout>
+                        <!-- Decodificadores (0.6.48, mockup aprobado). -->
+                        <LinearLayout
+                            android:id="@+id/signal_video_decoder_cell"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="13dp"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_signal_video_decoder"
+                                android:textColor="@color/minimal_muted"
+                                android:textSize="8.5sp" />
+                            <TextView
+                                android:id="@+id/signal_video_decoder"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="3dp"
+                                android:singleLine="true"
+                                android:ellipsize="end"
+                                android:textColor="@color/white"
+                                android:textSize="11.5sp" />
+                        </LinearLayout>
+                        <LinearLayout
+                            android:id="@+id/signal_audio_decoder_cell"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_signal_audio_decoder"
+                                android:textColor="@color/minimal_muted"
+                                android:textSize="8.5sp" />
+                            <TextView
+                                android:id="@+id/signal_audio_decoder"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="3dp"
+                                android:singleLine="true"
+                                android:ellipsize="end"
+                                android:textColor="@color/white"
+                                android:textSize="11.5sp" />
+                        </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>

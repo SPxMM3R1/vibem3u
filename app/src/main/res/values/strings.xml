@@ -418,6 +418,20 @@
     <string name="source_selector_backup_label">Respaldo</string>
     <string name="source_selector_backup_detail">Otra señal del mismo canal</string>
     <string name="source_selector_backup_numbered_label">Respaldo %1$d</string>
+    <string name="source_selector_pulse_principal">PRINCIPAL</string>
+    <string name="source_selector_pulse_principal_short">principal</string>
+    <string name="source_selector_pulse_backup">RESPALDO %1$s DE %2$d</string>
+    <string name="source_selector_pulse_unmeasured">Sin medición</string>
+    <string name="source_selector_pulse_no_signal">Sin señal en la última medición</string>
+    <string name="source_selector_pulse_responds">responde</string>
+    <string name="source_selector_pulse_in_use">en uso: %1$s</string>
+    <string name="source_selector_pulse_hint">alto de cada barra = bitrate</string>
+    <string name="settings_signal_video_decoder">Decodificador de video</string>
+    <string name="settings_signal_audio_decoder">Decodificador de audio</string>
+    <string name="signal_decoder_hardware">Hardware</string>
+    <string name="signal_decoder_software">Software</string>
+    <string name="signal_decoder_passthrough">Directo a la TV</string>
+    <string name="signal_decoder_passthrough_detail">%1$s · lo decodifica la tele</string>
     <!-- Canales ocultos y papelera desde la TV (0.5.90). -->
     <string name="hidden_channels_title">Ocultos en esta TV</string>
     <plurals name="hidden_channels_summary">

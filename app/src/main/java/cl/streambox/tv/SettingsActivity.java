@@ -111,6 +111,8 @@ public final class SettingsActivity extends Activity {
     public static final String EXTRA_SIGNAL_FORMAT = "signal_format";
     public static final String EXTRA_SIGNAL_RESOLVER = "signal_resolver";
     public static final String EXTRA_SIGNAL_BACKUP = "signal_backup";
+    public static final String EXTRA_SIGNAL_VIDEO_DECODER = "signal_video_decoder";
+    public static final String EXTRA_SIGNAL_AUDIO_DECODER = "signal_audio_decoder";
     public static final String EXTRA_STATUS_CHANNELS = "status_channels";
     public static final String EXTRA_STATUS_CATALOG_AT = "status_catalog_at";
     public static final String EXTRA_STATUS_EPG_AT = "status_epg_at";
@@ -556,6 +558,28 @@ public final class SettingsActivity extends Activity {
         errorText.setVisibility(View.GONE);
     }
 
+    /** «Hardware · MediaTek» con el nombre técnico al lado, más chico y tenue; sin dato, oculta. */
+    private void setDecoderCell(int cellId, int valueId, String label) {
+        View cell = findViewById(cellId);
+        TextView value = findViewById(valueId);
+        if (cell == null || value == null) return;
+        String text = safeString(label);
+        cell.setVisibility(text.isEmpty() ? View.GONE : View.VISIBLE);
+        int split = text.indexOf('\n');
+        if (split < 0) {
+            value.setText(text);
+            return;
+        }
+        android.text.SpannableStringBuilder line = new android.text.SpannableStringBuilder(text.substring(0, split));
+        int start = line.length();
+        line.append("   ").append(text.substring(split + 1));
+        line.setSpan(new android.text.style.ForegroundColorSpan(0x80FFFFFF), start, line.length(),
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        line.setSpan(new android.text.style.RelativeSizeSpan(0.78f), start, line.length(),
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        value.setText(line);
+    }
+
     /** En reproducción: imagen y códecs que muestra el OSD; la fuente solo con un canal. */
     private void bindSignalInfo(Intent intent) {
         String video = safeString(intent.getStringExtra(EXTRA_SIGNAL_VIDEO));
@@ -589,6 +613,12 @@ public final class SettingsActivity extends Activity {
                 backupCell.setVisibility(backup.isEmpty() ? View.INVISIBLE : View.VISIBLE);
                 setSignalText(R.id.signal_backup, backup);
             }
+            // Decodificadores (0.6.48, mockup aprobado): «Hardware · MediaTek» y, al lado en
+            // chico, el nombre técnico. Sin dato, la fila no se muestra.
+            setDecoderCell(R.id.signal_video_decoder_cell, R.id.signal_video_decoder,
+                    intent.getStringExtra(EXTRA_SIGNAL_VIDEO_DECODER));
+            setDecoderCell(R.id.signal_audio_decoder_cell, R.id.signal_audio_decoder,
+                    intent.getStringExtra(EXTRA_SIGNAL_AUDIO_DECODER));
             // Sin ningún dato: una sola línea (mockup aprobado 0.6.02).
             boolean noData = isUnavailable(picture, 0) && isUnavailable(picture, 1)
                     && isUnavailable(codec, 0) && isUnavailable(codec, 1) && isUnavailable(codec, 2);

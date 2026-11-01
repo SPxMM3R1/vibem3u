@@ -1541,7 +1541,9 @@ public final class MainActivity extends MainSelector {
         Channel channel = channels.get(channelIndex);
         intent.putExtra(SettingsActivity.EXTRA_SIGNAL_FORMAT, signalFormatLabel())
                 .putExtra(SettingsActivity.EXTRA_SIGNAL_RESOLVER, signalResolverLabel(channel))
-                .putExtra(SettingsActivity.EXTRA_SIGNAL_BACKUP, signalBackupLabel(channel));
+                .putExtra(SettingsActivity.EXTRA_SIGNAL_BACKUP, signalBackupLabel(channel))
+                .putExtra(SettingsActivity.EXTRA_SIGNAL_VIDEO_DECODER, signalVideoDecoderLabel())
+                .putExtra(SettingsActivity.EXTRA_SIGNAL_AUDIO_DECODER, signalAudioDecoderLabel());
         intent.putExtra(SettingsActivity.EXTRA_CHANNEL_INDEX, channelIndex)
                 .putExtra(SettingsActivity.EXTRA_CHANNEL_TVG_ID, channel.getTvgId())
                 .putExtra(SettingsActivity.EXTRA_CHANNEL_NAME, channel.getName());
