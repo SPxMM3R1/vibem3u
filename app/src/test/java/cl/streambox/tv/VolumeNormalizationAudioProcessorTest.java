@@ -26,7 +26,7 @@ public final class VolumeNormalizationAudioProcessorTest {
         ByteBuffer input = ByteBuffer.allocateDirect(48_000 * 2 * 2)
                 .order(ByteOrder.nativeOrder());
         for (int frame = 0; frame < 48_000; frame++) {
-            short sample = (short) (0.04f * 32767f);
+            short sample = (short) (0.04f * 32767f * Math.sin(2d * Math.PI * 440d * frame / 48_000d));
             input.putShort(sample);
             input.putShort(sample);
         }
@@ -34,10 +34,40 @@ public final class VolumeNormalizationAudioProcessorTest {
         processor.queueInput(input);
         ByteBuffer output = processor.getOutput().order(ByteOrder.nativeOrder());
 
-        int first = Math.abs(output.getShort(0));
-        int last = Math.abs(output.getShort(output.limit() - 4));
+        int first = 0;
+        int last = 0;
+        for (int index = 0; index < 4_800; index++) {
+            first = Math.max(first, Math.abs(output.getShort(index * 4)));
+            last = Math.max(last, Math.abs(output.getShort(output.limit() - 4 - index * 4)));
+        }
         assertTrue(last > first);
         assertTrue(last <= 29_214);
+    }
+
+    /** Canal muy bajo (−38 dBFS): con +20 dB (0.6.47) llega cerca del objetivo; con +15 quedaba en ~0,07. */
+    @Test
+    public void veryQuietChannelReachesTargetLevel() throws Exception {
+        float[] out = runSine(0.0126f, 20);
+        double rms = rms(out, out.length - 48_000, out.length);
+        assertTrue("rms " + rms, rms > 0.1);
+    }
+
+    /** Canal fuerte (−6 dBFS): baja hasta cerca del objetivo en pocos segundos. */
+    @Test
+    public void loudChannelIsLowered() throws Exception {
+        float[] out = runSine(0.5f, 5);
+        double rms = rms(out, out.length - 48_000, out.length);
+        assertTrue("rms " + rms, rms < 0.16);
+    }
+
+    /** Ponderación K: a igual nivel eléctrico, graves (60 Hz) cuentan menos que agudos (3 kHz). */
+    @Test
+    public void bassHeavyChannelIsNotTreatedAsLouder() throws Exception {
+        float[] bass = process(floatProcessor(), tone(0.126f, 60d, 10));
+        float[] treble = process(floatProcessor(), tone(0.126f, 3_000d, 10));
+        double bassOut = rms(bass, bass.length - 48_000, bass.length);
+        double trebleOut = rms(treble, treble.length - 48_000, treble.length);
+        assertTrue("graves " + bassOut + " agudos " + trebleOut, bassOut > trebleOut * 1.2);
     }
 
     /** Canal bajo (~−31 dBFS, como Studio Universal): con +15 dB sube más que con el tope anterior. */
@@ -82,10 +112,14 @@ public final class VolumeNormalizationAudioProcessorTest {
     }
 
     private static float[] sine(float rmsLevel, int seconds) {
+        return tone(rmsLevel, 440d, seconds);
+    }
+
+    private static float[] tone(float rmsLevel, double frequency, int seconds) {
         float[] samples = new float[48_000 * seconds];
         float amplitude = rmsLevel * (float) Math.sqrt(2d);
         for (int index = 0; index < samples.length; index++) {
-            samples[index] = amplitude * (float) Math.sin(2d * Math.PI * 440d * index / 48_000d);
+            samples[index] = amplitude * (float) Math.sin(2d * Math.PI * frequency * index / 48_000d);
         }
         return samples;
     }
@@ -118,20 +152,14 @@ public final class VolumeNormalizationAudioProcessorTest {
         processor.configure(format);
         processor.flush();
 
-        ByteBuffer input = ByteBuffer.allocateDirect(4 * 48_000).order(ByteOrder.nativeOrder());
-        for (int index = 0; index < 48_000; index++) input.putFloat(0.04f);
-        input.flip();
-        processor.queueInput(input);
-        ByteBuffer processedOutput = processor.getOutput().order(ByteOrder.nativeOrder());
-        float processed = processedOutput.getFloat(processedOutput.limit() - 4);
+        float[] processed = process(processor, sine(0.04f, 2));
+        double raised = rms(processed, processed.length - 4_800, processed.length);
 
         processor.flush();
-        ByteBuffer afterReset = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder());
-        afterReset.putFloat(0.04f).flip();
-        processor.queueInput(afterReset);
-        float resetValue = processor.getOutput().order(ByteOrder.nativeOrder()).getFloat();
+        float[] afterReset = process(processor, sine(0.04f, 1));
+        double reset = rms(afterReset, 0, 480);
 
-        assertTrue(processed > resetValue);
-        assertTrue(resetValue > 0f);
+        assertTrue(raised > reset);
+        assertTrue(reset > 0d);
     }
 }
