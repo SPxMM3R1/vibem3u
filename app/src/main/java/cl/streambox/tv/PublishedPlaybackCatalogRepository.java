@@ -36,6 +36,9 @@ final class PublishedPlaybackCatalogRepository {
     static final String ADULT_URL =
             "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/adultos.json";
     static final String ADULT_FILE = "adultos.json";
+    /** Canales marcados «Conservar» desde la app (0.6.52, data/app-keep.json). */
+    static final String KEEP_URL =
+            "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/data/app-keep.json";
     private static final String CACHE_DIR = "published_catalog";
     private static final Set<String> ALLOWED_HOSTS = Collections.unmodifiableSet(
             new HashSet<>(Collections.singletonList("raw.githubusercontent.com"))
@@ -110,6 +113,11 @@ final class PublishedPlaybackCatalogRepository {
         String document = download(ADULT_URL, AdultChannels.MAX_BYTES);
         if (!AdultChannels.parse(document).isEmpty()) store(ADULT_FILE, document);
         return document;
+    }
+
+    /** Lista de canales conservados; sin caché en disco (la guarda {@link ChannelKeep}). */
+    String fetchKeep() throws IOException {
+        return download(KEEP_URL, ChannelKeep.MAX_BYTES);
     }
 
     /** Último documento guardado con ese nombre, o null si no hay. */

@@ -12,7 +12,7 @@ Referencias aprobadas en `docs/diseno/`:
 
 | Pantalla | Archivo | Estado |
 | --- | --- | --- |
-| Selector «Fuentes y calidades» | escenario: `selector-escenario.jpg` (mockup «F2») · `selector-escenario-app.jpg` (app) · anteriores: `selector-respaldos.jpg`, `selector-calidad-app.jpg`, `selector-versiones-app.jpg` | implementado (0.5.95); escenario abajo desde la 0.6.22; señales directas como barras «Pulso» desde la 0.6.48 (`selector-pulso.jpg` mockup · `selector-pulso-app.jpg` app) |
+| Selector «Fuentes y calidades» | escenario: `selector-escenario.jpg` (mockup «F2») · `selector-escenario-app.jpg` (app) · anteriores: `selector-respaldos.jpg`, `selector-calidad-app.jpg`, `selector-versiones-app.jpg` | implementado (0.5.95); escenario abajo desde la 0.6.22; señales directas como barras «Pulso» desde la 0.6.48 (`selector-pulso.jpg` mockup · `selector-pulso-app.jpg` app); acción «Conservar» / «✓ Conservado» (verde) entre Ocultar y Papelera, con «N conservados» debajo y «✓ CONSERVADO» en la línea del OSD desde la 0.6.52 (`conservar-app.jpg`) |
 | Guía | `guia-ahora.jpg`, `guia-futuro.jpg` (mockup) · `guia-app.jpg` (app) · bloques: `guia-bloques-app.jpg` | implementado (0.5.96); bloques B1 en la 0.6.14 |
 | Opciones | `opciones-*.jpg` (mockup) · `opciones-*-app.jpg` (app); pestaña Proveedores: `opciones-canales-app.jpg`, `opciones-proveedores-app.jpg` | implementado (0.5.96); Proveedores en la 0.6.02 |
 | OSD | `osd.jpg` (app) | implementado (0.5.96) |

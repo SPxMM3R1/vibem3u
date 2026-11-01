@@ -409,6 +409,7 @@
     <string name="notice_this_tv">Esta TV</string>
     <string name="notice_channel_hidden">%1$s oculto</string>
     <string name="notice_trash">Papelera</string>
+    <string name="notice_keep">Conservar</string>
     <string name="notice_list">Lista M3U</string>
     <string name="logo_size_description">%1$s · se ajusta en vivo sobre el video</string>
     <string name="logo_size_action">%1$d %% ›</string>
@@ -461,6 +462,17 @@
     <string name="channel_trash_sending">Enviando %1$s a la papelera…</string>
     <string name="channel_trash_done">%1$s enviado a la papelera · GitHub actualizado</string>
     <string name="channel_trash_failed">No se pudo enviar a la papelera: %1$s</string>
+    <!-- «Conservar» (0.6.52): marcar canales para que se queden; lo no conservado se borra a pedido. -->
+    <string name="channel_keep">Conservar</string>
+    <string name="channel_kept">✓ Conservado</string>
+    <plurals name="channel_keep_count">
+        <item quantity="one">%1$d conservado</item>
+        <item quantity="other">%1$d conservados</item>
+    </plurals>
+    <string name="channel_keep_hint">lo marca para quedarse en la lista</string>
+    <string name="channel_keep_hint_kept">otra vez para quitarlo</string>
+    <string name="channel_keep_failed">No se pudo anotar en GitHub: %1$s</string>
+    <string name="osd_channel_kept">✓ CONSERVADO</string>
     <string name="channel_trash_unavailable">Este canal no tiene una fila en el editor; solo se puede ocultar.</string>
     <string name="github_link_kicker">Lista M3U · GitHub</string>
     <string name="github_link_title">Vincular GitHub</string>

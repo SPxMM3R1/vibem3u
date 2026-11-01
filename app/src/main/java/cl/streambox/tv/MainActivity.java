@@ -104,6 +104,7 @@ public final class MainActivity extends MainSelector {
         LogoScales.load(this);
         playbackPreferences = new PlaybackPreferences(this);
         channelVisibility = new ChannelVisibility(this);
+        channelKeep = new ChannelKeep(this);
         adultChannelsUnlocked = AdultChannels.isUnlocked(this);
         AdultChannels.setHiding(!adultChannelsUnlocked);
         resolverCatalogRepository = new ResolverCatalogRepository(this);
@@ -1023,6 +1024,19 @@ public final class MainActivity extends MainSelector {
                     } catch (Exception error) {
                         Log.w(RESOURCE_HEALTH_TAG, "Lista de canales de adultos no disponible", error);
                         // Sin lista, se ocultan por el grupo «Adultos» o la última guardada.
+                    }
+                });
+                executeUnlessClosing(catalogExecutor, () -> {
+                    try {
+                        // Canales conservados desde la app (data/app-keep.json, 0.6.52).
+                        String keep = repository.fetchKeep();
+                        if (keep.contains("\"rowKeys\"")) {
+                            channelKeep.applyRemote(ChannelKeep.parseRemote(keep), System.currentTimeMillis());
+                            mainHandler.post(this::refreshOsdKeepMark);
+                        }
+                    } catch (Exception error) {
+                        Log.w(RESOURCE_HEALTH_TAG, "Lista de conservados no disponible", error);
+                        // Sin red vale lo último guardado y lo marcado en esta TV.
                     }
                 });
                 try {

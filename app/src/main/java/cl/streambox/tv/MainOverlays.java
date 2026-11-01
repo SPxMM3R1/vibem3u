@@ -497,11 +497,30 @@ abstract class MainOverlays extends MainPlayback {
             // Línea «Flotante minimalista»: el punto verde marca lo que se está viendo.
             String eyebrow = String.format(Locale.ROOT, "%03d", displayNumber) + " · " + channel.getName();
             if (!AppStrings.isBlank(channel.getGroup())) eyebrow += " · " + channel.getGroup().trim();
-            android.text.SpannableString text = new android.text.SpannableString("●  " + eyebrow);
+            // «✓ CONSERVADO» (0.6.52): se ve al pasar de canal si ya se marcó en el selector.
+            String key = PublishedPlaybackCatalog.editorRowKey(channel);
+            boolean kept = channelKeep != null && channelKeep.isKept(key, System.currentTimeMillis());
+            String mark = kept ? getString(R.string.osd_channel_kept) : "";
+            if (kept) eyebrow += " · ";
+            android.text.SpannableString text = new android.text.SpannableString("●  " + eyebrow + mark);
             text.setSpan(new android.text.style.ForegroundColorSpan(0xFF5BE9A0), 0, 1,
                     android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            if (kept) {
+                text.setSpan(new android.text.style.ForegroundColorSpan(0xFF5BE9A0), text.length() - mark.length(),
+                        text.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
             osdEyebrow.setText(text);
+            osdEyebrowNumber = displayNumber;
+            osdEyebrowChannel = channel;
         }
+    }
+
+    int osdEyebrowNumber;
+    Channel osdEyebrowChannel;
+
+    /** Repinta la línea del OSD tras marcar o desmarcar «Conservar». */
+    void refreshOsdKeepMark() {
+        if (osdEyebrow != null && osdEyebrowChannel != null) bindOsdChannel(osdEyebrowNumber, osdEyebrowChannel);
     }
 
     /** Etiqueta en mayúsculas espaciadas dentro de un texto mixto (no hay span de interletrado). */
