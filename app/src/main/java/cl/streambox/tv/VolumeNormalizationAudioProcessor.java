@@ -24,7 +24,12 @@ import java.nio.ByteOrder;
  */
 @UnstableApi
 final class VolumeNormalizationAudioProcessor extends BaseAudioProcessor {
-    private static final float TARGET_RMS = 0.12589254f;
+    /**
+     * −22 dB RMS ponderado (≈ −20 LUFS momentáneos en estéreo; un programa queda en ~−22,5
+     * LUFS integrados). 0.6.49, pedido del usuario («siento que hay canales que están haciendo
+     * clipping… reducirlo a 20»): antes −18 dB (≈ −16 LUFS), con más trabajo del limitador.
+     */
+    static final float TARGET_RMS = 0.07943282f;
     private static final float MIN_MEASURABLE_RMS = 0.002f;
     /** −20 dB. */
     static final float MIN_GAIN = 0.1f;

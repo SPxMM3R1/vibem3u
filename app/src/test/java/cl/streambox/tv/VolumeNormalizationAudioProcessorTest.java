@@ -44,12 +44,12 @@ public final class VolumeNormalizationAudioProcessorTest {
         assertTrue(last <= 29_214);
     }
 
-    /** Canal muy bajo (−38 dBFS): con +20 dB (0.6.47) llega cerca del objetivo; con +15 quedaba en ~0,07. */
+    /** Canal muy bajo (−38 dBFS): con +20 dB (0.6.47) llega cerca del objetivo. */
     @Test
     public void veryQuietChannelReachesTargetLevel() throws Exception {
         float[] out = runSine(0.0126f, 20);
         double rms = rms(out, out.length - 48_000, out.length);
-        assertTrue("rms " + rms, rms > 0.1);
+        assertTrue("rms " + rms, rms > VolumeNormalizationAudioProcessor.TARGET_RMS * 0.8);
     }
 
     /** Canal fuerte (−6 dBFS): baja hasta cerca del objetivo en pocos segundos. */
@@ -57,7 +57,7 @@ public final class VolumeNormalizationAudioProcessorTest {
     public void loudChannelIsLowered() throws Exception {
         float[] out = runSine(0.5f, 5);
         double rms = rms(out, out.length - 48_000, out.length);
-        assertTrue("rms " + rms, rms < 0.16);
+        assertTrue("rms " + rms, rms < VolumeNormalizationAudioProcessor.TARGET_RMS * 1.3);
     }
 
     /** Ponderación K: a igual nivel eléctrico, graves (60 Hz) cuentan menos que agudos (3 kHz). */
@@ -70,13 +70,13 @@ public final class VolumeNormalizationAudioProcessorTest {
         assertTrue("graves " + bassOut + " agudos " + trebleOut, bassOut > trebleOut * 1.2);
     }
 
-    /** Canal bajo (~−31 dBFS, como Studio Universal): con +15 dB sube más que con el tope anterior. */
+    /** Canal bajo (−35 dBFS): necesita ~+13 dB, más que el tope de +9 dB de antes de la 0.6.38. */
     @Test
     public void quietChannelReachesTargetLevel() throws Exception {
-        float[] out = runSine(0.028f, 20);
+        float[] out = runSine(0.018f, 20);
         double rms = rms(out, out.length - 48_000, out.length);
-        // Con el tope anterior (+9 dB) quedaba en 0.028 × 2.82 ≈ 0.079.
-        assertTrue("rms " + rms, rms > 0.09);
+        // Con el tope de +9 dB quedaba en 0.018 × 2.82 ≈ 0.051.
+        assertTrue("rms " + rms, rms > VolumeNormalizationAudioProcessor.TARGET_RMS * 0.8);
     }
 
     /** Señal fuerte: el limitador suave nunca pasa de −1 dBFS. */
