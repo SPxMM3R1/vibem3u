@@ -329,9 +329,159 @@ abstract class MainSelector extends MainGuide {
         return position == 0 ? "P" : String.format(java.util.Locale.ROOT, "%02d", position);
     }
 
+    /**
+     * Medición en vivo (0.6.49, pedido del usuario «que mida cuando el canal está abierto, como
+     * TvVoo»): al abrir el selector se baja un segmento de cada señal (tres a la vez, en segundo
+     * plano) y la barra pasa de la medición diaria a la de ahora. Se guarda mientras no cambie el
+     * canal; cerrar el selector cancela lo pendiente.
+     */
+    final ExecutorService pulseExecutor = idlePool(3, "vibem3u-pulse", true);
+    final Map<String, PublishedDirectBackups.Quality> pulseLive = new HashMap<>();
+    final Set<String> pulsePending = new HashSet<>();
+    final List<Future<?>> pulseJobs = new ArrayList<>();
+    final List<PulseBar> pulseBars = new ArrayList<>();
+    String pulseLiveChannel = "";
+    int pulseSession;
+    int pulseTotal;
+    int pulseInUse = -1;
+
+    /** Una barra del pulso y lo que se sabe de su señal. */
+    static final class PulseBar {
+        final int position;
+        final String variant;
+        final boolean inUse;
+        final View bar;
+        final TextView tag;
+        final android.graphics.drawable.GradientDrawable shape;
+        PublishedDirectBackups.Quality quality;
+        boolean focused;
+
+        PulseBar(int position, String variant, boolean inUse, View bar, TextView tag,
+                android.graphics.drawable.GradientDrawable shape) {
+            this.position = position;
+            this.variant = variant;
+            this.inUse = inUse;
+            this.bar = bar;
+            this.tag = tag;
+            this.shape = shape;
+        }
+    }
+
+    /** Calidad a mostrar: la medida ahora si ya llegó; si no, la diaria de backups.json. */
+    PublishedDirectBackups.Quality pulseQualityOf(String variant) {
+        PublishedDirectBackups.Quality live = pulseLive.get(variant);
+        return live != null ? live : pulseQuality.get(variant);
+    }
+
+    /** Alto y color de todas las barras (el alto es relativo a la de más bitrate). */
+    void refreshPulseBars() {
+        int maxKbps = 1;
+        for (PulseBar item : pulseBars) {
+            PublishedDirectBackups.Quality quality = item.quality;
+            if (quality != null && quality.ok) maxKbps = Math.max(maxKbps, quality.kbps);
+        }
+        for (PulseBar item : pulseBars) {
+            PublishedDirectBackups.Quality quality = item.quality;
+            boolean measured = quality != null;
+            boolean failed = measured && !quality.ok;
+            int height = !measured ? dp(10)
+                    : failed ? dp(2)
+                    : Math.max(dp(4), Math.round(dp(PULSE_MAX_DP) * quality.kbps / (float) maxKbps));
+            ViewGroup.LayoutParams params = item.bar.getLayoutParams();
+            if (params.height != height) {
+                params.height = height;
+                item.bar.setLayoutParams(params);
+            }
+            item.shape.setColor(item.focused ? 0xFFFFFFFF : item.inUse ? 0xFF5BE9A0
+                    : failed ? 0x24FFFFFF : !measured ? 0x40FFFFFF : 0x57FFFFFF);
+            item.tag.setVisibility(item.focused ? View.VISIBLE : View.INVISIBLE);
+        }
+    }
+
+    /** Lanza la medición en vivo de las señales directas que aún no se midieron ahora. */
+    void startPulseLiveMeasure(String channelKey) {
+        if (!channelKey.equals(pulseLiveChannel)) {
+            cancelPulseLiveMeasure();
+            pulseLive.clear();
+            pulseLiveChannel = channelKey;
+        }
+        final int session = pulseSession;
+        for (ResolvedPlaybackCandidate candidate : sourceCandidates) {
+            if (!isDirectSignal(candidate) || candidate.getSource() == null) continue;
+            String variant = candidate.getVariantId();
+            if (pulseLive.containsKey(variant) || pulsePending.contains(variant)) continue;
+            URI uri = candidate.getSource().getPlaybackUri();
+            String scheme = uri == null ? "" : String.valueOf(uri.getScheme()).toLowerCase(Locale.ROOT);
+            if (!scheme.equals("http") && !scheme.equals("https")) continue;
+            if (isCurrentSource(candidate.getSource())) {
+                // La que suena no se vuelve a bajar: una segunda conexión al mismo servidor suele
+                // cortarse («unexpected end of stream»). Se usa lo que mide el reproductor (OSD).
+                PublishedDirectBackups.Quality playing = playingQuality();
+                if (playing != null) pulseLive.put(variant, playing);
+                continue;
+            }
+            Map<String, String> headers = new LinkedHashMap<>(candidate.getSource().getRequestHeaders());
+            // Conexión propia, sin reutilizar una que el servidor ya cerró.
+            headers.put("Connection", "close");
+            pulsePending.add(variant);
+            pulseJobs.add(pulseExecutor.submit(() -> {
+                PublishedDirectBackups.Quality measured;
+                try {
+                    HlsStreamValidator.LiveSample sample;
+                    try {
+                        sample = new HlsStreamValidator(new TokenHttpClient(4_000, 10_000))
+                                .measureLive(uri, headers, new ResolutionContext(15_000L));
+                    } catch (java.net.ProtocolException closed) {
+                        // Algunos servidores cortan la primera conexión: un reintento.
+                        sample = new HlsStreamValidator(new TokenHttpClient(4_000, 10_000))
+                                .measureLive(uri, headers, new ResolutionContext(15_000L));
+                    }
+                    int height = sample.info == null ? 0 : sample.info.height;
+                    int fps = sample.info == null ? 0 : sample.info.fps;
+                    // Sin SPS legible (otro códec): abrió igual, se muestra con su bitrate.
+                    measured = new PublishedDirectBackups.Quality(height,
+                            (int) Math.min(Integer.MAX_VALUE, sample.kbps), fps, true, true);
+                } catch (Exception failed) {
+                    Log.i("VibeM3U-Pulse", variant + " sin medición: " + failed.getClass().getSimpleName()
+                            + " " + SafePlaybackText.detail(String.valueOf(failed.getMessage())));
+                    measured = new PublishedDirectBackups.Quality(0, 0, 0f, false, true);
+                }
+                final PublishedDirectBackups.Quality result = measured;
+                mainHandler.post(() -> {
+                    if (session != pulseSession) return;
+                    pulsePending.remove(variant);
+                    pulseLive.put(variant, result);
+                    for (PulseBar item : pulseBars) {
+                        if (!item.variant.equals(variant)) continue;
+                        item.quality = result;
+                        refreshPulseBars();
+                        if (item.focused) showPulseDetail(item);
+                    }
+                });
+            }));
+        }
+    }
+
+    /** Calidad de la señal que suena, medida por el reproductor (lo mismo que muestra el OSD). */
+    PublishedDirectBackups.Quality playingQuality() {
+        Format video = player == null ? null : player.getVideoFormat();
+        if (video == null || video.height <= 0) return null;
+        PlaybackDiagnosticsWorker.Snapshot measurements = playbackBitrateMeter == null
+                ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
+        long bitrate = measurements.muxedStream ? measurements.streamBitrate : measurements.videoBitrate;
+        return new PublishedDirectBackups.Quality(video.height, (int) Math.max(0L, bitrate / 1000L),
+                shownFrameRate(measurements), true, true);
+    }
+
+    void cancelPulseLiveMeasure() {
+        pulseSession++;
+        for (Future<?> job : pulseJobs) job.cancel(true);
+        pulseJobs.clear();
+        pulsePending.clear();
+    }
+
     /** Una barra: su número arriba (solo con foco) y la barra, alineadas abajo. */
-    View pulseBar(int position, PublishedDirectBackups.Quality quality, int maxKbps,
-            boolean inUse, Runnable onFocus) {
+    View pulseBar(int position, String variant, boolean inUse) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
@@ -352,22 +502,18 @@ abstract class MainSelector extends MainGuide {
         tagParams.bottomMargin = dp(4);
         box.addView(tag, tagParams);
         View bar = new View(this);
-        boolean measured = quality != null;
-        boolean failed = measured && !quality.ok;
-        int height = !measured ? dp(10)
-                : failed ? dp(2)
-                : Math.max(dp(4), Math.round(dp(PULSE_MAX_DP) * quality.kbps / (float) Math.max(1, maxKbps)));
-        int restColor = inUse ? 0xFF5BE9A0 : failed ? 0x24FFFFFF : !measured ? 0x40FFFFFF : 0x57FFFFFF;
         android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable();
         shape.setCornerRadius(dp(1));
-        shape.setColor(restColor);
         bar.setBackground(shape);
         box.addView(bar, new LinearLayout.LayoutParams(
-                dp(position == 0 ? PULSE_PRINCIPAL_BAR_DP : PULSE_BAR_DP), height));
+                dp(position == 0 ? PULSE_PRINCIPAL_BAR_DP : PULSE_BAR_DP), dp(10)));
+        PulseBar item = new PulseBar(position, variant, inUse, bar, tag, shape);
+        item.quality = pulseQualityOf(variant);
+        pulseBars.add(item);
         box.setTag(R.id.source_selector_options, (View.OnFocusChangeListener) (view, focused) -> {
-            shape.setColor(focused ? 0xFFFFFFFF : restColor);
-            tag.setVisibility(focused ? View.VISIBLE : View.INVISIBLE);
-            if (focused) onFocus.run();
+            item.focused = focused;
+            refreshPulseBars();
+            if (focused) showPulseDetail(item);
         });
         return box;
     }
@@ -406,28 +552,35 @@ abstract class MainSelector extends MainGuide {
         return side;
     }
 
-    /** Llena el detalle con la señal {@code position} de {@code total} respaldos. */
-    void showPulseDetail(int position, int total, PublishedDirectBackups.Quality quality, int inUsePosition) {
-        if (pulseEyebrow == null) return;
+    /** Llena el detalle con la señal marcada: «RESPALDO 09 DE 21», su calidad y su estado. */
+    void showPulseDetail(PulseBar item) {
+        if (pulseEyebrow == null || item == null) return;
+        int position = item.position;
+        PublishedDirectBackups.Quality quality = item.quality;
+        boolean pending = pulsePending.contains(item.variant);
         pulseEyebrow.setText(position == 0 ? getString(R.string.source_selector_pulse_principal)
-                : getString(R.string.source_selector_pulse_backup, pulseNumber(position), total));
+                : getString(R.string.source_selector_pulse_backup, pulseNumber(position), pulseTotal));
         android.text.SpannableStringBuilder line = new android.text.SpannableStringBuilder();
         if (quality != null && quality.ok) {
-            line.append(quality.height + "p");
-            line.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, line.length(),
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            if (quality.height > 0) {
+                line.append(quality.height + "p");
+                line.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, line.length(),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
             List<String> parts = new ArrayList<>();
             if (quality.kbps > 0) parts.add(formatBitrate(quality.kbps * 1000L));
             if (quality.fps > 0) parts.add(trimDecimal(quality.fps) + " fps");
             if (!parts.isEmpty()) {
                 int start = line.length();
-                line.append("  ").append(TextUtils.join(" · ", parts));
+                line.append(start > 0 ? "  " : "").append(TextUtils.join(" · ", parts));
                 line.setSpan(new ForegroundColorSpan(0xB3FFFFFF), start, line.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                 line.setSpan(new android.text.style.RelativeSizeSpan(0.87f), start, line.length(),
                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
         } else {
-            line.append(getString(quality == null ? R.string.source_selector_pulse_unmeasured
+            line.append(getString(quality == null
+                    ? (pending ? R.string.source_selector_pulse_measuring : R.string.source_selector_pulse_unmeasured)
+                    : quality.live ? R.string.source_selector_pulse_no_signal_now
                     : R.string.source_selector_pulse_no_signal));
         }
         pulseQualityLine.setText(line);
@@ -435,11 +588,14 @@ abstract class MainSelector extends MainGuide {
         if (quality != null && quality.ok) {
             status.append("● ");
             status.setSpan(new ForegroundColorSpan(0xFF5BE9A0), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            status.append(getString(R.string.source_selector_pulse_responds)).append("  ·  ");
+            status.append(getString(quality.live ? R.string.source_selector_pulse_responds_now
+                    : R.string.source_selector_pulse_responded_daily)).append("  ·  ");
+        } else if (pending && quality != null) {
+            status.append(getString(R.string.source_selector_pulse_measuring)).append("  ·  ");
         }
-        status.append(inUsePosition < 0 ? getString(R.string.source_selector_pulse_hint)
-                : getString(R.string.source_selector_pulse_in_use, inUsePosition == 0
-                        ? getString(R.string.source_selector_pulse_principal_short) : pulseNumber(inUsePosition)));
+        status.append(pulseInUse < 0 ? getString(R.string.source_selector_pulse_hint)
+                : getString(R.string.source_selector_pulse_in_use, pulseInUse == 0
+                        ? getString(R.string.source_selector_pulse_principal_short) : pulseNumber(pulseInUse)));
         pulseStatus.setText(status);
     }
 
@@ -787,27 +943,26 @@ abstract class MainSelector extends MainGuide {
                 : R.string.source_selector_section_signal);
         // Pulso: solo señales directas (principal + respaldos), no versiones de un proveedor.
         boolean pulse = !versions && sourceNames.size() >= 2;
-        int pulseInUse = -1;
-        int pulseMaxKbps = 1;
+        pulseBars.clear();
+        pulseInUse = -1;
+        pulseTotal = sourceNames.size() - 1;
         int sourceIndex = 0;
         for (PlaybackOption option : playbackOptions) {
             if (option.sourceCandidate == null) continue;
             pulse &= isDirectSignal(option.sourceCandidate);
             if (option.selected) pulseInUse = sourceIndex;
-            PublishedDirectBackups.Quality quality = pulseQuality.get(option.sourceCandidate.getVariantId());
-            if (quality != null && quality.ok) pulseMaxKbps = Math.max(pulseMaxKbps, quality.kbps);
             sourceIndex++;
         }
         boolean sourcesInLadder = !hasQualities && !pulse;
         List<String> shortNames = versions ? shortVersionNames(sourceNames) : sourceNames;
         minimalStage(hasSources && !sourcesInLadder ? sourceLabel : "");
-        LinearLayout pulseBars = null;
+        LinearLayout pulseRow = null;
         if (pulse) {
             stageInline.setGravity(Gravity.BOTTOM);
-            pulseBars = new LinearLayout(this);
-            pulseBars.setOrientation(LinearLayout.HORIZONTAL);
-            pulseBars.setGravity(Gravity.BOTTOM);
-            stageInline.addView(pulseBars, new LinearLayout.LayoutParams(
+            pulseRow = new LinearLayout(this);
+            pulseRow.setOrientation(LinearLayout.HORIZONTAL);
+            pulseRow.setGravity(Gravity.BOTTOM);
+            stageInline.addView(pulseRow, new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         }
         int segment = stageSegmentWidth(sourcesInLadder ? sourceNames.size() : qualityCount);
@@ -823,16 +978,11 @@ abstract class MainSelector extends MainGuide {
                 final int position = sourcePosition;
                 if (option.selected) inUseSource = shortNames.get(sourcePosition);
                 sourcePosition++;
-                final PublishedDirectBackups.Quality quality =
-                        pulseQuality.get(option.sourceCandidate.getVariantId());
-                final int total = sourceNames.size() - 1;
-                final int inUse = pulseInUse;
-                view = pulseBar(position, quality, pulseMaxKbps, option.selected,
-                        () -> showPulseDetail(position, total, quality, inUse));
+                view = pulseBar(position, option.sourceCandidate.getVariantId(), option.selected);
                 LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(
                         dp(position == 0 ? 15 : 10), LinearLayout.LayoutParams.WRAP_CONTENT);
                 if (position > 0) barParams.setMarginStart(dp(3));
-                pulseBars.addView(view, barParams);
+                pulseRow.addView(view, barParams);
                 registerMinimalItem(view, MINIMAL_GROUP_OPTIONS, () -> selectPlaybackOption(optionIndex),
                         hasQualities ? 1 : 0);
                 continue;
@@ -861,9 +1011,10 @@ abstract class MainSelector extends MainGuide {
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
             sideParams.setMarginStart(dp(22));
             stageInline.addView(pulseSide(), sideParams);
-            int shown = Math.max(0, pulseInUse);
-            String variant = shown == 0 ? "direct-principal" : "direct-backup-" + (shown - 1);
-            showPulseDetail(shown, sourceNames.size() - 1, pulseQuality.get(variant), pulseInUse);
+            refreshPulseBars();
+            showPulseDetail(pulseBars.get(Math.min(Math.max(0, pulseInUse), pulseBars.size() - 1)));
+            Channel pulseChannel = playbackChannel;
+            startPulseLiveMeasure(pulseChannel == null ? "" : PlaybackPreferences.channelIdentity(pulseChannel));
         } else {
             pulseEyebrow = null;
         }
@@ -1912,6 +2063,8 @@ abstract class MainSelector extends MainGuide {
 
     void closePlaybackSourceSelector() {
         sourceCandidateRequestId++;
+        // Mediciones del pulso: lo pendiente se cancela; lo ya medido queda para este canal.
+        cancelPulseLiveMeasure();
         if (loadingPanel != null) {
             loadingPanel.setTranslationX(0f);
             loadingPanel.setTranslationY(0f);

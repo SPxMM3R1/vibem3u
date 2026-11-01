@@ -423,7 +423,10 @@
     <string name="source_selector_pulse_backup">RESPALDO %1$s DE %2$d</string>
     <string name="source_selector_pulse_unmeasured">Sin medición</string>
     <string name="source_selector_pulse_no_signal">Sin señal en la última medición</string>
-    <string name="source_selector_pulse_responds">responde</string>
+    <string name="source_selector_pulse_responds_now">responde ahora</string>
+    <string name="source_selector_pulse_responded_daily">abrió en la medición diaria</string>
+    <string name="source_selector_pulse_measuring">midiendo…</string>
+    <string name="source_selector_pulse_no_signal_now">Sin señal ahora</string>
     <string name="source_selector_pulse_in_use">en uso: %1$s</string>
     <string name="source_selector_pulse_hint">alto de cada barra = bitrate</string>
     <string name="settings_signal_video_decoder">Decodificador de video</string>

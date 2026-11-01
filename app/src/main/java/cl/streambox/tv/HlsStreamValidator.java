@@ -109,6 +109,70 @@ public final class HlsStreamValidator {
         return new Sustained(slowest, info);
     }
 
+    /** Resultado de {@link #measureLive}: calidad del video y bitrate real del último segmento. */
+    static final class LiveSample {
+        final VideoSampleInfo info;
+        final long kbps;
+
+        LiveSample(VideoSampleInfo info, long kbps) {
+            this.info = info;
+            this.kbps = kbps;
+        }
+    }
+
+    /**
+     * Medición en vivo de una señal directa para el selector «Pulso» (0.6.49, pedido del
+     * usuario «que mida cuando el canal está abierto, como lo que hace TvVoo»): sigue la
+     * variante de más bitrate, baja completo el penúltimo segmento (el último puede estar a
+     * medio publicar) y calcula kbps = bytes × 8 / duración declarada. La calidad (alto y
+     * cuadros por segundo) sale del SPS, igual que en las versiones de TvVoo.
+     */
+    LiveSample measureLive(
+            URI playbackUri,
+            Map<String, String> headers,
+            ResolutionContext context
+    ) throws IOException {
+        Map<String, String> safeHeaders = headers == null
+                ? Collections.emptyMap()
+                : Collections.unmodifiableMap(new java.util.LinkedHashMap<>(headers));
+        PlaylistResponse current = loadPlaylist(playbackUri, safeHeaders, context);
+        for (int depth = 0; depth < MAX_PLAYLIST_DEPTH; depth++) {
+            URI best = bestVariant(current);
+            if (best == null) break;
+            current = loadPlaylist(best, safeHeaders, context);
+        }
+        List<Double> durations = new ArrayList<>();
+        List<String> segments = new ArrayList<>();
+        double pending = -1;
+        for (String line : current.lines) {
+            String value = line.trim();
+            if (value.toUpperCase(Locale.ROOT).startsWith("#EXTINF:")) {
+                try {
+                    pending = Double.parseDouble(value.substring(8).split(",")[0].trim());
+                } catch (NumberFormatException ignored) {
+                    pending = -1;
+                }
+            } else if (!value.isEmpty() && !value.startsWith("#") && pending > 0) {
+                segments.add(value);
+                durations.add(pending);
+                pending = -1;
+            }
+        }
+        if (segments.isEmpty()) throw new IOException("El HLS no tiene segmentos.");
+        int index = Math.max(0, segments.size() - 2);
+        check(context);
+        URI segmentUri = resolve(current.finalUri, segments.get(index));
+        PublicStreamPolicy.requirePublicHttp(segmentUri);
+        TokenHttpClient.Response response = httpClient.getPublicPrefix(
+                segmentUri.toString(), safeHeaders, (int) MAX_SUSTAINED_SEGMENT_BYTES, null);
+        byte[] body = response.getBody();
+        if (body.length < 1024 || looksLikeErrorDocument(body)) {
+            throw new IOException("El segmento HLS no es reproducible.");
+        }
+        long kbps = Math.round(body.length * 8.0 / Math.max(0.5, durations.get(index)) / 1000.0);
+        return new LiveSample(VideoSampleInfo.probe(body), kbps);
+    }
+
     /** Variante de mayor BANDWIDTH declarado, o null si la lista ya es de medios. */
     private static URI bestVariant(PlaylistResponse response) {
         URI best = null;
