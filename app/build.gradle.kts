@@ -1,4 +1,4 @@
-plugins {
+﻿plugins {
     id("com.android.application")
 }
 
@@ -30,16 +30,16 @@ android {
         minSdk = 29
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 261
-        versionName = "0.6.52"
+        versionCode = 262
+        versionName = "0.6.53"
         buildConfigField("boolean", "ENABLE_APP_UPDATES", "true")
-        // Client ID público de la app OAuth de VibeM3U para el Device Flow de GitHub (papelera
+        // Client ID pÃºblico de la app OAuth de VibeM3U para el Device Flow de GitHub (papelera
         // desde la TV, 0.5.90). No es un secreto; CI puede reemplazarlo con la variable del repo.
         val githubDeviceClientId = (System.getenv("VIBEM3U_GITHUB_DEVICE_CLIENT_ID")
             ?: project.findProperty("githubDeviceClientId")?.toString()
             ?: "Ov23liJS3cyhfOtQyxLJ").trim().ifEmpty { "Ov23liJS3cyhfOtQyxLJ" }
         require(Regex("[A-Za-z0-9._-]{8,64}").matches(githubDeviceClientId)) {
-            "Client ID de GitHub inválido"
+            "Client ID de GitHub invÃ¡lido"
         }
         buildConfigField("String", "GITHUB_DEVICE_CLIENT_ID", "\"$githubDeviceClientId\"")
     }
@@ -88,7 +88,7 @@ dependencies {
     implementation("androidx.media3:media3-datasource-okhttp:1.11.1")
     implementation("androidx.media3:media3-ui:1.11.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    // QR de vinculación de Highfly Premium (solo el codificador, sin cámara).
+    // QR de vinculaciÃ³n de Highfly Premium (solo el codificador, sin cÃ¡mara).
     implementation("com.google.zxing:core:3.5.3")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

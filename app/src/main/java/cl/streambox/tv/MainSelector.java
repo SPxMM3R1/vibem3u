@@ -128,6 +128,7 @@ abstract class MainSelector extends MainGuide {
             loadingPanel.setTranslationY(-height / 2f);
         }
         sourceSelectorFixedHint = !classicUi && resolver instanceof TvVooStreamResolver;
+        minimalFocusActions = true;
         if (resolver != null && supportsSourceSelector(resolver)) {
             startSourceSelectorQuery(playbackChannel, versionsChannel, resolver);
             // Moderno (0.5.92): mientras consulta ya están las filas que tendrá al final
@@ -653,6 +654,7 @@ abstract class MainSelector extends MainGuide {
             if (focused) {
                 sourceCandidateFocusIndex = viewIndex;
                 sourceSelectorCloseFocused = false;
+                minimalFocusActions = group == MINIMAL_GROUP_ACTIONS;
             }
         });
         item.setOnClickListener(view -> click.run());
@@ -748,6 +750,17 @@ abstract class MainSelector extends MainGuide {
         }
     }
 
+    /**
+     * Al abrir, el foco empieza en las acciones (0.6.53, pedido del usuario: sin bajar ni ir al
+     * lado). Si se pasa a una calidad o señal, los repintados mantienen el foco allí.
+     */
+    boolean minimalFocusActions;
+
+    /** Primera acción («Cambio automático» u «Ocultar en esta TV»), o -1 si no hay. */
+    int firstMinimalAction() {
+        return minimalFocusActions ? minimalItemGroup.indexOf(MINIMAL_GROUP_ACTIONS) : -1;
+    }
+
     /** «Cambio automático · Ocultar en esta TV · Papelera» a la derecha de la escala. */
     void minimalActions(int line) {
         Channel channel = playbackChannel;
@@ -765,13 +778,6 @@ abstract class MainSelector extends MainGuide {
         }
         items.add(minimalOption(getString(R.string.channel_hide_title), false, false, false, TYPE_OPTION_SP));
         clicks.add(() -> hideChannelOnThisTv(channel));
-        String keepKey = PublishedPlaybackCatalog.editorRowKey(channel);
-        minimalKeepCount = null;
-        if (!AppStrings.isBlank(keepKey) && channelKeep != null) {
-            View keep = minimalKeepOption(keepKey);
-            items.add(keep);
-            clicks.add(() -> toggleKeep(channel, keepKey, keep));
-        }
         items.add(minimalOption(getString(R.string.source_selector_trash_short), false, false, true, TYPE_OPTION_SP));
         clicks.add(() -> confirmTrashChannel(channel));
         for (int index = 0; index < items.size(); index++) {
@@ -782,78 +788,6 @@ abstract class MainSelector extends MainGuide {
             sourceActionRunnables.add(clicks.get(index));
             registerMinimalItem(items.get(index), MINIMAL_GROUP_ACTIONS, clicks.get(index), line);
         }
-        if (!AppStrings.isBlank(keepKey) && channelKeep != null && stageRight != null) {
-            minimalKeepCount = new TextView(this);
-            minimalKeepCount.setTextSize(TypedValue.COMPLEX_UNIT_SP, TYPE_TECH_SP);
-            minimalKeepCount.setFontFeatureSettings("tnum");
-            minimalKeepCount.setIncludeFontPadding(false);
-            minimalKeepCount.setSingleLine(true);
-            minimalKeepCount.setShadowLayer(dp(3), 0, dp(1), 0x73000000);
-            LinearLayout.LayoutParams countParams = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            countParams.topMargin = dp(10);
-            stageRight.addView(minimalKeepCount, countParams);
-            refreshKeepCount(keepKey);
-        }
-    }
-
-    TextView minimalKeepCount;
-
-    /** «Conservar» / «✓ Conservado» (0.6.52): el título sigue el estado actual, no el de creación. */
-    View minimalKeepOption(String key) {
-        View option = minimalOption(getString(R.string.channel_keep), false, false, false, TYPE_OPTION_SP);
-        TextView title = (TextView) ((LinearLayout) ((LinearLayout) option).getChildAt(0)).getChildAt(0);
-        View underline = ((LinearLayout) option).getChildAt(1);
-        option.setTag(R.id.source_selector_options, (View.OnFocusChangeListener) (view, focused) -> {
-            styleKeepTitle(title, key, focused);
-            underline.setVisibility(focused ? View.VISIBLE : View.INVISIBLE);
-        });
-        styleKeepTitle(title, key, false);
-        return option;
-    }
-
-    void styleKeepTitle(TextView title, String key, boolean focused) {
-        boolean kept = channelKeep != null && channelKeep.isKept(key, System.currentTimeMillis());
-        title.setText(kept ? R.string.channel_kept : R.string.channel_keep);
-        title.setTextColor(kept ? (focused ? 0xFF9BF5C0 : 0xFF5BE9A0) : (focused ? 0xFFFFFFFF : 0x9EFFFFFF));
-        title.setTypeface(null, focused ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
-    }
-
-    /** «121 conservados · otra vez para quitarlo» bajo las acciones. */
-    void refreshKeepCount(String key) {
-        if (minimalKeepCount == null || channelKeep == null) return;
-        long now = System.currentTimeMillis();
-        int count = channelKeep.count(now);
-        boolean kept = channelKeep.isKept(key, now);
-        String total = getResources().getQuantityString(R.plurals.channel_keep_count, count, count);
-        android.text.SpannableString text = new android.text.SpannableString(
-                total + " · " + getString(kept ? R.string.channel_keep_hint_kept : R.string.channel_keep_hint));
-        text.setSpan(new android.text.style.ForegroundColorSpan(0xFF5BE9A0), 0, total.length(),
-                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        minimalKeepCount.setTextColor(0x8CFFFFFF);
-        minimalKeepCount.setText(text);
-    }
-
-    /** Marca o desmarca al tiro en esta TV y deja el pedido en GitHub (misma credencial que la papelera). */
-    void toggleKeep(Channel channel, String key, View option) {
-        boolean keep = !channelKeep.isKept(key, System.currentTimeMillis());
-        // Sin GitHub vinculado no se marca nada: si se cancela la vinculación, no queda una marca
-        // que GitHub no conoce.
-        Runnable apply = () -> {
-            markKeep(key, keep);
-            TextView title = (TextView) ((LinearLayout) ((LinearLayout) option).getChildAt(0)).getChildAt(0);
-            styleKeepTitle(title, key, option.hasFocus());
-            sendChannelRequest(channel, key,
-                    keep ? GitHubChannelTrash.ACTION_KEEP : GitHubChannelTrash.ACTION_UNKEEP, true);
-        };
-        if (new GitHubCredentialStore(this).linked()) apply.run();
-        else ChannelActionScenes.showGitHubLink(this, apply);
-    }
-
-    void markKeep(String key, boolean keep) {
-        channelKeep.mark(key, keep, System.currentTimeMillis());
-        refreshKeepCount(key);
-        refreshOsdKeepMark();
     }
 
     View minimalAutoToggleView;
@@ -1125,6 +1059,8 @@ abstract class MainSelector extends MainGuide {
                 break;
             }
         }
+        int action = firstMinimalAction();
+        if (action >= 0) focusIndex = action;
         if (!sourceCandidateViews.isEmpty()) {
             sourceCandidateFocusIndex = Math.min(focusIndex, sourceCandidateViews.size() - 1);
             sourceCandidateViews.get(sourceCandidateFocusIndex).requestFocus();
@@ -1151,8 +1087,8 @@ abstract class MainSelector extends MainGuide {
         }
         minimalActions(1);
         fitSourceSelectorList(sourceCandidateViews.size());
-        sourceCandidateFocusIndex = 0;
-        if (!sourceCandidateViews.isEmpty()) sourceCandidateViews.get(0).requestFocus();
+        sourceCandidateFocusIndex = Math.max(0, firstMinimalAction());
+        if (!sourceCandidateViews.isEmpty()) sourceCandidateViews.get(sourceCandidateFocusIndex).requestFocus();
     }
 
     /** ◀ ▶ dentro de la misma línea (escala, señal o acciones); false si no hay a dónde ir. */
@@ -1982,16 +1918,10 @@ abstract class MainSelector extends MainGuide {
         });
     }
 
-    void sendChannelToTrash(Channel channel, String key, boolean mayRelink) {
-        sendChannelRequest(channel, key, GitHubChannelTrash.ACTION_TRASH, mayRelink);
-    }
-
     /** Deja el pedido en GitHub; solo reabre el Device Flow si GitHub confirma que no puede renovar. */
-    void sendChannelRequest(Channel channel, String key, String action, boolean mayRelink) {
+    void sendChannelToTrash(Channel channel, String key, boolean mayRelink) {
         String name = channel.getName();
-        boolean trash = GitHubChannelTrash.ACTION_TRASH.equals(action);
-        // «Conservar» no avisa al enviar: el título y el contador ya cambiaron (es para ir rápido).
-        if (trash) showNotice(NOTICE_PROGRESS, R.string.notice_list, getString(R.string.channel_trash_sending, name), false);
+        showNotice(NOTICE_PROGRESS, R.string.notice_list, getString(R.string.channel_trash_sending, name), false);
         GitHubCredentialStore store = new GitHubCredentialStore(this);
         networkExecutor.execute(() -> {
             // Varias solicitudes de papelera comparten la misma credencial. Serializarlas evita
@@ -2002,13 +1932,13 @@ abstract class MainSelector extends MainGuide {
                     mainHandler.post(() -> {
                         if (!isFinishing() && mayRelink) {
                             ChannelActionScenes.showGitHubLink(this,
-                                    () -> sendChannelRequest(channel, key, action, false));
+                                    () -> sendChannelToTrash(channel, key, false));
                         }
                     });
                     return;
                 }
                 try {
-                    new GitHubChannelTrash().request(credentials, action, key, name, BuildConfig.VERSION_NAME,
+                    new GitHubChannelTrash().requestTrash(credentials, key, name, BuildConfig.VERSION_NAME,
                             rotated -> {
                                 try {
                                     store.save(rotated);
@@ -2017,7 +1947,6 @@ abstract class MainSelector extends MainGuide {
                                             "No se pudo guardar la renovación de GitHub.", saveError);
                                 }
                             });
-                    if (!trash) return;
                     mainHandler.post(() -> {
                         if (isFinishing()) return;
                         channelVisibility.markTrashed(key, name, System.currentTimeMillis());
@@ -2031,22 +1960,18 @@ abstract class MainSelector extends MainGuide {
                         if (isFinishing()) return;
                         if (mayRelink) {
                             ChannelActionScenes.showGitHubLink(this,
-                                    () -> sendChannelRequest(channel, key, action, false));
+                                    () -> sendChannelToTrash(channel, key, false));
                         } else {
-                            if (!trash) markKeep(key, !GitHubChannelTrash.ACTION_KEEP.equals(action));
-                            showNotice(NOTICE_WARN, trash ? R.string.notice_trash : R.string.notice_keep,
-                                    getString(trash ? R.string.channel_trash_failed : R.string.channel_keep_failed,
+                            showNotice(NOTICE_WARN, R.string.notice_trash,
+                                    getString(R.string.channel_trash_failed,
                                             reauthorizationRequired.getMessage()), true);
                         }
                         });
                 } catch (java.io.IOException error) {
-                    mainHandler.post(() -> {
-                        if (!trash) markKeep(key, !GitHubChannelTrash.ACTION_KEEP.equals(action));
-                        showNotice(NOTICE_WARN, trash ? R.string.notice_trash : R.string.notice_keep,
-                                getString(trash ? R.string.channel_trash_failed : R.string.channel_keep_failed,
-                                        AppStrings.isBlank(error.getMessage()) ? "sin conexión" : error.getMessage()),
-                                true);
-                    });
+                    mainHandler.post(() -> showNotice(NOTICE_WARN, R.string.notice_trash,
+                            getString(R.string.channel_trash_failed,
+                                    AppStrings.isBlank(error.getMessage()) ? "sin conexión" : error.getMessage()),
+                            true));
                 }
             }
         });

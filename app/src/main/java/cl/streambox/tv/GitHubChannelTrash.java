@@ -195,26 +195,15 @@ final class GitHubChannelTrash {
         return credentials;
     }
 
-    /** Pedido «Conservar» (0.6.52): {@code keep} marca la fila, {@code unkeep} la desmarca. */
-    static final String ACTION_TRASH = "trash";
-    static final String ACTION_KEEP = "keep";
-    static final String ACTION_UNKEEP = "unkeep";
-
-    GitHubCredentialStore.Credentials requestTrash(GitHubCredentialStore.Credentials credentials,
-            String rowKey, String channelName, String appVersion, CredentialPersister persister)
-            throws IOException {
-        return request(credentials, ACTION_TRASH, rowKey, channelName, appVersion, persister);
-    }
-
     /** Intenta el pedido; ante 401 renueva y persiste el par rotado antes del segundo intento. */
-    GitHubCredentialStore.Credentials request(GitHubCredentialStore.Credentials credentials, String action,
+    GitHubCredentialStore.Credentials requestTrash(GitHubCredentialStore.Credentials credentials,
             String rowKey, String channelName, String appVersion, CredentialPersister persister)
             throws IOException {
         if (credentials == null || !GitHubCredentialStore.isPlausibleToken(credentials.accessToken)) {
             throw new ReauthorizationRequiredException();
         }
         try {
-            request(credentials.accessToken, action, rowKey, channelName, appVersion);
+            requestTrash(credentials.accessToken, rowKey, channelName, appVersion);
             return credentials;
         } catch (InvalidAccessTokenException invalidAccessToken) {
             if (AppStrings.isBlank(credentials.refreshToken)) throw new ReauthorizationRequiredException();
@@ -224,7 +213,7 @@ final class GitHubChannelTrash {
             // del segundo pedido evita perder la nueva sesión si la app se interrumpe.
             persister.save(refreshed);
             try {
-                request(refreshed.accessToken, action, rowKey, channelName, appVersion);
+                requestTrash(refreshed.accessToken, rowKey, channelName, appVersion);
                 return refreshed;
             } catch (InvalidAccessTokenException secondRejection) {
                 throw new ReauthorizationRequiredException();
@@ -256,25 +245,18 @@ final class GitHubChannelTrash {
     /** Deja el pedido de papelera para la fila del editor {@code rowKey}. */
     void requestTrash(String token, String rowKey, String channelName, String appVersion)
             throws IOException {
-        request(token, ACTION_TRASH, rowKey, channelName, appVersion);
-    }
-
-    /** Deja el pedido {@code action} para la fila del editor {@code rowKey}. */
-    void request(String token, String action, String rowKey, String channelName, String appVersion)
-            throws IOException {
         if (AppStrings.isBlank(rowKey) || rowKey.length() > 600) throw new IOException("Canal sin fila en el editor.");
         String fileName = requestFileName(System.currentTimeMillis(), new SecureRandom().nextInt(1 << 24));
         String payload;
         try {
-            payload = requestDocument(action, rowKey, channelName, appVersion, System.currentTimeMillis())
-                    .toString(2) + "\n";
+            payload = requestDocument(rowKey, channelName, appVersion, System.currentTimeMillis()).toString(2) + "\n";
         } catch (JSONException error) {
             throw new IOException("No se pudo armar el pedido.", error);
         }
         JSONObject body;
         try {
             body = new JSONObject()
-                    .put("message", commitMessage(action) + safeName(channelName))
+                    .put("message", "Papelera desde la app: " + safeName(channelName))
                     .put("content", Base64.getEncoder().encodeToString(payload.getBytes(StandardCharsets.UTF_8)))
                     .put("branch", "main");
         } catch (JSONException error) {
@@ -303,24 +285,13 @@ final class GitHubChannelTrash {
         return format.format(new Date(nowMillis)) + "-" + String.format(Locale.ROOT, "%06x", random & 0xFFFFFF) + ".json";
     }
 
-    static String commitMessage(String action) {
-        if (ACTION_KEEP.equals(action)) return "Conservar desde la app: ";
-        if (ACTION_UNKEEP.equals(action)) return "Quitar de conservados desde la app: ";
-        return "Papelera desde la app: ";
-    }
-
     static JSONObject requestDocument(String rowKey, String channelName, String appVersion, long nowMillis)
             throws JSONException {
-        return requestDocument(ACTION_TRASH, rowKey, channelName, appVersion, nowMillis);
-    }
-
-    static JSONObject requestDocument(String action, String rowKey, String channelName, String appVersion,
-            long nowMillis) throws JSONException {
         SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.ROOT);
         format.setTimeZone(TimeZone.getTimeZone("UTC"));
         return new JSONObject()
                 .put("schema", 1)
-                .put("action", action)
+                .put("action", "trash")
                 .put("rowKey", rowKey)
                 .put("name", safeName(channelName))
                 .put("requestedAt", format.format(new Date(nowMillis)))
