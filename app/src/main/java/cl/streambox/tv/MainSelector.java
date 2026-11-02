@@ -181,6 +181,9 @@ abstract class MainSelector extends MainGuide {
         minimalItemGroup.clear();
         minimalItemLine.clear();
         minimalLineCount = 0;
+        screensMode = false;
+        screensQualities.clear();
+        screensSignals.clear();
         sourceSelectorCloseFocused = false;
     }
 
@@ -968,6 +971,10 @@ abstract class MainSelector extends MainGuide {
         }
         boolean sourcesInLadder = !hasQualities && !pulse;
         List<String> shortNames = versions ? shortVersionNames(sourceNames) : sourceNames;
+        if (hasQualities && (!hasSources || pulse)) {
+            renderMinimalScreens(pulse, sourceNames.size());
+            return;
+        }
         minimalStage(hasSources && !sourcesInLadder ? sourceLabel : "");
         LinearLayout pulseRow = null;
         if (pulse) {
@@ -1067,6 +1074,346 @@ abstract class MainSelector extends MainGuide {
         }
     }
 
+    // Pantallas (0.6.54, mockup «E2 · Resoluciones como pantallas», pedido del usuario: «aplica el
+    // E2, me encantó»). Las calidades de la señal que suena son contornos de pantalla anidados,
+    // del tamaño de su resolución; las otras señales quedan aparte en barras (Mbps). No se
+    // mezclan: cada grupo con su rótulo. ▲▼ recorre las pantallas (y «Auto»); ◀▶ pasa de grupo.
+    static final float SCREENS_WIDTH_DP = 130f;
+    boolean screensMode;
+    /** Índices (en sourceCandidateViews) de las calidades, de la más grande a «Auto». */
+    final List<Integer> screensQualities = new ArrayList<>();
+    /** Índices de las barras visibles de las otras señales, de izquierda a derecha. */
+    final List<Integer> screensSignals = new ArrayList<>();
+
+    void renderMinimalScreens(boolean pulse, int sourceCount) {
+        minimalStage("");
+        screensMode = true;
+        stageBottom.setVisibility(View.GONE);
+        pulseBars.clear();
+        pulseInUse = -1;
+        pulseTotal = sourceCount - 1;
+        int position = 0;
+        for (PlaybackOption option : playbackOptions) {
+            if (option.sourceCandidate == null) continue;
+            if (option.selected) pulseInUse = position;
+            position++;
+        }
+        Format video = player == null ? null : player.getVideoFormat();
+        int playingHeight = video == null ? 0 : video.height;
+        boolean automatic = false;
+        int maxHeight = 1;
+        for (PlaybackOption option : playbackOptions) {
+            if (option.automatic && option.selected) automatic = true;
+            if (option.quality != null) maxHeight = Math.max(maxHeight, option.quality.height);
+        }
+        // En uso: la fija elegida o, con «Auto», la de alto más cercano al que suena.
+        int inUseQuality = -1;
+        int bestGap = Integer.MAX_VALUE;
+        for (int index = 0; index < playbackOptions.size(); index++) {
+            PlaybackOption option = playbackOptions.get(index);
+            if (option.quality == null) continue;
+            if (!automatic && option.selected) {
+                inUseQuality = index;
+                break;
+            }
+            int gap = Math.abs(option.quality.height - playingHeight);
+            if (automatic && playingHeight > 0 && gap < bestGap) {
+                bestGap = gap;
+                inUseQuality = index;
+            }
+        }
+
+        // Izquierda: rótulo «EN USO · PRINCIPAL» y las pantallas, con «Auto» debajo.
+        LinearLayout inUseGroup = new LinearLayout(this);
+        inUseGroup.setOrientation(LinearLayout.VERTICAL);
+        String owner = sourceCount == 0 ? "" : pulseInUse <= 0
+                ? getString(R.string.source_selector_pulse_principal)
+                : getString(R.string.source_selector_screens_backup, pulseNumber(pulseInUse));
+        TextView inUseLabel = minimalSectionLabel(AppStrings.isBlank(owner)
+                ? getString(R.string.source_selector_screens_in_use)
+                : getString(R.string.source_selector_screens_in_use_of, owner));
+        inUseLabel.setTextColor(0xFF5BE9A0);
+        inUseGroup.addView(inUseLabel, screensLabelParams());
+        int boxWidth = dp(SCREENS_WIDTH_DP);
+        int boxHeight = Math.round(boxWidth * 9f / 16f);
+        FrameLayout screens = new FrameLayout(this);
+        inUseGroup.addView(screens, new LinearLayout.LayoutParams(boxWidth, boxHeight));
+
+        // De la más grande a la más chica: la chica queda encima.
+        List<Integer> order = new ArrayList<>();
+        for (int index = 0; index < playbackOptions.size(); index++) {
+            if (playbackOptions.get(index).quality != null) order.add(index);
+        }
+        java.util.Collections.sort(order, (a, b) -> Integer.compare(
+                playbackOptions.get(b).quality.height, playbackOptions.get(a).quality.height));
+        Map<Integer, View> views = new HashMap<>();
+        int previousWidth = Integer.MAX_VALUE;
+        int previousHeight = -1;
+        int previousLabelTop = Integer.MIN_VALUE / 2;
+        for (int index : order) {
+            VideoTrackOption quality = playbackOptions.get(index).quality;
+            int width = Math.round(boxWidth * Math.min(1f, quality.height / (float) maxHeight));
+            // Dos pistas del mismo alto: la segunda, un poco más chica, para que se vea.
+            if (quality.height == previousHeight || width >= previousWidth) width = previousWidth - dp(8);
+            width = Math.max(dp(28), width);
+            int height = Math.round(width * 9f / 16f);
+            int labelTop = boxHeight - height;
+            boolean crowded = labelTop - previousLabelTop < dp(11);
+            View screen = screenOutline(qualityTitle(playbackOptions.get(index)), index == inUseQuality, crowded);
+            screens.addView(screen, new FrameLayout.LayoutParams(width, height, Gravity.BOTTOM | Gravity.START));
+            views.put(index, screen);
+            if (!crowded) previousLabelTop = labelTop;
+            previousWidth = width;
+            previousHeight = quality.height;
+        }
+        String playingLabel = playingHeight > 0 ? playingHeight + "p" : "";
+        View auto = null;
+        int autoIndex = -1;
+        for (int index = 0; index < playbackOptions.size(); index++) {
+            if (!playbackOptions.get(index).automatic) continue;
+            autoIndex = index;
+            String title = automatic && !AppStrings.isBlank(playingLabel)
+                    ? getString(R.string.source_selector_screens_auto_playing, playingLabel)
+                    : getString(R.string.source_selector_screens_auto);
+            auto = minimalOption(title, false, false, false, TYPE_INLINE_SP);
+            if (automatic) {
+                TextView autoTitle = (TextView) ((LinearLayout) ((LinearLayout) auto).getChildAt(0)).getChildAt(0);
+                autoTitle.setTextColor(0xFF5BE9A0);
+                autoTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+                View.OnFocusChangeListener base = (View.OnFocusChangeListener) auto.getTag(R.id.source_selector_options);
+                auto.setTag(R.id.source_selector_options, (View.OnFocusChangeListener) (view, focused) -> {
+                    base.onFocusChange(view, focused);
+                    autoTitle.setTextColor(focused ? 0xFFFFFFFF : 0xFF5BE9A0);
+                    autoTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+                });
+            }
+            LinearLayout.LayoutParams autoParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            autoParams.topMargin = dp(7);
+            inUseGroup.addView(auto, autoParams);
+        }
+        stageLadder.setGravity(Gravity.BOTTOM);
+        stageLadder.addView(inUseGroup, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        // Derecha: las otras señales en barras (la que suena no se repite: está a la izquierda).
+        LinearLayout pulseRow = null;
+        if (pulse) {
+            LinearLayout signals = new LinearLayout(this);
+            signals.setOrientation(LinearLayout.VERTICAL);
+            signals.addView(minimalSectionLabel(getString(pulseInUse == 0
+                    ? R.string.source_selector_screens_backups : R.string.source_selector_screens_signals)),
+                    screensLabelParams());
+            pulseRow = new LinearLayout(this);
+            pulseRow.setOrientation(LinearLayout.HORIZONTAL);
+            pulseRow.setGravity(Gravity.BOTTOM);
+            // Rótulo a la altura de «EN USO» y barras apoyadas en la base de las pantallas.
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, 0, 1f);
+            rowParams.bottomMargin = dp(22);
+            signals.addView(pulseRow, rowParams);
+            LinearLayout.LayoutParams signalsParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT);
+            signalsParams.setMarginStart(dp(30));
+            stageLadder.addView(signals, signalsParams);
+        }
+        LinearLayout.LayoutParams sideParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        sideParams.setMarginStart(dp(26));
+        stageLadder.addView(pulseSide(), sideParams);
+
+        // Registro en el orden de playbackOptions (selectFocusedSource usa ese índice).
+        int sourcePosition = 0;
+        for (int index = 0; index < playbackOptions.size(); index++) {
+            final int optionIndex = index;
+            PlaybackOption option = playbackOptions.get(index);
+            View view;
+            if (option.sourceCandidate != null) {
+                final int barPosition = sourcePosition++;
+                view = pulseBar(barPosition, option.sourceCandidate.getVariantId(), option.selected);
+                LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(
+                        dp(barPosition == 0 ? 15 : 10), LinearLayout.LayoutParams.WRAP_CONTENT);
+                if (barPosition > 0) barParams.setMarginStart(dp(3));
+                pulseRow.addView(view, barParams);
+                if (option.selected) view.setVisibility(View.GONE);
+                else screensSignals.add(sourceCandidateViews.size());
+            } else {
+                view = option.automatic ? auto : views.get(index);
+                View.OnFocusChangeListener visual = (View.OnFocusChangeListener) view.getTag(R.id.source_selector_options);
+                view.setTag(R.id.source_selector_options, (View.OnFocusChangeListener) (v, focused) -> {
+                    visual.onFocusChange(v, focused);
+                    if (focused) showScreenDetail(option);
+                });
+            }
+            registerMinimalItem(view, MINIMAL_GROUP_OPTIONS, () -> selectPlaybackOption(optionIndex), 0);
+        }
+        screensQualities.addAll(order);
+        if (autoIndex >= 0) screensQualities.add(autoIndex);
+        if (pulse) {
+            refreshPulseBars();
+            Channel pulseChannel = playbackChannel;
+            startPulseLiveMeasure(pulseChannel == null ? "" : PlaybackPreferences.channelIdentity(pulseChannel));
+        }
+
+        String section = sourceCount > 0 ? getString(R.string.source_selector_title)
+                : getString(R.string.source_selector_quality_title);
+        setMinimalEyebrow(section);
+        String hero = minimalHeroQuality();
+        sourceSelectorTitle.setText(!AppStrings.isBlank(hero) ? hero : section);
+        setMinimalStatus(minimalHeroMeta(), true);
+        minimalActions(0);
+        // Acciones a la altura de las pantallas; la línea técnica, encima.
+        TextView tech = minimalTech();
+        if (tech != null) {
+            LinearLayout.LayoutParams techParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            techParams.bottomMargin = dp(12);
+            stageRight.addView(tech, 0, techParams);
+        }
+        fitSourceSelectorList(sourceCandidateViews.size());
+        if (inUseQuality >= 0) showScreenDetail(playbackOptions.get(inUseQuality));
+        else if (autoIndex >= 0) showScreenDetail(playbackOptions.get(autoIndex));
+        int focusIndex = firstMinimalAction();
+        if (focusIndex < 0) focusIndex = screensFocusedQuality();
+        if (focusIndex >= 0 && focusIndex < sourceCandidateViews.size()) {
+            sourceCandidateFocusIndex = focusIndex;
+            sourceCandidateViews.get(focusIndex).requestFocus();
+        }
+    }
+
+    LinearLayout.LayoutParams screensLabelParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.bottomMargin = dp(10);
+        return params;
+    }
+
+    /** Un contorno de pantalla: verde con relleno si suena, blanco si tiene foco, gris el resto. */
+    View screenOutline(String title, boolean inUse, boolean crowded) {
+        FrameLayout screen = new FrameLayout(this);
+        screen.setFocusable(true);
+        screen.setFocusableInTouchMode(true);
+        android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable();
+        shape.setCornerRadius(dp(2));
+        screen.setBackground(shape);
+        TextView label = new TextView(this);
+        label.setText(title);
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
+        label.setFontFeatureSettings("tnum");
+        label.setIncludeFontPadding(false);
+        label.setSingleLine(true);
+        label.setShadowLayer(dp(3), 0, dp(1), 0x73000000);
+        FrameLayout.LayoutParams labelParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
+        labelParams.setMargins(0, dp(3), dp(4), 0);
+        screen.addView(label, labelParams);
+        View.OnFocusChangeListener style = (view, focused) -> {
+            int color = focused ? 0xFFFFFFFF : inUse ? 0xFF5BE9A0 : 0x66FFFFFF;
+            shape.setStroke(focused || inUse ? dp(1.5f) : Math.max(1, dp(0.75f)), color);
+            shape.setColor(inUse ? 0x1F5BE9A0 : 0x00000000);
+            label.setTextColor(focused ? 0xFFFFFFFF : inUse ? 0xFF5BE9A0 : 0x8CFFFFFF);
+            label.setTypeface(null, focused || inUse ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+            // Con pantallas casi del mismo alto, el número solo se ve con foco o en uso.
+            label.setVisibility(!crowded || focused || inUse ? View.VISIBLE : View.INVISIBLE);
+        };
+        style.onFocusChange(screen, false);
+        screen.setTag(R.id.source_selector_options, style);
+        return screen;
+    }
+
+    /** Detalle a la derecha de una calidad: «CALIDAD», «1080p  1920 × 1080 · 5.1 Mbps» y en uso. */
+    void showScreenDetail(PlaybackOption option) {
+        if (pulseEyebrow == null) return;
+        pulseEyebrow.setText(R.string.source_selector_screens_detail_eyebrow);
+        android.text.SpannableStringBuilder line = new android.text.SpannableStringBuilder(option.automatic
+                ? getString(R.string.source_selector_screens_auto) : qualityTitle(option));
+        line.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, line.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        List<String> parts = new ArrayList<>();
+        if (option.automatic) {
+            parts.add(getString(R.string.source_selector_screens_auto_detail));
+        } else if (option.quality != null) {
+            if (option.quality.width > 0 && option.quality.height > 0) {
+                parts.add(option.quality.width + " × " + option.quality.height);
+            }
+            if (option.quality.bitrate > 0) parts.add(formatBitrate(option.quality.bitrate));
+        }
+        if (!parts.isEmpty()) {
+            int start = line.length();
+            line.append("  ").append(TextUtils.join(" · ", parts));
+            line.setSpan(new ForegroundColorSpan(0xB3FFFFFF), start, line.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            line.setSpan(new android.text.style.RelativeSizeSpan(0.87f), start, line.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        pulseQualityLine.setText(line);
+        String playing = minimalHeroQuality();
+        boolean automatic = false;
+        String fixed = "";
+        for (PlaybackOption candidate : playbackOptions) {
+            if (candidate.automatic && candidate.selected) automatic = true;
+            if (candidate.quality != null && candidate.selected) fixed = qualityTitle(candidate);
+        }
+        android.text.SpannableStringBuilder status = new android.text.SpannableStringBuilder("● ");
+        status.setSpan(new ForegroundColorSpan(0xFF5BE9A0), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        status.append(automatic
+                ? getString(R.string.source_selector_screens_status_auto, AppStrings.isBlank(playing) ? "—" : playing)
+                : getString(R.string.source_selector_screens_status_fixed, AppStrings.isBlank(fixed) ? playing : fixed));
+        pulseStatus.setText(status);
+    }
+
+    /**
+     * Navegación de las pantallas: ▲▼ entre calidades (y «Auto»); ◀▶ entre grupos: calidades,
+     * barras de las otras señales y acciones. Devuelve false si no hay a dónde ir.
+     */
+    boolean moveScreens(int dx, int dy) {
+        int current = sourceCandidateFocusIndex;
+        if (current < 0 || current >= sourceCandidateViews.size()) return false;
+        List<Integer> actions = new ArrayList<>();
+        for (int index = 0; index < minimalItemGroup.size(); index++) {
+            if (minimalItemGroup.get(index) == MINIMAL_GROUP_ACTIONS) actions.add(index);
+        }
+        int target = -1;
+        int quality = screensQualities.indexOf(current);
+        int signal = screensSignals.indexOf(current);
+        int action = actions.indexOf(current);
+        if (quality >= 0) {
+            if (dy != 0) {
+                int next = quality + dy;
+                if (next >= 0 && next < screensQualities.size()) target = screensQualities.get(next);
+            } else if (dx > 0) {
+                target = !screensSignals.isEmpty() ? screensSignals.get(0)
+                        : !actions.isEmpty() ? actions.get(0) : -1;
+            }
+        } else if (signal >= 0) {
+            if (dx != 0) {
+                int next = signal + dx;
+                if (next >= 0 && next < screensSignals.size()) target = screensSignals.get(next);
+                else if (next < 0) target = screensFocusedQuality();
+                else if (!actions.isEmpty()) target = actions.get(0);
+            }
+        } else if (action >= 0) {
+            if (dx != 0) {
+                int next = action + dx;
+                if (next >= 0 && next < actions.size()) target = actions.get(next);
+                else if (next < 0) target = !screensSignals.isEmpty()
+                        ? screensSignals.get(screensSignals.size() - 1) : screensFocusedQuality();
+            } else if (dy < 0) {
+                target = screensFocusedQuality();
+            }
+        }
+        if (target < 0 || target >= sourceCandidateViews.size()) return false;
+        sourceCandidateViews.get(target).requestFocus();
+        return true;
+    }
+
+    /** Calidad a la que se vuelve desde otro grupo: la elegida («Auto» o una fija), o la primera. */
+    int screensFocusedQuality() {
+        for (int index : screensQualities) {
+            if (playbackOptions.get(index).selected) return index;
+        }
+        return screensQualities.isEmpty() ? -1 : screensQualities.get(0);
+    }
+
     /** Mientras consulta: los tramos que tendrá (versiones conocidas o «Señal X») y las acciones. */
     void renderMinimalPlaceholders(List<String> names, List<Boolean> preferred, String status) {
         beginMinimalSelector();
@@ -1093,6 +1440,7 @@ abstract class MainSelector extends MainGuide {
 
     /** ◀ ▶ dentro de la misma línea (escala, señal o acciones); false si no hay a dónde ir. */
     boolean moveMinimalHorizontal(int delta) {
+        if (screensMode) return moveScreens(delta, 0);
         int current = sourceCandidateFocusIndex;
         if (current < 0 || current >= sourceCandidateViews.size()) return false;
         int line = minimalItemLine.get(current);
@@ -1100,14 +1448,32 @@ abstract class MainSelector extends MainGuide {
         // siguiente opción de la misma línea, no la vecina en la lista.
         for (int target = current + delta; target >= 0 && target < sourceCandidateViews.size(); target += delta) {
             if (minimalItemLine.get(target) != line) continue;
-            if (!minimalItemGroup.get(target).equals(minimalItemGroup.get(current))) return false;
+            if (!minimalItemGroup.get(target).equals(minimalItemGroup.get(current))) break;
             sourceCandidateViews.get(target).requestFocus();
             return true;
         }
-        return false;
+        // Las acciones están a la derecha de la escala (0.6.54, pedido del usuario: «para ir a
+        // calidades tengo que apretar hacia la derecha… está muy extraño»): ◀ desde la primera
+        // acción va a la última opción de la escala y ▶ desde el final de la escala, a las acciones.
+        boolean fromActions = minimalItemGroup.get(current) == MINIMAL_GROUP_ACTIONS;
+        int target = -1;
+        if (fromActions && delta < 0) {
+            for (int index = 0; index < sourceCandidateViews.size(); index++) {
+                if (minimalItemGroup.get(index) == MINIMAL_GROUP_OPTIONS && minimalItemLine.get(index) == 0) target = index;
+            }
+        } else if (!fromActions && delta > 0 && line == 0) {
+            target = minimalItemGroup.indexOf(MINIMAL_GROUP_ACTIONS);
+        }
+        if (target < 0) return false;
+        sourceCandidateViews.get(target).requestFocus();
+        return true;
     }
     /** ▲ ▼ a la opción más cercana en horizontal de la línea vecina. */
     void moveMinimalVertical(int delta) {
+        if (screensMode) {
+            moveScreens(0, delta);
+            return;
+        }
         int current = sourceCandidateFocusIndex;
         if (current < 0 || current >= sourceCandidateViews.size()) {
             if (!sourceCandidateViews.isEmpty()) sourceCandidateViews.get(0).requestFocus();

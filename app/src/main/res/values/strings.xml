@@ -429,6 +429,18 @@
     <string name="source_selector_pulse_no_signal_now">Sin señal ahora</string>
     <string name="source_selector_pulse_in_use">en uso: %1$s</string>
     <string name="source_selector_pulse_hint">alto de cada barra = bitrate</string>
+    <!-- Pantallas (0.6.54, mockup «E2»): calidades de la señal en uso como contornos de pantalla. -->
+    <string name="source_selector_screens_in_use">En uso</string>
+    <string name="source_selector_screens_in_use_of">En uso · %1$s</string>
+    <string name="source_selector_screens_backup">RESPALDO %1$s</string>
+    <string name="source_selector_screens_backups">Respaldos</string>
+    <string name="source_selector_screens_signals">Señales</string>
+    <string name="source_selector_screens_auto">Auto</string>
+    <string name="source_selector_screens_auto_playing">Auto · suena %1$s</string>
+    <string name="source_selector_screens_auto_detail">según la red</string>
+    <string name="source_selector_screens_detail_eyebrow">CALIDAD</string>
+    <string name="source_selector_screens_status_auto">en uso: Auto (%1$s)</string>
+    <string name="source_selector_screens_status_fixed">en uso: %1$s fija</string>
     <string name="settings_signal_video_decoder">Decodificador de video</string>
     <string name="settings_signal_audio_decoder">Decodificador de audio</string>
     <string name="signal_decoder_hardware">Hardware</string>
