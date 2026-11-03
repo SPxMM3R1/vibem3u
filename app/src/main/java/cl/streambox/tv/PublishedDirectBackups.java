@@ -38,13 +38,20 @@ final class PublishedDirectBackups {
         final boolean ok;
         /** Medida en la app al abrir el selector (0.6.49), no la diaria de backups.json. */
         final boolean live;
+        /** Señal entrelazada (0.6.55): se muestra «1080i». */
+        final boolean interlaced;
 
         Quality(int height, int kbps, float fps, boolean ok, boolean live) {
+            this(height, kbps, fps, ok, live, false);
+        }
+
+        Quality(int height, int kbps, float fps, boolean ok, boolean live, boolean interlaced) {
             this.height = height;
             this.kbps = kbps;
             this.fps = fps;
             this.ok = ok;
             this.live = live;
+            this.interlaced = interlaced;
         }
     }
 
@@ -97,7 +104,8 @@ final class PublishedDirectBackups {
         int height = Math.max(0, Math.min(8640, value.optInt("height", 0)));
         int kbps = Math.max(0, Math.min(200_000, value.optInt("kbps", 0)));
         float fps = (float) Math.max(0d, Math.min(240d, value.optDouble("fps", 0d)));
-        return new Quality(height, kbps, fps, value.optBoolean("ok", false) && height > 0, false);
+        return new Quality(height, kbps, fps, value.optBoolean("ok", false) && height > 0, false,
+                value.optBoolean("interlaced", false));
     }
 
     /** Copias de respaldo del canal de Lista 1 con ese tvg-id, en orden; vacía si no tiene. */

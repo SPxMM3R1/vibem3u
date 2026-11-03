@@ -444,7 +444,8 @@ abstract class MainSelector extends MainGuide {
                     int fps = sample.info == null ? 0 : sample.info.fps;
                     // Sin SPS legible (otro códec): abrió igual, se muestra con su bitrate.
                     measured = new PublishedDirectBackups.Quality(height,
-                            (int) Math.min(Integer.MAX_VALUE, sample.kbps), fps, true, true);
+                            (int) Math.min(Integer.MAX_VALUE, sample.kbps), fps, true, true,
+                            sample.info != null && sample.info.interlaced);
                 } catch (Exception failed) {
                     Log.i("VibeM3U-Pulse", variant + " sin medición: " + failed.getClass().getSimpleName()
                             + " " + SafePlaybackText.detail(String.valueOf(failed.getMessage())));
@@ -474,7 +475,7 @@ abstract class MainSelector extends MainGuide {
                 ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
         long bitrate = measurements.muxedStream ? measurements.streamBitrate : measurements.videoBitrate;
         return new PublishedDirectBackups.Quality(video.height, (int) Math.max(0L, bitrate / 1000L),
-                shownFrameRate(measurements), true, true);
+                shownFrameRate(measurements), true, true, playingInterlaced());
     }
 
     void cancelPulseLiveMeasure() {
@@ -482,6 +483,34 @@ abstract class MainSelector extends MainGuide {
         for (Future<?> job : pulseJobs) job.cancel(true);
         pulseJobs.clear();
         pulsePending.clear();
+    }
+
+    /**
+     * Máximo de barras a la vista (0.6.55, pedido del usuario con foto de 16 respaldos: «se solapa…
+     * haz que el selector de señales tenga un máximo y haga scroll lateral»). Con más, la fila se
+     * desplaza sola al mover el foco y los bordes se esfuman para indicar que hay más.
+     */
+    static final int PULSE_MAX_VISIBLE = 10;
+
+    int pulseScrollerWidth(int bars) {
+        int visible = Math.max(1, Math.min(bars, PULSE_MAX_VISIBLE));
+        // Principal 15 dp; cada respaldo 10 dp + 3 dp de separación.
+        return dp(15 + (visible - 1) * 13 + 2);
+    }
+
+    View pulseScroller(LinearLayout row, int bars) {
+        android.widget.HorizontalScrollView scroller = new android.widget.HorizontalScrollView(this);
+        scroller.setHorizontalScrollBarEnabled(false);
+        scroller.setFillViewport(true);
+        scroller.setFocusable(false);
+        scroller.setClipToPadding(false);
+        if (bars > PULSE_MAX_VISIBLE) {
+            scroller.setHorizontalFadingEdgeEnabled(true);
+            scroller.setFadingEdgeLength(dp(14));
+        }
+        scroller.addView(row, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        return scroller;
     }
 
     /** Una barra: su número arriba (solo con foco) y la barra, alineadas abajo. */
@@ -567,7 +596,7 @@ abstract class MainSelector extends MainGuide {
         android.text.SpannableStringBuilder line = new android.text.SpannableStringBuilder();
         if (quality != null && quality.ok) {
             if (quality.height > 0) {
-                line.append(quality.height + "p");
+                line.append(scanLabel(quality.height, quality.interlaced));
                 line.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, line.length(),
                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
@@ -844,6 +873,7 @@ abstract class MainSelector extends MainGuide {
                 ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
         List<String> parts = new ArrayList<>();
         if (video != null && video.width > 0 && video.height > 0) parts.add(video.width + " × " + video.height);
+        if (playingInterlaced()) parts.add(getString(R.string.source_selector_interlaced));
         float frameRate = shownFrameRate(measurements);
         if (frameRate > 0) parts.add(trimDecimal(frameRate) + " FPS");
         if (video != null && video.sampleMimeType != null) parts.add(codecName(video.sampleMimeType));
@@ -864,7 +894,44 @@ abstract class MainSelector extends MainGuide {
     /** La calidad que se está viendo («720p»), o vacío si el video aún no informa su alto. */
     String minimalHeroQuality() {
         Format video = player == null ? null : player.getVideoFormat();
-        return video != null && video.height > 0 ? video.height + "p" : "";
+        return video != null && video.height > 0 ? scanLabel(video.height, playingInterlaced()) : "";
+    }
+
+    /**
+     * «1080i» si la señal es entrelazada, «1080p» si no (0.6.55, mockup «A · i en vez de p»
+     * aprobado: «Aplicalo»). Los fps que se muestran son siempre cuadros completos.
+     */
+    static String scanLabel(int height, boolean interlaced) {
+        return height + (interlaced ? "i" : "p");
+    }
+
+    /** Título de una calidad de la señal que suena: «1080i» si esa señal es entrelazada. */
+    String screenTitle(PlaybackOption option) {
+        if (option.quality != null && option.quality.height > 0 && playingInterlaced()) {
+            return scanLabel(option.quality.height, true);
+        }
+        return qualityTitle(option);
+    }
+
+    Format interlacedFormat;
+    boolean interlacedValue;
+
+    /** Lee el SPS H.264 del video que suena (initializationData del Format): entrelazado o no. */
+    boolean playingInterlaced() {
+        Format video = player == null ? null : player.getVideoFormat();
+        if (video == null) return false;
+        if (video != interlacedFormat) {
+            interlacedFormat = video;
+            interlacedValue = false;
+            for (byte[] data : video.initializationData) {
+                VideoSampleInfo info = VideoSampleInfo.probe(data);
+                if (info != null) {
+                    interlacedValue = info.interlaced;
+                    break;
+                }
+            }
+        }
+        return interlacedValue;
     }
 
     /** «2.2 Mbps · 60 fps»: junto a la calidad grande. */
@@ -982,8 +1049,8 @@ abstract class MainSelector extends MainGuide {
             pulseRow = new LinearLayout(this);
             pulseRow.setOrientation(LinearLayout.HORIZONTAL);
             pulseRow.setGravity(Gravity.BOTTOM);
-            stageInline.addView(pulseRow, new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            stageInline.addView(pulseScroller(pulseRow, sourceNames.size()), new LinearLayout.LayoutParams(
+                    pulseScrollerWidth(sourceNames.size()), LinearLayout.LayoutParams.WRAP_CONTENT));
         }
         int segment = stageSegmentWidth(sourcesInLadder ? sourceNames.size() : qualityCount);
         int actionsLine = hasSources && hasQualities ? 2 : 1;
@@ -1159,14 +1226,14 @@ abstract class MainSelector extends MainGuide {
             int height = Math.round(width * 9f / 16f);
             int labelTop = boxHeight - height;
             boolean crowded = labelTop - previousLabelTop < dp(11);
-            View screen = screenOutline(qualityTitle(playbackOptions.get(index)), index == inUseQuality, crowded);
+            View screen = screenOutline(screenTitle(playbackOptions.get(index)), index == inUseQuality, crowded);
             screens.addView(screen, new FrameLayout.LayoutParams(width, height, Gravity.BOTTOM | Gravity.START));
             views.put(index, screen);
             if (!crowded) previousLabelTop = labelTop;
             previousWidth = width;
             previousHeight = quality.height;
         }
-        String playingLabel = playingHeight > 0 ? playingHeight + "p" : "";
+        String playingLabel = playingHeight > 0 ? scanLabel(playingHeight, playingInterlaced()) : "";
         View auto = null;
         int autoIndex = -1;
         for (int index = 0; index < playbackOptions.size(); index++) {
@@ -1201,17 +1268,16 @@ abstract class MainSelector extends MainGuide {
         if (pulse) {
             LinearLayout signals = new LinearLayout(this);
             signals.setOrientation(LinearLayout.VERTICAL);
-            signals.addView(minimalSectionLabel(getString(pulseInUse == 0
-                    ? R.string.source_selector_screens_backups : R.string.source_selector_screens_signals)),
+            signals.addView(minimalSectionLabel(getString(R.string.source_selector_screens_signals)),
                     screensLabelParams());
             pulseRow = new LinearLayout(this);
             pulseRow.setOrientation(LinearLayout.HORIZONTAL);
             pulseRow.setGravity(Gravity.BOTTOM);
             // Rótulo a la altura de «EN USO» y barras apoyadas en la base de las pantallas.
             LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT, 0, 1f);
+                    pulseScrollerWidth(sourceCount), 0, 1f);
             rowParams.bottomMargin = dp(22);
-            signals.addView(pulseRow, rowParams);
+            signals.addView(pulseScroller(pulseRow, sourceCount), rowParams);
             LinearLayout.LayoutParams signalsParams = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT);
             signalsParams.setMarginStart(dp(30));
@@ -1235,8 +1301,9 @@ abstract class MainSelector extends MainGuide {
                         dp(barPosition == 0 ? 15 : 10), LinearLayout.LayoutParams.WRAP_CONTENT);
                 if (barPosition > 0) barParams.setMarginStart(dp(3));
                 pulseRow.addView(view, barParams);
-                if (option.selected) view.setVisibility(View.GONE);
-                else screensSignals.add(sourceCandidateViews.size());
+                // La que suena también se ve, en verde (pedido del usuario: «la barra … en uso se vea
+                // de otro color para encontrarlo rápidamente… del mismo verde que en uso principal»).
+                screensSignals.add(sourceCandidateViews.size());
             } else {
                 view = option.automatic ? auto : views.get(index);
                 View.OnFocusChangeListener visual = (View.OnFocusChangeListener) view.getTag(R.id.source_selector_options);
@@ -1326,7 +1393,7 @@ abstract class MainSelector extends MainGuide {
         if (pulseEyebrow == null) return;
         pulseEyebrow.setText(R.string.source_selector_screens_detail_eyebrow);
         android.text.SpannableStringBuilder line = new android.text.SpannableStringBuilder(option.automatic
-                ? getString(R.string.source_selector_screens_auto) : qualityTitle(option));
+                ? getString(R.string.source_selector_screens_auto) : screenTitle(option));
         line.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, line.length(),
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         List<String> parts = new ArrayList<>();
@@ -1351,7 +1418,7 @@ abstract class MainSelector extends MainGuide {
         String fixed = "";
         for (PlaybackOption candidate : playbackOptions) {
             if (candidate.automatic && candidate.selected) automatic = true;
-            if (candidate.quality != null && candidate.selected) fixed = qualityTitle(candidate);
+            if (candidate.quality != null && candidate.selected) fixed = screenTitle(candidate);
         }
         android.text.SpannableStringBuilder status = new android.text.SpannableStringBuilder("● ");
         status.setSpan(new ForegroundColorSpan(0xFF5BE9A0), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);

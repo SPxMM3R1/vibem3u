@@ -17,12 +17,19 @@ final class VideoSampleInfo {
     /** Cuadros por segundo declarados en el SPS (H.264 con VUI); 0 si no se conocen. */
     final int fps;
     final String codec;
+    /** H.264 con frame_mbs_only_flag = 0: señal entrelazada («1080i», 0.6.55). */
+    final boolean interlaced;
 
     VideoSampleInfo(int width, int height, int fps, String codec) {
+        this(width, height, fps, codec, false);
+    }
+
+    VideoSampleInfo(int width, int height, int fps, String codec, boolean interlaced) {
         this.width = width;
         this.height = height;
         this.fps = fps;
         this.codec = codec;
+        this.interlaced = interlaced;
     }
 
     /** «1080p · 50 fps», «576p» o «» si no hay datos. */
@@ -188,7 +195,7 @@ final class VideoSampleInfo {
             }
         }
         if (width < 16 || height < 16 || width > 8192 || height > 8192) return null;
-        return new VideoSampleInfo(width, height, fps > 0 && fps <= 240 ? fps : 0, "h264");
+        return new VideoSampleInfo(width, height, fps > 0 && fps <= 240 ? fps : 0, "h264", frameMbsOnly == 0);
     }
 
     static VideoSampleInfo parseH265(byte[] sps) {

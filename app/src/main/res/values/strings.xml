@@ -430,6 +430,7 @@
     <string name="source_selector_pulse_in_use">en uso: %1$s</string>
     <string name="source_selector_pulse_hint">alto de cada barra = bitrate</string>
     <!-- Pantallas (0.6.54, mockup «E2»): calidades de la señal en uso como contornos de pantalla. -->
+    <string name="source_selector_interlaced">ENTRELAZADO</string>
     <string name="source_selector_screens_in_use">En uso</string>
     <string name="source_selector_screens_in_use_of">En uso · %1$s</string>
     <string name="source_selector_screens_backup">RESPALDO %1$s</string>
