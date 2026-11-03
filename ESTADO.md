@@ -11,6 +11,7 @@
 
 ## Hoy, en una mirada
 
+- **0.6.56 — «INTERLACED»/«PROGRESSIVE» y 59.9 fps (2026-11-02, pedido del usuario: «la idea era que en el menú, como antes también dijera 59.9 cuando está entrelazado» y la etiqueta con recuadro, en inglés y también para las progresivas)**: ver DISENO.md («Selector — 0.6.56»). Probado en VibeTV con Space (entrelazado, respaldos de `backups.json` con `interlaced`) y TVN3 (progresivo).
 - **0.6.55 — «1080i», barras con desplazamiento y en uso en verde (2026-11-02)**: ver DISENO.md («Selector — 0.6.55»). Contraparte Lista M3U: la medición diaria de respaldos publica `interlaced`. Probado en VibeTV con TNT Sports Premium (1080i), TVN3 (1080p) y Space (16 respaldos).
 - **0.6.54 — «Pantallas» y ◀ hacia las calidades (2026-11-01, pedidos del usuario: «aplica el E2, me encantó» y «ajusta bien el foco de cuando uno apriete el D-pad hacia la izquierda… para ir a calidades tengo que apretar hacia la derecha»)**: las calidades de la señal que suena pasan a contornos de pantalla anidados (resoluciones, no bitrates) y los respaldos quedan aparte en barras; las acciones bajan a la altura de «Auto». ◀ desde las acciones va a respaldos y calidades en vez de cerrar; en el escenario antiguo, ◀ desde la primera acción va a la escala y ▶ desde el final de la escala, a las acciones. Probado en VibeTV con TVN (2 respaldos) y TVN3 (sin respaldos). Detalle en DISENO.md.
 - **0.6.53 — fuera «Conservar»; foco en las acciones (2026-11-01, pedido del usuario: «Ya puedes eliminar de la app lo de conservar y la lógica que construiste detrás» y que la línea de ocultar «sea la primera opción cuando yo aprieto para el lado»)**: se revirtió la 0.6.52 en la app (`ChannelKeep`, la acción del selector, el contador, «✓ CONSERVADO» en el OSD, la descarga de `app-keep.json` y los textos); la papelera queda como antes. Al abrir el selector, el foco cae en la primera acción (`firstMinimalAction`: «Cambio automático» si hay TvVoo, si no «Ocultar en esta TV»); ▲ sube a calidades y señales, y si el usuario pasa a una de ellas los repintados lo dejan ahí (`minimalFocusActions`). Lista M3U quitó en paralelo `keep`/`unkeep` y `data/app-keep.json`.
@@ -224,6 +225,7 @@
 
 ## Bitácora (más reciente arriba)
 
+- **2026-11-02**: 0.6.56 (versionCode 265): etiqueta INTERLACED/PROGRESSIVE y 59.9 fps para entrelazadas; vuelve «1080p».
 - **2026-11-02**: 0.6.55 (versionCode 264): «1080i» para señales entrelazadas, máximo 10 barras con desplazamiento lateral, señal en uso en verde.
 - **2026-11-01**: 0.6.54 (versionCode 263): selector «Pantallas» (mockup E2) y ◀ desde las acciones hacia las calidades.
 - **2026-11-01**: 0.6.53 (versionCode 262): se quita «Conservar» (revierte `fe9ec17` salvo versión y bitácora) y el selector abre con el foco en las acciones.

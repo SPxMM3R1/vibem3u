@@ -445,7 +445,8 @@ abstract class MainSelector extends MainGuide {
                     // Sin SPS legible (otro códec): abrió igual, se muestra con su bitrate.
                     measured = new PublishedDirectBackups.Quality(height,
                             (int) Math.min(Integer.MAX_VALUE, sample.kbps), fps, true, true,
-                            sample.info != null && sample.info.interlaced);
+                            sample.info != null && sample.info.interlaced,
+                            sample.info != null && "h264".equals(sample.info.codec));
                 } catch (Exception failed) {
                     Log.i("VibeM3U-Pulse", variant + " sin medición: " + failed.getClass().getSimpleName()
                             + " " + SafePlaybackText.detail(String.valueOf(failed.getMessage())));
@@ -475,7 +476,7 @@ abstract class MainSelector extends MainGuide {
                 ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
         long bitrate = measurements.muxedStream ? measurements.streamBitrate : measurements.videoBitrate;
         return new PublishedDirectBackups.Quality(video.height, (int) Math.max(0L, bitrate / 1000L),
-                shownFrameRate(measurements), true, true, playingInterlaced());
+                shownFrameRate(measurements), true, true, playingInterlaced(), playingScanKnown());
     }
 
     void cancelPulseLiveMeasure() {
@@ -602,7 +603,7 @@ abstract class MainSelector extends MainGuide {
             }
             List<String> parts = new ArrayList<>();
             if (quality.kbps > 0) parts.add(formatBitrate(quality.kbps * 1000L));
-            if (quality.fps > 0) parts.add(trimDecimal(quality.fps) + " fps");
+            if (quality.fps > 0) parts.add(fpsText(quality.fps, quality.interlaced) + " fps");
             if (!parts.isEmpty()) {
                 int start = line.length();
                 line.append(start > 0 ? "  " : "").append(TextUtils.join(" · ", parts));
@@ -610,6 +611,7 @@ abstract class MainSelector extends MainGuide {
                 line.setSpan(new android.text.style.RelativeSizeSpan(0.87f), start, line.length(),
                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
+            if (quality.scanKnown) appendScanChip(line, quality.interlaced);
         } else {
             line.append(getString(quality == null
                     ? (pending ? R.string.source_selector_pulse_measuring : R.string.source_selector_pulse_unmeasured)
@@ -873,9 +875,8 @@ abstract class MainSelector extends MainGuide {
                 ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
         List<String> parts = new ArrayList<>();
         if (video != null && video.width > 0 && video.height > 0) parts.add(video.width + " × " + video.height);
-        if (playingInterlaced()) parts.add(getString(R.string.source_selector_interlaced));
         float frameRate = shownFrameRate(measurements);
-        if (frameRate > 0) parts.add(trimDecimal(frameRate) + " FPS");
+        if (frameRate > 0) parts.add(fpsText(frameRate, playingInterlaced()) + " FPS");
         if (video != null && video.sampleMimeType != null) parts.add(codecName(video.sampleMimeType));
         long bitrate = measurements.muxedStream ? measurements.streamBitrate : measurements.videoBitrate;
         if (bitrate > 0) parts.add(formatBitrate(bitrate));
@@ -898,23 +899,94 @@ abstract class MainSelector extends MainGuide {
     }
 
     /**
-     * «1080i» si la señal es entrelazada, «1080p» si no (0.6.55, mockup «A · i en vez de p»
-     * aprobado: «Aplicalo»). Los fps que se muestran son siempre cuadros completos.
+     * Barrido (0.6.56, mockups «D · 59.9 + INTERLACED» y «E · PROGRESSIVE» aprobados, y «que
+     * ahí salgan solo los fps» en la línea técnica): la calidad sigue «1080p»; una señal
+     * entrelazada muestra sus campos por segundo (29,97 → «59.9») y una etiqueta con recuadro
+     * «INTERLACED» o «PROGRESSIVE» junto a la calidad grande y en el detalle de cada respaldo.
      */
     static String scanLabel(int height, boolean interlaced) {
-        return height + (interlaced ? "i" : "p");
+        return height + "p";
     }
 
-    /** Título de una calidad de la señal que suena: «1080i» si esa señal es entrelazada. */
-    String screenTitle(PlaybackOption option) {
-        if (option.quality != null && option.quality.height > 0 && playingInterlaced()) {
-            return scanLabel(option.quality.height, true);
+    /** «59.9» para 29,97 entrelazado (campos), «50» para 25; si no, los cuadros reales. */
+    static String fpsText(float fps, boolean interlaced) {
+        if (!interlaced || fps <= 0) return trimDecimal(fps);
+        if (Math.abs(fps - 30f) < 1.2f) return "59.9";
+        return trimDecimal(Math.round(fps * 2f * 10f) / 10f);
+    }
+
+    /** Etiqueta con recuadro al final de la línea: « INTERLACED » o « PROGRESSIVE ». */
+    void appendScanChip(android.text.SpannableStringBuilder line, boolean interlaced) {
+        line.append("  ");
+        int start = line.length();
+        line.append(getString(interlaced ? R.string.source_selector_interlaced : R.string.source_selector_progressive));
+        line.setSpan(new ScanChipSpan(dp(1.2f), dp(5), dp(2.5f), 0.55f), start, line.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+    }
+
+    /** Texto en mayúsculas, chico y en negrita, dentro de un recuadro de borde fino. */
+    static final class ScanChipSpan extends android.text.style.ReplacementSpan {
+        final float stroke;
+        final float padX;
+        final float radius;
+        final float scale;
+
+        ScanChipSpan(float stroke, float padX, float radius, float scale) {
+            this.stroke = stroke;
+            this.padX = padX;
+            this.radius = radius;
+            this.scale = scale;
         }
+
+        private android.graphics.Paint chipPaint(android.graphics.Paint base) {
+            android.graphics.Paint paint = new android.graphics.Paint(base);
+            paint.setTextSize(base.getTextSize() * scale);
+            paint.setFakeBoldText(true);
+            paint.setLetterSpacing(0.1f);
+            return paint;
+        }
+
+        @Override
+        public int getSize(android.graphics.Paint paint, CharSequence text, int start, int end,
+                           android.graphics.Paint.FontMetricsInt fm) {
+            return Math.round(chipPaint(paint).measureText(text, start, end) + padX * 2 + stroke * 2);
+        }
+
+        @Override
+        public void draw(android.graphics.Canvas canvas, CharSequence text, int start, int end, float x,
+                         int top, int y, int bottom, android.graphics.Paint paint) {
+            android.graphics.Paint chip = chipPaint(paint);
+            float width = chip.measureText(text, start, end) + padX * 2;
+            android.graphics.Paint.FontMetrics metrics = chip.getFontMetrics();
+            float textHeight = metrics.descent - metrics.ascent;
+            float center = y - paint.getTextSize() * 0.35f;
+            float boxTop = center - textHeight / 2f - stroke * 2;
+            float boxBottom = center + textHeight / 2f + stroke * 2;
+            android.graphics.Paint border = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            border.setStyle(android.graphics.Paint.Style.STROKE);
+            border.setStrokeWidth(stroke);
+            border.setColor(0xBFFFFFFF);
+            canvas.drawRoundRect(x + stroke / 2f, boxTop, x + stroke / 2f + width + stroke, boxBottom,
+                    radius, radius, border);
+            chip.setColor(0xFFFFFFFF);
+            canvas.drawText(text, start, end, x + stroke + padX, center - (metrics.ascent + metrics.descent) / 2f, chip);
+        }
+    }
+
+    /** Título de una calidad de la señal que suena («1080p»). */
+    String screenTitle(PlaybackOption option) {
         return qualityTitle(option);
     }
 
     Format interlacedFormat;
     boolean interlacedValue;
+    boolean scanKnownValue;
+
+    /** Se pudo leer el SPS H.264 de la que suena (si no, no se muestra la etiqueta). */
+    boolean playingScanKnown() {
+        playingInterlaced();
+        return scanKnownValue;
+    }
 
     /** Lee el SPS H.264 del video que suena (initializationData del Format): entrelazado o no. */
     boolean playingInterlaced() {
@@ -923,10 +995,12 @@ abstract class MainSelector extends MainGuide {
         if (video != interlacedFormat) {
             interlacedFormat = video;
             interlacedValue = false;
+            scanKnownValue = false;
             for (byte[] data : video.initializationData) {
                 VideoSampleInfo info = VideoSampleInfo.probe(data);
                 if (info != null) {
                     interlacedValue = info.interlaced;
+                    scanKnownValue = "h264".equals(info.codec);
                     break;
                 }
             }
@@ -934,16 +1008,18 @@ abstract class MainSelector extends MainGuide {
         return interlacedValue;
     }
 
-    /** «2.2 Mbps · 60 fps»: junto a la calidad grande. */
-    String minimalHeroMeta() {
+    /** «2.2 Mbps · 59.9 fps [INTERLACED]»: junto a la calidad grande. */
+    CharSequence minimalHeroMeta() {
         List<String> parts = new ArrayList<>();
         PlaybackDiagnosticsWorker.Snapshot measurements = playbackBitrateMeter == null
                 ? PlaybackDiagnosticsWorker.Snapshot.EMPTY : playbackBitrateMeter.snapshot();
         long bitrate = measurements.muxedStream ? measurements.streamBitrate : measurements.videoBitrate;
         if (bitrate > 0) parts.add(formatBitrate(bitrate));
         float frameRate = shownFrameRate(measurements);
-        if (frameRate > 0) parts.add(trimDecimal(frameRate) + " fps");
-        return TextUtils.join(" · ", parts);
+        if (frameRate > 0) parts.add(fpsText(frameRate, playingInterlaced()) + " fps");
+        android.text.SpannableStringBuilder text = new android.text.SpannableStringBuilder(TextUtils.join(" · ", parts));
+        if (playingScanKnown()) appendScanChip(text, playingInterlaced());
+        return text;
     }
 
     /** «036 · ESPN 2»: se antepone la sección en la etiqueta («CALIDAD · 036 · ESPN 2»). */
@@ -955,7 +1031,7 @@ abstract class MainSelector extends MainGuide {
     }
 
     /** Texto junto a la calidad grande; con señal en vivo, la etiqueta lleva el punto verde. */
-    void setMinimalStatus(String text, boolean live) {
+    void setMinimalStatus(CharSequence text, boolean live) {
         sourceSelectorStatus.setText(text);
         if (live) {
             android.graphics.drawable.GradientDrawable dot = new android.graphics.drawable.GradientDrawable();

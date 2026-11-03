@@ -38,20 +38,24 @@ final class PublishedDirectBackups {
         final boolean ok;
         /** Medida en la app al abrir el selector (0.6.49), no la diaria de backups.json. */
         final boolean live;
-        /** Señal entrelazada (0.6.55): se muestra «1080i». */
+        /** Señal entrelazada (0.6.56): «59.9 fps» + «INTERLACED». */
         final boolean interlaced;
+        /** Se sabe si es entrelazada o progresiva (si no, no se muestra etiqueta). */
+        final boolean scanKnown;
 
         Quality(int height, int kbps, float fps, boolean ok, boolean live) {
-            this(height, kbps, fps, ok, live, false);
+            this(height, kbps, fps, ok, live, false, false);
         }
 
-        Quality(int height, int kbps, float fps, boolean ok, boolean live, boolean interlaced) {
+        Quality(int height, int kbps, float fps, boolean ok, boolean live, boolean interlaced,
+                boolean scanKnown) {
             this.height = height;
             this.kbps = kbps;
             this.fps = fps;
             this.ok = ok;
             this.live = live;
             this.interlaced = interlaced;
+            this.scanKnown = scanKnown;
         }
     }
 
@@ -105,7 +109,7 @@ final class PublishedDirectBackups {
         int kbps = Math.max(0, Math.min(200_000, value.optInt("kbps", 0)));
         float fps = (float) Math.max(0d, Math.min(240d, value.optDouble("fps", 0d)));
         return new Quality(height, kbps, fps, value.optBoolean("ok", false) && height > 0, false,
-                value.optBoolean("interlaced", false));
+                value.optBoolean("interlaced", false), value.has("interlaced"));
     }
 
     /** Copias de respaldo del canal de Lista 1 con ese tvg-id, en orden; vacía si no tiene. */
