@@ -42,6 +42,23 @@ public final class ChannelTrashTest {
     }
 
     @Test
+    public void promoteLeavesTheRequestInGitHubWithTheBackup() throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setResponseCode(201).setBody("{}"));
+
+            github(server).requestTrash("gho_accessToken0123456789ABCDEFGHIJ", "m3u:P", "Cinecanal", "B1", "0.6.57");
+
+            JSONObject body = new JSONObject(server.takeRequest().getBody().readUtf8());
+            JSONObject request = new JSONObject(new String(
+                    java.util.Base64.getDecoder().decode(body.getString("content")),
+                    java.nio.charset.StandardCharsets.UTF_8));
+            assertEquals("promote-backup", request.getString("action"));
+            assertEquals("m3u:P", request.getString("rowKey"));
+            assertEquals("B1", request.getString("backupTvgId"));
+        }
+    }
+
+    @Test
     public void nextBackupIsDescribedWithItsServerAndMeasuredQuality() {
         assertEquals("Cinecanal 38.87.224.19 · 1080p · 3.0 Mbps", ChannelActionScenes.describeBackup(
                 "Cinecanal", "38.87.224.19", new PublishedDirectBackups.Quality(1080, 3042, 29.97f, true, false)));

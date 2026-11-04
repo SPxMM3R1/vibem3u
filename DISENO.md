@@ -17,6 +17,7 @@ Referencias aprobadas en `docs/diseno/`:
 | Opciones | `opciones-*.jpg` (mockup) · `opciones-*-app.jpg` (app); pestaña Proveedores: `opciones-canales-app.jpg`, `opciones-proveedores-app.jpg` | implementado (0.5.96); Proveedores en la 0.6.02 |
 | OSD | `osd.jpg` (app) | implementado (0.5.96) |
 | Escenas (salir, actualización, papelera, Premium, GitHub, token vencido) | `*-app.jpg` | implementado (0.5.98) |
+| Papelera de un canal con respaldos | `papelera-respaldos.jpg` (mockup) · `papelera-respaldos-app.jpg` (app) | implementado (0.6.57): tres acciones, foco inicial en Cancelar y una línea tenue debajo que explica la opción marcada |
 | Avisos (mejor calidad, recordatorio) y MediaFlow | `recordatorio-app.jpg`, `mediaflow-app.jpg` | implementado (0.5.98) |
 | Pantalla de error, ajuste del logo, avisos breves, «CONECTANDO» | `error-app.jpg`, `logo-ajuste-app.jpg`, `aviso-app.jpg` | implementado (0.5.99) |
 
