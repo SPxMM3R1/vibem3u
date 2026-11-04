@@ -213,6 +213,7 @@ abstract class MainState extends Activity {
     Map<String, Integer> resolverChannelCounts = Collections.emptyMap();
     final List<Channel> channels = new ArrayList<>();
     ChannelVisibility channelVisibility;
+    ChannelPromotions channelPromotions;
     /** Canales de adultos desbloqueados en esta tele, tal como se aplicó a la lista (0.6.36). */
     boolean adultChannelsUnlocked;
     final Map<Integer, Playlist> playlistsBySource = new LinkedHashMap<>();

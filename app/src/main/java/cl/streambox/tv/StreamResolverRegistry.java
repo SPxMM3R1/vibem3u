@@ -46,6 +46,7 @@ public final class StreamResolverRegistry {
     }
 
     public StreamResolver find(Channel channel) {
+        if (TvVooBackup.isPromoted(channel)) return null;
         if (catalog != null) {
             ResolverDefinition definition = catalog.find(channel);
             if (definition == null || !preferences.isEnabled(definition)) return null;

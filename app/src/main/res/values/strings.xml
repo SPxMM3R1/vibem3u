@@ -482,7 +482,7 @@
     <string name="channel_trash_all_detail">%1$s sale de la lista con sus %2$d respaldos. Se recupera desde la papelera del editor.</string>
     <string name="channel_trash_all_detail_one">%1$s sale de la lista con su respaldo. Se recupera desde la papelera del editor.</string>
     <string name="channel_promote_sending">Pasando a principal el respaldo de %1$s…</string>
-    <string name="channel_promote_done">%1$s: el respaldo pasa a principal · GitHub actualizado. Se ve en la próxima actualización de la lista.</string>
+    <string name="channel_promote_done">%1$s ya usa el respaldo · GitHub actualizado</string>
     <string name="channel_promote_failed">No se pudo cambiar el principal: %1$s</string>
     <string name="channel_trash_sending">Enviando %1$s a la papelera…</string>
     <string name="channel_trash_done">%1$s enviado a la papelera · GitHub actualizado</string>

@@ -58,6 +58,70 @@ public final class ChannelTrashTest {
         }
     }
 
+    private static Channel channelWithBackups() {
+        java.util.Map<String, String> attributes = new java.util.LinkedHashMap<>();
+        attributes.put("tvg-id", "0104");
+        attributes.put("x-resolver-provider", "tvn");
+        Channel owner = new Channel("TVN", java.net.URI.create("http://old/a.m3u8"), null, "Nacionales", attributes);
+        return TvVooBackup.withDirectBackups(owner, Arrays.asList(copy("B1", "http://b1/a.m3u8"),
+                copy("B2", "http://b2/a.m3u8"), copy("B3", "http://b3/a.m3u8")));
+    }
+
+    private static Channel copy(String id, String url) {
+        java.util.Map<String, String> attributes = new java.util.LinkedHashMap<>();
+        attributes.put("tvg-id", id);
+        return new Channel(id, java.net.URI.create(url), null, "", attributes);
+    }
+
+    @Test
+    public void promotedBackupPlaysAtOnceKeepingTheChannelIdentity() {
+        Channel channel = TvVooBackup.withPromotedBackup(channelWithBackups(),
+                Collections.singletonList(java.net.URI.create("http://b1/a.m3u8")));
+        assertEquals("http://b1/a.m3u8", channel.getStreamUri().toString());
+        assertEquals("0104", channel.getTvgId());
+        assertEquals("TVN", channel.getName());
+        assertTrue(TvVooBackup.isPromoted(channel));
+        assertFalse(channel.getAttributes().containsKey("x-resolver-provider"));
+        assertEquals(Arrays.asList(java.net.URI.create("http://b2/a.m3u8"), java.net.URI.create("http://b3/a.m3u8")),
+                TvVooBackup.directBackupsOf(channel));
+        // Cada respaldo restante conserva su propia identidad al reproducirlo.
+        assertEquals("B2", TvVooBackup.directResolutionChannel(channel, 0).getTvgId());
+        assertEquals("B3", TvVooBackup.directResolutionChannel(channel, 1).getTvgId());
+    }
+
+    @Test
+    public void secondPromotionMovesToTheNextBackupAndDropsTheEarlierOne() {
+        Channel channel = TvVooBackup.withPromotedBackup(channelWithBackups(), Arrays.asList(
+                java.net.URI.create("http://b1/a.m3u8"), java.net.URI.create("http://b2/a.m3u8")));
+        assertEquals("http://b2/a.m3u8", channel.getStreamUri().toString());
+        assertEquals(Collections.singletonList(java.net.URI.create("http://b3/a.m3u8")),
+                TvVooBackup.directBackupsOf(channel));
+        assertEquals("B3", TvVooBackup.directResolutionChannel(channel, 0).getTvgId());
+    }
+
+    @Test
+    public void promotingTheLastBackupLeavesNoBackups() {
+        Channel owner = TvVooBackup.withDirectBackups(copy("P", "http://p/a.m3u8"),
+                Collections.singletonList(copy("B1", "http://b1/a.m3u8")));
+        Channel channel = TvVooBackup.withPromotedBackup(owner,
+                Collections.singletonList(java.net.URI.create("http://b1/a.m3u8")));
+        assertEquals("http://b1/a.m3u8", channel.getStreamUri().toString());
+        assertTrue(TvVooBackup.directBackupsOf(channel).isEmpty());
+    }
+
+    @Test
+    public void promotionsSurviveSerializationAndIgnoreGarbage() {
+        String text = ChannelPromotions.serialize(Collections.singletonList(new ChannelPromotions.Entry("P", 10L,
+                Arrays.asList(new ChannelPromotions.Step("B1", java.net.URI.create("http://b1/a.m3u8")),
+                        new ChannelPromotions.Step("B2", java.net.URI.create("http://b2/a.m3u8"))))));
+        Map<String, ChannelPromotions.Entry> parsed = ChannelPromotions.parse(text);
+        assertEquals(10L, parsed.get("P").atMillis);
+        assertEquals("B2", parsed.get("P").steps.get(1).tvgId);
+        assertEquals("http://b2/a.m3u8", parsed.get("P").steps.get(1).uri.toString());
+        assertTrue(ChannelPromotions.parse("{roto").isEmpty());
+        assertTrue(ChannelPromotions.parse("[{\"origin\":\"P\",\"steps\":[{\"id\":\"B\",\"url\":\"file:///x\"}]}]").isEmpty());
+    }
+
     @Test
     public void nextBackupIsDescribedWithItsServerAndMeasuredQuality() {
         assertEquals("Cinecanal 38.87.224.19 · 1080p · 3.0 Mbps", ChannelActionScenes.describeBackup(

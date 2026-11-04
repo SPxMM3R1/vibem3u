@@ -104,6 +104,7 @@ public final class MainActivity extends MainSelector {
         LogoScales.load(this);
         playbackPreferences = new PlaybackPreferences(this);
         channelVisibility = new ChannelVisibility(this);
+        channelPromotions = new ChannelPromotions(this);
         adultChannelsUnlocked = AdultChannels.isUnlocked(this);
         AdultChannels.setHiding(!adultChannelsUnlocked);
         resolverCatalogRepository = new ResolverCatalogRepository(this);
@@ -704,10 +705,13 @@ public final class MainActivity extends MainSelector {
             // Canales de adultos (0.6.36): bloqueados, no existen para la lista, la guía ni la búsqueda.
             if (!adultChannelsUnlocked && AdultChannels.isAdult(candidate)) continue;
             if (streamResolverRegistry.isChannelEnabled(candidate)) {
-                enabledChannels.add(candidate);
+                enabledChannels.add(channelPromotions.apply(candidate, visibilityNow));
             }
         }
-        if (!isWaitingForPublishedCatalog()) channelVisibility.prune(presentKeys, visibilityNow);
+        if (!isWaitingForPublishedCatalog()) {
+            channelVisibility.prune(presentKeys, visibilityNow);
+            channelPromotions.prune(presentKeys, visibilityNow);
+        }
 
         channels.clear();
         channels.addAll(enabledChannels);
@@ -802,6 +806,7 @@ public final class MainActivity extends MainSelector {
                 && previousIdentity.equals(PlaybackPreferences.channelIdentity(playbackChannel));
         boolean preserveResolvedPlayback = sameChannel
                 && !requestHeadersChanged
+                && TvVooBackup.isPromoted(previousChannel) == TvVooBackup.isPromoted(selectedChannel)
                 && currentPlaybackSource != null
                 && currentPlaybackSource.isDynamicallyResolved()
                 && player != null

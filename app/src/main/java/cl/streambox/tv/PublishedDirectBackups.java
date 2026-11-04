@@ -19,7 +19,8 @@ import java.util.Map;
  * inválido, el canal funciona como antes.
  */
 final class PublishedDirectBackups {
-    static final int MAX_BYTES = 512 * 1024;
+    // 0.6.58: 512 KiB quedó corto (Lista M3U llegó a 555 KB) y la descarga fallaba sin aviso.
+    static final int MAX_BYTES = 4 * 1024 * 1024;
     static final int MAX_PER_CHANNEL = 24;
     private static final int MAX_CHANNELS = 1024;
 

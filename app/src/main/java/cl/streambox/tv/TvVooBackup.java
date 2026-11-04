@@ -20,6 +20,8 @@ final class TvVooBackup {
     static final String DIRECT_ATTRIBUTE = "x-backup-stream";
     /** tvg-id propio de cada respaldo, indexado por posición; solo vive en el canal proyectado. */
     private static final String SOURCE_ID_PREFIX = "x-backup-source-id-";
+    /** Solo en memoria: el canal ya usa el respaldo pasado a principal (ChannelPromotions). */
+    private static final String PROMOTED_ATTRIBUTE = "x-backup-promoted";
 
     private TvVooBackup() {}
 
@@ -107,6 +109,39 @@ final class TvVooBackup {
         attributes.put(DIRECT_ATTRIBUTE, String.join("\n", lines));
         return new Channel(channel.getName(), channel.getStreamUri(), channel.getLogoUri(),
                 channel.getGroup(), attributes);
+    }
+
+    /**
+     * Respaldo pasado a principal desde esta TV (0.6.58): el canal conserva nombre, logo, grupo y
+     * tvg-id (número y guía), reproduce la última señal de {@code promoted} y deja de tener como
+     * respaldo a todas ellas; la señal anterior no queda de respaldo.
+     */
+    static Channel withPromotedBackup(Channel channel, List<URI> promoted) {
+        if (channel == null || promoted == null || promoted.isEmpty()) return channel;
+        Map<String, String> attributes = new LinkedHashMap<>(channel.getAttributes());
+        List<URI> backups = directBackupsOf(channel);
+        List<String> lines = new ArrayList<>();
+        Map<String, String> ids = new LinkedHashMap<>();
+        for (int index = 0; index < backups.size(); index++) {
+            if (promoted.contains(backups.get(index))) continue;
+            String id = attributes.get(SOURCE_ID_PREFIX + index);
+            if (!AppStrings.isBlank(id)) ids.put(SOURCE_ID_PREFIX + lines.size(), id);
+            lines.add(backups.get(index).toString());
+        }
+        attributes.keySet().removeIf(key -> key.startsWith(SOURCE_ID_PREFIX));
+        // Igual que al reproducir un respaldo: HTTP tal cual, sin los datos de resolutor del dueño.
+        attributes.keySet().removeIf(key -> key.startsWith("x-resolver"));
+        attributes.remove(DIRECT_ATTRIBUTE);
+        attributes.putAll(ids);
+        if (!lines.isEmpty()) attributes.put(DIRECT_ATTRIBUTE, String.join("\n", lines));
+        attributes.put(PROMOTED_ATTRIBUTE, "1");
+        return new Channel(channel.getName(), promoted.get(promoted.size() - 1), channel.getLogoUri(),
+                channel.getGroup(), attributes);
+    }
+
+    /** Reproduce un respaldo pasado a principal: ningún resolutor lo reclama por su tvg-id. */
+    static boolean isPromoted(Channel channel) {
+        return channel != null && channel.getAttributes().containsKey(PROMOTED_ATTRIBUTE);
     }
 
     /** Canal que reproduce el respaldo directo número {@code index} (0 = el primero), o null. */

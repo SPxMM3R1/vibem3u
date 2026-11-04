@@ -128,7 +128,8 @@ abstract class MainSelector extends MainGuide {
             loadingPanel.setTranslationY(-height / 2f);
         }
         sourceSelectorFixedHint = !classicUi && resolver instanceof TvVooStreamResolver;
-        minimalFocusActions = true;
+        minimalFocusActions = false;
+        minimalFocusOpening = true;
         if (resolver != null && supportsSourceSelector(resolver)) {
             startSourceSelectorQuery(playbackChannel, versionsChannel, resolver);
             // Moderno (0.5.92): mientras consulta ya están las filas que tendrá al final
@@ -785,10 +786,14 @@ abstract class MainSelector extends MainGuide {
     }
 
     /**
-     * Al abrir, el foco empieza en las acciones (0.6.53, pedido del usuario: sin bajar ni ir al
-     * lado). Si se pasa a una calidad o señal, los repintados mantienen el foco allí.
+     * Con el foco en las acciones, los repintados lo mantienen allí.
      */
     boolean minimalFocusActions;
+    /**
+     * Al abrir, el foco empieza en la señal (0.6.58, pedido del usuario: «el foco al principio esté
+     * en la calidad de señal»; antes, en las acciones) y sigue allí hasta que se aprieta una flecha.
+     */
+    boolean minimalFocusOpening;
 
     /** Primera acción («Cambio automático» u «Ocultar en esta TV»), o -1 si no hay. */
     int firstMinimalAction() {
@@ -1210,7 +1215,7 @@ abstract class MainSelector extends MainGuide {
             }
         }
         int action = firstMinimalAction();
-        if (action >= 0) focusIndex = action;
+        if (!minimalFocusOpening && action >= 0) focusIndex = action;
         if (!sourceCandidateViews.isEmpty()) {
             sourceCandidateFocusIndex = Math.min(focusIndex, sourceCandidateViews.size() - 1);
             sourceCandidateViews.get(sourceCandidateFocusIndex).requestFocus();
@@ -1416,8 +1421,9 @@ abstract class MainSelector extends MainGuide {
         fitSourceSelectorList(sourceCandidateViews.size());
         if (inUseQuality >= 0) showScreenDetail(playbackOptions.get(inUseQuality));
         else if (autoIndex >= 0) showScreenDetail(playbackOptions.get(autoIndex));
-        int focusIndex = firstMinimalAction();
+        int focusIndex = minimalFocusOpening ? screensOpeningFocus() : firstMinimalAction();
         if (focusIndex < 0) focusIndex = screensFocusedQuality();
+        if (focusIndex < 0) focusIndex = minimalItemGroup.indexOf(MINIMAL_GROUP_ACTIONS);
         if (focusIndex >= 0 && focusIndex < sourceCandidateViews.size()) {
             sourceCandidateFocusIndex = focusIndex;
             sourceCandidateViews.get(focusIndex).requestFocus();
@@ -1505,10 +1511,12 @@ abstract class MainSelector extends MainGuide {
     }
 
     /**
-     * Navegación de las pantallas: ▲▼ entre calidades (y «Auto»); ◀▶ entre grupos: calidades,
-     * barras de las otras señales y acciones. Devuelve false si no hay a dónde ir.
+     * Navegación de las pantallas: ▲▼ entre calidades (y «Auto»); ◀▶ dan la vuelta (0.6.58, pedido del
+     * usuario: desde la señal, «a la derecha me voy a la resolución» y «hacia la izquierda… hacia
+     * eliminación»): señales → calidades → acciones → señales. Devuelve false si no hay a dónde ir.
      */
     boolean moveScreens(int dx, int dy) {
+        minimalFocusOpening = false;
         int current = sourceCandidateFocusIndex;
         if (current < 0 || current >= sourceCandidateViews.size()) return false;
         List<Integer> actions = new ArrayList<>();
@@ -1524,22 +1532,27 @@ abstract class MainSelector extends MainGuide {
                 int next = quality + dy;
                 if (next >= 0 && next < screensQualities.size()) target = screensQualities.get(next);
             } else if (dx > 0) {
-                target = !screensSignals.isEmpty() ? screensSignals.get(0)
-                        : !actions.isEmpty() ? actions.get(0) : -1;
+                target = !actions.isEmpty() ? actions.get(0)
+                        : !screensSignals.isEmpty() ? screensSignals.get(0) : -1;
+            } else if (dx < 0) {
+                target = !screensSignals.isEmpty() ? screensSignals.get(screensSignals.size() - 1)
+                        : !actions.isEmpty() ? actions.get(actions.size() - 1) : -1;
             }
         } else if (signal >= 0) {
             if (dx != 0) {
                 int next = signal + dx;
                 if (next >= 0 && next < screensSignals.size()) target = screensSignals.get(next);
-                else if (next < 0) target = screensFocusedQuality();
-                else if (!actions.isEmpty()) target = actions.get(0);
+                else if (next < 0) target = !actions.isEmpty() ? actions.get(actions.size() - 1) : screensFocusedQuality();
+                else target = !screensQualities.isEmpty() ? screensFocusedQuality()
+                        : !actions.isEmpty() ? actions.get(0) : -1;
             }
         } else if (action >= 0) {
             if (dx != 0) {
                 int next = action + dx;
                 if (next >= 0 && next < actions.size()) target = actions.get(next);
-                else if (next < 0) target = !screensSignals.isEmpty()
-                        ? screensSignals.get(screensSignals.size() - 1) : screensFocusedQuality();
+                else if (next < 0) target = !screensQualities.isEmpty() ? screensFocusedQuality()
+                        : !screensSignals.isEmpty() ? screensSignals.get(screensSignals.size() - 1) : -1;
+                else target = !screensSignals.isEmpty() ? screensSignals.get(0) : screensFocusedQuality();
             } else if (dy < 0) {
                 target = screensFocusedQuality();
             }
@@ -1547,6 +1560,14 @@ abstract class MainSelector extends MainGuide {
         if (target < 0 || target >= sourceCandidateViews.size()) return false;
         sourceCandidateViews.get(target).requestFocus();
         return true;
+    }
+
+    /** Foco al abrir: la señal que suena, la primera señal o, sin señales, la calidad elegida. */
+    int screensOpeningFocus() {
+        for (int index : screensSignals) {
+            if (playbackOptions.get(index).selected) return index;
+        }
+        return screensSignals.isEmpty() ? screensFocusedQuality() : screensSignals.get(0);
     }
 
     /** Calidad a la que se vuelve desde otro grupo: la elegida («Auto» o una fija), o la primera. */
@@ -1577,13 +1598,14 @@ abstract class MainSelector extends MainGuide {
         }
         minimalActions(1);
         fitSourceSelectorList(sourceCandidateViews.size());
-        sourceCandidateFocusIndex = Math.max(0, firstMinimalAction());
+        sourceCandidateFocusIndex = minimalFocusOpening ? 0 : Math.max(0, firstMinimalAction());
         if (!sourceCandidateViews.isEmpty()) sourceCandidateViews.get(sourceCandidateFocusIndex).requestFocus();
     }
 
     /** ◀ ▶ dentro de la misma línea (escala, señal o acciones); false si no hay a dónde ir. */
     boolean moveMinimalHorizontal(int delta) {
         if (screensMode) return moveScreens(delta, 0);
+        minimalFocusOpening = false;
         int current = sourceCandidateFocusIndex;
         if (current < 0 || current >= sourceCandidateViews.size()) return false;
         int line = minimalItemLine.get(current);
@@ -1606,6 +1628,13 @@ abstract class MainSelector extends MainGuide {
             }
         } else if (!fromActions && delta > 0 && line == 0) {
             target = minimalItemGroup.indexOf(MINIMAL_GROUP_ACTIONS);
+        } else if (!fromActions && delta < 0 && line == 0) {
+            // Da la vuelta (0.6.58): ◀ desde el inicio de la escala va a «Papelera».
+            target = minimalItemGroup.lastIndexOf(MINIMAL_GROUP_ACTIONS);
+        } else if (fromActions && delta > 0) {
+            for (int index = 0; index < sourceCandidateViews.size() && target < 0; index++) {
+                if (minimalItemGroup.get(index) == MINIMAL_GROUP_OPTIONS && minimalItemLine.get(index) == 0) target = index;
+            }
         }
         if (target < 0) return false;
         sourceCandidateViews.get(target).requestFocus();
@@ -1613,6 +1642,7 @@ abstract class MainSelector extends MainGuide {
     }
     /** ▲ ▼ a la opción más cercana en horizontal de la línea vecina. */
     void moveMinimalVertical(int delta) {
+        minimalFocusOpening = false;
         if (screensMode) {
             moveScreens(0, delta);
             return;
@@ -2421,30 +2451,37 @@ abstract class MainSelector extends MainGuide {
             return;
         }
         closePlaybackSourceSelector();
-        List<Channel> backups = key.startsWith("m3u:")
-                ? PublishedDirectBackups.backupsFor(key.substring("m3u:".length()))
-                : Collections.<Channel>emptyList();
+        String originId = key.startsWith("m3u:") ? key.substring("m3u:".length()) : "";
+        // Con un respaldo ya pasado a principal y la lista aún sin llegar, en Lista M3U el canal es
+        // esa señal, y el siguiente respaldo es el que sigue.
+        List<String> promoted = channelPromotions.promotedIds(originId, System.currentTimeMillis());
+        String requestKey = promoted.isEmpty() ? key : "m3u:" + promoted.get(promoted.size() - 1);
+        List<Channel> backups = new ArrayList<>();
+        for (Channel copy : PublishedDirectBackups.backupsFor(originId)) {
+            if (!promoted.contains(copy.getTvgId())) backups.add(copy);
+        }
         if (backups.isEmpty()) {
-            ChannelActionScenes.showTrashConfirm(this, channel.getName(), () -> trashWhenLinked(channel, key, null));
+            ChannelActionScenes.showTrashConfirm(this, channel.getName(),
+                    () -> trashWhenLinked(channel, key, requestKey, null));
             return;
         }
         Channel next = backups.get(0);
         ChannelActionScenes.showTrashWithBackups(this, channel.getName(), backups.size(),
                 ChannelActionScenes.describeBackup(next.getName(), next.getStreamUri().getHost(),
                         PublishedDirectBackups.qualityFor(next.getTvgId())),
-                () -> trashWhenLinked(channel, key, next.getTvgId()),
-                () -> trashWhenLinked(channel, key, null));
+                () -> trashWhenLinked(channel, key, requestKey, next),
+                () -> trashWhenLinked(channel, key, requestKey, null));
     }
 
-    private void trashWhenLinked(Channel channel, String key, String backupTvgId) {
-        if (new GitHubCredentialStore(this).linked()) sendChannelToTrash(channel, key, backupTvgId, true);
-        else ChannelActionScenes.showGitHubLink(this, () -> sendChannelToTrash(channel, key, backupTvgId, true));
+    private void trashWhenLinked(Channel channel, String key, String requestKey, Channel backup) {
+        if (new GitHubCredentialStore(this).linked()) sendChannelToTrash(channel, key, requestKey, backup, true);
+        else ChannelActionScenes.showGitHubLink(this, () -> sendChannelToTrash(channel, key, requestKey, backup, true));
     }
 
     /** Deja el pedido en GitHub; solo reabre el Device Flow si GitHub confirma que no puede renovar. */
-    void sendChannelToTrash(Channel channel, String key, String backupTvgId, boolean mayRelink) {
+    void sendChannelToTrash(Channel channel, String key, String requestKey, Channel backup, boolean mayRelink) {
         String name = channel.getName();
-        boolean promote = backupTvgId != null;
+        boolean promote = backup != null;
         int failedText = promote ? R.string.channel_promote_failed : R.string.channel_trash_failed;
         showNotice(NOTICE_PROGRESS, R.string.notice_list, getString(promote
                 ? R.string.channel_promote_sending : R.string.channel_trash_sending, name), false);
@@ -2458,13 +2495,14 @@ abstract class MainSelector extends MainGuide {
                     mainHandler.post(() -> {
                         if (!isFinishing() && mayRelink) {
                             ChannelActionScenes.showGitHubLink(this,
-                                    () -> sendChannelToTrash(channel, key, backupTvgId, false));
+                                    () -> sendChannelToTrash(channel, key, requestKey, backup, false));
                         }
                     });
                     return;
                 }
                 try {
-                    new GitHubChannelTrash().requestTrash(credentials, key, name, backupTvgId, BuildConfig.VERSION_NAME,
+                    new GitHubChannelTrash().requestTrash(credentials, requestKey, name,
+                            promote ? backup.getTvgId() : null, BuildConfig.VERSION_NAME,
                             rotated -> {
                                 try {
                                     store.save(rotated);
@@ -2476,9 +2514,12 @@ abstract class MainSelector extends MainGuide {
                     mainHandler.post(() -> {
                         if (isFinishing()) return;
                         if (promote) {
-                            // El canal sigue: la señal nueva llega con la próxima lista.
+                            // Al tiro en esta TV; la lista publicada la alcanza después.
+                            channelPromotions.add(key.substring("m3u:".length()), backup.getTvgId(),
+                                    backup.getStreamUri(), System.currentTimeMillis());
                             showNotice(NOTICE_OK, R.string.notice_list,
                                     getString(R.string.channel_promote_done, name), true);
+                            reapplyChannelList();
                             return;
                         }
                         channelVisibility.markTrashed(key, name, System.currentTimeMillis());
@@ -2492,7 +2533,7 @@ abstract class MainSelector extends MainGuide {
                         if (isFinishing()) return;
                         if (mayRelink) {
                             ChannelActionScenes.showGitHubLink(this,
-                                    () -> sendChannelToTrash(channel, key, backupTvgId, false));
+                                    () -> sendChannelToTrash(channel, key, requestKey, backup, false));
                         } else {
                             showNotice(NOTICE_WARN, R.string.notice_trash,
                                     getString(failedText, reauthorizationRequired.getMessage()), true);
