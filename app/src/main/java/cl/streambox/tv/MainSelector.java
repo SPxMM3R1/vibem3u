@@ -2421,16 +2421,33 @@ abstract class MainSelector extends MainGuide {
             return;
         }
         closePlaybackSourceSelector();
-        ChannelActionScenes.showTrashConfirm(this, channel.getName(), () -> {
-            if (new GitHubCredentialStore(this).linked()) sendChannelToTrash(channel, key, true);
-            else ChannelActionScenes.showGitHubLink(this, () -> sendChannelToTrash(channel, key, true));
-        });
+        List<Channel> backups = key.startsWith("m3u:")
+                ? PublishedDirectBackups.backupsFor(key.substring("m3u:".length()))
+                : Collections.<Channel>emptyList();
+        if (backups.isEmpty()) {
+            ChannelActionScenes.showTrashConfirm(this, channel.getName(), () -> trashWhenLinked(channel, key, null));
+            return;
+        }
+        Channel next = backups.get(0);
+        ChannelActionScenes.showTrashWithBackups(this, channel.getName(), backups.size(),
+                ChannelActionScenes.describeBackup(next.getName(), next.getStreamUri().getHost(),
+                        PublishedDirectBackups.qualityFor(next.getTvgId())),
+                () -> trashWhenLinked(channel, key, next.getTvgId()),
+                () -> trashWhenLinked(channel, key, null));
+    }
+
+    private void trashWhenLinked(Channel channel, String key, String backupTvgId) {
+        if (new GitHubCredentialStore(this).linked()) sendChannelToTrash(channel, key, backupTvgId, true);
+        else ChannelActionScenes.showGitHubLink(this, () -> sendChannelToTrash(channel, key, backupTvgId, true));
     }
 
     /** Deja el pedido en GitHub; solo reabre el Device Flow si GitHub confirma que no puede renovar. */
-    void sendChannelToTrash(Channel channel, String key, boolean mayRelink) {
+    void sendChannelToTrash(Channel channel, String key, String backupTvgId, boolean mayRelink) {
         String name = channel.getName();
-        showNotice(NOTICE_PROGRESS, R.string.notice_list, getString(R.string.channel_trash_sending, name), false);
+        boolean promote = backupTvgId != null;
+        int failedText = promote ? R.string.channel_promote_failed : R.string.channel_trash_failed;
+        showNotice(NOTICE_PROGRESS, R.string.notice_list, getString(promote
+                ? R.string.channel_promote_sending : R.string.channel_trash_sending, name), false);
         GitHubCredentialStore store = new GitHubCredentialStore(this);
         networkExecutor.execute(() -> {
             // Varias solicitudes de papelera comparten la misma credencial. Serializarlas evita
@@ -2441,13 +2458,13 @@ abstract class MainSelector extends MainGuide {
                     mainHandler.post(() -> {
                         if (!isFinishing() && mayRelink) {
                             ChannelActionScenes.showGitHubLink(this,
-                                    () -> sendChannelToTrash(channel, key, false));
+                                    () -> sendChannelToTrash(channel, key, backupTvgId, false));
                         }
                     });
                     return;
                 }
                 try {
-                    new GitHubChannelTrash().requestTrash(credentials, key, name, BuildConfig.VERSION_NAME,
+                    new GitHubChannelTrash().requestTrash(credentials, key, name, backupTvgId, BuildConfig.VERSION_NAME,
                             rotated -> {
                                 try {
                                     store.save(rotated);
@@ -2458,6 +2475,12 @@ abstract class MainSelector extends MainGuide {
                             });
                     mainHandler.post(() -> {
                         if (isFinishing()) return;
+                        if (promote) {
+                            // El canal sigue: la señal nueva llega con la próxima lista.
+                            showNotice(NOTICE_OK, R.string.notice_list,
+                                    getString(R.string.channel_promote_done, name), true);
+                            return;
+                        }
                         channelVisibility.markTrashed(key, name, System.currentTimeMillis());
                         showNotice(NOTICE_OK, R.string.notice_list,
                                 getString(R.string.channel_trash_done, name), true);
@@ -2469,16 +2492,15 @@ abstract class MainSelector extends MainGuide {
                         if (isFinishing()) return;
                         if (mayRelink) {
                             ChannelActionScenes.showGitHubLink(this,
-                                    () -> sendChannelToTrash(channel, key, false));
+                                    () -> sendChannelToTrash(channel, key, backupTvgId, false));
                         } else {
                             showNotice(NOTICE_WARN, R.string.notice_trash,
-                                    getString(R.string.channel_trash_failed,
-                                            reauthorizationRequired.getMessage()), true);
+                                    getString(failedText, reauthorizationRequired.getMessage()), true);
                         }
                         });
                 } catch (java.io.IOException error) {
                     mainHandler.post(() -> showNotice(NOTICE_WARN, R.string.notice_trash,
-                            getString(R.string.channel_trash_failed,
+                            getString(failedText,
                                     AppStrings.isBlank(error.getMessage()) ? "sin conexión" : error.getMessage()),
                             true));
                 }

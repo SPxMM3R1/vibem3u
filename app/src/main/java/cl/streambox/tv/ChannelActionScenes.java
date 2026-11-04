@@ -11,6 +11,7 @@ import android.widget.TextView;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Escenas de «Este canal» (0.5.90): confirmar la papelera y vincular GitHub con el teléfono. */
@@ -40,6 +41,78 @@ final class ChannelActionScenes {
         dialog.show();
         SceneDialog.hideSystemBars(dialog);
         return dialog;
+    }
+
+    /**
+     * Canal con respaldos (0.6.57): pasar el siguiente a principal o borrar todo. El foco parte en
+     * Cancelar; el detalle de abajo explica la opción marcada.
+     */
+    static Dialog showTrashWithBackups(Activity activity, String channelName, int backups, String nextBackup,
+            Runnable onPromote, Runnable onTrashAll) {
+        Dialog dialog = SceneDialog.create(activity, R.layout.dialog_scene);
+        ((TextView) dialog.findViewById(R.id.scene_kicker)).setText(R.string.github_link_kicker);
+        ((TextView) dialog.findViewById(R.id.scene_title)).setText(
+                activity.getString(R.string.channel_trash_confirm_title, channelName));
+        ((TextView) dialog.findViewById(R.id.scene_message)).setText(backups == 1
+                ? activity.getString(R.string.channel_trash_backups_message_one, nextBackup)
+                : activity.getString(R.string.channel_trash_backups_message, backups, nextBackup));
+        TextView detail = dialog.findViewById(R.id.scene_detail);
+        Button promote = dialog.findViewById(R.id.scene_primary);
+        Button trashAll = dialog.findViewById(R.id.scene_danger);
+        Button cancel = dialog.findViewById(R.id.scene_secondary);
+        promote.setText(R.string.channel_trash_promote);
+        trashAll.setText(R.string.channel_trash_all);
+        cancel.setText(R.string.cancel);
+        trashAll.setVisibility(View.VISIBLE);
+        String promoteDetail = backups == 1
+                ? activity.getString(R.string.channel_trash_promote_detail_none, channelName)
+                : backups == 2
+                ? activity.getString(R.string.channel_trash_promote_detail_one, channelName)
+                : activity.getString(R.string.channel_trash_promote_detail, channelName, backups - 1);
+        String trashAllDetail = backups == 1
+                ? activity.getString(R.string.channel_trash_all_detail_one, channelName)
+                : activity.getString(R.string.channel_trash_all_detail, channelName, backups);
+        // Invisible y no ausente: la escena crece desde abajo y los botones no deben saltar.
+        detail.setVisibility(View.INVISIBLE);
+        showDetailOnFocus(promote, detail, promoteDetail);
+        showDetailOnFocus(trashAll, detail, trashAllDetail);
+        cancel.setOnFocusChangeListener((view, focused) -> {
+            if (focused) detail.setVisibility(View.INVISIBLE);
+        });
+        promote.setOnClickListener(view -> {
+            dialog.dismiss();
+            onPromote.run();
+        });
+        trashAll.setOnClickListener(view -> {
+            dialog.dismiss();
+            onTrashAll.run();
+        });
+        cancel.setOnClickListener(view -> dialog.dismiss());
+        dialog.setOnShowListener(ignored -> cancel.requestFocus());
+        dialog.show();
+        SceneDialog.hideSystemBars(dialog);
+        return dialog;
+    }
+
+    private static void showDetailOnFocus(Button button, TextView detail, String text) {
+        button.setOnFocusChangeListener((view, focused) -> {
+            if (!focused) return;
+            detail.setText(text);
+            detail.setVisibility(View.VISIBLE);
+        });
+    }
+
+    /** «Cinecanal 38.87.224.19 · 1080p · 3.0 Mbps»; sin medición, solo el nombre y el servidor. */
+    static String describeBackup(String name, String host, PublishedDirectBackups.Quality quality) {
+        StringBuilder text = new StringBuilder(name == null ? "" : name);
+        if (host != null && !host.isEmpty()) text.append(' ').append(host);
+        if (quality != null && quality.ok) {
+            text.append(" · ").append(quality.height).append('p');
+            if (quality.kbps > 0) {
+                text.append(" · ").append(String.format(Locale.ROOT, "%.1f Mbps", quality.kbps / 1000f));
+            }
+        }
+        return text.toString();
     }
 
     /** Evita que abrir la fila de estado «Vinculado» inicie un QR sin confirmación explícita. */

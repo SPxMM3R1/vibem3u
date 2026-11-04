@@ -199,11 +199,18 @@ final class GitHubChannelTrash {
     GitHubCredentialStore.Credentials requestTrash(GitHubCredentialStore.Credentials credentials,
             String rowKey, String channelName, String appVersion, CredentialPersister persister)
             throws IOException {
+        return requestTrash(credentials, rowKey, channelName, null, appVersion, persister);
+    }
+
+    /** Con {@code backupTvgId}, ese respaldo toma el lugar de la fila que va a la papelera (0.6.57). */
+    GitHubCredentialStore.Credentials requestTrash(GitHubCredentialStore.Credentials credentials,
+            String rowKey, String channelName, String backupTvgId, String appVersion,
+            CredentialPersister persister) throws IOException {
         if (credentials == null || !GitHubCredentialStore.isPlausibleToken(credentials.accessToken)) {
             throw new ReauthorizationRequiredException();
         }
         try {
-            requestTrash(credentials.accessToken, rowKey, channelName, appVersion);
+            requestTrash(credentials.accessToken, rowKey, channelName, backupTvgId, appVersion);
             return credentials;
         } catch (InvalidAccessTokenException invalidAccessToken) {
             if (AppStrings.isBlank(credentials.refreshToken)) throw new ReauthorizationRequiredException();
@@ -213,7 +220,7 @@ final class GitHubChannelTrash {
             // del segundo pedido evita perder la nueva sesión si la app se interrumpe.
             persister.save(refreshed);
             try {
-                requestTrash(refreshed.accessToken, rowKey, channelName, appVersion);
+                requestTrash(refreshed.accessToken, rowKey, channelName, backupTvgId, appVersion);
                 return refreshed;
             } catch (InvalidAccessTokenException secondRejection) {
                 throw new ReauthorizationRequiredException();
@@ -245,11 +252,19 @@ final class GitHubChannelTrash {
     /** Deja el pedido de papelera para la fila del editor {@code rowKey}. */
     void requestTrash(String token, String rowKey, String channelName, String appVersion)
             throws IOException {
+        requestTrash(token, rowKey, channelName, null, appVersion);
+    }
+
+    void requestTrash(String token, String rowKey, String channelName, String backupTvgId, String appVersion)
+            throws IOException {
         if (AppStrings.isBlank(rowKey) || rowKey.length() > 600) throw new IOException("Canal sin fila en el editor.");
         String fileName = requestFileName(System.currentTimeMillis(), new SecureRandom().nextInt(1 << 24));
         String payload;
         try {
-            payload = requestDocument(rowKey, channelName, appVersion, System.currentTimeMillis()).toString(2) + "\n";
+            long now = System.currentTimeMillis();
+            payload = (backupTvgId == null
+                    ? requestDocument(rowKey, channelName, appVersion, now)
+                    : promoteDocument(rowKey, channelName, backupTvgId, appVersion, now)).toString(2) + "\n";
         } catch (JSONException error) {
             throw new IOException("No se pudo armar el pedido.", error);
         }
@@ -296,6 +311,14 @@ final class GitHubChannelTrash {
                 .put("name", safeName(channelName))
                 .put("requestedAt", format.format(new Date(nowMillis)))
                 .put("app", "VibeM3U " + (appVersion == null ? "" : appVersion));
+    }
+
+    /** La fila va a la papelera y {@code backupTvgId} queda de principal en su lugar. */
+    static JSONObject promoteDocument(String rowKey, String channelName, String backupTvgId, String appVersion,
+            long nowMillis) throws JSONException {
+        return requestDocument(rowKey, channelName, appVersion, nowMillis)
+                .put("action", "promote-backup")
+                .put("backupTvgId", backupTvgId);
     }
 
     static String safeName(String name) {

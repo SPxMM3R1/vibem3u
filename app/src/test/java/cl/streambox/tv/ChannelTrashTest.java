@@ -32,6 +32,25 @@ public final class ChannelTrashTest {
     }
 
     @Test
+    public void promoteRequestNamesTheBackupThatTakesThePlace() throws Exception {
+        JSONObject request = GitHubChannelTrash.promoteDocument("m3u:P", "Cinecanal", "B1", "0.6.57", 0L);
+        assertEquals(1, request.getInt("schema"));
+        assertEquals("promote-backup", request.getString("action"));
+        assertEquals("m3u:P", request.getString("rowKey"));
+        assertEquals("B1", request.getString("backupTvgId"));
+        assertEquals("Cinecanal", request.getString("name"));
+    }
+
+    @Test
+    public void nextBackupIsDescribedWithItsServerAndMeasuredQuality() {
+        assertEquals("Cinecanal 38.87.224.19 · 1080p · 3.0 Mbps", ChannelActionScenes.describeBackup(
+                "Cinecanal", "38.87.224.19", new PublishedDirectBackups.Quality(1080, 3042, 29.97f, true, false)));
+        assertEquals("Cinecanal 38.87.224.19", ChannelActionScenes.describeBackup(
+                "Cinecanal", "38.87.224.19", new PublishedDirectBackups.Quality(0, 0, 0f, false, false)));
+        assertEquals("Cinecanal 38.87.224.19", ChannelActionScenes.describeBackup("Cinecanal", "38.87.224.19", null));
+    }
+
+    @Test
     public void requestFilesAreSortableAndUnique() {
         String first = GitHubChannelTrash.requestFileName(1_760_000_000_000L, 0xabc);
         String later = GitHubChannelTrash.requestFileName(1_760_000_001_000L, 0x001);

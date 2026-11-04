@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Escena genérica con dos acciones; MainActivity y Opciones ponen los textos.
+<!-- Escena genérica con dos acciones (tres en la papelera de un canal con respaldos, 0.6.57);
+     MainActivity y Opciones ponen los textos.
      Estilo «escena» (2026-10-03): el video sigue vivo y atenuado, el degradado negro del OSD
      sube desde abajo y el contenido va abajo a la izquierda con los márgenes del OSD. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -23,7 +24,7 @@
         android:background="@drawable/scene_scrim" />
 
     <LinearLayout
-        android:layout_width="600dp"
+        android:layout_width="720dp"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|start"
         android:layout_marginStart="48dp"
@@ -89,6 +90,25 @@
                 android:textSize="11sp" />
 
             <Button
+                android:id="@+id/scene_danger"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="23dp"
+                android:background="@drawable/scene_button_danger"
+                android:includeFontPadding="false"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="7dp"
+                android:stateListAnimator="@null"
+                android:textAllCaps="false"
+                android:textColor="@color/scene_button_danger_text"
+                android:textSize="11sp"
+                android:visibility="gone" />
+
+            <Button
                 android:id="@+id/scene_secondary"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -107,6 +127,16 @@
                 android:textSize="11sp" />
 
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/scene_detail"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:includeFontPadding="false"
+            android:textColor="#80FFFFFF"
+            android:textSize="9.5sp"
+            android:visibility="gone" />
 
     </LinearLayout>
 </FrameLayout>
