@@ -174,3 +174,5 @@ agente debe poder retomar el trabajo solo con lo que está en el repositorio.
 - Referencias TvVoo 0.6.59: `M3uParser.legacyTvVooIdentity` debe coincidir con `TVVOO_LEGACY_REFERENCE_KEYS` de Lista M3U. Solo seis equivalencias verificadas, manteniendo tvg-id histórico para EPG; IDs arbitrarios o identidad cruzada se rechazan.
 
 - Validación de resolutores compartidos: ejecutar `:local-catalog:test` además de las tareas Android. `local-catalog/build.gradle.kts` mantiene una lista explícita de clases; incorporar las dependencias transitivas cuando se restaura/cambia un cliente.
+
+- Entrega TvVoo publicada: v0.6.59/268 en tag 2e2ed9d; CI 42330554604 y Release 42372890583 verdes. Ver ESTADO.md para hash/firma, evidencias y señales aún fallidas en origen. El cierre documental posterior no mueve el tag.

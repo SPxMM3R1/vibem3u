@@ -93,3 +93,9 @@ visual del contenido.
 El parser conserva también los seis tvg-id históricos mediante una tabla cerrada,
 compartida con `TVVOO_LEGACY_REFERENCE_KEYS` de Lista M3U. Se rechazan otros
 IDs y claves cruzadas; no eliminar esta compatibilidad al revisar el esquema.
+
+Publicada: v0.6.59/268, tag 2e2ed9d. CI 42330554604 y Release 42372890583
+correctos. APK público 2.944.565 bytes, SHA-256
+c299b21473c3188a4c8774e0d6fe4335af1f2b4b4252e1911358809fc064f106.
+La firma conserva el certificado de actualización. Ver ESTADO.md para límites
+de origen, contraparte y evidencia de reproducción.

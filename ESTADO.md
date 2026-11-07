@@ -576,3 +576,11 @@
 ### Auxiliar local y prueba final de apertura
 - CI detectó que `local-catalog` no incluía el cliente compartido restaurado. Su lista explícita incorpora VavooSessionClient, MediaFlowVavooUrl y MediaFlowOriginPolicy. Ejecutar también `:local-catalog:test` al tocar dependencias de un resolutor compartido.
 - Parser corregido instalado en VibeTV: #029 TNT Sports 3 muestra video real (World Sambo Championship, logo TNT Sports 3) y el selector mantiene sus tres versiones. Esta evidencia sustituye cualquier captura anterior al arreglo del parser.
+
+### Publicación verificada — 2026-11-07
+- Versión **0.6.59 / 268**, tag `v0.6.59` sobre `2e2ed9d`. Cambios: `6705c13`, `a296a98` (parser histórico), `2e2ed9d` (dependencias del auxiliar); versión `5e9b73f`.
+- CI final `42330554604`: compilación/tests/lint y persistencia cifrada en emulador correctos. Release `42372890583`: correcto; release público, no borrador ni pre-release.
+- APK público `VibeM3U-v0.6.59.apk`: 2.944.565 bytes; SHA-256 `c299b21473c3188a4c8774e0d6fe4335af1f2b4b4252e1911358809fc064f106`; certificado `ae6457004fe9b72f077439ce882e3913b2429e96dc7285f9d38b435e0f4322b6`, compatible; aapt confirma 268/0.6.59.
+- Pruebas locales finales: 410 JVM app (1 omitida), 24 auxiliar, lint debug/release, APK debug/release. Runner Lista M3U `42329413083` correcto; Raw conserva las seis referencias con alias y claves. No confundir salud identity_only con reproducción.
+- Límites de señal: DAZN F1/Eurosport 2 fallaron en origen; Main Event devolvió Sky Sports News en la referencia local. No se sustituyeron identidades ni EPG para ocultarlo. TV física y MediaFlow del usuario pendientes.
+- Verificación adicional del APK público: instalado con `adb install -r` sobre la app existente, sin borrar datos; Android confirma 268/0.6.59. Abre #029 TNT Sports 3 con video decodificado real (snooker John Higgins–Kyren Wilson, logo TNT Sports 3 LIVE). El emulador requirió arranque sin snapshot con GPU software por fallo gráfico del host; no se cambió la configuración del proyecto ni del AVD.
