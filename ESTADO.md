@@ -566,3 +566,6 @@
   app; tokens de TVN y Mega solo en RAM.
 - **2026-09-17 al 22**: Highfly y TvVoo con renovación al reproducir, MediaFlow, catálogo y
   menús.
+
+### Preparación de publicación 0.6.59
+- Implementación publicada en `6705c13`; versión 268/0.6.59 preparada en commit separado. Compilación debug/test APK, 409 pruebas JVM (1 omitida) y lint correctos. Tag y APK pendientes de CI y runner de Lista M3U.
