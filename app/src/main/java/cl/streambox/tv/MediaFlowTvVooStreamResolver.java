@@ -15,13 +15,13 @@ import java.util.Map;
 /** TvVoo resolver variant that sends the original Vavoo destination to MediaFlow. */
 public final class MediaFlowTvVooStreamResolver implements StreamResolver {
     private static final String PLAYBACK_USER_AGENT = "VAVOO/2.6";
-    private static final int DEFAULT_BUDGET_MS = 12_000;
+    private static final int DEFAULT_BUDGET_MS = 18_000;
     private static final int MAX_DISCOVERY_STREAMS = 16;
     private static final int MAX_DISCOVERY_PAYLOAD_BYTES = 512 * 1024;
 
     private final ResolverDefinition definition;
     private final MediaFlowPreferences preferences;
-    private final TokenHttpClient tvVooClient;
+    private final VavooSessionClient sessionClient;
     private final MediaFlowExtractor extractor;
 
     public MediaFlowTvVooStreamResolver(
@@ -39,7 +39,7 @@ public final class MediaFlowTvVooStreamResolver implements StreamResolver {
     ) {
         this.definition = definition;
         this.preferences = preferences;
-        this.tvVooClient = tvVooClient;
+        this.sessionClient = new VavooSessionClient(definition, tvVooClient);
         this.extractor = extractor;
     }
 
@@ -86,7 +86,7 @@ public final class MediaFlowTvVooStreamResolver implements StreamResolver {
                 ? ResolutionProgressListener.NONE
                 : listener;
         ResolutionDeadline deadline = new ResolutionDeadline(definition.getIntConfig(
-                "resolutionBudgetMs", DEFAULT_BUDGET_MS, 2_000, 20_000
+                "nativeResolutionBudgetMs", DEFAULT_BUDGET_MS, 2_000, 20_000
         ));
         ResolutionContext current = ResolutionContext.current();
         if (current == null) {
@@ -132,19 +132,8 @@ public final class MediaFlowTvVooStreamResolver implements StreamResolver {
                         ResolutionStage.ALIAS_ATTEMPT,
                         "MediaFlow · consultando alias TvVoo"
                 ));
-                URI endpoint = MediaFlowTvVooEndpoint.forChannel(
-                        definition, channel, origin, alias
-                );
-                TokenHttpClient.Response response = tvVooClient.getPublicOnHosts(
-                        endpoint.toString(),
-                        Collections.singletonMap("Accept", "application/json"),
-                        512 * 1024,
-                        null,
-                        Collections.singleton("tvvoo.hayd.uk")
-                );
-                List<URI> originals = parseMediaFlowVavooCandidates(
-                        new String(response.getBody(), java.nio.charset.StandardCharsets.UTF_8)
-                );
+                List<URI> originals = sessionClient.originalCandidates(channel,
+                        Collections.singletonList(alias), progress, deadline);
                 for (URI original : originals) {
                     try {
                         deadline.check();
@@ -226,6 +215,8 @@ public final class MediaFlowTvVooStreamResolver implements StreamResolver {
             throw new IOException("TvVoo devolvió JSON inválido.", error);
         }
     }
+
+    @Override public void clearSensitiveState() { sessionClient.clear(); }
 
     private long expiresAt() {
         long ttl = cacheTtlMillis();

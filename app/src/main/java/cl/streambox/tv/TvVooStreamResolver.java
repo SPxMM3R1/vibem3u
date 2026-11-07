@@ -30,11 +30,11 @@ import javax.net.ssl.SSLPeerUnverifiedException;
 /** Resolves short-lived TvVoo candidates from stable catalogue aliases. */
 public final class TvVooStreamResolver implements StreamResolver {
     private static final String DEFAULT_ENDPOINT = "https://tvvoo.hayd.uk/stream/tv";
-    static final String PLAYBACK_USER_AGENT = "VAVOO/2.6";
+    static final String PLAYBACK_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36";
     private static final int DEFAULT_PARALLEL_ALIASES = 2;
     private static final int DEFAULT_PARALLEL_CANDIDATES = 3;
     /** Margen para reintentar la consulta JSON cuando el addon responde vacío. */
-    private static final int DEFAULT_RESOLUTION_BUDGET_MS = 12_000;
+    private static final int DEFAULT_RESOLUTION_BUDGET_MS = 18_000;
     /**
      * El addon a veces responde ``streams: []`` o falla una vez y a la siguiente
      * consulta entrega la señal (medido 2026-10-01: 4 de 45 consultas, 4 de 15 en
@@ -707,25 +707,10 @@ public final class TvVooStreamResolver implements StreamResolver {
         if (!"http".equalsIgnoreCase(scheme)) {
             throw new IOException("TvVoo publicó una URL inválida.");
         }
-        URI upgraded = withScheme(published, "https");
-        try {
-            validator.validate(
-                    upgraded,
-                    playbackHeaders,
-                    strictValidation,
-                    listener
-            );
-            return upgraded;
-        } catch (IOException error) {
-            if (!allowHttpFallback || !isExpiredCertificateFailure(error)) throw error;
-            validator.validate(
-                    published,
-                    playbackHeaders,
-                    strictValidation,
-                    listener
-            );
-            return published;
-        }
+        // Vavoo publishes HTTP media ports which do not speak TLS. Preserve the
+        // provider's URI instead of inventing HTTPS and rejecting a valid source.
+        validator.validate(published, playbackHeaders, strictValidation, listener);
+        return published;
     }
 
     /**
@@ -757,6 +742,10 @@ public final class TvVooStreamResolver implements StreamResolver {
             httpError = error;
         }
 
+        // An explicit HTTP source has already been tested as published. A
+        // 403/502 is an origin failure, not a reason to try TLS on its media port.
+        if ("http".equalsIgnoreCase(published.getScheme())) throw httpError;
+
         URI httpsCandidate = "https".equalsIgnoreCase(published.getScheme())
                 ? published
                 : withScheme(published, "https");
@@ -769,8 +758,8 @@ public final class TvVooStreamResolver implements StreamResolver {
             );
             return httpsCandidate;
         } catch (IOException httpsError) {
-            httpsError.addSuppressed(httpError);
-            throw httpsError;
+            httpError.addSuppressed(httpsError);
+            throw httpError;
         }
     }
 
@@ -869,6 +858,18 @@ public final class TvVooStreamResolver implements StreamResolver {
             ResolutionProgressListener progress,
             ResolutionDeadline deadline
     ) throws IOException {
+        if ("tvvoo.hayd.uk".equalsIgnoreCase(URI.create(endpointBase).getHost())) {
+            encodedAlias(alias); // Same bounded alias validation as the addon route.
+            Channel target = new Channel(versionName(alias), URI.create("https://vavoo.to/"),
+                    null, "", Collections.singletonMap("x-resolver-id", alias));
+            VavooSessionClient session = new VavooSessionClient(definition, httpClient, true);
+            List<URI> result = new ArrayList<>();
+            try {
+                session.streamCandidates(target, Collections.singletonList(alias), progress,
+                        deadline, (candidate, identity) -> { result.add(candidate); return true; });
+                return result;
+            } finally { session.clear(); }
+        }
         String endpoint = endpointBase + "/" + encodedAlias(alias) + ".json";
         progress.onProgress(ResolutionProgress.of(
                 ResolutionStage.CATALOG_REQUEST,
@@ -930,7 +931,7 @@ public final class TvVooStreamResolver implements StreamResolver {
     private ResolutionDeadline newResolutionDeadline() {
         return new ResolutionDeadline(
                 definition.getIntConfig(
-                        "resolutionBudgetMs",
+                        "nativeResolutionBudgetMs",
                         DEFAULT_RESOLUTION_BUDGET_MS,
                         2_000,
                         20_000

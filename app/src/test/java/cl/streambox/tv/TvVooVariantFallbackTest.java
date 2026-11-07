@@ -94,6 +94,16 @@ public class TvVooVariantFallbackTest {
             this.selectedQueries = selectedQueries;
         }
 
+        @Override public String postJsonText(String url, Map<String, String> headers,
+                String body, int limit) throws IOException {
+            if (url.endsWith("/api/app/ping"))
+                return "{\"addonSig\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}";
+            if (url.contains("catalog"))
+                return "{\"items\":[{\"type\":\"iptv\",\"ids\":{\"id\":\"1\"},\"name\":\"SKY SPORTS MIX\",\"group\":\"United Kingdom\",\"url\":\"https://vavoo.to/vavoo-iptv/play/selected\"},{\"type\":\"iptv\",\"ids\":{\"id\":\"2\"},\"name\":\"SKY SPORTS MIX HD\",\"group\":\"United Kingdom\",\"url\":\"https://vavoo.to/vavoo-iptv/play/sibling\"}]}";
+            if (body.contains("selected")) { selectedQueries.incrementAndGet(); return "[]"; }
+            return "[{\"url\":\"" + SIBLING_STREAM + "\"}]";
+        }
+
         @Override
         public String getText(String url, Map<String, String> headers) throws IOException {
             if (url.contains(SELECTED)) {

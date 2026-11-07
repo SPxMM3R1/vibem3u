@@ -51,3 +51,41 @@ La implementación queda validada por pruebas estáticas y unitarias del
 proyecto. La apertura real en Android TV y una sesión sostenida a través de un
 servidor MediaFlow requieren probarse en el dispositivo y con la instancia
 del usuario.
+
+
+## Recuperación 0.6.59 — 2026-11-06
+
+La instancia pública fue retirada. `TvVooStreamResolver.queryAlias` consulta ahora
+`VavooSessionClient` para los alias cuyo endpoint es el antiguo host público.
+Se conservan `TvVooFastRace`, las versiones publicadas, el foco, los alias elegidos,
+la medición y la búsqueda de mejor calidad. El engine continúa siendo `tvvoo`.
+No se añaden canales desde el catálogo interno del resolutor.
+
+El protocolo sigue el código oficial de TvVoo (cliente 3.1.0, ping Vypn,
+language de/region AT, UA diferentes para catálogo y resolución). Esos campos
+son parámetros del protocolo: no se falsea la IP ni se reescribe la firma.
+Las sesiones y los destinos se guardan solo en RAM. La URL HTTP publicada se
+valida directamente; un 403/502 no provoca un intento TLS en ese puerto.
+No se desactiva la comprobación de certificados HTTPS.
+
+MediaFlow descubre los originales en el catálogo Vavoo y usa el extractor
+configurado por el usuario. La contraseña del proxy nunca va al proveedor.
+Validado con pruebas de protocolo; no había un MediaFlow real configurado para
+una prueba de reproducción con proxy.
+
+Contraparte Lista M3U: 08abe33 + ce96409. Conserva los seis IDs y la numeración;
+las seis fuentes públicas son referencias tokenless. La salud identity_only
+indica validez de identidad, nunca una señal comprobada.
+
+Última prueba Android 2026-11-07 02:21–02:22 UTC: Main Event, TNT 3, TNT 4 y
+Eurosport 1 superaron HLS/segmento en 4–5,3 s. DAZN F1 y Eurosport 2 fallan en
+origen (502/403); no se sustituyen por señales de otro país ni se cambia la EPG.
+TNT 3 y 4 mostraron video real de rugby/cricket en VibeTV. La referencia local
+Main Event mostró Sky Sports News: un alias del proveedor no acredita el feed.
+El servidor Node de comparación fue apagado y no es dependencia de la TV.
+
+Pruebas: VavooProtocolTest, VavooSessionClientTest, TvVooVariantFallbackTest;
+`VavooLiveInstrumentedTest` es optativo y exige una M3U en
+`/data/local/tmp/vavoo-live-test.m3u` (opcional archivo de variantes al lado).
+No registra ni guarda enlaces resueltos. Un test HLS no sustituye la inspección
+visual del contenido.
