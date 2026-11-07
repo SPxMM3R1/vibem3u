@@ -170,3 +170,5 @@ agente debe poder retomar el trabajo solo con lo que está en el repositorio.
 - `VIBEM3U_ID_CONTRACT_EPG_LOGOS.md` (contrato vigente de identidad, EPG y logos).
 - `TVVOO_M3U_CONTRACT.md`, `RESOLVER_RECIPE_V1.md`, `CONTEXTO_LISTA_M3U_PARA_VIBEM3U.md`.
 - `OSD_THREADING.md`, `PLAYBACK_AUDIT.md`, `vibem3u_context.md` (solo historia: describe la 0.4.83).
+
+- Referencias TvVoo 0.6.59: `M3uParser.legacyTvVooIdentity` debe coincidir con `TVVOO_LEGACY_REFERENCE_KEYS` de Lista M3U. Solo seis equivalencias verificadas, manteniendo tvg-id histórico para EPG; IDs arbitrarios o identidad cruzada se rechazan.

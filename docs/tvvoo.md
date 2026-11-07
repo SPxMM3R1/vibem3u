@@ -89,3 +89,7 @@ Pruebas: VavooProtocolTest, VavooSessionClientTest, TvVooVariantFallbackTest;
 `/data/local/tmp/vavoo-live-test.m3u` (opcional archivo de variantes al lado).
 No registra ni guarda enlaces resueltos. Un test HLS no sustituye la inspección
 visual del contenido.
+
+El parser conserva también los seis tvg-id históricos mediante una tabla cerrada,
+compartida con `TVVOO_LEGACY_REFERENCE_KEYS` de Lista M3U. Se rechazan otros
+IDs y claves cruzadas; no eliminar esta compatibilidad al revisar el esquema.

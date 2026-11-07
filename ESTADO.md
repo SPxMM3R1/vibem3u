@@ -569,3 +569,6 @@
 
 ### Preparación de publicación 0.6.59
 - Implementación publicada en `6705c13`; versión 268/0.6.59 preparada en commit separado. Compilación debug/test APK, 409 pruebas JVM (1 omitida) y lint correctos. Tag y APK pendientes de CI y runner de Lista M3U.
+
+### Compatibilidad de referencias históricas TvVoo
+- La prueba de apertura detectó que `M3uParser` rechazaba las seis referencias tokenless con IDs históricos conservados por Lista M3U. Se añade la misma equivalencia cerrada de `update_m3u.py`, sin aceptar IDs arbitrarios ni cambiar EPG. `M3uParserTest.preservesOnlyVerifiedLegacyTvVooIds` cubre las seis y rechaza cruces/IDs desconocidos. Publicación APK pendiente de las nuevas pruebas.

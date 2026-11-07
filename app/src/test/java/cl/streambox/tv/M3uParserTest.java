@@ -160,4 +160,28 @@ public class M3uParserTest {
                 + "tvvoo://channel/legacy@TvVoo\n";
         assertEquals(0, M3uParser.parse(invalid, URI.create("https://example.org/list.m3u")).size());
     }
+
+    @Test
+    public void preservesOnlyVerifiedLegacyTvVooIds() throws Exception {
+        String[][] pairs = {
+            {"SkySportsMainEvent.uk@TvVoo", "unitedkingdom|vavoo_SKY%20SPORTS%20MAIN%20EVENT%7Cgroup%3Auk"},
+            {"DAZNF1.es@TvVoo", "spain|vavoo_DAZN%20F1%7Cgroup%3Aes"},
+            {"TNTSports3.uk@TvVoo", "unitedkingdom|vavoo_TNT%20SPORTS%203%7Cgroup%3Auk"},
+            {"Vavoo.uk.TNTSPORTS4@TvVoo", "unitedkingdom|vavoo_TNT%20SPORT%204%7Cgroup%3Auk"},
+            {"Vavoo.es.EUROSPORT1@TvVoo", "spain|vavoo_EUROSPORT%201%7Cgroup%3Aes"},
+            {"Eurosport2.es@TvVoo", "spain|vavoo_EUROSPORT%202%7Cgroup%3Aes"}
+        };
+        URI base = URI.create("https://example.org/1.m3u");
+        for (String[] pair : pairs) {
+            String reference = "tvvoo://channel/" + java.net.URLEncoder.encode(pair[1], "UTF-8");
+            String m3u = "#EXTM3U\n#EXTINF:-1 tvg-id=\"" + pair[0] + "\",Canal\n" + reference + "\n";
+            java.util.List<Channel> channels = M3uParser.parse(m3u, base);
+            assertEquals(1, channels.size());
+            assertEquals(pair[0], channels.get(0).getTvgId());
+            assertEquals(pair[1], channels.get(0).getAttributes().get("x-resolver-stable-id"));
+            assertEquals(0, M3uParser.parse(m3u.replace(pair[0], "unknown@TvVoo"), base).size());
+            String wrongKey = java.net.URLEncoder.encode("spain|vavoo_OTHER%7Cgroup%3Aes", "UTF-8");
+            assertEquals(0, M3uParser.parse(m3u.replace(reference, "tvvoo://channel/" + wrongKey), base).size());
+        }
+    }
 }

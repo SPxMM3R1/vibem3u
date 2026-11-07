@@ -213,7 +213,8 @@ public final class M3uParser {
                 || !TvVooCatalogChannel.isStableId(stableId)) return false;
         String declaredTvgId = attributes.get("tvg-id");
         if (!AppStrings.isBlank(declaredTvgId)
-                && !declaredTvgId.equals(stableId + "@TvVoo")) return false;
+                && !declaredTvgId.equals(stableId + "@TvVoo")
+                && !stableId.equals(legacyTvVooIdentity(declaredTvgId))) return false;
         String explicitId = attributes.get("x-resolver-id");
         if (AppStrings.isBlank(explicitId)) {
             attributes.put("x-resolver-id", stableId);
@@ -239,6 +240,22 @@ public final class M3uParser {
         }
         attributes.put("x-resolver-ids", serialized.toString());
         return true;
+    }
+
+    /** Closed migration map shared with Lista M3U; never infer identity by name. */
+    private static String legacyTvVooIdentity(String tvgId) {
+        switch (tvgId) {
+            case "SkySportsMainEvent.uk@TvVoo":
+                return "unitedkingdom|vavoo_SKY%20SPORTS%20MAIN%20EVENT%7Cgroup%3Auk";
+            case "DAZNF1.es@TvVoo": return "spain|vavoo_DAZN%20F1%7Cgroup%3Aes";
+            case "TNTSports3.uk@TvVoo":
+                return "unitedkingdom|vavoo_TNT%20SPORTS%203%7Cgroup%3Auk";
+            case "Vavoo.uk.TNTSPORTS4@TvVoo":
+                return "unitedkingdom|vavoo_TNT%20SPORT%204%7Cgroup%3Auk";
+            case "Vavoo.es.EUROSPORT1@TvVoo": return "spain|vavoo_EUROSPORT%201%7Cgroup%3Aes";
+            case "Eurosport2.es@TvVoo": return "spain|vavoo_EUROSPORT%202%7Cgroup%3Aes";
+            default: return "";
+        }
     }
 
     private static void addAliases(String value, LinkedHashSet<String> result) {
