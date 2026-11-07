@@ -25,6 +25,8 @@ val resolverFiles = listOf(
     "ManifestHandoffData.java",
     "MeganoticiasHlsDecoder.java",
     "MeganoticiasStreamResolver.java",
+    "MediaFlowVavooUrl.java",
+    "MediaFlowOriginPolicy.java",
     "Playlist.java",
     "PublicStreamPolicy.java",
     "ProviderStreamParsers.java",
@@ -51,6 +53,7 @@ val resolverFiles = listOf(
     "TvVooFastRace.java",
     "TvVooSourceHistory.java",
     "TvVooStreamResolver.java",
+    "VavooSessionClient.java",
     "VideoSampleInfo.java",
 )
 

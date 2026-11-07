@@ -572,3 +572,7 @@
 
 ### Compatibilidad de referencias históricas TvVoo
 - La prueba de apertura detectó que `M3uParser` rechazaba las seis referencias tokenless con IDs históricos conservados por Lista M3U. Se añade la misma equivalencia cerrada de `update_m3u.py`, sin aceptar IDs arbitrarios ni cambiar EPG. `M3uParserTest.preservesOnlyVerifiedLegacyTvVooIds` cubre las seis y rechaza cruces/IDs desconocidos. Publicación APK pendiente de las nuevas pruebas.
+
+### Auxiliar local y prueba final de apertura
+- CI detectó que `local-catalog` no incluía el cliente compartido restaurado. Su lista explícita incorpora VavooSessionClient, MediaFlowVavooUrl y MediaFlowOriginPolicy. Ejecutar también `:local-catalog:test` al tocar dependencias de un resolutor compartido.
+- Parser corregido instalado en VibeTV: #029 TNT Sports 3 muestra video real (World Sambo Championship, logo TNT Sports 3) y el selector mantiene sus tres versiones. Esta evidencia sustituye cualquier captura anterior al arreglo del parser.
