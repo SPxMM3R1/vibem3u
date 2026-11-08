@@ -943,25 +943,43 @@ abstract class MainPlayback extends MainState {
         return true;
     }
 
-    /** Antepone el directo («Principal») a las versiones TvVoo de su respaldo. */
+    /**
+     * Antepone las señales directas del canal (principal y respaldos de la lista) a las versiones
+     * TvVoo de su respaldo. Desde la 0.6.60 también los respaldos directos: antes un canal con
+     * TvVoo (ESPN 3, 11 respaldos) solo mostraba «Directo».
+     */
     List<ResolvedPlaybackCandidate> withDirectPrincipal(
             Channel channel,
             Channel resolutionChannel,
             List<ResolvedPlaybackCandidate> versions
     ) {
         if (channel == resolutionChannel || versions == null) return versions;
-        List<ResolvedPlaybackCandidate> result = new ArrayList<>(versions.size() + 1);
+        List<ResolvedPlaybackCandidate> result = new ArrayList<>(directSignalCandidates(channel));
+        result.addAll(versions);
+        return result;
+    }
+
+    /** Principal («direct-principal») y respaldos directos («direct-backup-N»), en orden. */
+    List<ResolvedPlaybackCandidate> directSignalCandidates(Channel channel) {
+        List<ResolvedPlaybackCandidate> result = new ArrayList<>();
+        if (channel == null) return result;
+        int backupCount = TvVooBackup.directBackupsOf(channel).size();
         result.add(ResolvedPlaybackCandidate.version(
                 getString(R.string.source_selector_direct_label),
                 getString(R.string.source_selector_direct_detail),
                 ResolvedPlaybackSource.direct(channel, PLAYER_USER_AGENT),
-                "direct",
-                "",
-                true,
-                true,
-                0
-        ));
-        result.addAll(versions);
+                "direct-principal", "", true, true, 0));
+        for (int index = 0; index < backupCount; index++) {
+            Channel backupChannel = TvVooBackup.directResolutionChannel(channel, index);
+            if (backupChannel == null) continue;
+            String label = backupCount == 1 ? getString(R.string.source_selector_backup_label)
+                    : getString(R.string.source_selector_backup_numbered_label, index + 1);
+            result.add(ResolvedPlaybackCandidate.version(
+                    label,
+                    getString(R.string.source_selector_backup_detail),
+                    ResolvedPlaybackSource.direct(backupChannel, PLAYER_USER_AGENT),
+                    "direct-backup-" + index, "", true, false, 0));
+        }
         return result;
     }
 

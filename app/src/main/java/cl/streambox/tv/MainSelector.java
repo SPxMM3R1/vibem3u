@@ -137,7 +137,9 @@ abstract class MainSelector extends MainGuide {
             // Antes reservaba 5 filas vacías y el panel se encogía al cargar.
             List<TvVooStreamResolver.PlannedVersion> planned = sourceSelectorFixedHint
                     ? ((TvVooStreamResolver) resolver).plannedVersions(versionsChannel) : null;
-            if (planned != null && !planned.isEmpty()) {
+            if (sourceSelectorFixedHint && minimalSelector()) {
+                renderProviderPlaceholders(planned);
+            } else if (planned != null && !planned.isEmpty()) {
                 renderSourcePlaceholders(planned);
             } else if (!classicUi) {
                 renderLoadingPlaceholder(providerLabel(resolver));
@@ -186,6 +188,8 @@ abstract class MainSelector extends MainGuide {
         screensQualities.clear();
         screensSignals.clear();
         sourceSelectorCloseFocused = false;
+        resetProviderStage();
+        pulsePlayingVariant = "";
     }
 
     // Escenario (0.6.22, mockup «F2» aprobado): el selector moderno es una franja abajo con el
@@ -372,8 +376,37 @@ abstract class MainSelector extends MainGuide {
         }
     }
 
-    /** Calidad a mostrar: la medida ahora si ya llegó; si no, la diaria de backups.json. */
+    /**
+     * Señal que suena (0.6.60, pedido del usuario: «si está en reproducción, ¿no debería usar los
+     * datos en tiempo real?»): se reconoce con la misma regla que la pinta de verde, no por su URL
+     * (TVN y otros abren por su resolutor y la URL no calza), y nunca se vuelve a bajar.
+     */
+    String pulsePlayingVariant = "";
+
+    /** Mientras el selector está abierto, la barra de la que suena sigue al reproductor. */
+    final Runnable pulsePlayingTick = new Runnable() {
+        @Override
+        public void run() {
+            if (!isSourceSelectorVisible() || pulsePlayingVariant.isEmpty()) return;
+            for (PulseBar item : pulseBars) {
+                if (!item.variant.equals(pulsePlayingVariant)) continue;
+                item.quality = pulseQualityOf(item.variant);
+                if (item.focused) showPulseDetail(item);
+            }
+            refreshPulseBars();
+            mainHandler.postDelayed(this, 1_000L);
+        }
+    };
+
+    /**
+     * Calidad a mostrar: la de la que suena, del reproductor y al momento (si ya midió su tasa);
+     * si no, la medida ahora; si no, la diaria de backups.json.
+     */
     PublishedDirectBackups.Quality pulseQualityOf(String variant) {
+        if (variant.equals(pulsePlayingVariant)) {
+            PublishedDirectBackups.Quality playing = playingQuality();
+            if (playing != null && playing.kbps > 0) return playing;
+        }
         PublishedDirectBackups.Quality live = pulseLive.get(variant);
         return live != null ? live : pulseQuality.get(variant);
     }
@@ -391,7 +424,8 @@ abstract class MainSelector extends MainGuide {
             boolean failed = measured && !quality.ok;
             int height = !measured ? dp(10)
                     : failed ? dp(2)
-                    : Math.max(dp(4), Math.round(dp(PULSE_MAX_DP) * quality.kbps / (float) maxKbps));
+                    : Math.max(dp(4), Math.round(dp(providerMode ? PROVIDER_PULSE_MAX_DP : PULSE_MAX_DP)
+                    * quality.kbps / (float) maxKbps));
             ViewGroup.LayoutParams params = item.bar.getLayoutParams();
             if (params.height != height) {
                 params.height = height;
@@ -418,13 +452,9 @@ abstract class MainSelector extends MainGuide {
             URI uri = candidate.getSource().getPlaybackUri();
             String scheme = uri == null ? "" : String.valueOf(uri.getScheme()).toLowerCase(Locale.ROOT);
             if (!scheme.equals("http") && !scheme.equals("https")) continue;
-            if (isCurrentSource(candidate.getSource())) {
-                // La que suena no se vuelve a bajar: una segunda conexión al mismo servidor suele
-                // cortarse («unexpected end of stream»). Se usa lo que mide el reproductor (OSD).
-                PublishedDirectBackups.Quality playing = playingQuality();
-                if (playing != null) pulseLive.put(variant, playing);
-                continue;
-            }
+            // La que suena no se vuelve a bajar: una segunda conexión al mismo servidor suele
+            // cortarse («unexpected end of stream»). Usa lo que mide el reproductor (OSD), al día.
+            if (variant.equals(pulsePlayingVariant) || isCurrentSource(candidate.getSource())) continue;
             Map<String, String> headers = new LinkedHashMap<>(candidate.getSource().getRequestHeaders());
             // Conexión propia, sin reutilizar una que el servidor ya cerró.
             headers.put("Connection", "close");
@@ -467,6 +497,8 @@ abstract class MainSelector extends MainGuide {
                 });
             }));
         }
+        mainHandler.removeCallbacks(pulsePlayingTick);
+        if (!pulsePlayingVariant.isEmpty()) mainHandler.postDelayed(pulsePlayingTick, 1_000L);
     }
 
     /** Calidad de la señal que suena, medida por el reproductor (lo mismo que muestra el OSD). */
@@ -482,6 +514,7 @@ abstract class MainSelector extends MainGuide {
 
     void cancelPulseLiveMeasure() {
         pulseSession++;
+        mainHandler.removeCallbacks(pulsePlayingTick);
         for (Future<?> job : pulseJobs) job.cancel(true);
         pulseJobs.clear();
         pulsePending.clear();
@@ -542,6 +575,7 @@ abstract class MainSelector extends MainGuide {
         bar.setBackground(shape);
         box.addView(bar, new LinearLayout.LayoutParams(
                 dp(position == 0 ? PULSE_PRINCIPAL_BAR_DP : PULSE_BAR_DP), dp(10)));
+        if (inUse) pulsePlayingVariant = variant;
         PulseBar item = new PulseBar(position, variant, inUse, bar, tag, shape);
         item.quality = pulseQualityOf(variant);
         pulseBars.add(item);
@@ -633,6 +667,22 @@ abstract class MainSelector extends MainGuide {
                 : getString(R.string.source_selector_pulse_in_use, pulseInUse == 0
                         ? getString(R.string.source_selector_pulse_principal_short) : pulseNumber(pulseInUse)));
         pulseStatus.setText(status);
+        if (pulseCompact != null) {
+            android.text.SpannableStringBuilder compact = new android.text.SpannableStringBuilder(position == 0
+                    ? getString(R.string.source_selector_compact_principal)
+                    : getString(R.string.source_selector_compact_backup, pulseNumber(position)));
+            compact.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, compact.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            compact.setSpan(new ForegroundColorSpan(0xFFFFFFFF), 0, compact.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            if (position > 0) compact.append(getString(R.string.source_selector_compact_of, pulseTotal));
+            // Sin la etiqueta de barrido: ya va junto a la calidad grande y no cabe en una línea.
+            String plain = line.toString()
+                    .replace(getString(R.string.source_selector_interlaced), "")
+                    .replace(getString(R.string.source_selector_progressive), "")
+                    .trim().replace("  ", " · ");
+            compact.append(" · ").append(plain);
+            pulseCompact.setText(compact);
+        }
     }
 
     /** «Respaldo 1  1080p»: el detalle va en la misma línea, más chico y tenue. */
@@ -1103,6 +1153,11 @@ abstract class MainSelector extends MainGuide {
         boolean hasSources = !sourceNames.isEmpty();
         boolean hasQualities = qualityCount > 0;
         boolean versions = sourceSelectorFixedHint;
+        if (versions && hasSources) {
+            providerMode = true;
+            renderMinimalScreens(false, sourceNames.size());
+            return;
+        }
         String sourceLabel = getString(versions ? R.string.source_selector_section_versions
                 : R.string.source_selector_section_signal);
         // Pulso: solo señales directas (principal + respaldos), no versiones de un proveedor.
@@ -1130,8 +1185,25 @@ abstract class MainSelector extends MainGuide {
             pulseRow = new LinearLayout(this);
             pulseRow.setOrientation(LinearLayout.HORIZONTAL);
             pulseRow.setGravity(Gravity.BOTTOM);
-            stageInline.addView(pulseScroller(pulseRow, sourceNames.size()), new LinearLayout.LayoutParams(
-                    pulseScrollerWidth(sourceNames.size()), LinearLayout.LayoutParams.WRAP_CONTENT));
+            View scroller = pulseScroller(pulseRow, sourceNames.size());
+            int scrollerWidth = pulseScrollerWidth(sourceNames.size());
+            if (sourceNames.size() > PULSE_MAX_VISIBLE) {
+                // Pistas a ancho fijo bajo las barras (0.6.60): ‹ › en los bordes y la barrita.
+                LinearLayout column = new LinearLayout(this);
+                column.setOrientation(LinearLayout.VERTICAL);
+                LinearLayout.LayoutParams scrollerParams = new LinearLayout.LayoutParams(
+                        scrollerWidth, LinearLayout.LayoutParams.WRAP_CONTENT);
+                scrollerParams.setMarginStart(dp(PULSE_ARROW_GUTTER_DP));
+                scrollerParams.bottomMargin = dp(5);
+                column.addView(scroller, scrollerParams);
+                column.addView(pulseIndicator((android.widget.HorizontalScrollView) scroller, scrollerWidth),
+                        new LinearLayout.LayoutParams(scrollerWidth + 2 * dp(PULSE_ARROW_GUTTER_DP), dp(9)));
+                stageInline.addView(column, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            } else {
+                stageInline.addView(scroller, new LinearLayout.LayoutParams(
+                        scrollerWidth, LinearLayout.LayoutParams.WRAP_CONTENT));
+            }
         }
         int segment = stageSegmentWidth(sourcesInLadder ? sourceNames.size() : qualityCount);
         int actionsLine = hasSources && hasQualities ? 2 : 1;
@@ -1239,15 +1311,26 @@ abstract class MainSelector extends MainGuide {
         stageBottom.setVisibility(View.GONE);
         pulseBars.clear();
         pulseInUse = -1;
-        pulseTotal = sourceCount - 1;
-        int position = 0;
+        // Proveedores (0.6.60, mockup «B3» aprobado): las señales directas siguen en barras y las
+        // versiones de TvVoo van aparte, en texto (calidad · fps · país), sin bitrate.
+        int directCount = 0;
+        int versionCount = 0;
+        int versionInUse = -1;
         for (PlaybackOption option : playbackOptions) {
             if (option.sourceCandidate == null) continue;
-            if (option.selected) pulseInUse = position;
-            position++;
+            if (!providerMode || isDirectSignal(option.sourceCandidate)) {
+                if (option.selected) pulseInUse = directCount;
+                directCount++;
+            } else {
+                if (option.selected) versionInUse = versionCount;
+                versionCount++;
+            }
         }
+        pulseTotal = directCount - 1;
+        boolean bars = providerMode ? directCount > 0 : pulse;
         Format video = player == null ? null : player.getVideoFormat();
         int playingHeight = video == null ? 0 : video.height;
+        String playingLabel = playingHeight > 0 ? scanLabel(playingHeight, playingInterlaced()) : "";
         boolean automatic = false;
         int maxHeight = 1;
         for (PlaybackOption option : playbackOptions) {
@@ -1274,7 +1357,8 @@ abstract class MainSelector extends MainGuide {
         // Izquierda: rótulo «EN USO · PRINCIPAL» y las pantallas, con «Auto» debajo.
         LinearLayout inUseGroup = new LinearLayout(this);
         inUseGroup.setOrientation(LinearLayout.VERTICAL);
-        String owner = sourceCount == 0 ? "" : pulseInUse <= 0
+        String owner = versionInUse >= 0 ? getString(R.string.source_selector_provider_tvvoo_owner)
+                : (providerMode ? directCount : sourceCount) == 0 ? "" : pulseInUse <= 0
                 ? getString(R.string.source_selector_pulse_principal)
                 : getString(R.string.source_selector_screens_backup, pulseNumber(pulseInUse));
         TextView inUseLabel = minimalSectionLabel(AppStrings.isBlank(owner)
@@ -1314,7 +1398,12 @@ abstract class MainSelector extends MainGuide {
             previousWidth = width;
             previousHeight = quality.height;
         }
-        String playingLabel = playingHeight > 0 ? scanLabel(playingHeight, playingInterlaced()) : "";
+        if (order.isEmpty()) {
+            // Una sola calidad (proveedores): la pantalla de lo que suena, solo informativa.
+            View screen = screenOutline(playingLabel, true, false);
+            screen.setFocusable(false);
+            screens.addView(screen, new FrameLayout.LayoutParams(boxWidth, boxHeight, Gravity.BOTTOM | Gravity.START));
+        }
         View auto = null;
         int autoIndex = -1;
         for (int index = 0; index < playbackOptions.size(); index++) {
@@ -1344,43 +1433,146 @@ abstract class MainSelector extends MainGuide {
         stageLadder.addView(inUseGroup, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        // Derecha: las otras señales en barras (la que suena no se repite: está a la izquierda).
+        // Centro: las señales directas en barras. Con más de 10 se desplazan y debajo van las
+        // pistas (‹ › y la barrita de posición), a ancho fijo.
         LinearLayout pulseRow = null;
-        if (pulse) {
+        int slot = 0;
+        if (bars) {
             LinearLayout signals = new LinearLayout(this);
             signals.setOrientation(LinearLayout.VERTICAL);
-            signals.addView(minimalSectionLabel(getString(R.string.source_selector_screens_signals)),
-                    screensLabelParams());
+            TextView signalsLabel = minimalSectionLabel(providerMode ? directProviderLabel()
+                    : getString(R.string.source_selector_screens_signals));
+            if (providerMode && pulseInUse >= 0) {
+                android.graphics.drawable.GradientDrawable dot = new android.graphics.drawable.GradientDrawable();
+                dot.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+                dot.setColor(0xFF5BE9A0);
+                dot.setSize(dp(4.5f), dp(4.5f));
+                signalsLabel.setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, dot, null);
+                signalsLabel.setCompoundDrawablePadding(dp(7));
+            }
+            signals.addView(signalsLabel, screensLabelParams());
             pulseRow = new LinearLayout(this);
             pulseRow.setOrientation(LinearLayout.HORIZONTAL);
             pulseRow.setGravity(Gravity.BOTTOM);
+            boolean scrolls = directCount > PULSE_MAX_VISIBLE;
+            boolean spread = providerMode && scrolls;
+            int scrollerWidth = spread ? dp(PROVIDER_TRACK_DP) : pulseScrollerWidth(directCount);
+            if (spread) slot = Math.round(scrollerWidth / (float) PULSE_MAX_VISIBLE);
+            View scroller = pulseScroller(pulseRow, directCount);
             // Rótulo a la altura de «EN USO» y barras apoyadas en la base de las pantallas.
-            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
-                    pulseScrollerWidth(sourceCount), 0, 1f);
-            rowParams.bottomMargin = dp(22);
-            signals.addView(pulseScroller(pulseRow, sourceCount), rowParams);
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(scrollerWidth, 0, 1f);
+            if (scrolls) rowParams.setMarginStart(dp(PULSE_ARROW_GUTTER_DP));
+            rowParams.bottomMargin = scrolls ? dp(5) : providerMode ? dp(8) : dp(22);
+            signals.addView(scroller, rowParams);
+            if (scrolls) {
+                LinearLayout.LayoutParams indicatorParams = new LinearLayout.LayoutParams(
+                        scrollerWidth + 2 * dp(PULSE_ARROW_GUTTER_DP), dp(9));
+                indicatorParams.bottomMargin = providerMode ? dp(5) : dp(8);
+                signals.addView(pulseIndicator((android.widget.HorizontalScrollView) scroller, scrollerWidth),
+                        indicatorParams);
+            }
+            if (providerMode) {
+                pulseCompact = new TextView(this);
+                pulseCompact.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
+                pulseCompact.setTextColor(0xBFFFFFFF);
+                pulseCompact.setFontFeatureSettings("tnum");
+                pulseCompact.setIncludeFontPadding(false);
+                pulseCompact.setSingleLine(true);
+                pulseCompact.setEllipsize(TextUtils.TruncateAt.END);
+                pulseCompact.setShadowLayer(dp(3), 0, dp(1), 0x73000000);
+                signals.addView(pulseCompact, new LinearLayout.LayoutParams(
+                        dp(PROVIDER_COLUMN_DP), LinearLayout.LayoutParams.WRAP_CONTENT));
+            }
             LinearLayout.LayoutParams signalsParams = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT);
             signalsParams.setMarginStart(dp(30));
             stageLadder.addView(signals, signalsParams);
         }
-        LinearLayout.LayoutParams sideParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        sideParams.setMarginStart(dp(26));
-        stageLadder.addView(pulseSide(), sideParams);
+
+        // Derecha (proveedores): las versiones de TvVoo, tres a la vista; con más, se desplazan y
+        // la línea divisoria y las flechas ⌃ ⌄ indican que hay más.
+        LinearLayout versionRows = null;
+        versionTotal = versionCount;
+        if (providerMode && (versionCount > 0 || providerPending)) {
+            boolean scrolls = versionCount > PROVIDER_VERSIONS_VISIBLE;
+            if (bars || scrolls) {
+                LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(
+                        dp(4), LinearLayout.LayoutParams.MATCH_PARENT);
+                dividerParams.setMarginStart(dp(bars ? 22 : 30));
+                stageLadder.addView(versionDivider(scrolls), dividerParams);
+            }
+            LinearLayout column = new LinearLayout(this);
+            column.setOrientation(LinearLayout.VERTICAL);
+            versionHeader = minimalSectionLabel("");
+            column.addView(versionHeader, screensLabelParams());
+            LinearLayout body = new LinearLayout(this);
+            body.setOrientation(LinearLayout.HORIZONTAL);
+            versionScroll = new android.widget.ScrollView(this);
+            versionScroll.setVerticalScrollBarEnabled(false);
+            versionScroll.setFocusable(false);
+            versionScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+            versionScroll.setVerticalFadingEdgeEnabled(scrolls);
+            versionScroll.setFadingEdgeLength(dp(12));
+            versionRows = new LinearLayout(this);
+            versionRows.setOrientation(LinearLayout.VERTICAL);
+            versionScroll.addView(versionRows, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+            int visible = Math.max(1, Math.min(versionCount, PROVIDER_VERSIONS_VISIBLE));
+            // Ancho fijo: las flechas quedan siempre en el mismo lugar y ninguna fila se corta.
+            body.addView(versionScroll, new LinearLayout.LayoutParams(
+                    dp(PROVIDER_VERSIONS_WIDTH_DP), dp(PROVIDER_VERSION_ROW_DP * visible)));
+            if (scrolls) {
+                FrameLayout arrows = new FrameLayout(this);
+                versionUp = new ChevronView(this, ChevronView.UP, dp(1.3f));
+                versionDown = new ChevronView(this, ChevronView.DOWN, dp(1.3f));
+                arrows.addView(versionUp, new FrameLayout.LayoutParams(dp(9), dp(5), Gravity.TOP));
+                arrows.addView(versionDown, new FrameLayout.LayoutParams(dp(9), dp(5), Gravity.BOTTOM));
+                LinearLayout.LayoutParams arrowsParams = new LinearLayout.LayoutParams(
+                        dp(9), dp(PROVIDER_VERSION_ROW_DP * visible) - dp(8));
+                arrowsParams.setMarginStart(dp(14));
+                arrowsParams.topMargin = dp(4);
+                body.addView(arrows, arrowsParams);
+                versionScroll.setOnScrollChangeListener((view, x, y, oldX, oldY) -> refreshVersionIndicator());
+            }
+            column.addView(body);
+            LinearLayout.LayoutParams columnParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT);
+            columnParams.setMarginStart(dp(bars || scrolls ? 14 : 30));
+            stageLadder.addView(column, columnParams);
+        }
+        if (!providerMode) {
+            LinearLayout.LayoutParams sideParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            sideParams.setMarginStart(dp(26));
+            stageLadder.addView(pulseSide(), sideParams);
+        } else {
+            // Detalle sin mostrar: showScreenDetail y showPulseDetail lo siguen llenando.
+            pulseSide();
+        }
 
         // Registro en el orden de playbackOptions (selectFocusedSource usa ese índice).
         int sourcePosition = 0;
+        int versionPosition = 0;
         for (int index = 0; index < playbackOptions.size(); index++) {
             final int optionIndex = index;
             PlaybackOption option = playbackOptions.get(index);
             View view;
-            if (option.sourceCandidate != null) {
+            if (option.sourceCandidate != null && providerMode && !isDirectSignal(option.sourceCandidate)) {
+                view = versionRow(option, versionPosition++);
+                versionRows.addView(view, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT, dp(PROVIDER_VERSION_ROW_DP)));
+                screensVersions.add(sourceCandidateViews.size());
+            } else if (option.sourceCandidate != null) {
                 final int barPosition = sourcePosition++;
                 view = pulseBar(barPosition, option.sourceCandidate.getVariantId(), option.selected);
-                LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(
-                        dp(barPosition == 0 ? 15 : 10), LinearLayout.LayoutParams.WRAP_CONTENT);
-                if (barPosition > 0) barParams.setMarginStart(dp(3));
+                LinearLayout.LayoutParams barParams;
+                if (slot > 0) {
+                    barParams = new LinearLayout.LayoutParams(slot, LinearLayout.LayoutParams.WRAP_CONTENT);
+                } else {
+                    barParams = new LinearLayout.LayoutParams(
+                            dp(barPosition == 0 ? 15 : 10), LinearLayout.LayoutParams.WRAP_CONTENT);
+                    if (barPosition > 0) barParams.setMarginStart(dp(3));
+                }
                 pulseRow.addView(view, barParams);
                 // La que suena también se ve, en verde (pedido del usuario: «la barra … en uso se vea
                 // de otro color para encontrarlo rápidamente… del mismo verde que en uso principal»).
@@ -1397,13 +1589,14 @@ abstract class MainSelector extends MainGuide {
         }
         screensQualities.addAll(order);
         if (autoIndex >= 0) screensQualities.add(autoIndex);
-        if (pulse) {
+        if (bars) {
             refreshPulseBars();
             Channel pulseChannel = playbackChannel;
             startPulseLiveMeasure(pulseChannel == null ? "" : PlaybackPreferences.channelIdentity(pulseChannel));
         }
 
-        String section = sourceCount > 0 ? getString(R.string.source_selector_title)
+        String section = (providerMode ? directCount + versionCount : sourceCount) > 0
+                ? getString(R.string.source_selector_title)
                 : getString(R.string.source_selector_quality_title);
         setMinimalEyebrow(section);
         String hero = minimalHeroQuality();
@@ -1421,12 +1614,316 @@ abstract class MainSelector extends MainGuide {
         fitSourceSelectorList(sourceCandidateViews.size());
         if (inUseQuality >= 0) showScreenDetail(playbackOptions.get(inUseQuality));
         else if (autoIndex >= 0) showScreenDetail(playbackOptions.get(autoIndex));
+        if (pulseCompact != null && !pulseBars.isEmpty()) {
+            showPulseDetail(pulseBars.get(Math.min(Math.max(0, pulseInUse), pulseBars.size() - 1)));
+        }
+        focusedVersion = -1;
+        refreshVersionHeader();
         int focusIndex = minimalFocusOpening ? screensOpeningFocus() : firstMinimalAction();
         if (focusIndex < 0) focusIndex = screensFocusedQuality();
         if (focusIndex < 0) focusIndex = minimalItemGroup.indexOf(MINIMAL_GROUP_ACTIONS);
         if (focusIndex >= 0 && focusIndex < sourceCandidateViews.size()) {
             sourceCandidateFocusIndex = focusIndex;
             sourceCandidateViews.get(focusIndex).requestFocus();
+        }
+        if (versionScroll != null) versionScroll.post(this::refreshVersionIndicator);
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Proveedores (0.6.60, mockups «B3» aprobados: «me encanta», «Aplícalo»). Las versiones de
+    // TvVoo son la misma señal de otro proveedor: no importa su bitrate ni su nombre, sino su
+    // calidad, sus fps y de qué país vienen. Tres a la vista; con más, se desplazan con el foco
+    // al centro. Las pistas («hay más que no se ven») van a ancho fijo, en los bordes.
+
+    static final float PROVIDER_COLUMN_DP = 158f;
+    static final float PROVIDER_TRACK_DP = 134f;
+    static final float PULSE_ARROW_GUTTER_DP = 12f;
+    static final int PROVIDER_VERSIONS_VISIBLE = 3;
+    static final float PROVIDER_VERSION_ROW_DP = 25f;
+    static final float PROVIDER_VERSIONS_WIDTH_DP = 190f;
+    /** Alto máximo de las barras con proveedores: deja sitio al número y al detalle de abajo. */
+    static final float PROVIDER_PULSE_MAX_DP = 34f;
+
+    /** Selector con versiones de TvVoo: proveedores separados (directas · TvVoo). */
+    boolean providerMode;
+    /** Mientras TvVoo responde, sus filas dicen «Probando…». */
+    boolean providerPending;
+    /** Índices (en sourceCandidateViews) de las versiones de TvVoo, de arriba abajo. */
+    final List<Integer> screensVersions = new ArrayList<>();
+    TextView pulseCompact;
+    android.widget.HorizontalScrollView pulseScrollView;
+    View pulseThumb;
+    ChevronView pulseLeft;
+    ChevronView pulseRight;
+    int pulseTrackWidth;
+    android.widget.ScrollView versionScroll;
+    TextView versionHeader;
+    View versionThumb;
+    ChevronView versionUp;
+    ChevronView versionDown;
+    int versionTotal;
+    int focusedVersion = -1;
+
+    /** Reinicia lo propio de proveedores y pistas al armar el selector de nuevo. */
+    void resetProviderStage() {
+        providerMode = false;
+        screensVersions.clear();
+        pulseCompact = null;
+        pulseScrollView = null;
+        pulseThumb = null;
+        pulseLeft = null;
+        pulseRight = null;
+        versionScroll = null;
+        versionHeader = null;
+        versionThumb = null;
+        versionUp = null;
+        versionDown = null;
+        versionTotal = 0;
+        focusedVersion = -1;
+    }
+
+    /** «Lista M3U», o «Highfly» si la señal principal la entrega Highfly (Sky, TNT). */
+    String directProviderLabel() {
+        StreamResolver resolver = streamResolverRegistry == null || playbackChannel == null
+                ? null : streamResolverRegistry.find(playbackChannel);
+        return resolver != null && "highfly".equalsIgnoreCase(resolver.getId())
+                ? "Highfly" : getString(R.string.source_selector_provider_list);
+    }
+
+    /** Nombre del país de una versión TvVoo por su código («uk» → «Reino Unido»). */
+    static String countryName(String code) {
+        if (code == null || code.isEmpty()) return "";
+        switch (code) {
+            case "uk": return "Reino Unido";
+            case "es": return "España";
+            case "pt": return "Portugal";
+            case "de": return "Alemania";
+            case "fr": return "Francia";
+            case "it": return "Italia";
+            case "nl": return "Países Bajos";
+            case "be": return "Bélgica";
+            case "ar": return "Arabia";
+            case "tr": return "Turquía";
+            case "pl": return "Polonia";
+            case "ro": return "Rumania";
+            case "gr": return "Grecia";
+            case "al": return "Albania";
+            case "bg": return "Bulgaria";
+            case "ru": return "Rusia";
+            case "us": return "Estados Unidos";
+            case "mx": return "México";
+            case "at": return "Austria";
+            case "ch": return "Suiza";
+            default: return code.toUpperCase(Locale.ROOT);
+        }
+    }
+
+    /** Una versión: calidad grande y, al lado, fps y país; «Sin señal» o «Probando…» si aún no. */
+    View versionRow(PlaybackOption option, int position) {
+        ResolvedPlaybackCandidate candidate = option.sourceCandidate;
+        String country = countryName(TvVooStreamResolver.groupCode(candidate.getVariantId()));
+        boolean pending = providerPending && !candidate.isAvailable();
+        String quality = candidate.getQuality() == null ? "" : candidate.getQuality().trim();
+        int split = quality.indexOf(" · ");
+        String head = split > 0 ? quality.substring(0, split) : quality;
+        String title;
+        List<String> details = new ArrayList<>();
+        if (pending) {
+            title = getString(R.string.source_selector_version_testing);
+        } else if (!candidate.isAvailable()) {
+            title = getString(R.string.source_selector_version_no_signal);
+        } else if (head.matches("\\d+p")) {
+            title = head;
+            if (split > 0) details.add(quality.substring(split + 3));
+        } else {
+            title = getString(R.string.source_selector_version_no_data);
+        }
+        if (!country.isEmpty()) details.add(country);
+        View row = minimalOption(inlineTitle(title, TextUtils.join(" · ", details)), option.selected,
+                !candidate.isAvailable() && !pending, false, TYPE_OPTION_SP);
+        if (pending) row.setAlpha(0.55f);
+        View.OnFocusChangeListener base = (View.OnFocusChangeListener) row.getTag(R.id.source_selector_options);
+        row.setTag(R.id.source_selector_options, (View.OnFocusChangeListener) (view, focused) -> {
+            base.onFocusChange(view, focused);
+            if (!focused) return;
+            focusedVersion = position;
+            refreshVersionHeader();
+            centerVersionRow(view);
+        });
+        return row;
+    }
+
+    /** «TVVOO · 3 VERSIONES», o «TVVOO · 4 DE 7» con más de tres y el foco en una. */
+    void refreshVersionHeader() {
+        if (versionHeader == null) return;
+        String text;
+        if (versionTotal == 0) {
+            text = getString(R.string.source_selector_provider_tvvoo_consulting);
+        } else if (versionTotal > PROVIDER_VERSIONS_VISIBLE && focusedVersion >= 0) {
+            text = getString(R.string.source_selector_provider_tvvoo_position, focusedVersion + 1, versionTotal);
+        } else if (versionTotal == 1) {
+            text = getString(R.string.source_selector_provider_tvvoo_one);
+        } else {
+            text = getString(R.string.source_selector_provider_tvvoo_count, versionTotal);
+        }
+        versionHeader.setText(text.toUpperCase(Locale.ROOT));
+    }
+
+    /** Deja la versión con foco al centro de las tres a la vista. */
+    void centerVersionRow(View row) {
+        android.widget.ScrollView scroll = versionScroll;
+        if (scroll == null || versionTotal <= PROVIDER_VERSIONS_VISIBLE) return;
+        scroll.post(() -> {
+            int target = row.getTop() - (scroll.getHeight() - row.getHeight()) / 2;
+            scroll.smoothScrollTo(0, Math.max(0, target));
+        });
+    }
+
+    /** Línea divisoria entre proveedores; con más de tres versiones, su tramo claro es la posición. */
+    View versionDivider(boolean scrolls) {
+        FrameLayout track = new FrameLayout(this);
+        View line = new View(this);
+        line.setBackgroundColor(0x29FFFFFF);
+        track.addView(line, new FrameLayout.LayoutParams(Math.max(1, dp(1)),
+                FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER_HORIZONTAL));
+        versionThumb = null;
+        if (scrolls) {
+            versionThumb = new View(this);
+            android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable();
+            shape.setCornerRadius(dp(1));
+            shape.setColor(0xCCFFFFFF);
+            versionThumb.setBackground(shape);
+            versionThumb.setVisibility(View.INVISIBLE);
+            track.addView(versionThumb, new FrameLayout.LayoutParams(dp(2), dp(10),
+                    Gravity.TOP | Gravity.CENTER_HORIZONTAL));
+        }
+        return track;
+    }
+
+    /** Tramo claro de la línea y flechas ⌃ ⌄ según lo que queda arriba y abajo. */
+    void refreshVersionIndicator() {
+        android.widget.ScrollView scroll = versionScroll;
+        if (scroll == null || scroll.getChildCount() == 0) return;
+        if (versionUp != null) versionUp.setVisibility(scroll.canScrollVertically(-1) ? View.VISIBLE : View.INVISIBLE);
+        if (versionDown != null) versionDown.setVisibility(scroll.canScrollVertically(1) ? View.VISIBLE : View.INVISIBLE);
+        if (versionThumb == null || !(versionThumb.getParent() instanceof View)) return;
+        int content = scroll.getChildAt(0).getHeight();
+        int visible = scroll.getHeight();
+        int track = ((View) versionThumb.getParent()).getHeight();
+        if (content <= visible || visible <= 0 || track <= 0) {
+            versionThumb.setVisibility(View.INVISIBLE);
+            return;
+        }
+        int height = Math.max(dp(6), Math.round(track * visible / (float) content));
+        int top = Math.round((track - height) * scroll.getScrollY() / (float) (content - visible));
+        ViewGroup.LayoutParams params = versionThumb.getLayoutParams();
+        if (params.height != height) {
+            params.height = height;
+            versionThumb.setLayoutParams(params);
+        }
+        versionThumb.setTranslationY(top);
+        versionThumb.setVisibility(View.VISIBLE);
+    }
+
+    /** Pistas bajo las barras: ‹ en el borde izquierdo, › en el derecho y la barrita entre ellas. */
+    View pulseIndicator(android.widget.HorizontalScrollView scroller, int trackWidth) {
+        FrameLayout box = new FrameLayout(this);
+        int gutter = dp(PULSE_ARROW_GUTTER_DP);
+        pulseLeft = new ChevronView(this, ChevronView.LEFT, dp(1.3f));
+        pulseRight = new ChevronView(this, ChevronView.RIGHT, dp(1.3f));
+        box.addView(pulseLeft, new FrameLayout.LayoutParams(dp(5), dp(9), Gravity.START | Gravity.CENTER_VERTICAL));
+        box.addView(pulseRight, new FrameLayout.LayoutParams(dp(5), dp(9), Gravity.END | Gravity.CENTER_VERTICAL));
+        View line = new View(this);
+        line.setBackgroundColor(0x29FFFFFF);
+        FrameLayout.LayoutParams lineParams = new FrameLayout.LayoutParams(trackWidth, Math.max(1, dp(1)),
+                Gravity.START | Gravity.CENTER_VERTICAL);
+        lineParams.leftMargin = gutter;
+        box.addView(line, lineParams);
+        pulseThumb = new View(this);
+        android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable();
+        shape.setCornerRadius(dp(1));
+        shape.setColor(0xCCFFFFFF);
+        pulseThumb.setBackground(shape);
+        FrameLayout.LayoutParams thumbParams = new FrameLayout.LayoutParams(dp(10), dp(2),
+                Gravity.START | Gravity.CENTER_VERTICAL);
+        thumbParams.leftMargin = gutter;
+        box.addView(pulseThumb, thumbParams);
+        pulseTrackWidth = trackWidth;
+        pulseScrollView = scroller;
+        scroller.setHorizontalFadingEdgeEnabled(false);
+        scroller.setOnScrollChangeListener((view, x, y, oldX, oldY) -> refreshPulseIndicator());
+        scroller.post(this::refreshPulseIndicator);
+        return box;
+    }
+
+    void refreshPulseIndicator() {
+        android.widget.HorizontalScrollView scroller = pulseScrollView;
+        if (scroller == null || pulseThumb == null || scroller.getChildCount() == 0) return;
+        int content = scroller.getChildAt(0).getWidth();
+        int visible = scroller.getWidth();
+        if (content <= 0 || visible <= 0) return;
+        int width = Math.max(dp(6), Math.round(pulseTrackWidth * Math.min(1f, visible / (float) content)));
+        int left = content > visible
+                ? Math.round((pulseTrackWidth - width) * scroller.getScrollX() / (float) (content - visible)) : 0;
+        ViewGroup.LayoutParams params = pulseThumb.getLayoutParams();
+        if (params.width != width) {
+            params.width = width;
+            pulseThumb.setLayoutParams(params);
+        }
+        pulseThumb.setTranslationX(left);
+        if (pulseLeft != null) pulseLeft.setVisibility(scroller.canScrollHorizontally(-1) ? View.VISIBLE : View.INVISIBLE);
+        if (pulseRight != null) pulseRight.setVisibility(scroller.canScrollHorizontally(1) ? View.VISIBLE : View.INVISIBLE);
+    }
+
+    /** Flecha fina (‹ › ⌃ ⌄) en blanco tenue. */
+    static final class ChevronView extends View {
+        static final int UP = 0;
+        static final int DOWN = 1;
+        static final int LEFT = 2;
+        static final int RIGHT = 3;
+        private final int direction;
+        private final android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.Path path = new android.graphics.Path();
+
+        ChevronView(android.content.Context context, int direction, float stroke) {
+            super(context);
+            this.direction = direction;
+            paint.setStyle(android.graphics.Paint.Style.STROKE);
+            paint.setStrokeWidth(stroke);
+            paint.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+            paint.setStrokeJoin(android.graphics.Paint.Join.ROUND);
+            paint.setColor(0x9EFFFFFF);
+        }
+
+        @Override
+        protected void onDraw(android.graphics.Canvas canvas) {
+            float inset = paint.getStrokeWidth();
+            float right = getWidth() - inset;
+            float bottom = getHeight() - inset;
+            path.reset();
+            switch (direction) {
+                case UP:
+                    path.moveTo(inset, bottom);
+                    path.lineTo(getWidth() / 2f, inset);
+                    path.lineTo(right, bottom);
+                    break;
+                case DOWN:
+                    path.moveTo(inset, inset);
+                    path.lineTo(getWidth() / 2f, bottom);
+                    path.lineTo(right, inset);
+                    break;
+                case LEFT:
+                    path.moveTo(right, inset);
+                    path.lineTo(inset, getHeight() / 2f);
+                    path.lineTo(right, bottom);
+                    break;
+                default:
+                    path.moveTo(inset, inset);
+                    path.lineTo(right, getHeight() / 2f);
+                    path.lineTo(inset, bottom);
+                    break;
+            }
+            canvas.drawPath(path, paint);
         }
     }
 
@@ -1523,38 +2020,35 @@ abstract class MainSelector extends MainGuide {
         for (int index = 0; index < minimalItemGroup.size(); index++) {
             if (minimalItemGroup.get(index) == MINIMAL_GROUP_ACTIONS) actions.add(index);
         }
+        // Vuelta con ▶: señales → versiones TvVoo → calidades → acciones → señales (◀, al revés).
+        List<List<Integer>> groups = new ArrayList<>();
+        for (List<Integer> group : java.util.Arrays.asList(screensSignals, screensVersions, screensQualities, actions)) {
+            if (!group.isEmpty()) groups.add(group);
+        }
+        int groupIndex = -1;
+        for (int index = 0; index < groups.size() && groupIndex < 0; index++) {
+            if (groups.get(index).contains(current)) groupIndex = index;
+        }
+        if (groupIndex < 0) return false;
+        List<Integer> group = groups.get(groupIndex);
+        int position = group.indexOf(current);
+        boolean vertical = group == screensQualities || group == screensVersions;
         int target = -1;
-        int quality = screensQualities.indexOf(current);
-        int signal = screensSignals.indexOf(current);
-        int action = actions.indexOf(current);
-        if (quality >= 0) {
-            if (dy != 0) {
-                int next = quality + dy;
-                if (next >= 0 && next < screensQualities.size()) target = screensQualities.get(next);
-            } else if (dx > 0) {
-                target = !actions.isEmpty() ? actions.get(0)
-                        : !screensSignals.isEmpty() ? screensSignals.get(0) : -1;
-            } else if (dx < 0) {
-                target = !screensSignals.isEmpty() ? screensSignals.get(screensSignals.size() - 1)
-                        : !actions.isEmpty() ? actions.get(actions.size() - 1) : -1;
-            }
-        } else if (signal >= 0) {
-            if (dx != 0) {
-                int next = signal + dx;
-                if (next >= 0 && next < screensSignals.size()) target = screensSignals.get(next);
-                else if (next < 0) target = !actions.isEmpty() ? actions.get(actions.size() - 1) : screensFocusedQuality();
-                else target = !screensQualities.isEmpty() ? screensFocusedQuality()
-                        : !actions.isEmpty() ? actions.get(0) : -1;
-            }
-        } else if (action >= 0) {
-            if (dx != 0) {
-                int next = action + dx;
-                if (next >= 0 && next < actions.size()) target = actions.get(next);
-                else if (next < 0) target = !screensQualities.isEmpty() ? screensFocusedQuality()
-                        : !screensSignals.isEmpty() ? screensSignals.get(screensSignals.size() - 1) : -1;
-                else target = !screensSignals.isEmpty() ? screensSignals.get(0) : screensFocusedQuality();
-            } else if (dy < 0) {
+        if (dy != 0) {
+            if (vertical) {
+                int next = position + dy;
+                if (next >= 0 && next < group.size()) target = group.get(next);
+            } else if (group == actions && dy < 0) {
                 target = screensFocusedQuality();
+            }
+        } else if (dx != 0) {
+            if (!vertical) {
+                int next = position + dx;
+                if (next >= 0 && next < group.size()) target = group.get(next);
+            }
+            if (target < 0 && groups.size() > 1) {
+                List<Integer> other = groups.get((groupIndex + dx + groups.size()) % groups.size());
+                target = screensEntry(other, dx, actions);
             }
         }
         if (target < 0 || target >= sourceCandidateViews.size()) return false;
@@ -1562,12 +2056,29 @@ abstract class MainSelector extends MainGuide {
         return true;
     }
 
-    /** Foco al abrir: la señal que suena, la primera señal o, sin señales, la calidad elegida. */
+    /** Dónde entra el foco al llegar a un grupo: lo elegido, o el borde por el que se llega. */
+    int screensEntry(List<Integer> group, int dx, List<Integer> actions) {
+        if (group == screensQualities) return screensFocusedQuality();
+        if (group == screensVersions) {
+            for (int index : screensVersions) {
+                if (playbackOptions.get(index).selected) return index;
+            }
+            return screensVersions.get(0);
+        }
+        return dx > 0 ? group.get(0) : group.get(group.size() - 1);
+    }
+
+    /** Foco al abrir: lo que suena (versión o señal), la primera señal o, sin señales, la calidad. */
     int screensOpeningFocus() {
+        for (int index : screensVersions) {
+            if (playbackOptions.get(index).selected) return index;
+        }
         for (int index : screensSignals) {
             if (playbackOptions.get(index).selected) return index;
         }
-        return screensSignals.isEmpty() ? screensFocusedQuality() : screensSignals.get(0);
+        if (!screensSignals.isEmpty()) return screensSignals.get(0);
+        if (!screensVersions.isEmpty()) return screensVersions.get(0);
+        return screensFocusedQuality();
     }
 
     /** Calidad a la que se vuelve desde otro grupo: la elegida («Auto» o una fija), o la primera. */
@@ -1904,9 +2415,12 @@ abstract class MainSelector extends MainGuide {
                 || !isCurrentPlayback(channel, expectedGeneration)) return;
         sourceCandidateTask = null;
         sourceCandidateContext = null;
+        providerPending = false;
         sourceCandidates.clear();
         playbackOptions.clear();
         if (resolved != null) sourceCandidates.addAll(resolved);
+        pulseQuality.clear();
+        fillDirectQuality(channel);
         if (sourceCandidates.isEmpty()) {
             // Media3 may already expose adaptive variants even when the
             // provider's alternate-source endpoint is empty. Keep the same
@@ -1927,6 +2441,7 @@ abstract class MainSelector extends MainGuide {
                 || !isCurrentPlayback(channel, expectedGeneration)) return;
         sourceCandidateTask = null;
         sourceCandidateContext = null;
+        providerPending = false;
         sourceCandidates.clear();
         playbackOptions.clear();
         sourceCandidateViews.clear();
@@ -1968,11 +2483,18 @@ abstract class MainSelector extends MainGuide {
 
     void renderSourceSelectorOptions() {
         playbackOptions.clear();
+        boolean anyCurrent = false;
         for (ResolvedPlaybackCandidate candidate : sourceCandidates) {
-            playbackOptions.add(PlaybackOption.source(
-                    candidate,
-                    isCurrentSource(candidate.getSource())
-            ));
+            anyCurrent |= candidate.getSource() != null && isCurrentSource(candidate.getSource());
+        }
+        // Canal directo con respaldo TvVoo que suena por su resolutor (Highfly, TVN): la URL no
+        // calza, pero sin respaldo activo lo que suena es la principal.
+        boolean principalByState = !anyCurrent && playbackChannel != null
+                && TvVooBackup.hasTvVoo(playbackChannel) && !tvvooBackupActive;
+        for (ResolvedPlaybackCandidate candidate : sourceCandidates) {
+            boolean current = candidate.getSource() != null && isCurrentSource(candidate.getSource());
+            if (principalByState && "direct-principal".equals(candidate.getVariantId())) current = true;
+            playbackOptions.add(PlaybackOption.source(candidate, current));
         }
         if (minimalSelector() && playbackChannel != null) appendQualityOptions(playbackChannel);
         int available = 0;
@@ -2100,27 +2622,8 @@ abstract class MainSelector extends MainGuide {
         // todas sus señales arriba y, debajo, sus calidades.
         int backupCount = TvVooBackup.directBackupsOf(channel).size();
         if (backupCount > 0) {
-            ResolvedPlaybackSource principal = ResolvedPlaybackSource.direct(channel, PLAYER_USER_AGENT);
-            sourceCandidates.add(ResolvedPlaybackCandidate.version(
-                    getString(R.string.source_selector_direct_label),
-                    getString(R.string.source_selector_direct_detail),
-                    principal, "direct-principal", "", true, true, 0));
-            PublishedDirectBackups.Quality principalQuality = PublishedDirectBackups.qualityFor(channel.getTvgId());
-            if (principalQuality != null) pulseQuality.put("direct-principal", principalQuality);
-            for (int index = 0; index < backupCount; index++) {
-                Channel backupChannel = TvVooBackup.directResolutionChannel(channel, index);
-                if (backupChannel == null) continue;
-                PublishedDirectBackups.Quality backupQuality =
-                        PublishedDirectBackups.qualityFor(backupChannel.getTvgId());
-                if (backupQuality != null) pulseQuality.put("direct-backup-" + index, backupQuality);
-                String label = backupCount == 1 ? getString(R.string.source_selector_backup_label)
-                        : getString(R.string.source_selector_backup_numbered_label, index + 1);
-                sourceCandidates.add(ResolvedPlaybackCandidate.version(
-                        label,
-                        getString(R.string.source_selector_backup_detail),
-                        ResolvedPlaybackSource.direct(backupChannel, PLAYER_USER_AGENT),
-                        "direct-backup-" + index, "", true, false, 0));
-            }
+            sourceCandidates.addAll(directSignalCandidates(channel));
+            fillDirectQuality(channel);
             // «En uso» por URL; si ninguna coincide (TVN y otros pasan por su resolutor oficial y
             // la URL reproducida no es la del canal), por el estado de respaldo (0.5.94).
             boolean anyMatch = false;
@@ -2158,6 +2661,50 @@ abstract class MainSelector extends MainGuide {
                 : getString(R.string.source_selector_quality_count, qualities.size())
                 : playbackOptions.size() == 1 ? getString(R.string.source_selector_ready_one)
                 : getString(R.string.source_selector_ready_count, playbackOptions.size()));
+    }
+
+    /** Calidad diaria (backups.json) de la principal y de cada respaldo directo en sourceCandidates. */
+    void fillDirectQuality(Channel channel) {
+        if (channel == null) return;
+        for (ResolvedPlaybackCandidate candidate : sourceCandidates) {
+            String variant = candidate.getVariantId();
+            PublishedDirectBackups.Quality quality = null;
+            if ("direct-principal".equals(variant)) {
+                quality = PublishedDirectBackups.qualityFor(channel.getTvgId());
+            } else if (variant.startsWith("direct-backup-")) {
+                try {
+                    Channel backup = TvVooBackup.directResolutionChannel(channel,
+                            Integer.parseInt(variant.substring("direct-backup-".length())));
+                    if (backup != null) quality = PublishedDirectBackups.qualityFor(backup.getTvgId());
+                } catch (NumberFormatException ignored) {
+                    // Variante ajena: sin calidad diaria.
+                }
+            }
+            if (quality != null) pulseQuality.put(variant, quality);
+        }
+    }
+
+    /**
+     * Mientras TvVoo responde (proveedores): las señales directas ya listas y una fila «Probando…»
+     * por versión conocida, en el mismo lugar que tendrán al final.
+     */
+    void renderProviderPlaceholders(List<TvVooStreamResolver.PlannedVersion> versions) {
+        Channel channel = playbackChannel;
+        if (channel == null || !isSourceSelectorVisible()) return;
+        providerPending = true;
+        sourceCandidates.clear();
+        pulseQuality.clear();
+        if (TvVooBackup.hasTvVoo(channel)) {
+            sourceCandidates.addAll(directSignalCandidates(channel));
+            fillDirectQuality(channel);
+        }
+        if (versions != null) {
+            for (TvVooStreamResolver.PlannedVersion version : versions) {
+                sourceCandidates.add(ResolvedPlaybackCandidate.version(version.name, "", null,
+                        version.alias, "", false, version.preferred, 0));
+            }
+        }
+        renderSourceSelectorOptions();
     }
 
     /** Agrega «Auto» y las calidades del stream en reproducción; devuelve las calidades. */
