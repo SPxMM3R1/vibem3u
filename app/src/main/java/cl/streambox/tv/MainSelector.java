@@ -1381,22 +1381,42 @@ abstract class MainSelector extends MainGuide {
         Map<Integer, View> views = new HashMap<>();
         int previousWidth = Integer.MAX_VALUE;
         int previousHeight = -1;
-        int previousLabelTop = Integer.MIN_VALUE / 2;
-        for (int index : order) {
-            VideoTrackOption quality = playbackOptions.get(index).quality;
+        int[] widths = new int[order.size()];
+        int[] heights = new int[order.size()];
+        for (int position = 0; position < order.size(); position++) {
+            VideoTrackOption quality = playbackOptions.get(order.get(position)).quality;
             int width = Math.round(boxWidth * Math.min(1f, quality.height / (float) maxHeight));
             // Dos pistas del mismo alto: la segunda, un poco más chica, para que se vea.
             if (quality.height == previousHeight || width >= previousWidth) width = previousWidth - dp(8);
             width = Math.max(dp(28), width);
-            int height = Math.round(width * 9f / 16f);
-            int labelTop = boxHeight - height;
-            boolean crowded = labelTop - previousLabelTop < dp(11);
-            View screen = screenOutline(screenTitle(playbackOptions.get(index)), index == inUseQuality, crowded);
-            screens.addView(screen, new FrameLayout.LayoutParams(width, height, Gravity.BOTTOM | Gravity.START));
-            views.put(index, screen);
-            if (!crowded) previousLabelTop = labelTop;
+            widths[position] = width;
+            heights[position] = Math.round(width * 9f / 16f);
             previousWidth = width;
             previousHeight = quality.height;
+        }
+        // Etiquetas sin solaparse (0.6.61, foto del usuario de Al Jazeera: «no queda bien, se solapa»;
+        // mockup aprobado): el número de una pantalla se escribe solo si ningún borde de una más
+        // chica lo cruza. Si no, aparece al marcarla, sobre un fondo oscuro.
+        android.graphics.Paint labelPaint = new android.graphics.Paint();
+        labelPaint.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 8f,
+                getResources().getDisplayMetrics()));
+        labelPaint.setFakeBoldText(true);
+        for (int position = 0; position < order.size(); position++) {
+            int index = order.get(position);
+            String title = screenTitle(playbackOptions.get(index));
+            int labelTop = boxHeight - heights[position] + dp(3);
+            int labelBottom = labelTop + Math.round(labelPaint.getTextSize() * 1.2f);
+            int labelLeft = widths[position] - dp(4) - Math.round(labelPaint.measureText(title));
+            boolean crowded = false;
+            for (int smaller = position + 1; smaller < order.size() && !crowded; smaller++) {
+                int border = boxHeight - heights[smaller];
+                crowded = border >= labelTop - dp(1) && border <= labelBottom + dp(1)
+                        && widths[smaller] > labelLeft;
+            }
+            View screen = screenOutline(title, index == inUseQuality, crowded);
+            screens.addView(screen, new FrameLayout.LayoutParams(widths[position], heights[position],
+                    Gravity.BOTTOM | Gravity.START));
+            views.put(index, screen);
         }
         if (order.isEmpty()) {
             // Una sola calidad (proveedores): la pantalla de lo que suena, solo informativa.
@@ -1953,14 +1973,20 @@ abstract class MainSelector extends MainGuide {
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
         labelParams.setMargins(0, dp(3), dp(4), 0);
         screen.addView(label, labelParams);
+        android.graphics.drawable.GradientDrawable chip = new android.graphics.drawable.GradientDrawable();
+        chip.setCornerRadius(dp(1.5f));
+        chip.setColor(0xB8000000);
         View.OnFocusChangeListener style = (view, focused) -> {
             int color = focused ? 0xFFFFFFFF : inUse ? 0xFF5BE9A0 : 0x66FFFFFF;
             shape.setStroke(focused || inUse ? dp(1.5f) : Math.max(1, dp(0.75f)), color);
             shape.setColor(inUse ? 0x1F5BE9A0 : 0x00000000);
             label.setTextColor(focused ? 0xFFFFFFFF : inUse ? 0xFF5BE9A0 : 0x8CFFFFFF);
             label.setTypeface(null, focused || inUse ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
-            // Con pantallas casi del mismo alto, el número solo se ve con foco o en uso.
+            // Si un borde cruza el número, solo se ve con foco o en uso, sobre un fondo oscuro.
             label.setVisibility(!crowded || focused || inUse ? View.VISIBLE : View.INVISIBLE);
+            label.setBackground(crowded && (focused || inUse) ? chip : null);
+            int padX = crowded && (focused || inUse) ? dp(2.5f) : 0;
+            label.setPadding(padX, 0, padX, 0);
         };
         style.onFocusChange(screen, false);
         screen.setTag(R.id.source_selector_options, style);
