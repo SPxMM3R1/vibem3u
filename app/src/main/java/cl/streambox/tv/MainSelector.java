@@ -1401,17 +1401,40 @@ abstract class MainSelector extends MainGuide {
         labelPaint.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 8f,
                 getResources().getDisplayMetrics()));
         labelPaint.setFakeBoldText(true);
+        // Caja de cada número (arriba a la derecha de su pantalla).
+        int[] labelTops = new int[order.size()];
+        int[] labelBottoms = new int[order.size()];
+        int[] labelLefts = new int[order.size()];
+        int[] labelRights = new int[order.size()];
+        for (int position = 0; position < order.size(); position++) {
+            String title = screenTitle(playbackOptions.get(order.get(position)));
+            labelTops[position] = boxHeight - heights[position] + dp(3);
+            labelBottoms[position] = labelTops[position] + Math.round(labelPaint.getTextSize() * 1.2f);
+            labelRights[position] = widths[position] - dp(4);
+            labelLefts[position] = labelRights[position] - Math.round(labelPaint.measureText(title));
+        }
+        // El de la que suena siempre se ve; otro número tampoco se escribe si choca con uno visible
+        // (Mega con dos pistas 1080: «1080p» salía dos veces, una sobre otra).
+        List<Integer> shown = new ArrayList<>();
+        int inUsePosition = order.indexOf(inUseQuality);
+        if (inUsePosition >= 0) shown.add(inUsePosition);
         for (int position = 0; position < order.size(); position++) {
             int index = order.get(position);
             String title = screenTitle(playbackOptions.get(index));
-            int labelTop = boxHeight - heights[position] + dp(3);
-            int labelBottom = labelTop + Math.round(labelPaint.getTextSize() * 1.2f);
-            int labelLeft = widths[position] - dp(4) - Math.round(labelPaint.measureText(title));
             boolean crowded = false;
             for (int smaller = position + 1; smaller < order.size() && !crowded; smaller++) {
                 int border = boxHeight - heights[smaller];
-                crowded = border >= labelTop - dp(1) && border <= labelBottom + dp(1)
-                        && widths[smaller] > labelLeft;
+                crowded = border >= labelTops[position] - dp(1) && border <= labelBottoms[position] + dp(1)
+                        && widths[smaller] > labelLefts[position];
+            }
+            if (position != inUsePosition) {
+                for (int other : shown) {
+                    crowded |= labelLefts[position] < labelRights[other] + dp(2)
+                            && labelLefts[other] < labelRights[position] + dp(2)
+                            && labelTops[position] < labelBottoms[other] + dp(1)
+                            && labelTops[other] < labelBottoms[position] + dp(1);
+                }
+                if (!crowded) shown.add(position);
             }
             View screen = screenOutline(title, index == inUseQuality, crowded);
             screens.addView(screen, new FrameLayout.LayoutParams(widths[position], heights[position],
