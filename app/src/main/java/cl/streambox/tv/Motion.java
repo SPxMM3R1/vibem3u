@@ -177,9 +177,24 @@ final class Motion {
      */
     static void focusScale(View view, boolean focused, float scale) {
         if (view == null) return;
+        // Lo que está en la mitad derecha de la pantalla crece hacia la izquierda: si no, la
+        // última acción («Papelera») se salía por el borde.
+        int[] location = new int[2];
+        view.getLocationInWindow(location);
+        int screen = view.getRootView().getWidth();
+        boolean rightSide = screen > 0 && location[0] + view.getWidth() / 2f > screen / 2f;
         boolean rtl = view.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
-        view.setPivotX(rtl ? view.getWidth() : 0f);
+        view.setPivotX(rightSide != rtl ? view.getWidth() : 0f);
         view.setPivotY(view.getHeight() / 2f);
+        // El texto que crece se dibuja fuera de su caja: sus contenedores no lo recortan (hasta
+        // cinco niveles, sin pasar de una lista con desplazamiento, que sí debe recortar).
+        android.view.ViewParent parent = view.getParent();
+        for (int level = 0; level < 5 && parent instanceof ViewGroup; level++) {
+            if (parent instanceof android.widget.ScrollView
+                    || parent instanceof android.widget.HorizontalScrollView) break;
+            ((ViewGroup) parent).setClipChildren(false);
+            parent = parent.getParent();
+        }
         float target = focused ? scale : 1f;
         view.animate().scaleX(target).scaleY(target)
                 .setDuration(SCALE_MS).setInterpolator(SPRING).start();

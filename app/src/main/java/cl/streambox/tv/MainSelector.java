@@ -425,14 +425,25 @@ abstract class MainSelector extends MainGuide {
             PublishedDirectBackups.Quality quality = item.quality;
             if (quality != null && quality.ok) maxKbps = Math.max(maxKbps, quality.kbps);
         }
+        // La barra más alta deja lugar al número que va debajo de la base: si no, la fila la
+        // desborda (2026-11-14).
+        int maxBar = dp(providerMode ? PROVIDER_PULSE_MAX_DP : PULSE_MAX_DP);
+        if (!pulseBars.isEmpty()) {
+            PulseBar first = pulseBars.get(0);
+            View box = (View) first.bar.getParent();
+            View row = box == null ? null : (View) box.getParent();
+            int room = row == null ? 0 : row.getHeight() - first.tag.getHeight() - dp(4);
+            if (row != null && row.getHeight() > 0 && first.tag.getHeight() > 0 && room >= dp(12)) {
+                maxBar = Math.min(maxBar, room);
+            }
+        }
         for (PulseBar item : pulseBars) {
             PublishedDirectBackups.Quality quality = item.quality;
             boolean measured = quality != null;
             boolean failed = measured && !quality.ok;
             int height = !measured ? dp(10)
                     : failed ? dp(2)
-                    : Math.max(dp(4), Math.round(dp(providerMode ? PROVIDER_PULSE_MAX_DP : PULSE_MAX_DP)
-                    * quality.kbps / (float) maxKbps));
+                    : Math.max(dp(4), Math.round(maxBar * quality.kbps / (float) maxKbps));
             ViewGroup.LayoutParams params = item.bar.getLayoutParams();
             if (params.height != height) {
                 params.height = height;
@@ -555,7 +566,7 @@ abstract class MainSelector extends MainGuide {
         return scroller;
     }
 
-    /** Una barra: su número arriba (solo con foco) y la barra, alineadas abajo. */
+    /** Una barra y, debajo de su base, su número (solo con foco). */
     View pulseBar(int position, String variant, boolean inUse) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -572,16 +583,19 @@ abstract class MainSelector extends MainGuide {
         tag.setSingleLine(true);
         tag.setShadowLayer(dp(3), 0, dp(1), 0x73000000);
         tag.setVisibility(View.INVISIBLE);
-        LinearLayout.LayoutParams tagParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        tagParams.bottomMargin = dp(4);
-        box.addView(tag, tagParams);
         View bar = new View(this);
         android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable();
         shape.setCornerRadius(dp(1));
         bar.setBackground(shape);
         box.addView(bar, new LinearLayout.LayoutParams(
                 dp(position == 0 ? PULSE_PRINCIPAL_BAR_DP : PULSE_BAR_DP), dp(10)));
+        // Número debajo de la base (2026-11-14, foto del usuario de ESPN 2 096: arriba de la
+        // barra más alta quedaba fuera de la fila y no se veía; «Aplica la propuesta»). Ocupa
+        // su lugar aunque esté oculto, así todas las barras comparten la misma base.
+        LinearLayout.LayoutParams tagParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        tagParams.topMargin = dp(4);
+        box.addView(tag, tagParams);
         if (inUse) pulsePlayingVariant = variant;
         PulseBar item = new PulseBar(position, variant, inUse, bar, tag, shape);
         item.quality = pulseQualityOf(variant);
@@ -1195,8 +1209,12 @@ abstract class MainSelector extends MainGuide {
         if (pulse) {
             stageInline.setGravity(Gravity.BOTTOM);
             pulseRow = new LinearLayout(this);
+            // Base común: sin esto la fila alinea las barras por la línea de texto de su número.
+            pulseRow.setBaselineAligned(false);
             pulseRow.setOrientation(LinearLayout.HORIZONTAL);
             pulseRow.setGravity(Gravity.BOTTOM);
+            // Ya medida la fila, las barras se ajustan a su alto (ver refreshPulseBars).
+            pulseRow.post(this::refreshPulseBars);
             View scroller = pulseScroller(pulseRow, sourceNames.size());
             int scrollerWidth = pulseScrollerWidth(sourceNames.size());
             if (sourceNames.size() > PULSE_MAX_VISIBLE) {
@@ -1507,12 +1525,16 @@ abstract class MainSelector extends MainGuide {
             }
             signals.addView(signalsLabel, screensLabelParams());
             pulseRow = new LinearLayout(this);
+            // Base común: sin esto la fila alinea las barras por la línea de texto de su número.
+            pulseRow.setBaselineAligned(false);
             pulseRow.setOrientation(LinearLayout.HORIZONTAL);
             pulseRow.setGravity(Gravity.BOTTOM);
             boolean scrolls = directCount > PULSE_MAX_VISIBLE;
             boolean spread = providerMode && scrolls;
             int scrollerWidth = spread ? dp(PROVIDER_TRACK_DP) : pulseScrollerWidth(directCount);
             if (spread) slot = Math.round(scrollerWidth / (float) PULSE_MAX_VISIBLE);
+            // Ya medida la fila, las barras se ajustan a su alto (ver refreshPulseBars).
+            pulseRow.post(this::refreshPulseBars);
             View scroller = pulseScroller(pulseRow, directCount);
             // Rótulo a la altura de «EN USO» y barras apoyadas en la base de las pantallas.
             LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(scrollerWidth, 0, 1f);
