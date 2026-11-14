@@ -103,6 +103,8 @@ public final class MainActivity extends MainSelector {
         channelLogoCache = new ChannelLogoCache(this);
         LogoScales.load(this);
         playbackPreferences = new PlaybackPreferences(this);
+        // 0.6.66: enciende «Cambio automático» una vez (migración; no vuelve a correr).
+        playbackPreferences.migrateAutoBackupOnce();
         channelVisibility = new ChannelVisibility(this);
         channelPromotions = new ChannelPromotions(this);
         adultChannelsUnlocked = AdultChannels.isUnlocked(this);

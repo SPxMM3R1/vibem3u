@@ -53,6 +53,12 @@ final class PlaybackPreferences {
     private final SharedPreferences preferences;
 
     private static final String KEY_AUTO_BACKUP = "auto_backup_enabled";
+    /**
+     * Migración de una sola vez (0.6.66, 2026-11-14): en 0.6.53–0.6.57 un OK pulsado con el foco
+     * en «Cambio automático» la apagaba sin querer. Esta bandera hace que la opción vuelva a
+     * encenderse una vez; después manda el usuario y la migración no vuelve a correr.
+     */
+    private static final String KEY_AUTO_BACKUP_RESET_0666 = "auto_backup_reset_0666";
 
     /** «Cambio automático» del selector (0.5.95): pasar sola a un respaldo si la señal cae. */
     boolean isAutoBackupEnabled() {
@@ -61,6 +67,15 @@ final class PlaybackPreferences {
 
     void setAutoBackupEnabled(boolean enabled) {
         preferences.edit().putBoolean(KEY_AUTO_BACKUP, enabled).apply();
+    }
+
+    /** Enciende «Cambio automático» una sola vez (0.6.66, 2026-11-14). Ver KEY_AUTO_BACKUP_RESET_0666. */
+    void migrateAutoBackupOnce() {
+        if (preferences.getBoolean(KEY_AUTO_BACKUP_RESET_0666, false)) return;
+        preferences.edit()
+                .putBoolean(KEY_AUTO_BACKUP, true)
+                .putBoolean(KEY_AUTO_BACKUP_RESET_0666, true)
+                .apply();
     }
 
     PlaybackPreferences(Context context) {
