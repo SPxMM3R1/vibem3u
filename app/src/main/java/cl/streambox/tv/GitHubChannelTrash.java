@@ -56,6 +56,22 @@ final class GitHubChannelTrash {
         }
     }
 
+    /**
+     * GitHub rechazó la renovación con un error que no confirma que la sesión murió (0.6.63, foto del
+     * usuario: «No se pudo enviar a la papelera: GitHub no pudo renovar la autorización»). Lleva el
+     * código de GitHub para que el aviso diga qué pasó; la sesión se conserva y la app ofrece vincular.
+     */
+    static final class RefreshFailedException extends IOException {
+        final String code;
+
+        RefreshFailedException(String code) {
+            super("GitHub no pudo renovar la autorización"
+                    + (AppStrings.isBlank(code) ? " (sin código)" : " (" + code + ")")
+                    + ". Se conservó la sesión guardada.");
+            this.code = code == null ? "" : code;
+        }
+    }
+
     /** 401 antes de intentar la renovación: no implica que el refresh token también haya vencido. */
     private static final class InvalidAccessTokenException extends IOException {
         InvalidAccessTokenException() {
@@ -180,12 +196,14 @@ final class GitHubChannelTrash {
                 .build());
         String token = response.optString("access_token", "").trim();
         if (token.isEmpty()) {
-            String error = response.optString("error", "");
-            if ("bad_refresh_token".equals(error)) {
+            String error = response.optString("error", "").trim();
+            // Rechazos que confirman que este refresh token ya no sirve (vencido, revocado o usado).
+            if ("bad_refresh_token".equals(error) || "invalid_grant".equals(error)
+                    || "expired_token".equals(error)) {
                 throw new ReauthorizationRequiredException(
-                        "GitHub ya no acepta la renovación; vuelve a vincular esta TV.");
+                        "GitHub ya no acepta la renovación (" + error + "); vuelve a vincular esta TV.");
             }
-            throw new IOException("GitHub no pudo renovar la autorización. Se conservó la sesión guardada.");
+            throw new RefreshFailedException(error.length() > 60 ? error.substring(0, 60) : error);
         }
         GitHubCredentialStore.Credentials credentials = credentialsFromOAuthResponse(response,
                 System.currentTimeMillis());

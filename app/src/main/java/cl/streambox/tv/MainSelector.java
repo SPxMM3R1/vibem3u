@@ -3152,6 +3152,18 @@ abstract class MainSelector extends MainGuide {
                                     getString(failedText, reauthorizationRequired.getMessage()), true);
                         }
                         });
+                } catch (GitHubChannelTrash.RefreshFailedException refreshFailed) {
+                    // La sesión se conserva, pero esta TV no puede seguir así: se avisa con el código
+                    // de GitHub y se ofrece vincular de nuevo (cancelar no borra nada).
+                    mainHandler.post(() -> {
+                        if (isFinishing()) return;
+                        showNotice(NOTICE_WARN, R.string.notice_trash,
+                                getString(failedText, refreshFailed.getMessage()), true);
+                        if (mayRelink) {
+                            ChannelActionScenes.showGitHubLink(this,
+                                    () -> sendChannelToTrash(channel, key, requestKey, backup, false));
+                        }
+                    });
                 } catch (java.io.IOException error) {
                     mainHandler.post(() -> showNotice(NOTICE_WARN, R.string.notice_trash,
                             getString(failedText,

@@ -287,6 +287,41 @@ public final class ChannelTrashTest {
     }
 
     @Test
+    public void unknownRefreshErrorKeepsSessionAndReportsGitHubCode() throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setResponseCode(401).setBody("{}"));
+            server.enqueue(new MockResponse().setResponseCode(200).setBody("{\"error\":\"server_error\"}"));
+            AtomicReference<GitHubCredentialStore.Credentials> persisted = new AtomicReference<>();
+            try {
+                github(server).requestTrash(credentials("gho_accessToken0123456789ABCDEFGHIJ",
+                                "ghr_refreshToken0123456789ABCDEFGHIJ"),
+                        "row:1", "Canal", "0.6.63", persisted::set);
+                throw new AssertionError("Un error desconocido debe informar su código.");
+            } catch (GitHubChannelTrash.RefreshFailedException expected) {
+                assertEquals("server_error", expected.code);
+                assertTrue(expected.getMessage().contains("(server_error)"));
+            }
+            assertEquals(null, persisted.get());
+        }
+    }
+
+    @Test
+    public void invalidGrantRequiresRelink() throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setResponseCode(401).setBody("{}"));
+            server.enqueue(new MockResponse().setResponseCode(200).setBody("{\"error\":\"invalid_grant\"}"));
+            try {
+                github(server).requestTrash(credentials("gho_accessToken0123456789ABCDEFGHIJ",
+                                "ghr_refreshToken0123456789ABCDEFGHIJ"),
+                        "row:1", "Canal", "0.6.63", rotated -> { });
+                throw new AssertionError("invalid_grant confirma que el refresh token ya no sirve.");
+            } catch (GitHubChannelTrash.ReauthorizationRequiredException expected) {
+                assertTrue(expected.getMessage().contains("invalid_grant"));
+            }
+        }
+    }
+
+    @Test
     public void incorrectOAuthClientConfigurationPreservesSavedCredentials() throws Exception {
         try (MockWebServer server = new MockWebServer()) {
             server.enqueue(new MockResponse().setResponseCode(401).setBody("{}"));
