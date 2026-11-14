@@ -253,9 +253,10 @@ abstract class MainSelector extends MainGuide {
             titleView.setTextColor(focused ? (danger ? 0xFFFFB4B4 : 0xFFFFFFFF) : restColor);
             titleView.setTypeface(null, focused || inUse
                     ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
-            // Animaciones B: la línea viaja desde la opción anterior y el texto crece.
+            // Animaciones B: la línea viaja desde la opción anterior y la opción (texto y línea
+            // juntos) crece.
             Motion.focusLine(underline, focused);
-            Motion.focusScale(titleLine, focused, Motion.FOCUS_SCALE);
+            Motion.focusScale(box, focused, Motion.FOCUS_SCALE);
         });
         return box;
     }
