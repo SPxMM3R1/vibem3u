@@ -604,10 +604,10 @@ abstract class MainSelector extends MainGuide {
         box.setTag(R.id.source_selector_options, (View.OnFocusChangeListener) (view, focused) -> {
             item.focused = focused;
             refreshPulseBars();
-            // Animaciones B: la barra marcada se ensancha y sube un poco desde su base.
+            // Animaciones B: la barra marcada se ensancha (solo a lo ancho: su alto es el bitrate y
+            // su base debe seguir alineada con las demás).
             bar.setPivotX(bar.getWidth() / 2f);
-            bar.setPivotY(bar.getHeight());
-            bar.animate().scaleX(focused ? 1.3f : 1f).scaleY(focused ? 1.08f : 1f)
+            bar.animate().scaleX(focused ? 1.3f : 1f)
                     .setDuration(Motion.SCALE_MS).setInterpolator(Motion.SPRING).start();
             if (focused) showPulseDetail(item);
         });
