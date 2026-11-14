@@ -2761,12 +2761,13 @@ abstract class MainSelector extends MainGuide {
         List<VideoTrackOption> qualities = player == null
                 ? Collections.emptyList()
                 : collectVideoTrackOptions(player.getCurrentTracks());
+        VideoTrackOption selected = selectedQualityOption(channel, qualities);
+        if (!classicUi) qualities = onePerHeight(qualities, selected);
         if (qualities.size() > 1) {
             boolean automatic = playbackPreferences != null
                     && playbackPreferences.isAutomaticQuality(channel);
             playbackOptions.add(PlaybackOption.automatic(automatic));
         }
-        VideoTrackOption selected = selectedQualityOption(channel, qualities);
         for (VideoTrackOption quality : qualities) {
             playbackOptions.add(PlaybackOption.quality(
                     quality,
@@ -2774,6 +2775,22 @@ abstract class MainSelector extends MainGuide {
             ));
         }
         return qualities;
+    }
+
+    /**
+     * Una calidad por resolución (0.6.62, pedido del usuario con foto de Mega, que trae dos pistas
+     * 1080: «en la foto se ven 2», opción «1» = una sola pantalla por resolución). Queda la elegida
+     * si es una de ellas; si no, la de mayor bitrate. «Auto» sigue usando todas.
+     */
+    static List<VideoTrackOption> onePerHeight(List<VideoTrackOption> qualities, VideoTrackOption selected) {
+        Map<Integer, VideoTrackOption> best = new LinkedHashMap<>();
+        for (VideoTrackOption quality : qualities) {
+            VideoTrackOption kept = best.get(quality.height);
+            if (kept == null || (kept != selected && (quality == selected || quality.bitrate > kept.bitrate))) {
+                best.put(quality.height, quality);
+            }
+        }
+        return best.size() == qualities.size() ? qualities : new ArrayList<>(best.values());
     }
 
     VideoTrackOption selectedQualityOption(
