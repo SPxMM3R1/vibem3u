@@ -567,6 +567,22 @@ abstract class MainSelector extends MainGuide {
         return scroller;
     }
 
+    /**
+     * Sube lo más bajo de la columna de señales hasta el borde inferior de las pantallas: con
+     * «Auto» debajo del cuadro, la columna termina más abajo que él. Se mide ya dibujado.
+     */
+    void alignPulseToScreens(View lowest, View inUseGroup, View screens) {
+        inUseGroup.post(() -> {
+            if (screens.getHeight() <= 0) return;
+            int gap = Math.max(0, inUseGroup.getHeight() - screens.getBottom());
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) lowest.getLayoutParams();
+            if (params.bottomMargin == gap) return;
+            params.bottomMargin = gap;
+            lowest.setLayoutParams(params);
+            lowest.post(this::refreshPulseBars);
+        });
+    }
+
     /** Una barra y, debajo de su base, su número (solo con foco). */
     View pulseBar(int position, String variant, boolean inUse) {
         LinearLayout box = new LinearLayout(this);
@@ -1540,17 +1556,21 @@ abstract class MainSelector extends MainGuide {
             // Rótulo a la altura de «EN USO» y barras apoyadas en la base de las pantallas.
             LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(scrollerWidth, 0, 1f);
             if (scrolls) rowParams.setMarginStart(dp(PULSE_ARROW_GUTTER_DP));
-            // 2026-11-14 («ajusta la posición a la altura de los demás»): sin margen, la base de las
-            // barras con su número queda a la altura del borde inferior del cuadro «En uso».
+            // 2026-11-14 («ajusta la posición a la altura de los demás»): la base de las barras con
+            // su número (o la barrita de posición, con más de 10) queda a la altura del borde
+            // inferior del cuadro «En uso», haya o no «Auto» debajo (ver alignPulseToScreens).
             rowParams.bottomMargin = scrolls ? dp(5) : providerMode ? dp(8) : 0;
             signals.addView(scroller, rowParams);
+            View lowest = scroller;
             if (scrolls) {
                 LinearLayout.LayoutParams indicatorParams = new LinearLayout.LayoutParams(
                         scrollerWidth + 2 * dp(PULSE_ARROW_GUTTER_DP), dp(9));
                 indicatorParams.bottomMargin = providerMode ? dp(5) : 0;
-                signals.addView(pulseIndicator((android.widget.HorizontalScrollView) scroller, scrollerWidth),
-                        indicatorParams);
+                View indicator = pulseIndicator((android.widget.HorizontalScrollView) scroller, scrollerWidth);
+                signals.addView(indicator, indicatorParams);
+                lowest = indicator;
             }
+            if (!providerMode) alignPulseToScreens(lowest, inUseGroup, screens);
             if (providerMode) {
                 pulseCompact = new TextView(this);
                 pulseCompact.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
