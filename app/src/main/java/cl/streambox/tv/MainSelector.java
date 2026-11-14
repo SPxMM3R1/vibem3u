@@ -1540,12 +1540,14 @@ abstract class MainSelector extends MainGuide {
             // Rótulo a la altura de «EN USO» y barras apoyadas en la base de las pantallas.
             LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(scrollerWidth, 0, 1f);
             if (scrolls) rowParams.setMarginStart(dp(PULSE_ARROW_GUTTER_DP));
-            rowParams.bottomMargin = scrolls ? dp(5) : providerMode ? dp(8) : dp(22);
+            // 2026-11-14 («ajusta la posición a la altura de los demás»): sin margen, la base de las
+            // barras con su número queda a la altura del borde inferior del cuadro «En uso».
+            rowParams.bottomMargin = scrolls ? dp(5) : providerMode ? dp(8) : 0;
             signals.addView(scroller, rowParams);
             if (scrolls) {
                 LinearLayout.LayoutParams indicatorParams = new LinearLayout.LayoutParams(
                         scrollerWidth + 2 * dp(PULSE_ARROW_GUTTER_DP), dp(9));
-                indicatorParams.bottomMargin = providerMode ? dp(5) : dp(8);
+                indicatorParams.bottomMargin = providerMode ? dp(5) : 0;
                 signals.addView(pulseIndicator((android.widget.HorizontalScrollView) scroller, scrollerWidth),
                         indicatorParams);
             }
