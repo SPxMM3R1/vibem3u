@@ -1,5 +1,6 @@
 package cl.streambox.tv;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -99,6 +100,7 @@ public final class EpgGuideView extends View implements GuideSurface {
     private float nowLineBottom = Float.NaN;
     private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final RectF rect = new RectF();
+    private final Paint shadowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Typeface bold = Typeface.create(Typeface.DEFAULT, Typeface.BOLD);
     private final Typeface regular = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL);
     private final Typeface medium = Typeface.create("sans-serif-medium", Typeface.NORMAL);
@@ -147,6 +149,77 @@ public final class EpgGuideView extends View implements GuideSurface {
         invalidate();
     }
 
+    // ---- Animaciones B (2026-11-14): filas que suben al abrir, marco que viaja, bloque que se levanta ----
+    private static final long OPEN_MS = 700L;
+    private static final long ROW_STAGGER_MS = 45L;
+    private static final long OPEN_TOTAL_MS = OPEN_MS + 12 * ROW_STAGGER_MS;
+    private static final float LIFT = 0.06f;
+    private ValueAnimator openAnimator;
+    private float openElapsedMs = OPEN_TOTAL_MS;
+    private ValueAnimator focusAnimator;
+    private float focusProgress = 1f;
+    private final RectF focusTarget = new RectF();
+    private final RectF focusFrom = new RectF();
+    private final RectF focusDrawn = new RectF();
+    private boolean focusDrawnValid;
+    private long focusKeyStart = Long.MIN_VALUE;
+    private int focusKeyRow = -1;
+    // Bloque con foco: se dibuja al final, levantado sobre sus vecinos.
+    private EpgProgramme liftedProgramme;
+    private int liftedRow;
+    private float liftedLeft, liftedRight, liftedTop, liftedHeight;
+    private long liftedWindowStart;
+    private float liftedGridLeft, liftedGridWidth;
+
+    /** Al abrir la Guía: las filas suben escalonadas y el detalle entra desde la izquierda. */
+    public void playOpenAnimation() {
+        if (openAnimator != null) openAnimator.cancel();
+        focusDrawnValid = false;
+        focusKeyRow = -1;
+        openElapsedMs = 0f;
+        openAnimator = ValueAnimator.ofFloat(0f, OPEN_TOTAL_MS);
+        openAnimator.setDuration(OPEN_TOTAL_MS);
+        openAnimator.setInterpolator(null);
+        openAnimator.addUpdateListener(animation -> {
+            openElapsedMs = (float) animation.getAnimatedValue();
+            invalidate();
+        });
+        openAnimator.start();
+        setAlpha(0f);
+        animate().alpha(1f).setDuration(Motion.FADE_IN_MS).setInterpolator(Motion.EASE_OUT).start();
+    }
+
+    /** Avance con resorte (0 a 1, con rebote leve) de algo que empieza {@code delayMs} después. */
+    private float springAt(float delayMs, float durationMs) {
+        float t = (openElapsedMs - delayMs) / durationMs;
+        if (t <= 0f) return 0f;
+        if (t >= 1f) return 1f;
+        return Motion.SPRING.getInterpolation(t);
+    }
+
+    private float rowOffset(int index) {
+        return (1f - springAt(index * ROW_STAGGER_MS, OPEN_MS)) * dp(24);
+    }
+
+    private void startFocusGlide() {
+        if (focusAnimator != null) focusAnimator.cancel();
+        focusProgress = 0f;
+        focusAnimator = ValueAnimator.ofFloat(0f, 1f);
+        focusAnimator.setDuration(Motion.GLIDE_MS);
+        focusAnimator.setInterpolator(null);
+        focusAnimator.addUpdateListener(animation -> {
+            focusProgress = (float) animation.getAnimatedValue();
+            invalidate();
+        });
+        focusAnimator.start();
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        if (openAnimator != null) openAnimator.cancel();
+        if (focusAnimator != null) focusAnimator.cancel();
+        super.onDetachedFromWindow();
+    }
+
     private float dp(float value) {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value,
                 getResources().getDisplayMetrics());
@@ -186,16 +259,23 @@ public final class EpgGuideView extends View implements GuideSurface {
         if (focusedRow >= firstVisibleRow + visibleRows) firstVisibleRow = focusedRow - visibleRows + 1;
         firstVisibleRow = Math.max(0, Math.min(firstVisibleRow, Math.max(0, source.rowCount() - visibleRows)));
 
+        int headerSave = canvas.save();
+        canvas.translate(0f, -(1f - springAt(0f, 500f)) * dp(8));
         drawHeader(canvas, left, right);
+        canvas.restoreToCount(headerSave);
+        int heroSave = canvas.save();
+        canvas.translate(-(1f - springAt(150f, 600f)) * dp(14), 0f);
         drawHero(canvas, left, right, focusedRow);
+        canvas.restoreToCount(heroSave);
         drawAxis(canvas, gridLeft, gridWidth, axisBaseline, windowStart, windowEnd);
 
         boolean filtersFocused = source.filtersFocused();
         int shownRows = 0;
+        liftedProgramme = null;
         for (int index = 0; index <= visibleRows; index++) {
             int row = firstVisibleRow + index;
             if (row >= source.rowCount()) break;
-            float rowTop = rowsTop + index * rowPitch;
+            float rowTop = rowsTop + index * rowPitch + rowOffset(index);
             if (rowTop >= height) break;
             boolean peek = index == visibleRows;
             if (!peek) shownRows++;
@@ -204,6 +284,8 @@ public final class EpgGuideView extends View implements GuideSurface {
                     windowStart, windowEnd, row == focusedRow && !filtersFocused);
             if (saved >= 0) canvas.restoreToCount(saved);
         }
+
+        drawLiftedFocus(canvas);
 
         if (nowMillis >= windowStart && nowMillis < windowEnd && shownRows > 0) {
             // Hora actual: línea cian fina desde el eje hasta el final de las filas visibles.
@@ -519,13 +601,36 @@ public final class EpgGuideView extends View implements GuideSurface {
             float blockLeft = Math.max(gridLeft, startX);
             float blockRight = Math.min(right, xFor(programme.getStopMillis(), gridLeft, gridWidth, windowStart));
             if (blockRight - blockLeft < dp(6)) continue;
-            boolean past = programme.getStopMillis() <= nowMillis;
-            boolean onAir = programme.getStartMillis() <= nowMillis && !past;
             boolean focused = programme == focusedProgramme;
 
             // Bloque: ocupa todo el programa (antes solo se veía el texto y parecía terminar ahí).
             float tileLeft = blockLeft + dp(1);
             float tileRight = blockRight - dp(1);
+            if (focused) {
+                // Animaciones B: el bloque con foco se dibuja al final, levantado (drawLiftedFocus).
+                liftedProgramme = programme;
+                liftedRow = row;
+                liftedLeft = tileLeft;
+                liftedRight = tileRight;
+                liftedTop = rowTop;
+                liftedHeight = rowHeight;
+                liftedWindowStart = windowStart;
+                liftedGridLeft = gridLeft;
+                liftedGridWidth = gridWidth;
+                continue;
+            }
+            drawTile(canvas, row, programme, tileLeft, tileRight, rowTop, rowHeight, false,
+                    windowStart, gridLeft, gridWidth);
+        }
+    }
+
+    /** Un bloque de programa: fondo, tramo emitido, título y horario. */
+    private void drawTile(Canvas canvas, int row, EpgProgramme programme, float tileLeft, float tileRight,
+                          float rowTop, float rowHeight, boolean focused,
+                          long windowStart, float gridLeft, float gridWidth) {
+        {
+            boolean past = programme.getStopMillis() <= nowMillis;
+            boolean onAir = programme.getStartMillis() <= nowMillis && !past;
             float radius = dp(3);
             rect.set(tileLeft, rowTop, tileRight, rowTop + rowHeight);
             fillPaint.setColor(focused ? TILE_FOCUSED : onAir ? TILE_ON_AIR : TILE);
@@ -540,18 +645,9 @@ public final class EpgGuideView extends View implements GuideSurface {
                     canvas.restoreToCount(saved);
                 }
             }
-            if (focused) {
-                fillPaint.setStyle(Paint.Style.STROKE);
-                fillPaint.setStrokeWidth(dp(1));
-                fillPaint.setColor(TILE_FOCUS_BORDER);
-                rect.inset(dp(0.5f), dp(0.5f));
-                canvas.drawRoundRect(rect, radius, radius, fillPaint);
-                fillPaint.setStyle(Paint.Style.FILL);
-            }
-
             float textLeft = tileLeft + dp(7);
             float textWidth = tileRight - textLeft - dp(6);
-            if (textWidth < dp(14)) continue;
+            if (textWidth < dp(14)) return;
             String title = programme.getStartMillis() < windowStart
                     ? "‹ " + programme.getTitle() : programme.getTitle();
             boolean reminded = source.hasReminder(row, programme);
@@ -576,6 +672,73 @@ public final class EpgGuideView extends View implements GuideSurface {
                     TextUtils.TruncateAt.END).toString();
             canvas.drawText(range, textLeft, rowTop + dp(23.5f), smallPaint);
         }
+    }
+
+    /**
+     * Bloque con foco levantado (crece hasta 6 % con resorte, con sombra) y su marco blanco, que
+     * viaja con resorte desde el bloque anterior en vez de saltar.
+     */
+    private void drawLiftedFocus(Canvas canvas) {
+        if (liftedProgramme == null) {
+            focusDrawnValid = false;
+            return;
+        }
+        long key = liftedProgramme.getStartMillis();
+        if (key != focusKeyStart || liftedRow != focusKeyRow) {
+            boolean firstFocus = focusKeyRow < 0 || !focusDrawnValid;
+            focusKeyStart = key;
+            focusKeyRow = liftedRow;
+            if (firstFocus) {
+                focusProgress = 1f;
+            } else {
+                focusFrom.set(focusDrawn);
+                startFocusGlide();
+            }
+        }
+        float glide = focusProgress >= 1f ? 1f : Motion.SPRING_SOFT.getInterpolation(focusProgress);
+        float liftShare = focusProgress >= 1f ? 1f : Motion.SPRING.getInterpolation(focusProgress);
+        float lift = 1f + LIFT * liftShare;
+        float cx = (liftedLeft + liftedRight) / 2f;
+        float cy = liftedTop + liftedHeight / 2f;
+        float halfW = (liftedRight - liftedLeft) / 2f * lift;
+        float halfH = liftedHeight / 2f * lift;
+        focusTarget.set(cx - halfW, cy - halfH, cx + halfW, cy + halfH);
+
+        int saved = canvas.save();
+        canvas.scale(lift, lift, cx, cy);
+        rect.set(liftedLeft, liftedTop, liftedRight, liftedTop + liftedHeight);
+        // Sombra suave alrededor del bloque levantado (solo afuera: el bloque sigue dejando ver
+        // el video, como todos los bloques).
+        float shadow = Math.max(0f, Math.min(1f, liftShare));
+        if (shadow > 0f) {
+            int shadowSave = canvas.save();
+            canvas.clipOutRect(rect);
+            shadowPaint.setColor(BASE);
+            shadowPaint.setShadowLayer(dp(8) * shadow, 0f, dp(3) * shadow, 0x8C000000);
+            canvas.drawRoundRect(rect, dp(3), dp(3), shadowPaint);
+            canvas.restoreToCount(shadowSave);
+        }
+        drawTile(canvas, liftedRow, liftedProgramme, liftedLeft, liftedRight, liftedTop, liftedHeight, true,
+                liftedWindowStart, liftedGridLeft, liftedGridWidth);
+        canvas.restoreToCount(saved);
+
+        if (glide >= 1f || !focusDrawnValid) {
+            focusDrawn.set(focusTarget);
+        } else {
+            focusDrawn.set(
+                    focusFrom.left + (focusTarget.left - focusFrom.left) * glide,
+                    focusFrom.top + (focusTarget.top - focusFrom.top) * glide,
+                    focusFrom.right + (focusTarget.right - focusFrom.right) * glide,
+                    focusFrom.bottom + (focusTarget.bottom - focusFrom.bottom) * glide);
+        }
+        focusDrawnValid = true;
+        fillPaint.setStyle(Paint.Style.STROKE);
+        fillPaint.setStrokeWidth(dp(1));
+        fillPaint.setColor(TILE_FOCUS_BORDER);
+        rect.set(focusDrawn);
+        rect.inset(dp(0.5f), dp(0.5f));
+        canvas.drawRoundRect(rect, dp(3) * lift, dp(3) * lift, fillPaint);
+        fillPaint.setStyle(Paint.Style.FILL);
     }
 
     /** Recordatorio: anillo cian sin relleno, centrado en ({@code cx}, {@code cy}). */

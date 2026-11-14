@@ -179,6 +179,10 @@ abstract class MainPlayback extends MainState {
                     .send();
         }
         player.addListener(new Player.Listener() {
+            @Override public void onRenderedFirstFrame() {
+                liftZapVeilOnFirstFrame();
+            }
+
             @Override public void onIsPlayingChanged(boolean isPlaying) {
                 settlePlaybackEpisode(isPlaying);
                 if (isPlaying) maybeSchedulePlaybackSourceStability();
@@ -430,6 +434,8 @@ abstract class MainPlayback extends MainState {
             return;
         }
         Channel channel = channels.get(channelIndex);
+        // Animaciones B: al cambiar de canal el video viejo se apaga bajo un velo negro.
+        if (playbackChannel != null) dropZapVeil();
         boolean resumingRecovery = PlaybackPreferences.channelIdentity(channel)
                 .equals(pendingTvVooBackupIdentity);
         if (resumingRecovery) {

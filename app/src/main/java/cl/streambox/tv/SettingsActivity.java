@@ -268,7 +268,11 @@ public final class SettingsActivity extends Activity {
 
         settingsRoot = findViewById(R.id.settings_root);
         settingsPanel = findViewById(R.id.settings_panel);
-        if (!classicUi) installMinimalFocus();
+        if (!classicUi) {
+            installMinimalFocus();
+            // Animaciones B: el menú entra desde la izquierda con resorte.
+            Motion.enterFromSide(settingsPanel, 0L, -24f * getResources().getDisplayMetrics().density);
+        }
         settingsRoot.addOnLayoutChangeListener((view, left, top, right, bottom,
                                                  oldLeft, oldTop, oldRight, oldBottom) ->
                 updateSettingsPanelWidth()
@@ -1146,7 +1150,16 @@ public final class SettingsActivity extends Activity {
                 tabs[index].setTypeface(null, selected ? android.graphics.Typeface.BOLD
                         : android.graphics.Typeface.NORMAL);
             }
+            boolean pageAppears = selected && tabPages[index].getVisibility() != View.VISIBLE;
             tabPages[index].setVisibility(selected ? View.VISIBLE : View.GONE);
+            if (!classicUi && pageAppears && tabPages[index] instanceof android.view.ViewGroup) {
+                // Animaciones B: las filas de la pestaña nueva suben escalonadas.
+                android.view.ViewGroup page = (android.view.ViewGroup) tabPages[index];
+                View rows = page.getChildCount() == 1 && page.getChildAt(0) instanceof android.view.ViewGroup
+                        ? page.getChildAt(0) : page;
+                Motion.staggerChildren((android.view.ViewGroup) rows,
+                        14f * getResources().getDisplayMetrics().density);
+            }
             if (selected) {
                 // Columna derecha con la información de la señal (0.6.33): solo en En reproducción.
                 View side = findViewById(R.id.settings_side_column);
@@ -1582,7 +1595,47 @@ public final class SettingsActivity extends Activity {
                     minimalFocusTarget = null;
                     styleMinimalFocus(oldFocus, false);
                     styleMinimalFocus(newFocus, true);
+                    // Animaciones B (2026-11-14): lo marcado crece con resorte.
+                    focusMotion(oldFocus, false);
+                    focusMotion(newFocus, true);
                 });
+    }
+
+    /**
+     * Pestañas, opciones y acciones de texto crecen 7 %. En una fila crece solo su título (si
+     * creciera la fila entera, el valor de la derecha se cortaría contra el borde del panel);
+     * los interruptores solo cambian a negrita.
+     */
+    private void focusMotion(View view, boolean focused) {
+        if (view == null || view instanceof EditText || view instanceof Switch) return;
+        View target = view instanceof android.view.ViewGroup
+                ? firstTextView((android.view.ViewGroup) view) : view;
+        Motion.focusScale(target, focused, Motion.FOCUS_SCALE);
+    }
+
+    /** Rebote corto cuando ◀ ▶ ▲ ▼ no tiene a dónde ir: «no hay más hacia allá». */
+    private void bumpFocus(int keyCode) {
+        if (classicUi) return;
+        View focused = getCurrentFocus();
+        float step = 5f * getResources().getDisplayMetrics().density;
+        if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT) Motion.bump(focused, -step, 0f);
+        else if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT) Motion.bump(focused, step, 0f);
+        else if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_UP) Motion.bump(focused, 0f, -step * 0.8f);
+        else if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN) Motion.bump(focused, 0f, step * 0.8f);
+    }
+
+    /** Pasa la tecla y, si el foco no se movió con una flecha, rebota. */
+    private boolean dispatchWithBump(android.view.KeyEvent event) {
+        View before = getCurrentFocus();
+        boolean handled = super.dispatchKeyEvent(event);
+        int key = event.getKeyCode();
+        boolean arrow = key == android.view.KeyEvent.KEYCODE_DPAD_LEFT || key == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+                || key == android.view.KeyEvent.KEYCODE_DPAD_UP || key == android.view.KeyEvent.KEYCODE_DPAD_DOWN;
+        if (arrow && event.getAction() == android.view.KeyEvent.ACTION_DOWN && before != null
+                && getCurrentFocus() == before && !(before instanceof EditText)) {
+            bumpFocus(key);
+        }
+        return handled;
     }
 
     private static void clearMinimalFocus(TextView target) {
@@ -1948,10 +2001,11 @@ public final class SettingsActivity extends Activity {
                 }
                 if (isTextFieldFocused() || isFooterButtonFocused()
                         || hasHorizontalTargetInCurrentPage(event.getKeyCode())) {
-                    return super.dispatchKeyEvent(event);
+                    return dispatchWithBump(event);
                 }
                 // There is no horizontal control in this page. Keep focus where it
                 // is instead of allowing Android's fallback search to reach a tab.
+                bumpFocus(event.getKeyCode());
                 return true;
             }
             if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_DPAD_UP
@@ -1960,7 +2014,7 @@ public final class SettingsActivity extends Activity {
                 return true;
             }
         }
-        return super.dispatchKeyEvent(event);
+        return dispatchWithBump(event);
     }
 
     @Override

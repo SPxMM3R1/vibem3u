@@ -1051,7 +1051,9 @@ abstract class MainOverlays extends MainPlayback {
         if (!classicUi && (isSourceSelectorVisible() || isGuideVisible() || settingsOpen)) return;
         hideProgrammeDetail.run();
         mainHandler.removeCallbacks(hideProgrammeDetailWithOverlay);
+        boolean appearing = channelOverlay.getVisibility() != View.VISIBLE || osdExiting;
         channelOverlay.setVisibility(View.VISIBLE);
+        if (!classicUi && appearing) animateOsdIn();
         // Moderno: la hora y la fecha van dentro del OSD; el reloj aparte es del clásico.
         clock.setVisibility(classicUi ? View.VISIBLE : View.GONE);
         updateDiagnosticsVisibility();
@@ -1065,7 +1067,102 @@ abstract class MainOverlays extends MainPlayback {
 
     void showOverlayForChannelStart() {
         overlayAwaitingPlayback = true;
+        boolean alreadyShown = channelOverlay.getVisibility() == View.VISIBLE && !osdExiting;
         showOverlay(true);
+        // Otro canal con el OSD ya a la vista: su información entra de nuevo, escalonada.
+        if (!classicUi && alreadyShown && channelIndex != osdAnimatedChannel) animateOsdRefresh();
+        osdAnimatedChannel = channelIndex;
+    }
+
+    // ---- Movimiento del OSD (2026-11-14, animaciones B aprobadas) ----
+    boolean osdExiting;
+    int osdAnimatedChannel = -1;
+    final Runnable finishOsdExit = () -> {
+        if (!osdExiting) return;
+        osdExiting = false;
+        channelOverlay.setVisibility(View.GONE);
+        clock.setVisibility(View.GONE);
+        for (View view : osdMotionViews(true)) Motion.settle(view);
+        updateDiagnosticsVisibility();
+    };
+
+    /** Partes del OSD moderno en el orden en que entran: logo, eyebrow, título, avance… */
+    java.util.List<View> osdMotionViews(boolean withScrim) {
+        java.util.List<View> views = new java.util.ArrayList<>();
+        if (withScrim) views.add(channelOverlay.findViewById(R.id.osd_scrim));
+        if (osdHero instanceof android.view.ViewGroup) {
+            android.view.ViewGroup hero = (android.view.ViewGroup) osdHero;
+            for (int index = 0; index < hero.getChildCount(); index++) views.add(hero.getChildAt(index));
+        }
+        views.add(channelOverlay.findViewById(R.id.channel_number));
+        View clockBox = channelOverlay.findViewById(R.id.osd_clock);
+        if (clockBox instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) clockBox;
+            for (int index = 0; index < group.getChildCount(); index++) views.add(group.getChildAt(index));
+        }
+        views.add(channelOverlay.findViewById(R.id.osd_tech));
+        views.removeIf(java.util.Objects::isNull);
+        return views;
+    }
+
+    void animateOsdIn() {
+        mainHandler.removeCallbacks(finishOsdExit);
+        osdExiting = false;
+        osdAnimatedChannel = channelIndex;
+        View scrim = channelOverlay.findViewById(R.id.osd_scrim);
+        if (scrim != null) {
+            scrim.setTranslationY(0f);
+            scrim.setAlpha(0f);
+            Motion.fadeTo(scrim, 1f, 400L, null);
+        }
+        Motion.staggerIn(osdMotionViews(false), dpToPx(22));
+    }
+
+    void animateOsdRefresh() {
+        java.util.List<View> hero = new java.util.ArrayList<>();
+        if (osdHero instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) osdHero;
+            for (int index = 0; index < group.getChildCount(); index++) hero.add(group.getChildAt(index));
+        }
+        hero.add(channelOverlay.findViewById(R.id.channel_number));
+        hero.removeIf(java.util.Objects::isNull);
+        Motion.staggerIn(hero, dpToPx(14));
+    }
+
+    @Override void animateOsdOut() {
+        if (osdExiting) return;
+        osdExiting = true;
+        for (View view : osdMotionViews(true)) {
+            if (view.getVisibility() == View.VISIBLE) Motion.exit(view, dpToPx(8), null);
+        }
+        mainHandler.removeCallbacks(finishOsdExit);
+        mainHandler.postDelayed(finishOsdExit, Motion.EXIT_MS + 20L);
+    }
+
+    // ---- Velo del cambio de canal: el video viejo se apaga y el nuevo aparece ----
+    View zapVeil;
+    final Runnable liftZapVeil = () -> {
+        if (zapVeil == null || zapVeil.getVisibility() != View.VISIBLE) return;
+        Motion.fadeTo(zapVeil, 0f, 450L, () -> zapVeil.setVisibility(View.GONE));
+    };
+
+    /** Al cambiar de canal: velo negro en 140 ms; se abre con el primer cuadro (o a los 6 s). */
+    @Override void dropZapVeil() {
+        if (classicUi) return;
+        if (zapVeil == null) zapVeil = findViewById(R.id.zap_veil);
+        if (zapVeil == null) return;
+        mainHandler.removeCallbacks(liftZapVeil);
+        if (zapVeil.getVisibility() != View.VISIBLE) {
+            zapVeil.setAlpha(0f);
+            zapVeil.setVisibility(View.VISIBLE);
+        }
+        Motion.fadeTo(zapVeil, 1f, 140L, null);
+        mainHandler.postDelayed(liftZapVeil, 6_000L);
+    }
+
+    @Override void liftZapVeilOnFirstFrame() {
+        mainHandler.removeCallbacks(liftZapVeil);
+        mainHandler.post(liftZapVeil);
     }
 
     boolean isProgrammeDetailVisible() {
@@ -1103,8 +1200,16 @@ abstract class MainOverlays extends MainPlayback {
         noticeOverlay.setTranslationY(isGuideVisible() && root != null
                 ? -(root.getHeight() - dpToPx(272)) : 0f);
         noticeOverlay.animate().cancel();
+        boolean noticeAppearing = noticeOverlay.getVisibility() != View.VISIBLE || noticeOverlay.getAlpha() < 1f;
         noticeOverlay.setVisibility(View.VISIBLE);
-        noticeOverlay.animate().alpha(1f).setDuration(180L).start();
+        if (noticeAppearing && noticeText != null) {
+            // Animaciones B: el texto baja con resorte mientras el aviso se funde.
+            noticeText.setTranslationY(-dpToPx(14));
+            noticeText.animate().translationY(0f).setDuration(Motion.ENTER_MS)
+                    .setInterpolator(Motion.SPRING).start();
+        }
+        noticeOverlay.animate().alpha(1f).setDuration(Motion.FADE_IN_MS)
+                .setInterpolator(Motion.EASE_OUT).start();
         mainHandler.postDelayed(hideNotice, longDuration ? 4_000L : 2_600L);
     }
 
@@ -1123,6 +1228,7 @@ abstract class MainOverlays extends MainPlayback {
         Channel channel = channels.isEmpty() || channelIndex < 0 || channelIndex >= channels.size()
                 ? null : channels.get(channelIndex);
         playbackErrorIsPlaylist = false;
+        liftZapVeilOnFirstFrame();
         mainHandler.removeCallbacks(hideOverlay);
         hideOverlay.run();
         android.graphics.drawable.Drawable logo = channelLogo == null ? null : channelLogo.getDrawable();

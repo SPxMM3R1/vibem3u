@@ -120,6 +120,10 @@ abstract class MainSelector extends MainGuide {
                 + " · " + playbackChannel.getName();
         sourceSelectorChannel.setText(classicUi ? playbackChannel.getName() : minimalChannelLabel);
         sourceSelectorOverlay.setVisibility(View.VISIBLE);
+        if (!classicUi) {
+            // Animaciones B: la franja sube desde abajo con resorte.
+            Motion.enter(findViewById(R.id.source_selector_panel), 0, dp(28f));
+        }
         // Moderno: «Cargando…» o «Buffer insuficiente» suben a la zona libre, sobre la franja
         // del selector, en vez de quedar debajo de su texto (0.6.22: antes iba a la izquierda).
         if (!classicUi && loadingPanel != null) {
@@ -249,7 +253,9 @@ abstract class MainSelector extends MainGuide {
             titleView.setTextColor(focused ? (danger ? 0xFFFFB4B4 : 0xFFFFFFFF) : restColor);
             titleView.setTypeface(null, focused || inUse
                     ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
-            underline.setVisibility(focused ? View.VISIBLE : View.INVISIBLE);
+            // Animaciones B: la línea viaja desde la opción anterior y el texto crece.
+            Motion.focusLine(underline, focused);
+            Motion.focusScale(titleLine, focused, Motion.FOCUS_SCALE);
         });
         return box;
     }
@@ -310,7 +316,8 @@ abstract class MainSelector extends MainGuide {
             titleView.setTypeface(null, focused || inUse
                     ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
             if (subtitleRef != null) subtitleRef.setTextColor(focused ? 0xA6FFFFFF : 0x66FFFFFF);
-            underline.setVisibility(focused ? View.VISIBLE : View.INVISIBLE);
+            Motion.focusLine(underline, focused);
+            Motion.focusScale(text, focused, Motion.FOCUS_SCALE);
         });
         return box;
     }
@@ -582,6 +589,11 @@ abstract class MainSelector extends MainGuide {
         box.setTag(R.id.source_selector_options, (View.OnFocusChangeListener) (view, focused) -> {
             item.focused = focused;
             refreshPulseBars();
+            // Animaciones B: la barra marcada se ensancha y sube un poco desde su base.
+            bar.setPivotX(bar.getWidth() / 2f);
+            bar.setPivotY(bar.getHeight());
+            bar.animate().scaleX(focused ? 1.3f : 1f).scaleY(focused ? 1.08f : 1f)
+                    .setDuration(Motion.SCALE_MS).setInterpolator(Motion.SPRING).start();
             if (focused) showPulseDetail(item);
         });
         return box;
@@ -2100,7 +2112,11 @@ abstract class MainSelector extends MainGuide {
                 target = screensEntry(other, dx, actions);
             }
         }
-        if (target < 0 || target >= sourceCandidateViews.size()) return false;
+        if (target < 0 || target >= sourceCandidateViews.size()) {
+            // Animaciones B: no hay más hacia allá; la opción rebota hacia ese lado.
+            if (!minimalFocusOpening) Motion.bump(sourceCandidateViews.get(current), dx * dp(5f), dy * dp(4f));
+            return false;
+        }
         sourceCandidateViews.get(target).requestFocus();
         return true;
     }

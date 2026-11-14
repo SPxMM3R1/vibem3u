@@ -501,10 +501,18 @@ abstract class MainState extends Activity {
     };
 
     final Runnable hideOverlay = () -> {
+        // Moderno (2026-11-14, animaciones B): baja y se funde; se oculta al terminar.
+        if (!classicUi && channelOverlay.getVisibility() == View.VISIBLE && !exiting) {
+            animateOsdOut();
+            return;
+        }
         channelOverlay.setVisibility(View.GONE);
         clock.setVisibility(View.GONE);
         updateDiagnosticsVisibility();
     };
+    abstract void animateOsdOut();
+    abstract void dropZapVeil();
+    abstract void liftZapVeilOnFirstFrame();
     final Runnable hideProgrammeDetail = () -> {
         if (programmeDetailOverlay != null) {
             programmeDetailOverlay.setVisibility(View.GONE);

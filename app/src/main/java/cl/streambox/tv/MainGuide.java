@@ -119,6 +119,8 @@ abstract class MainGuide extends MainOverlays {
         guideOkLongHandled = false;
         guideSurface.bind(guideSource, guideNavigator, now);
         guideView.setVisibility(View.VISIBLE);
+        // Animaciones B (2026-11-14): las filas suben escalonadas y el detalle entra de lado.
+        if (guideView instanceof EpgGuideView) ((EpgGuideView) guideView).playOpenAnimation();
     }
 
     /** «Todos» más las categorías (grupos) de la lista, en el orden en que aparecen. */

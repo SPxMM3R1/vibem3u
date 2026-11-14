@@ -58,6 +58,24 @@ Colores de texto: blancos con transparencia (`minimal_muted` = #9EFFFFFF para lo
 
 El foco nunca es un fondo de color, un velo ni un recuadro.
 
+## Movimiento (0.6.64, «B · Apple TV» aprobado: «Aplica animaciones b para todo»)
+
+Mockup interactivo en `Codex/mockups/animaciones/` (Hoy, A · Sutil, B · Apple TV); app: `animaciones-guia-app.jpg` (bloque levantado), `animaciones-cambio-canal-app.jpg` (velo y OSD entrando). Todo pasa por
+`Motion.java`:
+
+- **Resorte**: `PathInterpolator(0.34, 1.42, 0.64, 1)` (arranca rápido, frena con un rebote
+  leve). Líneas y marcos que viajan usan uno más suave (`0.34, 1.3, 0.64, 1`).
+- **Entrar**: sube (OSD 22 dp, filas 14 dp) con resorte en 620 ms mientras se funde en 350 ms;
+  escalonado 55 ms por elemento (Guía: 45 ms por fila).
+- **Salir**: baja 8 dp y se funde en 220 ms.
+- **Foco**: la línea fina viaja desde la opción anterior (420 ms) en vez de saltar; el texto
+  marcado crece 7 % (en las filas de Opciones solo el título; si creciera la fila, el valor de la derecha se cortaba); en la Guía el marco viaja y el bloque con
+  foco se levanta 6 % con sombra; en el Pulso la barra marcada se ensancha.
+- **Borde**: si ◀ ▶ ▲ ▼ no tiene a dónde ir, lo marcado rebota 5 dp hacia ese lado (320 ms).
+- **Cambio de canal**: velo negro en 140 ms que se abre en 450 ms con el primer cuadro.
+- El video nunca se anima (`SurfaceView`). Solo alfa, traslación y escala (GPU). Con las
+  animaciones del sistema apagadas, Android las termina al instante.
+
 ## Tipografía y jerarquía (Roboto)
 
 - **Etiqueta de sección / eyebrow**: MAYÚSCULAS, espaciado 0,2 em, `sans-serif-medium`, blanco
