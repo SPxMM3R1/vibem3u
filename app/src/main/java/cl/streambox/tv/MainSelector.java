@@ -335,7 +335,6 @@ abstract class MainSelector extends MainGuide {
     final Map<String, PublishedDirectBackups.Quality> pulseQuality = new HashMap<>();
     TextView pulseEyebrow;
     TextView pulseQualityLine;
-    TextView pulseStatus;
 
     static boolean isDirectSignal(ResolvedPlaybackCandidate candidate) {
         return candidate != null && candidate.getVariantId().startsWith("direct-");
@@ -647,20 +646,13 @@ abstract class MainSelector extends MainGuide {
         pulseQualityLine.setIncludeFontPadding(false);
         pulseQualityLine.setSingleLine(true);
         pulseQualityLine.setShadowLayer(dp(3), 0, dp(1), 0x73000000);
-        pulseStatus = new TextView(this);
-        pulseStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
-        pulseStatus.setTextColor(0x80FFFFFF);
-        pulseStatus.setIncludeFontPadding(false);
-        pulseStatus.setSingleLine(true);
+        // Sin línea de estado (0.6.68): el bloque termina en la calidad, que queda a la altura de
+        // «Auto» y «Cambio automático» (la fila del escenario alinea por abajo).
         side.addView(pulseEyebrow);
         LinearLayout.LayoutParams lineParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         lineParams.topMargin = dp(5);
         side.addView(pulseQualityLine, lineParams);
-        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        statusParams.topMargin = dp(5);
-        side.addView(pulseStatus, statusParams);
         return side;
     }
 
@@ -689,7 +681,6 @@ abstract class MainSelector extends MainGuide {
                 line.setSpan(new android.text.style.RelativeSizeSpan(0.87f), start, line.length(),
                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
-            if (quality.scanKnown) appendScanChip(line, quality.interlaced);
         } else {
             line.append(getString(quality == null
                     ? (pending ? R.string.source_selector_pulse_measuring : R.string.source_selector_pulse_unmeasured)
@@ -697,19 +688,6 @@ abstract class MainSelector extends MainGuide {
                     : R.string.source_selector_pulse_no_signal));
         }
         pulseQualityLine.setText(line);
-        android.text.SpannableStringBuilder status = new android.text.SpannableStringBuilder();
-        if (quality != null && quality.ok) {
-            status.append("● ");
-            status.setSpan(new ForegroundColorSpan(0xFF5BE9A0), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            status.append(getString(quality.live ? R.string.source_selector_pulse_responds_now
-                    : R.string.source_selector_pulse_responded_daily)).append("  ·  ");
-        } else if (pending && quality != null) {
-            status.append(getString(R.string.source_selector_pulse_measuring)).append("  ·  ");
-        }
-        status.append(pulseInUse < 0 ? getString(R.string.source_selector_pulse_hint)
-                : getString(R.string.source_selector_pulse_in_use, pulseInUse == 0
-                        ? getString(R.string.source_selector_pulse_principal_short) : pulseNumber(pulseInUse)));
-        pulseStatus.setText(status);
         if (pulseCompact != null) {
             android.text.SpannableStringBuilder compact = new android.text.SpannableStringBuilder(position == 0
                     ? getString(R.string.source_selector_compact_principal)
@@ -718,11 +696,7 @@ abstract class MainSelector extends MainGuide {
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             compact.setSpan(new ForegroundColorSpan(0xFFFFFFFF), 0, compact.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             if (position > 0) compact.append(getString(R.string.source_selector_compact_of, pulseTotal));
-            // Sin la etiqueta de barrido: ya va junto a la calidad grande y no cabe en una línea.
-            String plain = line.toString()
-                    .replace(getString(R.string.source_selector_interlaced), "")
-                    .replace(getString(R.string.source_selector_progressive), "")
-                    .trim().replace("  ", " · ");
+            String plain = line.toString().trim().replace("  ", " · ");
             compact.append(" · ").append(plain);
             pulseCompact.setText(compact);
         }
@@ -2098,19 +2072,6 @@ abstract class MainSelector extends MainGuide {
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         pulseQualityLine.setText(line);
-        String playing = minimalHeroQuality();
-        boolean automatic = false;
-        String fixed = "";
-        for (PlaybackOption candidate : playbackOptions) {
-            if (candidate.automatic && candidate.selected) automatic = true;
-            if (candidate.quality != null && candidate.selected) fixed = screenTitle(candidate);
-        }
-        android.text.SpannableStringBuilder status = new android.text.SpannableStringBuilder("● ");
-        status.setSpan(new ForegroundColorSpan(0xFF5BE9A0), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        status.append(automatic
-                ? getString(R.string.source_selector_screens_status_auto, AppStrings.isBlank(playing) ? "—" : playing)
-                : getString(R.string.source_selector_screens_status_fixed, AppStrings.isBlank(fixed) ? playing : fixed));
-        pulseStatus.setText(status);
     }
 
     /**

@@ -170,6 +170,8 @@ public final class EpgGuideView extends View implements GuideSurface {
     private float liftedLeft, liftedRight, liftedTop, liftedHeight;
     private long liftedWindowStart;
     private float liftedGridLeft, liftedGridWidth;
+    // El bloque empieza en el borde izquierdo de la grilla (programa empezado antes de la ventana).
+    private boolean liftedAtGridEdge;
 
     /** Al abrir la Guía: las filas suben escalonadas y el detalle entra desde la izquierda. */
     public void playOpenAnimation() {
@@ -617,6 +619,7 @@ public final class EpgGuideView extends View implements GuideSurface {
                 liftedWindowStart = windowStart;
                 liftedGridLeft = gridLeft;
                 liftedGridWidth = gridWidth;
+                liftedAtGridEdge = startX <= gridLeft;
                 continue;
             }
             drawTile(canvas, row, programme, tileLeft, tileRight, rowTop, rowHeight, false,
@@ -698,14 +701,26 @@ public final class EpgGuideView extends View implements GuideSurface {
         float glide = focusProgress >= 1f ? 1f : Motion.SPRING_SOFT.getInterpolation(focusProgress);
         float liftShare = focusProgress >= 1f ? 1f : Motion.SPRING.getInterpolation(focusProgress);
         float lift = 1f + LIFT * liftShare;
-        float cx = (liftedLeft + liftedRight) / 2f;
         float cy = liftedTop + liftedHeight / 2f;
-        float halfW = (liftedRight - liftedLeft) / 2f * lift;
         float halfH = liftedHeight / 2f * lift;
-        focusTarget.set(cx - halfW, cy - halfH, cx + halfW, cy + halfH);
+        // Crece hacia los dos lados desde el centro, pero nunca cruza el borde izquierdo de la
+        // grilla (sobre los logos): ese lado se recorta. Un bloque que ya empieza en ese borde
+        // lo conserva fijo y crece solo hacia la derecha. La escala sigue siendo uniforme (texto
+        // incluido) y se pivotea en un ancla horizontal: con el ancla en el centro es el
+        // crecimiento simétrico de siempre.
+        float cx = (liftedLeft + liftedRight) / 2f;
+        float symmetricLeft = cx - (liftedRight - liftedLeft) / 2f * lift;
+        float targetLeft = liftedAtGridEdge ? liftedLeft : Math.max(liftedGridLeft, symmetricLeft);
+        float anchorX = cx;
+        if (lift > 1f && Math.abs(targetLeft - symmetricLeft) > dp(0.1f)) {
+            // Ancla donde el borde izquierdo, escalado desde ella, cae exactamente en targetLeft.
+            anchorX = (targetLeft - lift * liftedLeft) / (1f - lift);
+        }
+        float targetRight = anchorX + (liftedRight - anchorX) * lift;
+        focusTarget.set(targetLeft, cy - halfH, targetRight, cy + halfH);
 
         int saved = canvas.save();
-        canvas.scale(lift, lift, cx, cy);
+        canvas.scale(lift, lift, anchorX, cy);
         rect.set(liftedLeft, liftedTop, liftedRight, liftedTop + liftedHeight);
         // Sombra suave alrededor del bloque levantado (solo afuera: el bloque sigue dejando ver
         // el video, como todos los bloques).
