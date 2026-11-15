@@ -133,8 +133,7 @@ abstract class MainPlayback extends MainState {
         playerUsesVolumeNormalization = isVolumeNormalizationEnabled();
         playerUsesSoftwareMp2 = isSoftwareMp2Enabled();
         playerUsesTunneling = isVideoTunnelingEnabled();
-        tunneledRenderedFrames = 0;
-        tunneledFrameProgressNs = 0L;
+        decoderProgress.reset();
         tunnelFpsCount = 0;
         tunnelFpsSinceMs = 0L;
         tunneledFps = 0f;
@@ -180,6 +179,11 @@ abstract class MainPlayback extends MainState {
         }
         player.addListener(new Player.Listener() {
             @Override public void onRenderedFirstFrame() {
+                if (playbackSourceFirstFrameElapsedRealtime < 0L) {
+                    playbackSourceFirstFrameElapsedRealtime = SystemClock.elapsedRealtime();
+                }
+                // El tiempo de carga inicial termina aquí: un rebuffer posterior mide su propia ventana (0.6.67).
+                playbackLoadingSinceElapsedRealtime = -1L;
                 liftZapVeilOnFirstFrame();
             }
 
@@ -446,6 +450,8 @@ abstract class MainPlayback extends MainState {
             directBackupIndex = 0;
             backupReturnedToPrincipal = false;
             rememberedBackupStart = applyRememberedSourceChoice(channel);
+            // Canal elegido por el usuario: su historial de cortes tempranos empieza de cero.
+            if (!playbackRestartingForRecovery) earlyStallPolicy.reset();
         }
         pendingTvVooBackupIdentity = null;
         playbackGeneration++;
@@ -641,11 +647,16 @@ abstract class MainPlayback extends MainState {
         long lastFrameNs = measurements.lastRenderedVideoFrameRealtimeNs;
         long nowNs = System.nanoTime();
         boolean hasRenderedFrame = measurements.hasRenderedVideoFrame;
+        long decoderNs = decoderProgressNs(nowNs);
         if (playerUsesTunneling) {
-            // En túnel Media3 no avisa cada cuadro (sin metadatos por cuadro): se usa el
-            // contador de cuadros del decodificador, que sí avanza (0.6.42).
-            lastFrameNs = tunneledFrameProgressNs(nowNs);
-            hasRenderedFrame = lastFrameNs != androidx.media3.common.C.TIME_UNSET;
+            // En túnel Media3 no avisa cada cuadro (sin metadatos por cuadro): el progreso del
+            // decodificador es la única señal (0.6.42, unificado en 0.6.67).
+            lastFrameNs = decoderNs;
+            hasRenderedFrame = decoderNs != DecoderProgressTracker.NO_PROGRESS;
+        } else if (decoderNs != DecoderProgressTracker.NO_PROGRESS && decoderNs > lastFrameNs) {
+            // Media3 descarta sin avisar los cuadros que llegan tarde: si el decodificador sigue
+            // procesando, no es un congelamiento aunque no se muestre ninguno (0.6.67).
+            lastFrameNs = decoderNs;
         }
         if (hasRenderedFrame
                 && lastFrameNs != androidx.media3.common.C.TIME_UNSET
@@ -655,18 +666,20 @@ abstract class MainPlayback extends MainState {
         }
     }
 
-    /** Último momento en que avanzó el contador de cuadros mostrados; TIME_UNSET sin cuadros. */
-    long tunneledFrameProgressNs(long nowNs) {
-        androidx.media3.exoplayer.DecoderCounters counters = player.getVideoDecoderCounters();
-        if (counters == null) return androidx.media3.common.C.TIME_UNSET;
+    /**
+     * Último instante en que avanzó el trabajo del decodificador (mostrados, descartados y
+     * saltados); {@link DecoderProgressTracker#NO_PROGRESS} si aún no produjo nada.
+     */
+    long decoderProgressNs(long nowNs) {
+        androidx.media3.exoplayer.DecoderCounters counters = player == null
+                ? null : player.getVideoDecoderCounters();
+        if (counters == null) return DecoderProgressTracker.NO_PROGRESS;
         counters.ensureUpdated();
-        int rendered = counters.renderedOutputBufferCount;
-        if (rendered <= 0) return androidx.media3.common.C.TIME_UNSET;
-        if (rendered != tunneledRenderedFrames || tunneledFrameProgressNs == 0L) {
-            tunneledRenderedFrames = rendered;
-            tunneledFrameProgressNs = nowNs;
-        }
-        return tunneledFrameProgressNs;
+        return decoderProgress.observe(DecoderProgressTracker.totalOf(
+                counters.renderedOutputBufferCount,
+                counters.droppedBufferCount,
+                counters.skippedOutputBufferCount,
+                counters.skippedInputBufferCount), nowNs);
     }
 
     /**
@@ -822,7 +835,25 @@ abstract class MainPlayback extends MainState {
             waitForNetworkThenRecover();
             return;
         }
-        if (switchToTvVooBackup(reason)) return;
+        boolean reconnectSameSource = false;
+        if (!immediate && canSwitchToBackup()) {
+            // Corte temprano (0.6.67): antes de saltar al respaldo se reintenta la misma señal;
+            // si la cascada se repite, se queda en la principal.
+            EarlyStallPolicy.Action action = earlyStallAction(reason);
+            if (action == EarlyStallPolicy.Action.RECONNECT_SAME
+                    && playbackRecoveryBudget.hasAttemptLeft()) {
+                reconnectSameSource = true;
+                Log.i(PLAYBACK_HEALTH_TAG, "reconexión temprana reason=" + reason
+                        + " fuente=" + playbackSourceSlot()
+                        + " desdePrimerCuadroMs=" + sinceSourceFirstFrameMs());
+            } else if (action == EarlyStallPolicy.Action.STOP_CASCADE) {
+                Log.i(PLAYBACK_HEALTH_TAG, "sin cascada: posible límite del decodificador reason="
+                        + reason + " fuente=" + playbackSourceSlot()
+                        + " tras " + EarlyStallPolicy.CASCADE_LIMIT + " fuentes seguidas");
+                if (stayOnPrincipalWithoutCascade(reason)) return;
+            }
+        }
+        if (!reconnectSameSource && switchToTvVooBackup(reason)) return;
         if (!playbackRecoveryBudget.hasAttemptLeft()) {
             if (lastPlaybackDiagnosticCode <= 0) {
                 lastPlaybackDiagnosticCode = PlaybackDiagnosticCode.recoveryExhausted();
@@ -832,10 +863,13 @@ abstract class MainPlayback extends MainState {
         }
         int attempt = playbackRecoveryBudget.consume();
         // TvVoo: la URL que falló rara vez vuelve sola y pedir otra cuesta menos de
-        // un segundo, así que desde el primer reintento se resuelve de nuevo.
-        boolean renewSource = PlaybackRecoveryBudget.renewsSource(attempt)
-                || (currentPlaybackSource != null
-                && "tvvoo".equalsIgnoreCase(currentPlaybackSource.getResolverId()));
+        // un segundo, así que desde el primer reintento se resuelve de nuevo. Una
+        // reconexión temprana de una señal directa reutiliza su URL validada.
+        boolean tvvooSource = currentPlaybackSource != null
+                && "tvvoo".equalsIgnoreCase(currentPlaybackSource.getResolverId());
+        boolean renewSource = reconnectSameSource
+                ? tvvooSource
+                : PlaybackRecoveryBudget.renewsSource(attempt) || tvvooSource;
         long delayMs = immediate ? 0L : PlaybackRecoveryBudget.delayMsFor(attempt);
         playbackAutoRecoveryInFlight = true;
         playbackRecoveryFailed = false;
@@ -859,6 +893,43 @@ abstract class MainPlayback extends MainState {
         } else {
             mainHandler.postDelayed(restart, delayMs);
         }
+    }
+
+    /** Hay respaldo al que pasar: el canal tiene uno y «Cambio automático» está encendido. */
+    boolean canSwitchToBackup() {
+        Channel channel = playbackChannel;
+        return channel != null && TvVooBackup.has(channel)
+                && (playbackPreferences == null || playbackPreferences.isAutoBackupEnabled());
+    }
+
+    /** Señal que suena: «principal», «tvvoo» o «directo-N» (para la política y el diagnóstico). */
+    String playbackSourceSlot() {
+        if (!tvvooBackupActive) return "principal";
+        return playbackChannel != null && TvVooBackup.hasTvVoo(playbackChannel)
+                ? "tvvoo" : "directo-" + directBackupIndex;
+    }
+
+    long sinceSourceFirstFrameMs() {
+        return playbackSourceFirstFrameElapsedRealtime < 0L
+                ? -1L : SystemClock.elapsedRealtime() - playbackSourceFirstFrameElapsedRealtime;
+    }
+
+    EarlyStallPolicy.Action earlyStallAction(String reason) {
+        boolean early = EarlyStallPolicy.isEarly(
+                playbackSourceFirstFrameElapsedRealtime, SystemClock.elapsedRealtime());
+        String sourceKey = PlaybackPreferences.channelIdentity(playbackChannel)
+                + "|" + playbackSourceSlot();
+        return earlyStallPolicy.onStall(sourceKey, early,
+                PlaybackStallPolicy.DECODER_STALL.equals(reason));
+    }
+
+    /**
+     * Tras dos fuentes seguidas que se trabaron al empezar, no se cambia más de fuente: si
+     * suena un respaldo, vuelve a la principal. Devuelve true si ya tomó el control.
+     */
+    boolean stayOnPrincipalWithoutCascade(String reason) {
+        backupReturnedToPrincipal = true;
+        return tvvooBackupActive && switchPlaybackSource(playbackChannel, reason, -1);
     }
 
     void rememberSourceChoice(Channel channel, String value) {
@@ -1031,7 +1102,12 @@ abstract class MainPlayback extends MainState {
         }
 
         createPlayer();
-        playChannel(targetIndex, false);
+        playbackRestartingForRecovery = true;
+        try {
+            playChannel(targetIndex, false);
+        } finally {
+            playbackRestartingForRecovery = false;
+        }
         lastPlaybackDiagnosticCode = diagnosticCodeBeforeRecovery;
         // playChannel resets episode-local state. Keep the attempts already
         // spent until playback has been stable for a full episode.
@@ -1655,6 +1731,7 @@ abstract class MainPlayback extends MainState {
                 : NO_RESOLUTION_REQUEST;
         currentPlaybackSource = source;
         currentSourceStartedElapsedRealtime = SystemClock.elapsedRealtime();
+        playbackSourceFirstFrameElapsedRealtime = -1L;
         playbackSourceRecoveryInFlight = false;
         playbackSourceStabilityScheduledFor = "";
         if (playbackManifestCache != null) {
@@ -1693,6 +1770,7 @@ abstract class MainPlayback extends MainState {
 
     void resetPlaybackBitrateMeter() {
         playbackDiagnosticsActive = false;
+        decoderProgress.reset();
         if (playbackBitrateMeter != null) playbackBitrateMeter.reset();
     }
 
@@ -1793,6 +1871,7 @@ abstract class MainPlayback extends MainState {
         if (playbackRecoveryFailed) {
             // OK/Play sobre un ERROR siempre reintenta, con reintentos repuestos.
             playbackRecoveryBudget.reset();
+            earlyStallPolicy.reset();
             playbackRecoveryFailed = false;
             playbackAutoRecoveryInFlight = false;
             requestFullPlaybackRecovery("reanudación tras error", true, true);

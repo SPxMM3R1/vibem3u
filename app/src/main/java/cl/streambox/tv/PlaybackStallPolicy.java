@@ -2,6 +2,9 @@ package cl.streambox.tv;
 
 /** Decides when post-start buffering has lasted long enough to reopen playback. */
 final class PlaybackStallPolicy {
+    /** Motivo del corte cuando el decodificador deja de avanzar con datos en el búfer. */
+    static final String DECODER_STALL = "decoder detenido";
+
     private PlaybackStallPolicy() {}
 
     static String classify(boolean buffering, boolean mediaStopped, boolean audioUnderrun,
@@ -9,7 +12,7 @@ final class PlaybackStallPolicy {
         if (buffering) return "carga detenida";
         if (mediaStopped && bufferedMs <= 500L) return "audio y vídeo detenidos";
         if (audioUnderrun && bufferedMs <= 500L) return "audio detenido";
-        return "decoder detenido";
+        return DECODER_STALL;
     }
 
     /**

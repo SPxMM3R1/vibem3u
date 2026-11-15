@@ -436,8 +436,14 @@ abstract class MainState extends Activity {
     boolean playerUsesVolumeNormalization;
     boolean playerUsesSoftwareMp2;
     boolean playerUsesTunneling;
-    int tunneledRenderedFrames;
-    long tunneledFrameProgressNs;
+    /** Progreso del decodificador (mostrados + descartados + saltados), también en túnel (0.6.67). */
+    final DecoderProgressTracker decoderProgress = new DecoderProgressTracker();
+    /** Corte temprano: reconexión, respaldo o «sin cascada» (0.6.67). */
+    final EarlyStallPolicy earlyStallPolicy = new EarlyStallPolicy();
+    /** Primer cuadro de la fuente actual en elapsedRealtime; -1 hasta que llega (0.6.67). */
+    long playbackSourceFirstFrameElapsedRealtime = -1L;
+    /** Verdadero mientras la recuperación reabre el canal (no es un cambio de canal del usuario). */
+    boolean playbackRestartingForRecovery;
     int tunnelFpsCount;
     long tunnelFpsSinceMs;
     float tunneledFps;
