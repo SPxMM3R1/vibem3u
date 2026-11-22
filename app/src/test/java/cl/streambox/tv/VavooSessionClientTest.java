@@ -88,4 +88,20 @@ public final class VavooSessionClientTest {
         assertEquals("1", target.number);
         assertTrue(target.numberDeclared);
     }
+
+    @Test
+    public void parsesLive2IndexWithoutCopyNumberSuffix() throws Exception {
+        java.util.List<VavooSessionClient.CatalogEntry> entries = VavooSessionClient.parseLive2(
+                "[{\"group\":\"United Kingdom\",\"name\":\"SKY SPORTS MAIN EVENT (1)\","
+                        + "\"url\":\"https://vavoo.to/live2/play3/1079620770.m3u8\"},"
+                        + "{\"group\":\"Spain\",\"name\":\"DAZN F1 (6)\","
+                        + "\"url\":\"https://vavoo.to/live2/play3/42.m3u8\"},"
+                        + "{\"group\":\"Spain\",\"name\":\"Otro\",\"url\":\"https://example.com/x\"}]");
+
+        assertEquals(2, entries.size());
+        assertEquals("1079620770", entries.get(0).id);
+        assertEquals("SKY SPORTS MAIN EVENT", entries.get(0).name);
+        assertEquals("United Kingdom", entries.get(0).country);
+        assertEquals("DAZN F1", entries.get(1).name);
+    }
 }

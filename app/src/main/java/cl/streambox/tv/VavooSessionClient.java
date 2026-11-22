@@ -32,6 +32,20 @@ final class VavooSessionClient {
     private static final String APP_VERSION = "1.4.1";
     private static final Set<String> PING_HOSTS = setOf("www.vavoo.tv", "www.vypn.net");
     private static final Set<String> API_HOSTS = setOf("vavoo.to", "kool.to");
+    /*
+     * Vía sin firma (TvVoo, 2026-11-19): índice público live2 y resolución /live/resolve.
+     * Se usa cuando el catálogo firmado falla (2026-11-22 respondía «Internal error» y no
+     * abría ningún canal Vavoo).
+     */
+    private static final String[] LIVE2_BASES = {"https://vavoo.to", "https://voltop.net", "https://vavoo.net"};
+    private static final String[] V2_BASES = {"https://voltop.net", "https://vavoo.net", "https://kool.to", "https://geil.to"};
+    private static final Set<String> LIVE2_HOSTS = setOf("vavoo.to", "voltop.net", "vavoo.net");
+    private static final Set<String> V2_HOSTS = setOf("voltop.net", "vavoo.net", "kool.to", "geil.to");
+    private static final int MAX_LIVE2_INDEX_BYTES = 8 * 1024 * 1024;
+    private static final long LIVE2_REUSE_MS = 60 * 60 * 1000L;
+    private static final long SIGNED_DOWN_MS = 10 * 60 * 1000L;
+    private static final java.util.regex.Pattern PLAY3_ID =
+            java.util.regex.Pattern.compile("/live2/play3/(\\d+)");
 
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
@@ -45,6 +59,13 @@ final class VavooSessionClient {
     private final Map<String, CachedCatalog> catalogsByTarget = new LinkedHashMap<>();
     private final Map<String, String> winningIdentityByChannel = new LinkedHashMap<>();
     private String activeBase;
+    // De todo el proceso: el resolvedor crea un cliente por alias y así no se pierde entre
+    // aperturas. Es el índice público y una marca de tiempo, nada secreto.
+    private static final Object LIVE2_LOCK = new Object();
+    private static final Object LIVE2_DOWNLOAD_LOCK = new Object();
+    private static List<CatalogEntry> live2Entries;
+    private static long live2LoadedAt;
+    private static long signedDownUntil;
 
     VavooSessionClient(ResolverDefinition definition) {
         this(definition, new TokenHttpClient());
@@ -124,6 +145,14 @@ final class VavooSessionClient {
         for (Target target : targets) catalogTargets.putIfAbsent(target.catalogKey(), target);
         IOException firstError = null;
         try {
+            if (signedRecentlyDown()) {
+                // El catálogo firmado falló hace poco: directo a la vía sin firma.
+                try {
+                    if (streamLive2(channel, aliases, progress, deadline, sink)) return true;
+                } catch (IOException error) {
+                    firstError = error;
+                }
+            }
             for (int pass = 0; pass < 2; pass++) {
                 deadline.check();
                 try {
@@ -213,10 +242,162 @@ final class VavooSessionClient {
                     clearSessionOnly();
                 }
             }
+            synchronized (LIVE2_LOCK) {
+                signedDownUntil = System.currentTimeMillis() + SIGNED_DOWN_MS;
+            }
+            try {
+                if (streamLive2(channel, aliases, progress, deadline, sink)) return true;
+            } catch (IOException error) {
+                if (firstError == null) firstError = error;
+            }
         } finally {
             clearSessionOnly();
         }
         throw new IOException("Vavoo no entregó una fuente reproducible.", firstError);
+    }
+
+    private static boolean signedRecentlyDown() {
+        synchronized (LIVE2_LOCK) {
+            return System.currentTimeMillis() < signedDownUntil;
+        }
+    }
+
+    /** Vía sin firma: busca el canal en el índice live2 y resuelve con /live/resolve. */
+    private boolean streamLive2(
+            Channel channel,
+            List<String> aliases,
+            ResolutionProgressListener progress,
+            ResolutionDeadline deadline,
+            CandidateSink sink
+    ) throws IOException {
+        deadline.check();
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.CATALOG_REQUEST,
+                "Índice live2 · vía sin firma"
+        ));
+        List<CatalogEntry> entries = live2Index(deadline);
+        List<CatalogEntry> matches = rankedMatches(channel, aliases, entries);
+        progress.onProgress(ResolutionProgress.of(
+                ResolutionStage.CATALOG_MATCHING,
+                "live2 · coincidencias=" + matches.size() + " de " + entries.size()
+        ));
+        if (matches.isEmpty()) throw new IOException("El canal no aparece en el índice live2.");
+        int maximum = definition.getIntConfig("maxResolveCandidates", 8, 1, 12);
+        int attempted = 0;
+        IOException firstError = null;
+        for (CatalogEntry match : matches) {
+            if (attempted++ >= maximum) break;
+            deadline.check();
+            progress.onProgress(ResolutionProgress.counted(
+                    ResolutionStage.SOURCE_REQUEST,
+                    attempted,
+                    Math.min(matches.size(), maximum),
+                    "live2 · resolución " + attempted + " · id=" + match.id
+            ));
+            try {
+                URI candidate = resolveLive2(match.id, deadline);
+                if (candidate == null) continue;
+                if (sink.onCandidate(candidate, match.id)) {
+                    rememberWinningIdentity(channel, match.id);
+                    return true;
+                }
+            } catch (IOException error) {
+                if (firstError == null) firstError = error;
+            }
+        }
+        if (firstError != null) throw firstError;
+        return false;
+    }
+
+    private List<CatalogEntry> live2Index(ResolutionDeadline deadline) throws IOException {
+        // Un solo hilo baja el índice (~1,4 MB); los alias en paralelo esperan y lo reutilizan.
+        synchronized (LIVE2_DOWNLOAD_LOCK) {
+            return live2IndexLocked(deadline);
+        }
+    }
+
+    private List<CatalogEntry> live2IndexLocked(ResolutionDeadline deadline) throws IOException {
+        synchronized (LIVE2_LOCK) {
+            if (live2Entries != null && System.currentTimeMillis() - live2LoadedAt < LIVE2_REUSE_MS) {
+                return live2Entries;
+            }
+        }
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("User-Agent", "VAVOO/2.6");
+        headers.put("Accept", "application/json");
+        IOException failure = null;
+        for (String base : LIVE2_BASES) {
+            deadline.check();
+            try {
+                String url = base + "/live2/index?output=json";
+                byte[] body = withDeadline(deadline, () -> httpClient.getPublicOnHosts(
+                        url, headers, MAX_LIVE2_INDEX_BYTES, null, LIVE2_HOSTS).getBody());
+                List<CatalogEntry> parsed = parseLive2(new String(body, StandardCharsets.UTF_8));
+                if (parsed.isEmpty()) continue;
+                List<CatalogEntry> immutable = Collections.unmodifiableList(parsed);
+                synchronized (LIVE2_LOCK) {
+                    live2Entries = immutable;
+                    live2LoadedAt = System.currentTimeMillis();
+                }
+                return immutable;
+            } catch (IOException error) {
+                failure = error;
+            }
+        }
+        throw new IOException("No se pudo leer el índice live2 de Vavoo.", failure);
+    }
+
+    /** Package-visible para pruebas: entradas play3 del índice, sin el sufijo « (n)» del nombre. */
+    static List<CatalogEntry> parseLive2(String text) throws IOException {
+        try {
+            JSONArray array = new JSONArray(text.trim());
+            List<CatalogEntry> result = new ArrayList<>();
+            for (int index = 0; index < array.length(); index++) {
+                JSONObject item = array.optJSONObject(index);
+                if (item == null) continue;
+                java.util.regex.Matcher matcher = PLAY3_ID.matcher(item.optString("url", ""));
+                if (!matcher.find()) continue;
+                String name = item.optString("name", "").replaceAll("\\s*\\(\\d+\\)\\s*$", "").trim();
+                String group = item.optString("group", "").trim();
+                if (AppStrings.isBlank(name)) continue;
+                result.add(new CatalogEntry(matcher.group(1), name,
+                        "https://vavoo.to/live2/play3/" + matcher.group(1) + ".m3u8",
+                        baseCountry(group), group));
+            }
+            return result;
+        } catch (JSONException error) {
+            throw new IOException("Índice live2 inválido.", error);
+        }
+    }
+
+    private URI resolveLive2(String id, ResolutionDeadline deadline) throws IOException {
+        if (!id.matches("\\d{1,20}")) throw new IOException("Id live2 inválido.");
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("User-Agent", "MediaHubMX/2");
+        headers.put("Accept", "application/json");
+        IOException failure = null;
+        for (String base : V2_BASES) {
+            deadline.check();
+            try {
+                String url = base + "/live/resolve?url="
+                        + java.net.URLEncoder.encode(base + "/live/play/" + id, StandardCharsets.UTF_8.name());
+                byte[] body = withDeadline(deadline, () -> httpClient.getPublicOnHosts(
+                        url, headers, MAX_RESOLVE_BYTES, null, V2_HOSTS).getBody());
+                JSONObject object = new JSONObject(new String(body, StandardCharsets.UTF_8).trim());
+                String candidate = object.optString("url", "").trim();
+                URI uri = AppStrings.isBlank(candidate) ? null : URI.create(candidate);
+                if (uri != null && uri.getHost() != null
+                        && ("https".equalsIgnoreCase(uri.getScheme())
+                        || "http".equalsIgnoreCase(uri.getScheme()))) {
+                    return uri;
+                }
+            } catch (IOException error) {
+                failure = error;
+            } catch (JSONException | IllegalArgumentException error) {
+                failure = new IOException("Vavoo devolvió una fuente inválida.", error);
+            }
+        }
+        throw new IOException("La vía live2 no resolvió el canal.", failure);
     }
 
     /** Stable, unsigned play destinations for the user's own MediaFlow extractor. */
@@ -1114,7 +1295,7 @@ final class VavooSessionClient {
         }
     }
 
-    private static final class CatalogEntry {
+    static final class CatalogEntry {
         final String id;
         final String name;
         final String sourceUrl;
