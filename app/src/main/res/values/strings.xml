@@ -121,6 +121,7 @@
     <string name="guide_filter_all">Todos</string>
     <string name="guide_next">Después · %1$s</string>
     <string name="guide_remaining">quedan %1$s</string>
+    <string name="guide_since">desde %1$s · quedan %2$s</string>
     <string name="guide_starts_in">empieza en %1$s</string>
     <string name="guide_key_ok">OK</string>
     <string name="guide_key_hold">Mantener OK</string>

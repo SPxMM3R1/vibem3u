@@ -96,6 +96,9 @@ public final class EpgGuideView extends View implements GuideSurface {
     private LinearGradient nowLineShade;
     private float shadeWidth = -1f;
     private float shadeHeight = -1f;
+    /** Corrimiento del texto de los bloques vecinos al foco levantado (ver drawRow). */
+    private float neighbourTextLeftInset;
+    private float neighbourTextRightInset;
     private float nowLineTop = Float.NaN;
     private float nowLineBottom = Float.NaN;
     private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -290,10 +293,11 @@ public final class EpgGuideView extends View implements GuideSurface {
         drawLiftedFocus(canvas);
 
         if (nowMillis >= windowStart && nowMillis < windowEnd && shownRows > 0) {
-            // Hora actual: línea cian fina desde el eje hasta el final de las filas visibles.
+            // Hora actual: marca cian corta en el eje (0.6.69). Antes bajaba por todas las filas y
+            // tapaba las horas de los bloques («1|7:22»); el tramo emitido ya marca el ahora.
             float nowX = xFor(nowMillis, gridLeft, gridWidth, windowStart);
-            float lineTop = axisBaseline + dp(6);
-            float lineBottom = rowsTop + shownRows * rowPitch;
+            float lineTop = axisBaseline + dp(3);
+            float lineBottom = rowsTop - dp(1);
             if (nowLineShade == null || lineTop != nowLineTop || lineBottom != nowLineBottom) {
                 nowLineShade = new LinearGradient(0f, lineTop, 0f, lineBottom,
                         CYAN, 0x5900B8D9, Shader.TileMode.CLAMP);
@@ -333,7 +337,7 @@ public final class EpgGuideView extends View implements GuideSurface {
         shadeWidth = width;
         shadeHeight = height;
         backgroundVertical = new LinearGradient(0f, 0f, 0f, height,
-                new int[] {0xE6000000, 0xD1000000, 0xB3000000, 0xE0000000, 0xF5000000, 0xF7000000},
+                new int[] {0xE6000000, 0xD1000000, 0xB3000000, 0xE8000000, 0xFA000000, 0xFC000000},
                 new float[] {0f, 0.12f, 0.30f, 0.46f, 0.58f, 1f}, Shader.TileMode.CLAMP);
         backgroundHorizontal = new LinearGradient(0f, 0f, width, 0f,
                 new int[] {0xB8000000, 0x73000000, 0x00000000},
@@ -598,12 +602,28 @@ public final class EpgGuideView extends View implements GuideSurface {
                     gridLeft + dp(9), centerBaseline, textPaint);
             return;
         }
+        // 0.6.69: el bloque con foco crece (LIFT) y tapaba la primera letra del siguiente
+        // («ransfer 360»). Los vecinos corren su texto lo que crece el foco hacia su lado.
+        float liftGrowLeft = 0f;
+        float liftGrowRight = 0f;
+        if (focusedProgramme != null) {
+            float fStart = xFor(focusedProgramme.getStartMillis(), gridLeft, gridWidth, windowStart);
+            float fLeft = Math.max(gridLeft, fStart);
+            float fRight = Math.min(right, xFor(focusedProgramme.getStopMillis(), gridLeft, gridWidth, windowStart));
+            float grow = Math.max(0f, fRight - fLeft) * LIFT;
+            liftGrowRight = (fStart <= gridLeft ? grow : grow / 2f) + dp(3);
+            liftGrowLeft = fStart <= gridLeft ? 0f : grow / 2f + dp(3);
+        }
         for (EpgProgramme programme : programmes) {
             float startX = xFor(programme.getStartMillis(), gridLeft, gridWidth, windowStart);
             float blockLeft = Math.max(gridLeft, startX);
             float blockRight = Math.min(right, xFor(programme.getStopMillis(), gridLeft, gridWidth, windowStart));
             if (blockRight - blockLeft < dp(6)) continue;
             boolean focused = programme == focusedProgramme;
+            neighbourTextLeftInset = focusedProgramme != null
+                    && programme.getStartMillis() == focusedProgramme.getStopMillis() ? liftGrowRight : 0f;
+            neighbourTextRightInset = focusedProgramme != null
+                    && programme.getStopMillis() == focusedProgramme.getStartMillis() ? liftGrowLeft : 0f;
 
             // Bloque: ocupa todo el programa (antes solo se veía el texto y parecía terminar ahí).
             float tileLeft = blockLeft + dp(1);
@@ -625,6 +645,8 @@ public final class EpgGuideView extends View implements GuideSurface {
             drawTile(canvas, row, programme, tileLeft, tileRight, rowTop, rowHeight, false,
                     windowStart, gridLeft, gridWidth);
         }
+        neighbourTextLeftInset = 0f;
+        neighbourTextRightInset = 0f;
     }
 
     /** Un bloque de programa: fondo, tramo emitido, título y horario. */
@@ -648,11 +670,21 @@ public final class EpgGuideView extends View implements GuideSurface {
                     canvas.restoreToCount(saved);
                 }
             }
-            float textLeft = tileLeft + dp(7);
-            float textWidth = tileRight - textLeft - dp(6);
-            if (textWidth < dp(14)) return;
-            String title = programme.getStartMillis() < windowStart
-                    ? "‹ " + programme.getTitle() : programme.getTitle();
+            // 0.6.69 (mockup aprobado): un programa que empezó antes de la ventana lleva una barra
+            // a la izquierda en vez de «‹ » pegada al título, y dice desde cuándo y cuánto queda.
+            boolean startedBefore = programme.getStartMillis() < windowStart;
+            if (startedBefore) {
+                int saved = canvas.save();
+                canvas.clipRect(tileLeft, rowTop, tileLeft + dp(2), rowTop + rowHeight);
+                fillPaint.setColor(onAir || focused ? CYAN : TEXT_PAST);
+                canvas.drawRoundRect(rect, radius, radius, fillPaint);
+                canvas.restoreToCount(saved);
+            }
+            float textLeft = tileLeft + (startedBefore ? dp(9) : dp(7)) + neighbourTextLeftInset;
+            float textWidth = tileRight - textLeft - dp(6) - neighbourTextRightInset;
+            // Bloques angostos sin texto: dos letras y media hora cortada se encimaban.
+            if (textWidth < dp(34)) return;
+            String title = programme.getTitle();
             boolean reminded = source.hasReminder(row, programme);
             textPaint.setTextSize(sp(10));
             textPaint.setTypeface(focused ? bold : regular);
@@ -671,7 +703,12 @@ public final class EpgGuideView extends View implements GuideSurface {
             smallPaint.setTypeface(regular);
             smallPaint.setTextSize(sp(7));
             smallPaint.setColor(focused ? TIME_FOCUSED : onAir ? TIME_ON_AIR : TIME_OTHER);
-            String range = TextUtils.ellipsize(range(programme), smallPaint, textWidth,
+            String rangeText = startedBefore && onAir
+                    ? getContext().getString(R.string.guide_since,
+                            timeFormat.format(new Date(programme.getStartMillis())),
+                            formatDuration(programme.getStopMillis() - nowMillis))
+                    : range(programme);
+            String range = TextUtils.ellipsize(rangeText, smallPaint, textWidth,
                     TextUtils.TruncateAt.END).toString();
             canvas.drawText(range, textLeft, rowTop + dp(23.5f), smallPaint);
         }
