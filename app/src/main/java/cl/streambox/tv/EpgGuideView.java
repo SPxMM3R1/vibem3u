@@ -97,8 +97,6 @@ public final class EpgGuideView extends View implements GuideSurface {
     private float shadeWidth = -1f;
     private float shadeHeight = -1f;
     /** Corrimiento del texto de los bloques vecinos al foco levantado (ver drawRow). */
-    private float neighbourTextLeftInset;
-    private float neighbourTextRightInset;
     private float nowLineTop = Float.NaN;
     private float nowLineBottom = Float.NaN;
     private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -156,7 +154,12 @@ public final class EpgGuideView extends View implements GuideSurface {
     private static final long OPEN_MS = 700L;
     private static final long ROW_STAGGER_MS = 45L;
     private static final long OPEN_TOTAL_MS = OPEN_MS + 12 * ROW_STAGGER_MS;
-    private static final float LIFT = 0.06f;
+    // 0.6.70: el foco ya no se escala. Al crecer un 6 % de su ancho, un bloque largo tapaba
+    // 60 px del vecino y, como los bloques son translúcidos, se veía el texto de abajo como
+    // fantasma. Ahora solo ocupa el hueco entre filas (LIFT_Y por lado) y no crece a los lados.
+    private static final float LIFT_Y_DP = 1.5f;
+    /** Alto extra del fondo del bloque con foco (solo mientras se dibuja ese bloque). */
+    private float tileGrowY;
     private ValueAnimator openAnimator;
     private float openElapsedMs = OPEN_TOTAL_MS;
     private ValueAnimator focusAnimator;
@@ -174,7 +177,6 @@ public final class EpgGuideView extends View implements GuideSurface {
     private long liftedWindowStart;
     private float liftedGridLeft, liftedGridWidth;
     // El bloque empieza en el borde izquierdo de la grilla (programa empezado antes de la ventana).
-    private boolean liftedAtGridEdge;
 
     /** Al abrir la Guía: las filas suben escalonadas y el detalle entra desde la izquierda. */
     public void playOpenAnimation() {
@@ -602,29 +604,12 @@ public final class EpgGuideView extends View implements GuideSurface {
                     gridLeft + dp(9), centerBaseline, textPaint);
             return;
         }
-        // 0.6.69: el bloque con foco crece (LIFT) y tapaba la primera letra del siguiente
-        // («ransfer 360»). Los vecinos corren su texto lo que crece el foco hacia su lado.
-        float liftGrowLeft = 0f;
-        float liftGrowRight = 0f;
-        if (focusedProgramme != null) {
-            float fStart = xFor(focusedProgramme.getStartMillis(), gridLeft, gridWidth, windowStart);
-            float fLeft = Math.max(gridLeft, fStart);
-            float fRight = Math.min(right, xFor(focusedProgramme.getStopMillis(), gridLeft, gridWidth, windowStart));
-            float grow = Math.max(0f, fRight - fLeft) * LIFT;
-            liftGrowRight = (fStart <= gridLeft ? grow : grow / 2f) + dp(3);
-            liftGrowLeft = fStart <= gridLeft ? 0f : grow / 2f + dp(3);
-        }
         for (EpgProgramme programme : programmes) {
             float startX = xFor(programme.getStartMillis(), gridLeft, gridWidth, windowStart);
             float blockLeft = Math.max(gridLeft, startX);
             float blockRight = Math.min(right, xFor(programme.getStopMillis(), gridLeft, gridWidth, windowStart));
             if (blockRight - blockLeft < dp(6)) continue;
             boolean focused = programme == focusedProgramme;
-            neighbourTextLeftInset = focusedProgramme != null
-                    && programme.getStartMillis() == focusedProgramme.getStopMillis() ? liftGrowRight : 0f;
-            neighbourTextRightInset = focusedProgramme != null
-                    && programme.getStopMillis() == focusedProgramme.getStartMillis() ? liftGrowLeft : 0f;
-
             // Bloque: ocupa todo el programa (antes solo se veía el texto y parecía terminar ahí).
             float tileLeft = blockLeft + dp(1);
             float tileRight = blockRight - dp(1);
@@ -639,14 +624,11 @@ public final class EpgGuideView extends View implements GuideSurface {
                 liftedWindowStart = windowStart;
                 liftedGridLeft = gridLeft;
                 liftedGridWidth = gridWidth;
-                liftedAtGridEdge = startX <= gridLeft;
                 continue;
             }
             drawTile(canvas, row, programme, tileLeft, tileRight, rowTop, rowHeight, false,
                     windowStart, gridLeft, gridWidth);
         }
-        neighbourTextLeftInset = 0f;
-        neighbourTextRightInset = 0f;
     }
 
     /** Un bloque de programa: fondo, tramo emitido, título y horario. */
@@ -657,7 +639,7 @@ public final class EpgGuideView extends View implements GuideSurface {
             boolean past = programme.getStopMillis() <= nowMillis;
             boolean onAir = programme.getStartMillis() <= nowMillis && !past;
             float radius = dp(3);
-            rect.set(tileLeft, rowTop, tileRight, rowTop + rowHeight);
+            rect.set(tileLeft, rowTop - tileGrowY, tileRight, rowTop + rowHeight + tileGrowY);
             fillPaint.setColor(focused ? TILE_FOCUSED : onAir ? TILE_ON_AIR : TILE);
             canvas.drawRoundRect(rect, radius, radius, fillPaint);
             if (onAir && !focused) {
@@ -675,13 +657,13 @@ public final class EpgGuideView extends View implements GuideSurface {
             boolean startedBefore = programme.getStartMillis() < windowStart;
             if (startedBefore) {
                 int saved = canvas.save();
-                canvas.clipRect(tileLeft, rowTop, tileLeft + dp(2), rowTop + rowHeight);
+                canvas.clipRect(tileLeft, rowTop - tileGrowY, tileLeft + dp(2), rowTop + rowHeight + tileGrowY);
                 fillPaint.setColor(onAir || focused ? CYAN : TEXT_PAST);
                 canvas.drawRoundRect(rect, radius, radius, fillPaint);
                 canvas.restoreToCount(saved);
             }
-            float textLeft = tileLeft + (startedBefore ? dp(9) : dp(7)) + neighbourTextLeftInset;
-            float textWidth = tileRight - textLeft - dp(6) - neighbourTextRightInset;
+            float textLeft = tileLeft + (startedBefore ? dp(9) : dp(7));
+            float textWidth = tileRight - textLeft - dp(6);
             // Bloques angostos sin texto: dos letras y media hora cortada se encimaban.
             if (textWidth < dp(34)) return;
             String title = programme.getTitle();
@@ -715,7 +697,7 @@ public final class EpgGuideView extends View implements GuideSurface {
     }
 
     /**
-     * Bloque con foco levantado (crece hasta 6 % con resorte, con sombra) y su marco blanco, que
+     * Bloque con foco levantado (su fondo ocupa el hueco entre filas, con resorte y sombra; no crece a los lados) y su marco blanco, que
      * viaja con resorte desde el bloque anterior en vez de saltar.
      */
     private void drawLiftedFocus(Canvas canvas) {
@@ -737,28 +719,10 @@ public final class EpgGuideView extends View implements GuideSurface {
         }
         float glide = focusProgress >= 1f ? 1f : Motion.SPRING_SOFT.getInterpolation(focusProgress);
         float liftShare = focusProgress >= 1f ? 1f : Motion.SPRING.getInterpolation(focusProgress);
-        float lift = 1f + LIFT * liftShare;
-        float cy = liftedTop + liftedHeight / 2f;
-        float halfH = liftedHeight / 2f * lift;
-        // Crece hacia los dos lados desde el centro, pero nunca cruza el borde izquierdo de la
-        // grilla (sobre los logos): ese lado se recorta. Un bloque que ya empieza en ese borde
-        // lo conserva fijo y crece solo hacia la derecha. La escala sigue siendo uniforme (texto
-        // incluido) y se pivotea en un ancla horizontal: con el ancla en el centro es el
-        // crecimiento simétrico de siempre.
-        float cx = (liftedLeft + liftedRight) / 2f;
-        float symmetricLeft = cx - (liftedRight - liftedLeft) / 2f * lift;
-        float targetLeft = liftedAtGridEdge ? liftedLeft : Math.max(liftedGridLeft, symmetricLeft);
-        float anchorX = cx;
-        if (lift > 1f && Math.abs(targetLeft - symmetricLeft) > dp(0.1f)) {
-            // Ancla donde el borde izquierdo, escalado desde ella, cae exactamente en targetLeft.
-            anchorX = (targetLeft - lift * liftedLeft) / (1f - lift);
-        }
-        float targetRight = anchorX + (liftedRight - anchorX) * lift;
-        focusTarget.set(targetLeft, cy - halfH, targetRight, cy + halfH);
+        float growY = dp(LIFT_Y_DP) * Math.max(0f, liftShare);
+        focusTarget.set(liftedLeft, liftedTop - growY, liftedRight, liftedTop + liftedHeight + growY);
 
-        int saved = canvas.save();
-        canvas.scale(lift, lift, anchorX, cy);
-        rect.set(liftedLeft, liftedTop, liftedRight, liftedTop + liftedHeight);
+        rect.set(focusTarget);
         // Sombra suave alrededor del bloque levantado (solo afuera: el bloque sigue dejando ver
         // el video, como todos los bloques).
         float shadow = Math.max(0f, Math.min(1f, liftShare));
@@ -766,13 +730,15 @@ public final class EpgGuideView extends View implements GuideSurface {
             int shadowSave = canvas.save();
             canvas.clipOutRect(rect);
             shadowPaint.setColor(BASE);
-            shadowPaint.setShadowLayer(dp(8) * shadow, 0f, dp(3) * shadow, 0x8C000000);
+            shadowPaint.setShadowLayer(dp(5) * shadow, 0f, dp(2) * shadow, 0x8C000000);
             canvas.drawRoundRect(rect, dp(3), dp(3), shadowPaint);
             canvas.restoreToCount(shadowSave);
         }
+        // El fondo ocupa el hueco entre filas; el texto queda donde estaba, sin saltar.
+        tileGrowY = growY;
         drawTile(canvas, liftedRow, liftedProgramme, liftedLeft, liftedRight, liftedTop, liftedHeight, true,
                 liftedWindowStart, liftedGridLeft, liftedGridWidth);
-        canvas.restoreToCount(saved);
+        tileGrowY = 0f;
 
         if (glide >= 1f || !focusDrawnValid) {
             focusDrawn.set(focusTarget);
@@ -789,7 +755,7 @@ public final class EpgGuideView extends View implements GuideSurface {
         fillPaint.setColor(TILE_FOCUS_BORDER);
         rect.set(focusDrawn);
         rect.inset(dp(0.5f), dp(0.5f));
-        canvas.drawRoundRect(rect, dp(3) * lift, dp(3) * lift, fillPaint);
+        canvas.drawRoundRect(rect, dp(3), dp(3), fillPaint);
         fillPaint.setStyle(Paint.Style.FILL);
     }
 
