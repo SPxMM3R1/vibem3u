@@ -1,11 +1,8 @@
 package cl.streambox.tv;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -54,47 +51,52 @@ final class EpgSnapshotCache {
 
     private EpgData loadFingerprint(String url, byte[] expectedFingerprint) {
         File file = snapshotFile(url);
-        if (!file.isFile() || file.length() <= 0) return null;
-        try (DataInputStream input = new DataInputStream(new BufferedInputStream(
-                new FileInputStream(file)
-        ))) {
-            if (input.readInt() != MAGIC || input.readInt() != FORMAT_VERSION) {
+        if (!file.isFile() || file.length() <= 0 || file.length() > Integer.MAX_VALUE) return null;
+        try {
+            // 0.6.72: el archivo entero de una vez y lectura directa del arreglo. Con
+            // DataInputStream (cuatro read() sincronizados por número y un arreglo por texto)
+            // la guía guardada tardaba ~5 s de CPU en abrir en el emulador.
+            java.nio.ByteBuffer input = java.nio.ByteBuffer.wrap(
+                    java.nio.file.Files.readAllBytes(file.toPath()));
+            if (input.getInt() != MAGIC || input.getInt() != FORMAT_VERSION) {
                 remove(file);
                 return null;
             }
-            int fingerprintLength = input.readInt();
+            int fingerprintLength = input.getInt();
             if (fingerprintLength != expectedFingerprint.length) {
                 remove(file);
                 return null;
             }
             byte[] storedFingerprint = new byte[fingerprintLength];
-            input.readFully(storedFingerprint);
+            input.get(storedFingerprint);
             if (!Arrays.equals(expectedFingerprint, storedFingerprint)) {
                 remove(file);
                 return null;
             }
 
-            int count = input.readInt();
+            int count = input.getInt();
             if (count < 0 || count > MAX_PROGRAMMES) {
                 remove(file);
                 return null;
             }
             List<EpgProgramme> programmes = new ArrayList<>(count);
-            // 0.6.26: canal, título y sinopsis se repiten miles de veces; una sola copia.
+            // 0.6.26: canal y título se repiten miles de veces; una sola copia. La sinopsis ya no
+            // (0.6.72): comparar textos largos en el mapa costaba ~0,5 s de CPU por arranque y la
+            // guía de Lista 1 (4 MB) apenas repite sinopsis.
             java.util.HashMap<String, String> pool = new java.util.HashMap<>();
             for (int index = 0; index < count; index++) {
                 String channelId = pooled(pool, readString(input));
                 String title = pooled(pool, readString(input));
-                long startMillis = input.readLong();
-                long stopMillis = input.readLong();
-                String description = pooled(pool, readString(input));
+                long startMillis = input.getLong();
+                long stopMillis = input.getLong();
+                String description = readString(input);
                 if (AppStrings.isBlank(channelId) || AppStrings.isBlank(title) || stopMillis <= startMillis) {
                     throw new IOException("La instantánea EPG no es válida.");
                 }
-                programmes.add(new EpgProgramme(
+                programmes.add(EpgProgramme.fromSnapshot(
                         channelId, title, startMillis, stopMillis, description));
             }
-            int aliasCount = input.readInt();
+            int aliasCount = input.getInt();
             if (aliasCount < 0 || aliasCount > MAX_PROGRAMMES) {
                 remove(file);
                 return null;
@@ -180,14 +182,16 @@ final class EpgSnapshotCache {
         return new File(directory, hex(fingerprint(url.getBytes(StandardCharsets.UTF_8))) + ".bin");
     }
 
-    private static String readString(DataInputStream input) throws IOException {
-        int length = input.readInt();
-        if (length < 0 || length > MAX_STRING_BYTES) {
+    private static String readString(java.nio.ByteBuffer input) throws IOException {
+        int length = input.getInt();
+        if (length < 0 || length > MAX_STRING_BYTES || length > input.remaining()) {
             throw new IOException("Texto EPG fuera de límite.");
         }
-        byte[] bytes = new byte[length];
-        input.readFully(bytes);
-        return new String(bytes, StandardCharsets.UTF_8);
+        if (length == 0) return "";
+        String value = new String(input.array(), input.arrayOffset() + input.position(), length,
+                StandardCharsets.UTF_8);
+        input.position(input.position() + length);
+        return value;
     }
 
     private static void writeString(DataOutputStream output, String value) throws IOException {

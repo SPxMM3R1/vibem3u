@@ -25,6 +25,7 @@ agente debe poder retomar el trabajo solo con lo que está en el repositorio.
 
 ## Qué es esta aplicación
 
+- **Catálogo liviano (0.6.72)**: la app lee `data/app-layout.json` (layout sin filas borradas, lo rehace Lista M3U) y cae al `channel-editor-layout.json` completo solo si falla; no volver a leer el completo en cada arranque. La guía guardada no se vuelve a normalizar al leerla (`EpgProgramme.fromSnapshot`).
 - **Vavoo sin firma (0.6.71)**: si el catálogo firmado falla, `VavooSessionClient` usa el índice público `live2/index` y `/live/resolve` (ver ESTADO.md); no quitar esa vía aunque la firmada vuelva.
 - **TvVoo directo (0.6.59, pedido «Soluciónalo», 2026-11-06)**: el engine `tvvoo` usa `VavooSessionClient`/`TvVooStreamResolver`, sin la instancia pública retirada. Protocolo 3.1.0, ping Vypn y cabeceras de Clean del código oficial de TvVoo. Conservar el protocolo HTTP/HTTPS de la URL devuelta: convertir un puerto HTTP a TLS rompe fuentes válidas. Validar URL pública, playlist y segmento; HTTPS conserva sus comprobaciones. Firma y enlaces solo en RAM. MediaFlow descubre el original en Vavoo y usa el extractor del usuario. No se restauran Nauta, M6Foot ni creación de canales en la app. `VavooProtocolTest` cubre protocolo y no alterar el esquema; `VavooLiveInstrumentedTest` es optativo con `/data/local/tmp/vavoo-live-test.m3u`, nunca prueba imagen por sí solo.
 

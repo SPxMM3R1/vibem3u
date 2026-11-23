@@ -18,7 +18,15 @@ import android.content.Context;
  * configuración pública publicada por Lista M3U (sin tokens ni URLs firmadas).</p>
  */
 final class PublishedPlaybackCatalogRepository {
+    /**
+     * Catálogo liviano (0.6.72): el layout del editor sin sus ~16 mil filas borradas. Leer el
+     * completo costaba segundos de CPU en cada arranque y en cada renovación; mientras tanto la
+     * TV mostraba la numeración y la guía anteriores.
+     */
     static final String LAYOUT_URL =
+            "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/data/app-layout.json";
+    /** Layout completo del editor: solo si el liviano no se puede leer. */
+    static final String FULL_LAYOUT_URL =
             "https://raw.githubusercontent.com/SPxMM3R1/lista-m3u/main/data/channel-editor-layout.json";
     /** Enlaces directos Highfly que el runner renueva cada 30 minutos. */
     static final String HIGHFLY_LINKS_URL =
@@ -74,9 +82,15 @@ final class PublishedPlaybackCatalogRepository {
 
     /** Descarga el catálogo (layout del editor), lo guarda y devuelve el documento crudo. */
     String fetchLayoutDocument() throws IOException {
-        String document = download(LAYOUT_URL, PublishedPlaybackCatalog.MAX_BYTES);
-        // Solo se guarda un documento válido: uno roto no reemplaza al último bueno.
-        PublishedPlaybackCatalog.parse(document);
+        String document;
+        try {
+            document = download(LAYOUT_URL, PublishedPlaybackCatalog.MAX_BYTES);
+            PublishedPlaybackCatalog.parse(document);
+        } catch (IOException light) {
+            document = download(FULL_LAYOUT_URL, PublishedPlaybackCatalog.MAX_BYTES);
+            // Solo se guarda un documento válido: uno roto no reemplaza al último bueno.
+            PublishedPlaybackCatalog.parse(document);
+        }
         store(LAYOUT_FILE, document);
         return document;
     }
