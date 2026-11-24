@@ -90,6 +90,17 @@ public final class VavooSessionClientTest {
     }
 
     @Test
+    public void parsesLive2IndexWithEscapedQuotesAndCommas() throws Exception {
+        java.util.List<VavooSessionClient.CatalogEntry> entries = VavooSessionClient.parseLive2(
+                "[{\"group\":\"Spain\",\"name\":\"Canal \\\"A, B\\\" (2)\","
+                        + "\"url\":\"https://vavoo.to/live2/play3/77.m3u8\"}]");
+
+        assertEquals(1, entries.size());
+        assertEquals("Canal \"A, B\"", entries.get(0).name);
+        assertEquals("77", entries.get(0).id);
+    }
+
+    @Test
     public void parsesLive2IndexWithoutCopyNumberSuffix() throws Exception {
         java.util.List<VavooSessionClient.CatalogEntry> entries = VavooSessionClient.parseLive2(
                 "[{\"group\":\"United Kingdom\",\"name\":\"SKY SPORTS MAIN EVENT (1)\","
@@ -102,6 +113,41 @@ public final class VavooSessionClientTest {
         assertEquals("1079620770", entries.get(0).id);
         assertEquals("SKY SPORTS MAIN EVENT", entries.get(0).name);
         assertEquals("United Kingdom", entries.get(0).country);
+        assertEquals("skysportsmainevent", entries.get(0).exactName);
+        assertEquals("unitedkingdom", entries.get(0).countryKey);
         assertEquals("DAZN F1", entries.get(1).name);
+    }
+
+    @Test
+    public void ranksLive2EntryUsingPrecomputedNameAndCountry() {
+        java.util.List<VavooSessionClient.CatalogEntry> entries = java.util.List.of(
+                new VavooSessionClient.CatalogEntry(
+                        "1079620770", "SKY SPORTS MAIN EVENT", null,
+                        "United Kingdom", "United Kingdom"),
+                new VavooSessionClient.CatalogEntry(
+                        "42", "DAZN F1", null, "Spain", "Spain")
+        );
+        java.util.Map<String, String> attributes = new java.util.LinkedHashMap<>();
+        attributes.put("tvg-id", "sky-sports-main-event.uk");
+        attributes.put("tvg-name", "SKY SPORTS MAIN EVENT");
+        attributes.put("tvg-country", "United Kingdom");
+        Channel channel = new Channel(
+                "Sky Sports Main Event",
+                java.net.URI.create("https://vavoo.to/"),
+                null,
+                "",
+                attributes
+        );
+        VavooSessionClient client = new VavooSessionClient(
+                ResolverDefinition.fallbackTvVoo(), null);
+
+        java.util.List<VavooSessionClient.CatalogEntry> matches = client.rankedMatches(
+                channel,
+                java.util.List.of("vavoo_SKY%20SPORTS%20MAIN%20EVENT%7Cgroup%3Auk"),
+                entries
+        );
+
+        assertEquals(1, matches.size());
+        assertEquals("1079620770", matches.get(0).id);
     }
 }

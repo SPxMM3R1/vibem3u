@@ -46,6 +46,8 @@ final class VavooSessionClient {
     private static final long SIGNED_DOWN_MS = 10 * 60 * 1000L;
     private static final java.util.regex.Pattern PLAY3_ID =
             java.util.regex.Pattern.compile("/live2/play3/(\\d+)");
+    private static final java.util.regex.Pattern COPY_SUFFIX =
+            java.util.regex.Pattern.compile("\\s*\\(\\d+\\)\\s*$");
 
     private final ResolverDefinition definition;
     private final TokenHttpClient httpClient;
@@ -347,26 +349,82 @@ final class VavooSessionClient {
         throw new IOException("No se pudo leer el índice live2 de Vavoo.", failure);
     }
 
-    /** Package-visible para pruebas: entradas play3 del índice, sin el sufijo « (n)» del nombre. */
+    /**
+     * Entradas play3 del índice, sin el sufijo « (n)» del nombre.
+     *
+     * <p>Se recorre el array objeto por objeto en vez de construir un
+     * {@code JSONArray} completo. El índice real ronda 1,4 MB y 9.500
+     * entradas; el árbol JSON completo se sumaba a la lista final y podía
+     * provocar GC intenso en una TV de 2 GB. Aquí el árbol solo contiene un
+     * objeto a la vez.</p>
+     */
     static List<CatalogEntry> parseLive2(String text) throws IOException {
+        if (text == null) throw new IOException("Índice live2 vacío.");
+        String source = text.replace("\uFEFF", "").trim();
+        int arrayStart = source.indexOf('[');
+        if (arrayStart < 0 || !source.endsWith("]")) {
+            throw new IOException("Índice live2 inválido.");
+        }
+        List<CatalogEntry> result = new ArrayList<>();
+        int index = arrayStart + 1;
+        int end = source.length() - 1;
         try {
-            JSONArray array = new JSONArray(text.trim());
-            List<CatalogEntry> result = new ArrayList<>();
-            for (int index = 0; index < array.length(); index++) {
-                JSONObject item = array.optJSONObject(index);
-                if (item == null) continue;
+            while (index < end) {
+                while (index < end
+                        && (Character.isWhitespace(source.charAt(index))
+                        || source.charAt(index) == ',')) {
+                    index++;
+                }
+                if (index >= end) break;
+                if (source.charAt(index) != '{') {
+                    throw new JSONException("objeto live2 esperado");
+                }
+                int objectStart = index;
+                int depth = 0;
+                boolean inString = false;
+                boolean escaped = false;
+                for (; index < end; index++) {
+                    char current = source.charAt(index);
+                    if (inString) {
+                        if (escaped) escaped = false;
+                        else if (current == '\\') escaped = true;
+                        else if (current == '"') inString = false;
+                    } else if (current == '"') {
+                        inString = true;
+                    } else if (current == '{') {
+                        depth++;
+                    } else if (current == '}') {
+                        depth--;
+                        if (depth == 0) {
+                            index++;
+                            break;
+                        }
+                    }
+                }
+                if (depth != 0) throw new JSONException("objeto live2 incompleto");
+                JSONObject item = new JSONObject(source.substring(objectStart, index));
                 java.util.regex.Matcher matcher = PLAY3_ID.matcher(item.optString("url", ""));
                 if (!matcher.find()) continue;
-                String name = item.optString("name", "").replaceAll("\\s*\\(\\d+\\)\\s*$", "").trim();
+                String name = COPY_SUFFIX.matcher(item.optString("name", ""))
+                        .replaceFirst("")
+                        .trim();
                 String group = item.optString("group", "").trim();
                 if (AppStrings.isBlank(name)) continue;
-                result.add(new CatalogEntry(matcher.group(1), name,
-                        "https://vavoo.to/live2/play3/" + matcher.group(1) + ".m3u8",
+                // sourceUrl solo lo usa la vía firmada; live2 resuelve por id.
+                result.add(new CatalogEntry(matcher.group(1), name, null,
                         baseCountry(group), group));
             }
             return result;
         } catch (JSONException error) {
             throw new IOException("Índice live2 inválido.", error);
+        }
+    }
+
+    /** Libera el índice estático cuando Android avisa de presión de memoria. */
+    static void clearMemoryCaches() {
+        synchronized (LIVE2_LOCK) {
+            live2Entries = null;
+            live2LoadedAt = 0L;
         }
     }
 
@@ -790,7 +848,7 @@ final class VavooSessionClient {
         T call() throws Exception;
     }
 
-    private List<CatalogEntry> rankedMatches(
+    List<CatalogEntry> rankedMatches(
             Channel channel,
             List<String> aliases,
             List<CatalogEntry> entries
@@ -799,11 +857,17 @@ final class VavooSessionClient {
         List<ScoredEntry> scored = new ArrayList<>();
         String explicitId = attribute(channel, "x-resolver-id");
         String rememberedId = rememberedWinningIdentity(channel);
+        // Los datos del canal no cambian dentro del recorrido: se calculan una
+        // vez. Antes se normalizaban de nuevo por cada una de las ~9.500
+        // entradas del índice, con regex y Normalizer, en cada alias.
+        String channelCountry = countryKey(attribute(channel, "tvg-country"));
+        String declaredNumber = declaredNumber(channel);
         for (CatalogEntry entry : entries) {
             if (exactAliasOnly && targets.stream().noneMatch(target ->
-                    target.exactName.equals(normalizedName(entry.name, false))
+                    target.exactName.equals(entry.exactName)
                             && strictCompatible(target, entry))) continue;
-            if (!strictChannelCompatible(channel, entry)) continue;
+            if (!channelCountry.isEmpty() && !channelCountry.equals(entry.countryKey)) continue;
+            if (!declaredNumber.isEmpty() && !declaredNumber.equals(entry.number)) continue;
             if (!strictTargetsCompatible(targets, entry)) continue;
             int best = -1;
             // A stable identity is authoritative for the name lookup. The
@@ -839,8 +903,8 @@ final class VavooSessionClient {
     private static int score(Target target, CatalogEntry entry) {
         if (!strictCompatible(target, entry)) return -1;
 
-        String exactEntry = normalizedName(entry.name, false);
-        String relaxedEntry = normalizedName(entry.name, true);
+        String exactEntry = entry.exactName;
+        String relaxedEntry = entry.relaxedName;
         int score;
         if (target.exactName.equals(exactEntry)) {
             score = 180;
@@ -854,18 +918,15 @@ final class VavooSessionClient {
         }
         if (target.countryDeclared) score += 80;
         if (target.numberDeclared) score += 80;
-        String lower = entry.name.toLowerCase(Locale.ROOT);
-        if (lower.contains("backup") || lower.contains("local")) score -= 10;
-        if (lower.contains("hd") || lower.contains("fhd")) score += 4;
+        if (entry.backupOrLocal) score -= 10;
+        if (entry.hd) score += 4;
         return score;
     }
 
     private static boolean strictCompatible(Target target, CatalogEntry entry) {
         if (target == null || entry == null) return false;
-        if (target.numberDeclared
-                && !target.number.equals(extractNumber(entry.name))) return false;
-        return !target.countryDeclared
-                || target.country.equals(countryKey(entry.country));
+        if (target.numberDeclared && !target.number.equals(entry.number)) return false;
+        return !target.countryDeclared || target.country.equals(entry.countryKey);
     }
 
     /**
@@ -885,20 +946,22 @@ final class VavooSessionClient {
         for (Target target : targets) {
             if (target.countryDeclared) {
                 countryDeclared = true;
-                if (target.country.equals(countryKey(entry.country))) countryMatched = true;
+                if (target.country.equals(entry.countryKey)) countryMatched = true;
             }
             if (target.numberDeclared) {
                 numberDeclared = true;
-                if (target.number.equals(extractNumber(entry.name))) numberMatched = true;
+                if (target.number.equals(entry.number)) numberMatched = true;
             }
         }
         return (!countryDeclared || countryMatched)
                 && (!numberDeclared || numberMatched);
     }
 
-    /** Channel metadata is authoritative even when an alias is less specific. */
-    private static boolean strictChannelCompatible(Channel channel, CatalogEntry entry) {
-        String country = countryKey(attribute(channel, "tvg-country"));
+    /**
+     * Número declarado por el canal (atributo o nombre), solo dígitos.
+     * Se calcula una vez por búsqueda y no por cada entrada del catálogo.
+     */
+    private static String declaredNumber(Channel channel) {
         String name = attribute(channel, "tvg-name");
         if (AppStrings.isBlank(name) && channel != null) name = channel.getName();
         String declaredNumber = firstNonBlank(
@@ -906,13 +969,8 @@ final class VavooSessionClient {
                 attribute(channel, "channel-number"),
                 attribute(channel, "x-resolver-number")
         );
-        return strictChannelCompatible(
-                name,
-                country,
-                declaredNumber,
-                entry.name,
-                entry.country
-        );
+        if (AppStrings.isBlank(declaredNumber)) declaredNumber = extractNumber(name);
+        return declaredNumber.replaceAll("[^0-9]", "");
     }
 
     /** Package-visible for resolver contract tests; uses the same production rule. */
@@ -1301,6 +1359,18 @@ final class VavooSessionClient {
         final String sourceUrl;
         final String country;
         final String group;
+        /*
+         * Campos derivados del nombre/país. Se calculan al leer el catálogo
+         * (una vez por entrada) para que cada búsqueda no repita Normalizer y
+         * regex sobre las ~9.500 entradas del índice live2. En una TV el
+         * recorrido completo pasaba de decenas de ms a ~1 ms.
+         */
+        final String exactName;
+        final String relaxedName;
+        final String countryKey;
+        final String number;
+        final boolean backupOrLocal;
+        final boolean hd;
 
         CatalogEntry(String id, String name, String sourceUrl, String country, String group) {
             this.id = id;
@@ -1308,6 +1378,13 @@ final class VavooSessionClient {
             this.sourceUrl = sourceUrl;
             this.country = country;
             this.group = group;
+            this.exactName = normalizedName(name, false);
+            this.relaxedName = normalizedName(name, true);
+            this.countryKey = countryKey(country);
+            this.number = extractNumber(name);
+            String lower = name == null ? "" : name.toLowerCase(Locale.ROOT);
+            this.backupOrLocal = lower.contains("backup") || lower.contains("local");
+            this.hd = lower.contains("hd") || lower.contains("fhd");
         }
     }
 

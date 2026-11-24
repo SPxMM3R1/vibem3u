@@ -46,6 +46,10 @@ final class TvVooDeadVersions {
         return new ArrayList<>(alive.subList(0, Math.min(Math.max(1, max), alive.size())));
     }
 
+    static void clear() {
+        DEAD_UNTIL.clear();
+    }
+
     static void resetForTests() {
         DEAD_UNTIL.clear();
     }

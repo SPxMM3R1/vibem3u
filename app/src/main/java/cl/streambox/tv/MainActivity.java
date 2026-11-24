@@ -1407,6 +1407,7 @@ public final class MainActivity extends MainSelector {
         playbackGeneration++;
         cancelPlaybackWatchdog();
         cancelPlaybackResolution();
+        cancelNeighborPrefetch();
         resolverCoordinator.clear();
         if (streamResolverRegistry != null) streamResolverRegistry.clearSensitiveState();
         mainHandler.removeCallbacksAndMessages(null);
