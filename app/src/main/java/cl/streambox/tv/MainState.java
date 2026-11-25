@@ -410,13 +410,6 @@ abstract class MainState extends Activity {
     android.animation.ObjectAnimator qualityUpgradeTimerAnimation;
     java.util.concurrent.Future<?> qualityUpgradeTask;
     ResolutionContext qualityUpgradeContext;
-    /*
-     * Precarga de vecinos: un solo contexto compartido para poder cortarla al
-     * cambiar de canal. Antes los dos trabajos seguían resolviendo TvVoo en
-     * segundo plano aunque el usuario ya estuviera en otro canal.
-     */
-    ResolutionContext neighborPrefetchContext;
-    volatile long neighborPrefetchGeneration;
     long qualityUpgradeCheckedGeneration = -1L;
     ResolvedPlaybackSource qualityUpgradeOffer;
     /** Fuente anterior a un cambio de calidad: si la nueva falla pronto, se vuelve a ella. */

@@ -247,7 +247,6 @@ abstract class MainOverlays extends MainPlayback {
         // El índice live2 de Vavoo es estático y puede pesar varios MB; se
         // suelta en cuanto Android avisa. Se vuelve a descargar si hace falta.
         VavooSessionClient.clearMemoryCaches();
-        TvVooDeadVersions.clear();
         if (playbackBufferManager != null) playbackBufferManager.onMemoryPressure(level);
         if (player == null || playbackChannel == null || !playbackHasStarted
                 || settingsOpen || loadFailed || !hasWindowFocus()) return;

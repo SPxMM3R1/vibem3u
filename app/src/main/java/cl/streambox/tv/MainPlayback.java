@@ -375,57 +375,24 @@ abstract class MainPlayback extends MainState {
 
     void scheduleNeighborPrefetch() {
         mainHandler.removeCallbacks(prefetchNeighbors);
-        cancelNeighborPrefetch();
         mainHandler.postDelayed(prefetchNeighbors, NEIGHBOR_PREFETCH_DELAY_MS);
     }
 
     /**
-     * Corta la precarga de vecinos en curso. Se llama al cambiar de canal y al
-     * reprogramar: con TvVoo cada vecino puede tardar varios segundos y crear
-     * su propia carrera de alias; si el usuario zapea, esos trabajos se
-     * acumulaban en el ejecutor y competían con el canal nuevo.
-     */
-    void cancelNeighborPrefetch() {
-        neighborPrefetchGeneration++;
-        ResolutionContext context = neighborPrefetchContext;
-        neighborPrefetchContext = null;
-        if (context != null) context.cancel();
-    }
-
-    /**
-     * Precarga (0.5.85): con el canal estable, resuelve en segundo plano el anterior y el
-     * siguiente. Su fuente queda en la caché del coordinador, así CH+/− abre sin esperar al
-     * resolutor. Los canales directos solo adelantan la consulta DNS de su servidor.
+     * Precarga de vecinos (0.5.85; solo directos desde la 0.6.74): con el canal estable deja
+     * abierta la conexión del anterior y del siguiente. Los canales con resolutor
+     * (TvVoo/Vavoo, MediaFlow, Meganoticias…) no se resuelven por adelantado: cada uno son
+     * varios segundos de red y CPU que competían con el canal en pantalla, casi siempre se
+     * descartaban, y en Vavoo sumaban pedidos desde la misma IP. Pedido del usuario
+     * (2026-11-24): «debería ser solo para directos».
      */
     void prefetchNeighborChannels() {
         if (channels.size() < 2 || player == null || !playbackHasStarted || settingsOpen
                 || exiting || resourcesReleased || streamResolverRegistry == null) return;
-        cancelNeighborPrefetch();
-        ResolutionContext context = new ResolutionContext(12_000L);
-        neighborPrefetchContext = context;
-        long generation = neighborPrefetchGeneration;
-        for (int delta : new int[] {1, -1}) {
-            int index = ((channelIndex + delta) % channels.size() + channels.size()) % channels.size();
-            Channel neighbor = channels.get(index);
-            if (neighbor == null || neighbor == playbackChannel) continue;
-            StreamResolver resolver = streamResolverRegistry.find(neighbor);
-            if (resolver != null) {
-                if (!resolver.cacheResolvedSource() || resolver.cacheTtlMillis() <= 0L) continue;
-                prefetchExecutor.submit(() -> {
-                    if (generation != neighborPrefetchGeneration) return;
-                    try (ResolutionContext.Scope ignored = context.activate()) {
-                        resolverCoordinator.resolve(neighbor, resolver, false,
-                                ResolutionProgressListener.NONE);
-                    } catch (Exception ignored) {
-                        // Una precarga fallida no afecta: al abrir el canal se resuelve normal.
-                    }
-                });
-            } else {
-                prefetchExecutor.submit(() -> {
-                    if (generation != neighborPrefetchGeneration) return;
-                    warmConnection(neighbor);
-                });
-            }
+        for (Channel neighbor : NeighborPrefetch.directNeighbors(
+                channels, channelIndex, playbackChannel,
+                channel -> streamResolverRegistry.find(channel) != null)) {
+            prefetchExecutor.submit(() -> warmConnection(neighbor));
         }
         // El pool cierra conexiones inactivas a los 5 min: se renuevan mientras se mira el canal.
         mainHandler.postDelayed(prefetchNeighbors, NEIGHBOR_REWARM_MS);
@@ -447,7 +414,6 @@ abstract class MainPlayback extends MainState {
         hidePlaybackErrorScreen();
         mainHandler.removeCallbacks(commitZap);
         mainHandler.removeCallbacks(prefetchNeighbors);
-        cancelNeighborPrefetch();
         zapPreviewPending = false;
         closePlaybackSourceSelector();
         cancelQualityUpgrade();
@@ -1926,7 +1892,6 @@ abstract class MainPlayback extends MainState {
         }
         restartPlaybackAfterFocusLoss = true;
         cancelPlaybackResolution();
-        cancelNeighborPrefetch();
         resolverCoordinator.clearForPlaybackPause();
         playbackGeneration++;
         playbackHasStarted = false;
