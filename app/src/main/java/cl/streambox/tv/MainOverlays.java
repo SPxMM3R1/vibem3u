@@ -1073,8 +1073,22 @@ abstract class MainOverlays extends MainPlayback {
         boolean alreadyShown = channelOverlay.getVisibility() == View.VISIBLE && !osdExiting;
         showOverlay(true);
         // Otro canal con el OSD ya a la vista: su información entra de nuevo, escalonada.
-        if (!classicUi && alreadyShown && channelIndex != osdAnimatedChannel) animateOsdRefresh();
+        if (!classicUi && alreadyShown && channelIndex != osdAnimatedChannel) {
+            if (zapPreviewPending) {
+                // Zapeo continuo (tecla mantenida): la información cambia cada pocos ms y
+                // reiniciar la entrada en cada pulsación dejaba el nombre y el número en
+                // alfa 0 mientras se mantenía la tecla. Se actualiza al instante.
+                settleOsdMotion();
+            } else {
+                animateOsdRefresh();
+            }
+        }
         osdAnimatedChannel = channelIndex;
+    }
+
+    /** Deja el OSD en reposo sin animar: el zapeo rápido necesita ver el canal al instante. */
+    void settleOsdMotion() {
+        for (View view : osdMotionViews(false)) Motion.settle(view);
     }
 
     // ---- Movimiento del OSD (2026-11-14, animaciones B aprobadas) ----
