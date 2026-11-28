@@ -195,8 +195,26 @@ public final class EpgData {
         }
         List<EpgProgramme> programmes = programmesFor(channelId);
         if (programmes == null || programmes.isEmpty()) return Collections.emptyList();
+        // Los programas están ordenados por inicio: se busca el primero que empieza en/después
+        // de la ventana (la guía dibuja ~9 filas por cuadro y antes recorría toda la lista).
+        int low = 0;
+        int high = programmes.size() - 1;
+        int firstAtOrAfter = programmes.size();
+        while (low <= high) {
+            int mid = (low + high) >>> 1;
+            if (programmes.get(mid).getStartMillis() >= fromMillis) {
+                firstAtOrAfter = mid;
+                high = mid - 1;
+            } else {
+                low = mid + 1;
+            }
+        }
+        // Un programa que empezó antes puede seguir al aire: se retrocede mientras solape.
+        int begin = firstAtOrAfter;
+        while (begin > 0 && programmes.get(begin - 1).getStopMillis() > fromMillis) begin--;
         List<EpgProgramme> result = new ArrayList<>();
-        for (EpgProgramme programme : programmes) {
+        for (int index = begin; index < programmes.size(); index++) {
+            EpgProgramme programme = programmes.get(index);
             if (programme.getStartMillis() >= toMillis) break;
             if (programme.getStopMillis() <= fromMillis) continue;
             result.add(programme);

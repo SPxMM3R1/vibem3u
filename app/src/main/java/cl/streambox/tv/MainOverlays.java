@@ -1074,15 +1074,20 @@ abstract class MainOverlays extends MainPlayback {
         showOverlay(true);
         // Otro canal con el OSD ya a la vista: su información entra de nuevo, escalonada.
         if (!classicUi && alreadyShown && channelIndex != osdAnimatedChannel) {
-            if (zapPreviewPending) {
-                // Zapeo continuo (tecla mantenida): la información cambia cada pocos ms y
-                // reiniciar la entrada en cada pulsación dejaba el nombre y el número en
-                // alfa 0 mientras se mantenía la tecla. Se actualiza al instante.
+            long now = SystemClock.uptimeMillis();
+            // Cambios seguidos (tecla mantenida o pulsaciones repetidas): si la entrada
+            // anterior todavía se está animando, reiniciarla dejaría el nombre y el número
+            // en alfa 0 la mayor parte del tiempo. Se actualiza al instante y se espera a
+            // que el usuario se detenga para volver a animar.
+            boolean rapid = zapPreviewPending
+                    || now - osdChannelStartShownAtMs < OSD_SETTLE_WINDOW_MS;
+            if (rapid) {
                 settleOsdMotion();
             } else {
                 animateOsdRefresh();
             }
         }
+        osdChannelStartShownAtMs = SystemClock.uptimeMillis();
         osdAnimatedChannel = channelIndex;
     }
 
@@ -1090,6 +1095,10 @@ abstract class MainOverlays extends MainPlayback {
     void settleOsdMotion() {
         for (View view : osdMotionViews(false)) Motion.settle(view);
     }
+
+    /** Si el canal cambia otra vez dentro de esta ventana, el OSD no vuelve a animar. */
+    static final long OSD_SETTLE_WINDOW_MS = 1_000L;
+    long osdChannelStartShownAtMs;
 
     // ---- Movimiento del OSD (2026-11-14, animaciones B aprobadas) ----
     boolean osdExiting;

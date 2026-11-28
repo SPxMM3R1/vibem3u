@@ -108,6 +108,32 @@ public final class EpgGuideView extends View implements GuideSurface {
     private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
     private final SimpleDateFormat dayFormat = new SimpleDateFormat("EEEE d", Locale.forLanguageTag("es-CL"));
     private final SimpleDateFormat dayKeyFormat = new SimpleDateFormat("yyyyMMdd", Locale.ROOT);
+    /**
+     * Etiquetas «HH:mm» por minuto. La guía dibuja decenas de horarios por cuadro (bloques, eje,
+     * encabezado) y formatearlos con SimpleDateFormat en cada uno era el mayor costo de dibujo.
+     */
+    private final android.util.LongSparseArray<String> minuteLabels =
+            new android.util.LongSparseArray<>();
+    /** Listas de programas por fila para la ventana actual; se rehacen al cambiar la ventana. */
+    private List<EpgProgramme>[] windowRows;
+    private long windowRowsStart = Long.MIN_VALUE;
+    private long windowRowsEnd = Long.MIN_VALUE;
+    private int windowRowsCount = -1;
+    /** Número de canal ya formateado por fila; se rehace al abrir la guía. */
+    private String[] rowNumbers;
+    private int rowNumbersCount = -1;
+    /** Títulos recortados y tramos «HH:mm – HH:mm» por programa: no cambian entre cuadros. */
+    private final java.util.IdentityHashMap<EpgProgramme, String[]> titleLabels =
+            new java.util.IdentityHashMap<>();
+    private final java.util.IdentityHashMap<EpgProgramme, float[]> titleLabelRooms =
+            new java.util.IdentityHashMap<>();
+    private final java.util.IdentityHashMap<EpgProgramme, String> staticRanges =
+            new java.util.IdentityHashMap<>();
+    private float titleLabelsGridWidth = Float.NaN;
+    /** Anchos de los filtros del encabezado; solo cambian al cambiar de filtro. */
+    private List<String> filterWidthsKey;
+    private int filterWidthsSelected = -1;
+    private float[] filterWidths;
 
     private Source source;
     private EpgGuideNavigator navigator;
@@ -142,12 +168,117 @@ public final class EpgGuideView extends View implements GuideSurface {
         this.navigator = navigator;
         this.nowMillis = nowMillis;
         this.firstVisibleRow = Math.max(0, navigator.getRow() - 2);
+        rowNumbers = null;
+        windowRows = null;
+        titleLabels.clear();
+        titleLabelRooms.clear();
+        staticRanges.clear();
+        filterWidths = null;
+        titleLabelsGridWidth = Float.NaN;
         invalidate();
     }
 
     @Override public void refresh(long nowMillis) {
         this.nowMillis = nowMillis;
         invalidate();
+    }
+
+    /** «HH:mm» cacheado por minuto: el mismo horario se repite en bloques, eje y encabezado. */
+    private String timeLabel(long millis) {
+        long minute = millis / 60_000L;
+        String cached = minuteLabels.get(minute);
+        if (cached != null) return cached;
+        String label = timeFormat.format(new Date(minute * 60_000L));
+        minuteLabels.put(minute, label);
+        return label;
+    }
+
+    /** Número de canal ya formateado por fila (antes se hacía String.format en cada cuadro). */
+    private String rowNumber(int row) {
+        int count = source.rowCount();
+        if (rowNumbers == null || rowNumbersCount != count) {
+            rowNumbers = new String[count];
+            rowNumbersCount = count;
+        }
+        String cached = rowNumbers[row];
+        if (cached == null) {
+            cached = source.number(row);
+            rowNumbers[row] = cached;
+        }
+        return cached;
+    }
+
+    /** Programas de una fila en la ventana visible; se calculan una vez por ventana, no por cuadro. */
+    @SuppressWarnings("unchecked")
+    private List<EpgProgramme> windowProgrammes(int row, long fromMillis, long toMillis) {
+        int count = source.rowCount();
+        if (windowRows == null || windowRowsCount != count
+                || windowRowsStart != fromMillis || windowRowsEnd != toMillis) {
+            windowRows = (List<EpgProgramme>[]) new List[count];
+            windowRowsCount = count;
+            windowRowsStart = fromMillis;
+            windowRowsEnd = toMillis;
+        }
+        List<EpgProgramme> cached = windowRows[row];
+        if (cached == null) {
+            cached = source.programmes(row, fromMillis, toMillis);
+            windowRows[row] = cached;
+        }
+        return cached;
+    }
+
+    /** Anchos de los filtros: se miden solo cuando cambia la lista o el filtro marcado. */
+    private float[] filterWidths(List<String> filters, int selected) {
+        if (filterWidths == null || filterWidthsKey != filters || filterWidthsSelected != selected
+                || filterWidths.length != filters.size()) {
+            filterWidths = new float[filters.size()];
+            for (int index = 0; index < filters.size(); index++) {
+                textPaint.setTypeface(index == selected ? bold : regular);
+                filterWidths[index] = textPaint.measureText(filters.get(index));
+            }
+            filterWidthsKey = filters;
+            filterWidthsSelected = selected;
+        }
+        return filterWidths;
+    }
+
+    /** Título ya recortado para el ancho del bloque: no se vuelve a medir en cada cuadro. */
+    private String titleLabel(EpgProgramme programme, String title, float room, boolean bold,
+                              float gridWidth) {
+        if (titleLabelsGridWidth != gridWidth) {
+            titleLabels.clear();
+            titleLabelRooms.clear();
+            titleLabelsGridWidth = gridWidth;
+        }
+        int slot = bold ? 1 : 0;
+        String[] labels = titleLabels.get(programme);
+        float[] rooms = titleLabelRooms.get(programme);
+        if (labels == null) {
+            labels = new String[2];
+            titleLabels.put(programme, labels);
+        }
+        if (rooms == null) {
+            rooms = new float[2];
+            titleLabelRooms.put(programme, rooms);
+        }
+        String cached = labels[slot];
+        if (cached != null && rooms[slot] == room) return cached;
+        textPaint.setTypeface(bold ? this.bold : regular);
+        cached = TextUtils.ellipsize(title, textPaint, room, TextUtils.TruncateAt.END).toString();
+        labels[slot] = cached;
+        rooms[slot] = room;
+        return cached;
+    }
+
+    /** Tramo «HH:mm – HH:mm» de un programa (no depende de la hora actual). */
+    private String staticRange(EpgProgramme programme) {
+        String cached = staticRanges.get(programme);
+        if (cached == null) {
+            cached = timeLabel(programme.getStartMillis()) + " – "
+                    + timeLabel(programme.getStopMillis());
+            staticRanges.put(programme, cached);
+        }
+        return cached;
     }
 
     // ---- Animaciones B (2026-11-14): filas que suben al abrir, marco que viaja, bloque que se levanta ----
@@ -363,7 +494,7 @@ public final class EpgGuideView extends View implements GuideSurface {
         // Fecha del foco y hora actual, arriba a la derecha, como texto.
         textPaint.setTextSize(sp(10.5f));
         textPaint.setTypeface(medium);
-        String time = timeFormat.format(new Date(nowMillis));
+        String time = timeLabel(nowMillis);
         float timeWidth = textPaint.measureText(time);
         textPaint.setTypeface(regular);
         String day = capitalize(dayFormat.format(new Date(navigator.getFocusMillis()))) + " · ";
@@ -383,11 +514,7 @@ public final class EpgGuideView extends View implements GuideSurface {
         int selected = Math.max(0, Math.min(source.selectedFilter(), filters.size() - 1));
         textPaint.setTextSize(sp(10.5f));
         float gap = dp(19);
-        float[] widths = new float[filters.size()];
-        for (int i = 0; i < filters.size(); i++) {
-            textPaint.setTypeface(i == selected ? bold : regular);
-            widths[i] = textPaint.measureText(filters.get(i));
-        }
+        float[] widths = filterWidths(filters, selected);
         int first = 0;
         while (first < selected && span(widths, first, selected, gap) > tabsRight - tabsLeft) first++;
         float x = tabsLeft;
@@ -408,9 +535,8 @@ public final class EpgGuideView extends View implements GuideSurface {
 
     private void drawHero(Canvas canvas, float left, float right, int row) {
         if (row < 0 || row >= source.rowCount()) return;
-        List<EpgProgramme> programmes = source.programmes(row,
-                navigator.getFocusMillis() - EpgGuideNavigator.WINDOW_MILLIS,
-                navigator.getFocusMillis() + 12L * 60L * 60L * 1000L);
+        List<EpgProgramme> programmes = windowProgrammes(row,
+                navigator.getWindowStart(), navigator.getWindowEnd());
         EpgProgramme programme = EpgGuideNavigator.programmeAt(programmes, navigator.getFocusMillis());
         float heroWidth = Math.min(dp(500), (right - left) * 0.56f);
 
@@ -422,7 +548,7 @@ public final class EpgGuideView extends View implements GuideSurface {
             canvas.drawCircle(x + dp(2), eyebrowBaseline - sp(2.6f), dp(2), fillPaint);
             x += dp(10);
         }
-        String meta = source.name(row) + " · " + source.number(row);
+        String meta = source.name(row) + " · " + rowNumber(row);
         String category = source.category(row);
         if (!TextUtils.isEmpty(category)) meta += " · " + category;
         labelPaint.setTextSize(sp(7.5f));
@@ -505,7 +631,7 @@ public final class EpgGuideView extends View implements GuideSurface {
             nextLeft += dp(11);
         }
         String prefix = getContext().getString(R.string.guide_next,
-                timeFormat.format(new Date(next.getStartMillis()))).toUpperCase(Locale.forLanguageTag("es-CL"));
+                timeLabel(next.getStartMillis())).toUpperCase(Locale.forLanguageTag("es-CL"));
         labelPaint.setTextSize(sp(7.5f));
         labelPaint.setColor(NEXT_LABEL);
         canvas.drawText(prefix, nextLeft, nextBaseline, labelPaint);
@@ -546,12 +672,12 @@ public final class EpgGuideView extends View implements GuideSurface {
         for (int slot = 0; slot < slots; slot++) {
             long time = windowStart + slot * EpgGuideNavigator.SLOT_MILLIS;
             smallPaint.setColor(LABEL);
-            canvas.drawText(timeFormat.format(new Date(time)), xFor(time, gridLeft, gridWidth, windowStart),
+            canvas.drawText(timeLabel(time), xFor(time, gridLeft, gridWidth, windowStart),
                     baseline, smallPaint);
         }
         if (nowMillis >= windowStart && nowMillis < windowEnd) {
             // Hora actual: en cian sobre el eje, centrada en su línea.
-            String nowLabel = timeFormat.format(new Date(nowMillis));
+            String nowLabel = timeLabel(nowMillis);
             float nowX = xFor(nowMillis, gridLeft, gridWidth, windowStart);
             smallPaint.setTypeface(medium);
             smallPaint.setColor(CYAN);
@@ -572,7 +698,7 @@ public final class EpgGuideView extends View implements GuideSurface {
         textPaint.setLetterSpacing(0.04f);
         textPaint.setColor(selected || playing ? WHITE : LABEL);
         float centerBaseline = rowTop + rowHeight / 2f + sp(3.2f);
-        String number = source.number(row);
+        String number = rowNumber(row);
         canvas.drawText(number, left, centerBaseline, textPaint);
         if (playing) {
             fillPaint.setColor(GREEN);
@@ -593,7 +719,7 @@ public final class EpgGuideView extends View implements GuideSurface {
                     TextUtils.TruncateAt.END).toString(), logoLeft, centerBaseline, textPaint);
         }
 
-        List<EpgProgramme> programmes = source.programmes(row, windowStart, windowEnd);
+        List<EpgProgramme> programmes = windowProgrammes(row, windowStart, windowEnd);
         EpgProgramme focusedProgramme = selected
                 ? EpgGuideNavigator.programmeAt(programmes, navigator.getFocusMillis())
                 : null;
@@ -672,8 +798,8 @@ public final class EpgGuideView extends View implements GuideSurface {
             textPaint.setTypeface(focused ? bold : regular);
             textPaint.setColor(focused ? WHITE : onAir ? TEXT_ON_AIR : past ? TEXT_PAST : TEXT_FUTURE);
             float titleRoom = reminded ? textWidth - dp(10) : textWidth;
-            String shownTitle = TextUtils.ellipsize(title, textPaint, Math.max(0f, titleRoom),
-                    TextUtils.TruncateAt.END).toString();
+            String shownTitle = titleLabel(programme, title, Math.max(0f, titleRoom), focused,
+                    gridWidth);
             // Título y horario centrados en el alto del bloque.
             float titleBaseline = rowTop + dp(13);
             canvas.drawText(shownTitle, textLeft, titleBaseline, textPaint);
@@ -687,7 +813,7 @@ public final class EpgGuideView extends View implements GuideSurface {
             smallPaint.setColor(focused ? TIME_FOCUSED : onAir ? TIME_ON_AIR : TIME_OTHER);
             String rangeText = startedBefore && onAir
                     ? getContext().getString(R.string.guide_since,
-                            timeFormat.format(new Date(programme.getStartMillis())),
+                            timeLabel(programme.getStartMillis()),
                             formatDuration(programme.getStopMillis() - nowMillis))
                     : range(programme);
             String range = TextUtils.ellipsize(rangeText, smallPaint, textWidth,
@@ -820,8 +946,7 @@ public final class EpgGuideView extends View implements GuideSurface {
     }
 
     private String range(EpgProgramme programme) {
-        return timeFormat.format(new Date(programme.getStartMillis())) + " – "
-                + timeFormat.format(new Date(programme.getStopMillis()));
+        return staticRange(programme);
     }
 
     private static float span(float[] widths, int from, int to, float gap) {
