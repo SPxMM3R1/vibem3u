@@ -6,6 +6,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
+import android.graphics.PorterDuff;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.Typeface;
@@ -170,6 +171,7 @@ public final class EpgGuideView extends View implements GuideSurface {
         this.firstVisibleRow = Math.max(0, navigator.getRow() - 2);
         rowNumbers = null;
         windowRows = null;
+        sceneKey = Long.MIN_VALUE;
         titleLabels.clear();
         titleLabelRooms.clear();
         staticRanges.clear();
@@ -309,6 +311,20 @@ public final class EpgGuideView extends View implements GuideSurface {
     private float liftedGridLeft, liftedGridWidth;
     // El bloque empieza en el borde izquierdo de la grilla (programa empezado antes de la ventana).
 
+    /**
+     * Escena estática (fondo, detalle, eje y filas) dibujada una vez en un bitmap: los cuadros
+     * de animación solo dibujan ese bitmap, el bloque con foco y el pie, en vez de repetir ~400
+     * operaciones de dibujo por cuadro sobre el video.
+     */
+    private static final int MAX_SCENE_PIXELS = 2_500_000;
+    private Bitmap sceneBitmap;
+    private Canvas sceneCanvas;
+    private final Paint scenePaint = new Paint();
+    private int sceneWidth;
+    private int sceneHeight;
+    private long sceneKey = Long.MIN_VALUE;
+    private long sceneRevision;
+
     /** Al abrir la Guía: las filas suben escalonadas y el detalle entra desde la izquierda. */
     public void playOpenAnimation() {
         if (openAnimator != null) openAnimator.cancel();
@@ -355,6 +371,7 @@ public final class EpgGuideView extends View implements GuideSurface {
     @Override protected void onDetachedFromWindow() {
         if (openAnimator != null) openAnimator.cancel();
         if (focusAnimator != null) focusAnimator.cancel();
+        releaseScene();
         super.onDetachedFromWindow();
     }
 
@@ -389,39 +406,44 @@ public final class EpgGuideView extends View implements GuideSurface {
         long windowStart = navigator.getWindowStart();
         long windowEnd = navigator.getWindowEnd();
 
-        drawBackground(canvas, width, height);
-
         int visibleRows = Math.max(1, (int) ((height - rowsTop - dp(12)) / rowPitch));
         int focusedRow = navigator.getRow();
         if (focusedRow < firstVisibleRow) firstVisibleRow = focusedRow;
         if (focusedRow >= firstVisibleRow + visibleRows) firstVisibleRow = focusedRow - visibleRows + 1;
         firstVisibleRow = Math.max(0, Math.min(firstVisibleRow, Math.max(0, source.rowCount() - visibleRows)));
 
-        int headerSave = canvas.save();
-        canvas.translate(0f, -(1f - springAt(0f, 500f)) * dp(8));
-        drawHeader(canvas, left, right);
-        canvas.restoreToCount(headerSave);
+        boolean animatingOpen = openElapsedMs < OPEN_TOTAL_MS;
+        boolean useSceneCache = !animatingOpen && (int) (width * height) <= MAX_SCENE_PIXELS;
+        if (useSceneCache) {
+            long key = sceneKey(windowStart, visibleRows);
+            if (sceneBitmap == null || sceneWidth != (int) width || sceneHeight != (int) height) {
+                releaseScene();
+                sceneBitmap = Bitmap.createBitmap((int) width, (int) height, Bitmap.Config.ARGB_8888);
+                sceneCanvas = new Canvas(sceneBitmap);
+                sceneWidth = (int) width;
+                sceneHeight = (int) height;
+                sceneKey = Long.MIN_VALUE;
+            }
+            if (key != sceneKey) {
+                sceneCanvas.drawColor(0, PorterDuff.Mode.CLEAR);
+                drawSceneContent(sceneCanvas, width, height, left, right, axisBaseline, rowsTop,
+                        rowHeight, rowPitch, gridLeft, gridWidth, windowStart, windowEnd,
+                        visibleRows);
+                sceneKey = key;
+            }
+            canvas.drawBitmap(sceneBitmap, 0f, 0f, scenePaint);
+        } else {
+            drawSceneContent(canvas, width, height, left, right, axisBaseline, rowsTop, rowHeight,
+                    rowPitch, gridLeft, gridWidth, windowStart, windowEnd, visibleRows);
+        }
+
         int heroSave = canvas.save();
         canvas.translate(-(1f - springAt(150f, 600f)) * dp(14), 0f);
         drawHero(canvas, left, right, focusedRow);
         canvas.restoreToCount(heroSave);
-        drawAxis(canvas, gridLeft, gridWidth, axisBaseline, windowStart, windowEnd);
 
-        boolean filtersFocused = source.filtersFocused();
-        int shownRows = 0;
-        liftedProgramme = null;
-        for (int index = 0; index <= visibleRows; index++) {
-            int row = firstVisibleRow + index;
-            if (row >= source.rowCount()) break;
-            float rowTop = rowsTop + index * rowPitch + rowOffset(index);
-            if (rowTop >= height) break;
-            boolean peek = index == visibleRows;
-            if (!peek) shownRows++;
-            int saved = peek ? canvas.saveLayerAlpha(0, rowTop, width, height, PEEK_ALPHA) : -1;
-            drawRow(canvas, row, rowTop, rowHeight, left, right, gridLeft, gridWidth,
-                    windowStart, windowEnd, row == focusedRow && !filtersFocused);
-            if (saved >= 0) canvas.restoreToCount(saved);
-        }
+        int shownRows = Math.max(0, Math.min(visibleRows, source.rowCount() - firstVisibleRow));
+        updateLifted(focusedRow, rowsTop, rowHeight, rowPitch, gridLeft, gridWidth, windowStart);
 
         drawLiftedFocus(canvas);
 
@@ -448,6 +470,108 @@ public final class EpgGuideView extends View implements GuideSurface {
         shaderPaint.setShader(footerShade);
         canvas.drawRect(0f, footerTop, width, height, shaderPaint);
         shaderPaint.setShader(null);
+    }
+
+    /** Fondo, encabezado, eje y filas (sin el detalle ni el bloque con foco, que van en vivo). */
+    private void drawSceneContent(Canvas target, float width, float height, float left, float right,
+                                  float axisBaseline, float rowsTop, float rowHeight, float rowPitch,
+                                  float gridLeft, float gridWidth, long windowStart, long windowEnd,
+                                  int visibleRows) {
+        drawBackground(target, width, height);
+        int headerSave = target.save();
+        target.translate(0f, -(1f - springAt(0f, 500f)) * dp(8));
+        drawHeader(target, left, right);
+        target.restoreToCount(headerSave);
+        drawAxis(target, gridLeft, gridWidth, axisBaseline, windowStart, windowEnd);
+
+        liftedProgramme = null;
+        for (int index = 0; index <= visibleRows; index++) {
+            int row = firstVisibleRow + index;
+            if (row >= source.rowCount()) break;
+            float rowTop = rowsTop + index * rowPitch + rowOffset(index);
+            if (rowTop >= height) break;
+            boolean peek = index == visibleRows;
+            int saved = peek ? target.saveLayerAlpha(0, rowTop, width, height, PEEK_ALPHA) : -1;
+            // Todos los bloques se dibujan normales; el del foco se pinta encima, en vivo.
+            drawRow(target, row, rowTop, rowHeight, left, right, gridLeft, gridWidth,
+                    windowStart, windowEnd, false);
+            if (saved >= 0) target.restoreToCount(saved);
+        }
+    }
+
+    /**
+     * Clave de la escena cacheada: no depende del foco (el detalle y el bloque con foco se
+     * dibujan en vivo); cambia con la ventana, el filtro, el día del foco, el minuto o el
+     * contenido marcado con {@link #invalidateScene()}.
+     */
+    private long sceneKey(long windowStart, int visibleRows) {
+        long key = 1125899906842597L;
+        key = 31 * key + sceneWidth;
+        key = 31 * key + windowStart;
+        key = 31 * key + firstVisibleRow;
+        key = 31 * key + visibleRows;
+        key = 31 * key + source.rowCount();
+        key = 31 * key + source.selectedFilter();
+        key = 31 * key + source.playingRow();
+        key = 31 * key + nowMillis / 60_000L;
+        key = 31 * key + (source.filtersFocused() ? 1 : 0);
+        key = 31 * key + sceneRevision;
+        // El encabezado muestra el día del foco: cruzar la medianoche rehace la escena.
+        long focusMillis = navigator.getFocusMillis();
+        key = 31 * key + (focusMillis + java.util.TimeZone.getDefault().getOffset(focusMillis))
+                / 86_400_000L;
+        return key;
+    }
+
+    /** Bloque con foco: se dibuja en vivo sobre la escena cacheada (no la rehace). */
+    private void updateLifted(int focusedRow, float rowsTop, float rowHeight, float rowPitch,
+                              float gridLeft, float gridWidth, long windowStart) {
+        liftedProgramme = null;
+        if (source.filtersFocused() || focusedRow < 0 || focusedRow >= source.rowCount()) return;
+        int index = focusedRow - firstVisibleRow;
+        if (index < 0) return;
+        float rowTop = rowsTop + index * rowPitch + rowOffset(index);
+        List<EpgProgramme> programmes = windowProgrammes(focusedRow, windowStart,
+                navigator.getWindowEnd());
+        EpgProgramme focused = EpgGuideNavigator.programmeAt(programmes, navigator.getFocusMillis());
+        if (focused == null) return;
+        float blockLeft = Math.max(gridLeft,
+                xFor(focused.getStartMillis(), gridLeft, gridWidth, windowStart));
+        float blockRight = Math.min(gridLeft + gridWidth,
+                xFor(focused.getStopMillis(), gridLeft, gridWidth, windowStart));
+        if (blockRight - blockLeft < dp(6)) return;
+        liftedProgramme = focused;
+        liftedRow = focusedRow;
+        liftedLeft = blockLeft + dp(1);
+        liftedRight = blockRight - dp(1);
+        liftedTop = rowTop;
+        liftedHeight = rowHeight;
+        liftedWindowStart = windowStart;
+        liftedGridLeft = gridLeft;
+        liftedGridWidth = gridWidth;
+    }
+
+    private void releaseScene() {
+        if (sceneBitmap != null) {
+            sceneBitmap.recycle();
+            sceneBitmap = null;
+        }
+        sceneCanvas = null;
+        sceneWidth = 0;
+        sceneHeight = 0;
+        sceneKey = Long.MIN_VALUE;
+    }
+
+    /** Rehace la escena cacheada (llegó un logo, cambió un recordatorio o los datos). */
+    public void invalidateScene() {
+        sceneRevision++;
+        sceneKey = Long.MIN_VALUE;
+        invalidate();
+    }
+
+    /** Libera el bitmap de la escena al cerrar la Guía (TV de 2 GB). */
+    public void releaseSceneCache() {
+        releaseScene();
     }
 
     /**

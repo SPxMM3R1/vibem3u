@@ -199,7 +199,10 @@ abstract class MainGuide extends MainOverlays {
                     return;
                 }
                 guideLogos.put(key, result);
-                if (isGuideVisible()) guideView.invalidate();
+                if (isGuideVisible()) {
+                    if (guideView instanceof EpgGuideView) ((EpgGuideView) guideView).invalidateScene();
+                    else guideView.invalidate();
+                }
             });
         });
         return null;
@@ -207,6 +210,7 @@ abstract class MainGuide extends MainOverlays {
 
     void closeGuide() {
         if (guideView != null) guideView.setVisibility(View.GONE);
+        if (guideView instanceof EpgGuideView) ((EpgGuideView) guideView).releaseSceneCache();
         if (loadingPanel != null) loadingPanel.setAlpha(blackScreenDimmed ? BLACK_SCREEN_ALPHA : 1f);
         // Después de lo que hizo cerrar la Guía: si eligió otro canal, playChannel ya descartó
         // el error pendiente y no se muestra nada.
@@ -424,6 +428,7 @@ abstract class MainGuide extends MainOverlays {
             return;
         }
         refreshReminderIds();
+        if (guideView instanceof EpgGuideView) ((EpgGuideView) guideView).invalidateScene();
         guideSurface.refresh(System.currentTimeMillis());
         if (classicUi) {
             Toast.makeText(this, added
